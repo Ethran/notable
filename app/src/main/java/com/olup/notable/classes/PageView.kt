@@ -222,7 +222,7 @@ class PageView(
         scroll += delta
 
         // scroll bitmap
-        val tmp = windowedBitmap.copy(windowedBitmap.config, false)
+        val tmp = windowedBitmap.copy(windowedBitmap.config!!, false)
         drawBg(windowedCanvas, pageFromDb?.nativeTemplate ?: "blank", scroll)
 
         windowedCanvas.drawBitmap(tmp, 0f, -delta.toFloat(), Paint())
