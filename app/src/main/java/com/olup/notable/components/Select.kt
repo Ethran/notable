@@ -7,9 +7,6 @@ import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.sharp.Edit
-import androidx.compose.material.icons.sharp.KeyboardArrowDown
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,7 +17,7 @@ import androidx.compose.ui.window.Popup
 import com.olup.notable.noRippleClickable
 
 @Composable
-fun SelectMenu(options: List<Pair<String, String>>, value: String, onChange: (String) -> Unit) {
+fun <T> SelectMenu(options: List<Pair<T, String>>, value: T, onChange: (T) -> Unit) {
     var isExpanded by remember { mutableStateOf(false) }
 
     Box {
@@ -52,11 +49,10 @@ fun SelectMenu(options: List<Pair<String, String>>, value: String, onChange: (St
                             .noRippleClickable {
                                 onChange(it.first)
                                 isExpanded = false
-                            })
+                            }
+                    )
                 }
             }
-
         }
     }
-
 }
