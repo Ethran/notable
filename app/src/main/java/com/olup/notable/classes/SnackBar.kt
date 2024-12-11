@@ -1,6 +1,5 @@
 package com.olup.notable
 
-import io.shipbook.shipbooksdk.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.Text

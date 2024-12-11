@@ -1,7 +1,7 @@
 package com.olup.notable.db
 
 import android.content.Context
-import io.shipbook.shipbooksdk.Log
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.room.*
 import java.util.Date

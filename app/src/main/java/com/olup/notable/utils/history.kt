@@ -64,16 +64,14 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
         return when (operation) {
             is Operation.AddStroke -> {
                 pageModel.addStrokes(operation.strokes)
-                return Operation.DeleteStroke(strokeIds = operation.strokes.map{it.id}) to strokeBounds(operation.strokes)
+                Operation.DeleteStroke(strokeIds = operation.strokes.map{it.id}) to strokeBounds(operation.strokes)
             }
             is Operation.DeleteStroke -> {
                 val strokes = pageModel.getStrokes(operation.strokeIds).filterNotNull()
                 pageModel.removeStrokes(operation.strokeIds)
-                return Operation.AddStroke(strokes = strokes) to strokeBounds(strokes)
+                Operation.AddStroke(strokes = strokes) to strokeBounds(strokes)
             }
-            else -> {
-                throw (java.lang.Error("Unhandled history operation"))
-            }
+            else -> throw (java.lang.Error("Unhandled history operation"))
         }
     }
 
@@ -85,7 +83,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
 
         if (originList.size == 0) return null
 
-        val operationBlock = originList.removeLast()
+        val operationBlock = originList.removeAt(originList.lastIndex)
         val revertOperations = mutableListOf<Operation>()
         val zoneAffected = Rect()
         for (operation in operationBlock) {
@@ -101,7 +99,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
 
     fun addOperationsToHistory(operations: OperationBlock) {
         undoList.add(operations)
-        if(undoList.size > 5) undoList.removeFirst()
+        if(undoList.size > 5) undoList.removeAt(0)
         redoList.clear()
     }
 }

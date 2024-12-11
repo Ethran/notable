@@ -1,20 +1,35 @@
 package com.olup.notable
 
-import io.shipbook.shipbooksdk.Log
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
+import android.util.Log
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Badge
-import androidx.compose.material.BadgedBox
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -25,15 +40,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.olup.notable.AppRepository
 import com.olup.notable.db.Folder
 import com.olup.notable.db.Notebook
 import com.olup.notable.db.Page
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Folder
 import compose.icons.feathericons.Settings
-import java.net.URL
-import kotlin.concurrent.thread
 
 @ExperimentalFoundationApi
 @ExperimentalComposeUiApi
@@ -41,7 +53,7 @@ import kotlin.concurrent.thread
 fun Library(navController: NavController, folderId: String? = null) {
     val context = LocalContext.current
 
-    var isSettingsOpen by remember {
+    var isAppSettingsOpen by remember {
         mutableStateOf(false)
     }
     val appRepository = AppRepository(LocalContext.current)
@@ -51,35 +63,21 @@ fun Library(navController: NavController, folderId: String? = null) {
         .observeAsState()
     val folders by appRepository.folderRepository.getAllInFolder(folderId).observeAsState()
 
-    var isLatestVersion by remember {
-        mutableStateOf(true)
-    }
-    LaunchedEffect(key1 = Unit, block = {
-        thread {
-            isLatestVersion = isLatestVersion(context, true)
-        }
-    })
-
     Column(
         Modifier.fillMaxSize()
     ) {
-        Topbar(
-        ) {
+        Topbar {
             Row(Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.weight(1f))
-                BadgedBox(
-                    badge = { if(!isLatestVersion) Badge( backgroundColor = Color.Black, modifier = Modifier.offset(-12.dp, 10.dp) ) }
-                ) {
-                    Icon(
-                        imageVector = FeatherIcons.Settings,
-                        contentDescription = "",
-                        Modifier
-                            .padding(8.dp)
-                            .noRippleClickable {
-                                isSettingsOpen = true
-                            })
-                }
-
+                Icon(
+                    imageVector = FeatherIcons.Settings,
+                    contentDescription = "",
+                    Modifier
+                        .padding(8.dp)
+                        .noRippleClickable {
+                            isAppSettingsOpen = true
+                        },
+                )
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 Text(text = "Add quick page",
@@ -219,7 +217,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(books!!) { item ->
-                        var isSettingsOpen by remember { mutableStateOf(false) }
+                        var isNotebookSettingsOpen by remember { mutableStateOf(false) }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -234,7 +232,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                         navController.navigate("books/$bookId/pages/$pageId")
                                     },
                                     onLongClick = {
-                                        isSettingsOpen = true
+                                        isNotebookSettingsOpen = true
                                     },
                                 )
                         ) {
@@ -256,16 +254,16 @@ fun Library(navController: NavController, folderId: String? = null) {
                             }
                         }
 
-                        if (isSettingsOpen) NotebookConfigDialog(
+                        if (isNotebookSettingsOpen) NotebookConfigDialog(
                             bookId = item.id,
-                            onClose = { isSettingsOpen = false })
+                            onClose = { isNotebookSettingsOpen = false })
                     }
                 }
             }
         }
     }
 
-    if (isSettingsOpen) AppSettingsModal(onClose = { isSettingsOpen = false })
+    if (isAppSettingsOpen) AppSettingsModal(onClose = { isAppSettingsOpen = false })
 }
 
 

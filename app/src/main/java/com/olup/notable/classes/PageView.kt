@@ -2,7 +2,7 @@ package com.olup.notable
 
 import android.content.Context
 import android.graphics.*
-import io.shipbook.shipbooksdk.Log
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue

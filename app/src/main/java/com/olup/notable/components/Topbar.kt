@@ -8,11 +8,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun Topbar(content: @Composable() () -> Unit){
+fun Topbar(content: @Composable () -> Unit){
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-        Box() {
+        Box {
             content()
         }
         Box(

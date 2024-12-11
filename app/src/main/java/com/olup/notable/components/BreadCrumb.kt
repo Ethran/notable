@@ -1,6 +1,5 @@
 package com.olup.notable
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
@@ -14,10 +13,10 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight
 
 @Composable
-fun BreadCrumb(folderId : String? = null, onSelectFolderId:(String?)->Unit){
+fun BreadCrumb(folderId: String? = null, onSelectFolderId: (String?) -> Unit) {
     val context = LocalContext.current
 
-    fun getFolderList (folderId : String) : List<Folder>{
+    fun getFolderList(folderId: String): List<Folder> {
         var folderList = listOf(FolderRepository(context).get(folderId))
         val parentId = folderList.first().parentFolderId
         if (parentId != null) {
@@ -26,14 +25,20 @@ fun BreadCrumb(folderId : String? = null, onSelectFolderId:(String?)->Unit){
         return folderList
     }
 
-    Row() {
-        Text(text = "Library", textDecoration = TextDecoration.Underline,modifier = Modifier.noRippleClickable { onSelectFolderId(null) })
+    Row {
+        Text(
+            text = "Library",
+            textDecoration = TextDecoration.Underline,
+            modifier = Modifier.noRippleClickable { onSelectFolderId(null) })
         if (folderId != null) {
             val folders = getFolderList(folderId).reversed()
 
-            folders.map{ f->
+            folders.map { f ->
                 Icon(imageVector = FeatherIcons.ChevronRight, contentDescription = "")
-                Text(text = f.title, textDecoration = TextDecoration.Underline, modifier = Modifier.noRippleClickable { onSelectFolderId(f.id) })
+                Text(
+                    text = f.title,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier.noRippleClickable { onSelectFolderId(f.id) })
             }
         }
     }

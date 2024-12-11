@@ -2,7 +2,7 @@ package com.olup.notable
 
 import android.content.Context
 import android.graphics.*
-import io.shipbook.shipbooksdk.Log
+import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.runtime.snapshotFlow
@@ -132,7 +132,7 @@ class DrawCanvas(
 
         val surfaceCallback: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
-                Log.i(TAG, "surface created ${holder}")
+                Log.i(TAG, "surface created $holder")
                 // set up the drawing surface
                 updateActiveSurface()
                 // This is supposed to let the ui update while the old surface is being unmounted

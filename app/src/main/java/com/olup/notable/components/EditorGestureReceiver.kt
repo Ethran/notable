@@ -1,6 +1,6 @@
 package com.olup.notable
 
-import io.shipbook.shipbooksdk.Log
+import android.util.Log
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -50,8 +50,8 @@ fun EditorGestureReceiver(
                         val fingerChange = event.changes.filter { it.type == PointerType.Touch }
                         // is already consumed return
                         if (fingerChange.find { it.isConsumed } != null) {
-                            return@awaitEachGesture
                             Log.i(TAG, "Canceling gesture - already consumemd")
+                            return@awaitEachGesture
                         }
                         fingerChange.forEach { it.consume() }
 

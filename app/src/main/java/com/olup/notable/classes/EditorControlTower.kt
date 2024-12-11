@@ -26,7 +26,7 @@ class EditorControlTower(
 
     fun onOpenPageCut(offset: Int) {
         if (offset < 0) return
-        var cutLine = state.selectionState.firstPageCut!!
+        val cutLine = state.selectionState.firstPageCut!!
 
         val (_, previousStrokes) = divideStrokesFromCut(page.strokes, cutLine)
 

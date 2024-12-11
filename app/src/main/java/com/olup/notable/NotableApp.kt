@@ -5,7 +5,6 @@ import com.onyx.android.sdk.rx.RxManager
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 class NotableApp : Application() {
-
     override fun onCreate() {
         super.onCreate()
         RxManager.Builder.initAppContext(this)
@@ -17,5 +16,4 @@ class NotableApp : Application() {
             HiddenApiBypass.addHiddenApiExemptions("")
         }
     }
-
 }

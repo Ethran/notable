@@ -1,7 +1,7 @@
 package com.olup.notable.db
 
 import android.content.Context
-import io.shipbook.shipbooksdk.Log
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.room.*
 import com.olup.notable.TAG
@@ -95,15 +95,15 @@ class BookRepository(context: Context) {
     }
 
     fun addPage(id: String, pageId: String, index: Int? = null) {
-        var pageIds = (db.getById(id) ?: return).pageIds.toMutableList()
+        val pageIds = (db.getById(id) ?: return).pageIds.toMutableList()
         if (index != null) pageIds.add(index, pageId)
         else pageIds.add(pageId)
         db.setPageIds(id, pageIds)
     }
 
     fun removePage(id: String, pageId: String) {
-        var notebook = db.getById(id) ?: return
-        var updatedNotebook = notebook.copy(
+        val notebook = db.getById(id) ?: return
+        val updatedNotebook = notebook.copy(
             // remove the page
             pageIds = notebook.pageIds.filterNot { it == pageId },
             // remove the "open page" if it's the one
@@ -114,10 +114,8 @@ class BookRepository(context: Context) {
     }
 
     fun changeePageIndex(id: String, pageId: String, index: Int) {
-        var pageIds = (db.getById(id) ?: return).pageIds.toMutableList()
-        var correctedIndex = index
-        if (correctedIndex < 0) correctedIndex = 0
-        if (correctedIndex > pageIds.size - 1) correctedIndex = pageIds.size - 1
+        val pageIds = (db.getById(id) ?: return).pageIds.toMutableList()
+        val correctedIndex = index.coerceIn(0, pageIds.size - 1)
 
         pageIds.remove(pageId)
         pageIds.add(correctedIndex, pageId)

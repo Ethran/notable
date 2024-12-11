@@ -7,7 +7,6 @@ import androidx.compose.ui.unit.IntOffset
 import com.olup.notable.db.BookRepository
 import com.olup.notable.db.PageRepository
 import com.olup.notable.db.Stroke
-import io.shipbook.shipbooksdk.Log
 import java.io.FileOutputStream
 import java.nio.file.Files
 import kotlin.io.path.absolutePathString

@@ -1,7 +1,7 @@
 package com.olup.notable
 
 import android.graphics.*
-import io.shipbook.shipbooksdk.Log
+import android.util.Log
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import com.olup.notable.db.Stroke

@@ -1,19 +1,21 @@
 package com.olup.notable
 
-import io.shipbook.shipbooksdk.Log
+import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
-import com.olup.notable.db.*
 import com.olup.notable.ui.theme.InkaTheme
-import com.onyx.android.sdk.pen.*
 
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -37,9 +39,9 @@ fun EditorView(
         return
     }
 
-    BoxWithConstraints() {
-        var height = convertDpToPixel(this.maxHeight, context).toInt()
-        var width = convertDpToPixel(this.maxWidth, context).toInt()
+    BoxWithConstraints {
+        val height = convertDpToPixel(this.maxHeight, context).toInt()
+        val width = convertDpToPixel(this.maxWidth, context).toInt()
 
 
         val page = remember {
@@ -97,7 +99,7 @@ fun EditorView(
         fun goToNextPage() {
             if (_bookId != null) {
                 val newPageId = appRepository.getNextPageIdFromBookAndPage(
-                    pageId = _pageId, notebookId = _bookId!!
+                    pageId = _pageId, notebookId = _bookId
                 )
                 navController.navigate("books/${_bookId}/pages/${newPageId}") {
                     popUpTo(lastRoute!!.destination.id) {
@@ -110,7 +112,7 @@ fun EditorView(
         fun goToPreviousPage() {
             if (_bookId != null) {
                 val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
-                    pageId = _pageId, notebookId = _bookId!!
+                    pageId = _pageId, notebookId = _bookId
                 )
                 if (newPageId != null) navController.navigate("books/${_bookId}/pages/${newPageId}")
             }
@@ -129,7 +131,11 @@ fun EditorView(
                 state = editorState
             )
             SelectedBitmap(editorState = editorState, controlTower = editorControlTower)
-            Row(modifier = Modifier.fillMaxWidth().fillMaxHeight()){
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+            ) {
                 Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(context = context, state = editorState)
             }
