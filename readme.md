@@ -28,7 +28,7 @@
 [Features](#features) •
 [Download](#download) •
 [Gestures](#gestures) •
-[Supported Devices](#supported-devices) •
+[Supported Devices](#tested-on-following-devices) •
 [Contribute](#contribute)
   
 </div>
@@ -45,6 +45,7 @@ Notable is a **custom note-taking app designed specifically for BOOX e-ink devic
 * 📒 **Notebooks:** Keep related notes together and easily switch between different notebooks based on your needs.
 * 📁 **Folders:** Create folders to organize your notes.
 * 🤏 **Editors' Mode Gestures:** [Intuitive gesture controls](#gestures) to enhance the editing experience.
+* 🌅 **Image insertion** work in progress
 
 ## Download
 **Download the latest stable version of the [Notable app here.](https://github.com/olup/notable/releases/latest)**
@@ -77,13 +78,12 @@ Notable features intuitive gestures controls within Editor's Mode, to optimize t
 * **Drag:** Move the selected writing around.
 * **Double tap:** Copy the selected writing.
 
-## Supported Devices
-
-The list below lists devices which users confirm to be supported by Notable. It does not imply any
+## Tested on following devices
+Those are not supported devices, only confirmed that app was running on them. The list below lists devices which users confirm to be supported by Notable. It does not imply any
 commitment from the developers. Feel free to add your device to the list.
-
-* [ONYX BOOX Go 10.3](https://onyxboox.com/boox_go103)
-* [Onyx Boox Note Air 4 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-4-c)
+* [ONYX BOOX Go 10.3](https://onyxboox.com/boox_go103) 0.0.10
+* [Onyx Boox Note Air 4 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-4-c) current version from this repo
+* [Onyx Boox Note Air 3 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-3-c) 0.0.11.f
 
 ## Screenshots
 
@@ -99,4 +99,4 @@ To start working with the project, see [the guide on how to start contributing](
 
 ***Important:*** Be sure to edit the `DEBUG_STORE_FILE` variable in the `/app/gradle.properties` file to the keystore on your own device. This is likely stored in the `.android` directory on your device.
 
-***Important:*** To use your BOOX device for debugging, an application will be required to enable developer mode on your BOOX device. [See a short guide here.](https://imgur.com/a/i1kb2UQ)  
+***Important:*** To use your BOOX device for debugging, an application will be required to enable developer mode on your BOOX device. [See a short guide here.](https://imgur.com/a/i1kb2UQ). In newer devices it is in settings under "More Settings"
