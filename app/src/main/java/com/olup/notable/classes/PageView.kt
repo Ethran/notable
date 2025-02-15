@@ -9,10 +9,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.toRect
 import com.olup.notable.db.AppDatabase
@@ -352,7 +350,7 @@ class PageView(
         scroll += delta
 
         // scroll bitmap
-        val tmp = windowedBitmap.copy(windowedBitmap.config, false)
+        val tmp = windowedBitmap.copy(windowedBitmap.config!!, false)
         drawBg(windowedCanvas, pageFromDb?.nativeTemplate ?: "blank", scroll)
 
         windowedCanvas.drawBitmap(tmp, 0f, -delta.toFloat(), Paint())

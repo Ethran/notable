@@ -1,19 +1,23 @@
 package com.olup.notable.db
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import androidx.annotation.RequiresApi
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -74,13 +78,28 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         private var INSTANCE: AppDatabase? = null
 
-        @RequiresApi(Build.VERSION_CODES.R)
         fun getDatabase(context: Context): AppDatabase {
             if (INSTANCE == null) {
                 synchronized(this) {
-                    // Check if the app has permission to access all files
-                    if (!Environment.isExternalStorageManager())
+                    // TODO: request only notable folder.
+                    // Request storage permission for Android 10 (Q) and below
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                        if (ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.WRITE_EXTERNAL_STORAGE
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            ActivityCompat.requestPermissions(
+                                (context as Activity),
+                                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                                1001
+                            )
+                        }
+                    }
+                    // Request "Manage all files" permission for Android R (API 30) and above
+                    else if (!Environment.isExternalStorageManager()) {
                         requestManageAllFilesPermission(context)
+                    }
                     val documentsDir =
                         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
                     val dbDir = File(documentsDir, "notabledb")

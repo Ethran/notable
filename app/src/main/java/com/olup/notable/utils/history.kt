@@ -117,7 +117,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
 
         if (originList.size == 0) return null
 
-        val operationBlock = originList.removeLast()
+        val operationBlock = originList.removeAt(originList.lastIndex)
         val revertOperations = mutableListOf<Operation>()
         val zoneAffected = Rect()
         for (operation in operationBlock) {
@@ -133,7 +133,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
 
     fun addOperationsToHistory(operations: OperationBlock) {
         undoList.add(operations)
-        if (undoList.size > 5) undoList.removeFirst()
+        if (undoList.size > 5) undoList.removeAt(0)
         redoList.clear()
     }
 }

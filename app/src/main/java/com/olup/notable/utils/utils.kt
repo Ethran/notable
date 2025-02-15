@@ -40,10 +40,9 @@ import java.io.IOException
 fun Modifier.noRippleClickable(
     onClick: () -> Unit
 ): Modifier = composed {
-    this.then(
-        clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
-            onClick()
-        })
+    clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
+        onClick()
+    }
 }
 
 
