@@ -70,11 +70,11 @@ jobs:
         run: |
           echo "version_name=${{steps.android_version.outputs.VERSION_NAME}}" >> $GITHUB_ENV
 
-      - run: mv ${{ github.workspace }}/app/build/outputs/apk/debug/app-debug.apk ${{ github.workspace }}/app/build/outputs/apk/debug/notable-${{ env.version_name }}.apk
+      - run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release.apk ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.version_name }}.apk
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ github.workspace }}/app/build/outputs/apk/debug/notable-${{ env.version_name }}.apk
+          files: ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.version_name }}.apk
           tag_name: v${{env.version_name}}
           token: ${{ secrets.TOKEN }}
