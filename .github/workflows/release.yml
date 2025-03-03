@@ -41,13 +41,19 @@ jobs:
           echo $FIREBASE_CONFIG | base64 --decode > google-services.json
 
       - name: Execute Gradle build
+        env:
+          STORE_FILE: ${{ github.workspace }}/secrets/my.keystore
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          ./gradlew \
-           -PSTORE_FILE="../${{ steps.decode_keystore.outputs.filePath }}" \
-           -PSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
-           -PKEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }} \
-           -PKEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }} \
-           assembleRelease
+          ./gradlew assembleRelease \
+            -PSTORE_FILE="$STORE_FILE" \
+            -PSTORE_PASSWORD="$STORE_PASSWORD" \
+            -PKEY_ALIAS="$KEY_ALIAS" \
+            -PKEY_PASSWORD="$KEY_PASSWORD"
+
+
 
       #   - name: Cache Gradle packages
       #     uses: actions/cache@v1
@@ -58,18 +64,22 @@ jobs:
 
       - name: Retrieve Version
         run: |
-          echo "::set-output name=VERSION_NAME::$(${{github.workspace}}/gradlew \
-           -PDEBUG_STORE_FILE="../${{ steps.decode_keystore.outputs.filePath }}" \
-           -PDEBUG_STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
-           -PDEBUG_KEY_ALIAS=${{ secrets.KEY_ALIAS }} \
-           -PDEBUG_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }} \
-          -q printVersionName)"
+          VERSION_NAME=$(${{ github.workspace }}/gradlew \
+            -PSTORE_FILE="$STORE_FILE" \
+            -PSTORE_PASSWORD="$STORE_PASSWORD" \
+            -PKEY_ALIAS="$KEY_ALIAS" \
+            -PKEY_PASSWORD="$KEY_PASSWORD" \
+            -q printVersionName)
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
         id: android_version
 
       - name: Get version
         run: |
           echo "version_name=${{steps.android_version.outputs.VERSION_NAME}}" >> $GITHUB_ENV
-
+          
+      - name: Verify APK Files
+        run: find ${{ github.workspace }}/app/build/outputs/apk/ -name "*.apk"
+          
       - run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release.apk ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.version_name }}.apk
 
       - name: Release
