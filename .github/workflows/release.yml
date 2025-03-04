@@ -73,8 +73,11 @@ jobs:
           STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          SHIPBOOK_APP_ID: ${{ secrets.SHIPBOOK_APP_ID }}
+          SHIPBOOK_APP_KEY: ${{ secrets.SHIPBOOK_APP_KEY }}
         run: |
-            echo "::set-output name=VERSION_NAME::$(${{github.workspace}}/gradlew \
+          ./gradlew -q printVersionName
+          echo "::set-output name=VERSION_NAME::$(${{github.workspace}}/gradlew \
             -PSTORE_FILE="$STORE_FILE" \
             -PSTORE_PASSWORD="$STORE_PASSWORD" \
             -PKEY_ALIAS="$KEY_ALIAS" \
