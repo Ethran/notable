@@ -47,6 +47,11 @@ jobs:
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
+          echo "Checking if keystore exists at $STORE_FILE..."
+          if [ ! -f "$STORE_FILE" ]; then
+            echo "ERROR: Keystore file not found at $STORE_FILE"
+            exit 1
+          fi
           ./gradlew assembleRelease \
             -PSTORE_FILE="$STORE_FILE" \
             -PSTORE_PASSWORD="$STORE_PASSWORD" \
