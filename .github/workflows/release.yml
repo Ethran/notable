@@ -77,19 +77,13 @@ jobs:
           SHIPBOOK_APP_KEY: ${{ secrets.SHIPBOOK_APP_KEY }}
         run: |
           ./gradlew -q printVersionName
-          echo "::set-output name=VERSION_NAME::$(${{github.workspace}}/gradlew \
-            -PSTORE_FILE="$STORE_FILE" \
-            -PSTORE_PASSWORD="$STORE_PASSWORD" \
-            -PKEY_ALIAS="$KEY_ALIAS" \
-            -PKEY_PASSWORD="$KEY_PASSWORD" \
-            -q printVersionName)
+          VERSION_NAME=$(./gradlew -q printVersionName)
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
         id: android_version
 
-      - name: Get version
-        run: |
-          echo "version_name=${{steps.android_version.outputs.VERSION_NAME}}" >> $GITHUB_ENV
 
-      - run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release.apk ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.version_name }}.apk
+      - name: Rename APK
+        run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release.apk ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.VERSION_NAME }}.apk
 
       - name: Release
         uses: softprops/action-gh-release@v1
