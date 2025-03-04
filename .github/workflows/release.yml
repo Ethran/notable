@@ -46,13 +46,14 @@ jobs:
           STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          SHIPBOOK_APP_ID: ${{ secrets.SHIPBOOK_APP_ID }}
+          SHIPBOOK_APP_KEY: ${{ secrets.SHIPBOOK_APP_KEY }}
         run: |
-          echo "Checking if keystore exists at $STORE_FILE..."
-          if [ ! -f "$STORE_FILE" ]; then
-            echo "ERROR: Keystore file not found at $STORE_FILE"
-            exit 1
-          fi
-          ./gradlew assembleRelease 
+          ./gradlew assembleRelease \
+            -PSTORE_FILE="$STORE_FILE" \
+            -PSTORE_PASSWORD="$STORE_PASSWORD" \
+            -PKEY_ALIAS="$KEY_ALIAS" \
+            -PKEY_PASSWORD="$KEY_PASSWORD"
 
 
 
@@ -73,12 +74,12 @@ jobs:
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          echo "::set-output name=VERSION_NAME::$(${{github.workspace}}/gradlew \
-           -PSTORE_FILE="../${{ steps.decode_keystore.outputs.filePath }}" \
-           -PSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
-           -PKEY_ALIAS=${{ secrets.KEY_ALIAS }} \
-           -PKEY_PASSWORD=${{ secrets.KEY_PASSWORD }} \
-          -q printVersionName)"
+            echo "::set-output name=VERSION_NAME::$(${{github.workspace}}/gradlew \
+            -PSTORE_FILE="$STORE_FILE" \
+            -PSTORE_PASSWORD="$STORE_PASSWORD" \
+            -PKEY_ALIAS="$KEY_ALIAS" \
+            -PKEY_PASSWORD="$KEY_PASSWORD" \
+            -q printVersionName)
         id: android_version
 
       - name: Get version
