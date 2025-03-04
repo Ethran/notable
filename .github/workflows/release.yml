@@ -88,6 +88,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.version_name }}.apk
-          tag_name: v${{env.version_name}}
+          files: ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.VERSION_NAME }}.apk
+          tag_name: v${{env.VERSION_NAME}}
           token: ${{ secrets.TOKEN }}
