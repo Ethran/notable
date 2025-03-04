@@ -52,11 +52,7 @@ jobs:
             echo "ERROR: Keystore file not found at $STORE_FILE"
             exit 1
           fi
-          ./gradlew assembleRelease \
-            -PSTORE_FILE="$STORE_FILE" \
-            -PSTORE_PASSWORD="$STORE_PASSWORD" \
-            -PKEY_ALIAS="$KEY_ALIAS" \
-            -PKEY_PASSWORD="$KEY_PASSWORD"
+          ./gradlew assembleRelease 
 
 
 
@@ -71,6 +67,11 @@ jobs:
         run: find ${{ github.workspace }}/app/build/outputs/apk/ -name "*.apk"
 
       - name: Retrieve Version
+        env:
+          STORE_FILE: ${{ github.workspace }}/secrets/my.keystore
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           echo "::set-output name=VERSION_NAME::$(${{github.workspace}}/gradlew \
            -PSTORE_FILE="../${{ steps.decode_keystore.outputs.filePath }}" \
