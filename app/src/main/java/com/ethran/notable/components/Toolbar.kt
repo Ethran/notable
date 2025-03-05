@@ -33,20 +33,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.navigation.NavController
+import com.ethran.notable.R
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.DrawCanvas
-import com.ethran.notable.utils.EditorState
-import com.ethran.notable.utils.Mode
-import com.ethran.notable.modals.PageSettingsModal
-import com.ethran.notable.utils.Pen
-import com.ethran.notable.utils.PenSetting
 import com.ethran.notable.db.KvProxy
 import com.ethran.notable.modals.AppSettings
-import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.modals.PageSettingsModal
+import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.History
+import com.ethran.notable.utils.Mode
+import com.ethran.notable.utils.Pen
+import com.ethran.notable.utils.PenSetting
 import com.ethran.notable.utils.UndoRedoType
 import com.ethran.notable.utils.createFileFromContentUri
-import com.ethran.notable.R
+import com.ethran.notable.utils.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.EyeOff
 import io.shipbook.shipbooksdk.Log
@@ -258,7 +258,7 @@ fun Toolbar(
                 )
 
                 LineToolbarButton(
-                    onStrokeMenuOpenChange = { state.isDrawing = !it },
+                    unSelect = { state.mode = Mode.Draw },
                     icon = R.drawable.line,
                     isSelected = state.mode == Mode.Line,
                     onSelect = { handleLine() },
@@ -425,7 +425,8 @@ fun Toolbar(
                             isMenuOpen = !isMenuOpen
                         }, iconId = R.drawable.menu, contentDescription = "menu"
                     )
-                    if (isMenuOpen) ToolbarMenu(navController = navController,
+                    if (isMenuOpen) ToolbarMenu(
+                        navController = navController,
                         state = state,
                         onClose = { isMenuOpen = false },
                         onPageSettingsOpen = { isPageSettingsModalOpen = true })

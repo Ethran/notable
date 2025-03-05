@@ -177,7 +177,8 @@ class DrawCanvas(
                 }
 
                 if (getActualState().mode == Mode.Select) {
-                    handleSelect(coroutineScope,
+                    handleSelect(
+                        coroutineScope,
                         this@DrawCanvas.page,
                         getActualState(),
                         plist.points.map { SimplePointF(it.x, it.y + page.scroll) })
@@ -310,7 +311,7 @@ class DrawCanvas(
         }
         coroutineScope.launch {
             isDrawing.collect {
-                Log.i(TAG + "Observer", "drawing state changed!")
+                Log.v(TAG + "Observer", "drawing state changed!")
                 state.isDrawing = it
             }
         }
@@ -318,7 +319,7 @@ class DrawCanvas(
 
         coroutineScope.launch {
             addImageByUri.drop(1).collect { imageUri ->
-                Log.i(TAG + "Observer", "Received image!")
+                Log.v(TAG + "Observer", "Received image!")
 
                 if (imageUri != null) {
                     handleImage(imageUri)
@@ -336,7 +337,7 @@ class DrawCanvas(
         // observe restartcount
         coroutineScope.launch {
             restartAfterConfChange.collect {
-                Log.i(TAG + "Observer", "Configuration changed!")
+                Log.v(TAG + "Observer", "Configuration changed!")
                 init()
                 drawCanvasToView()
             }
@@ -345,21 +346,21 @@ class DrawCanvas(
         // observe pen and stroke size
         coroutineScope.launch {
             snapshotFlow { state.pen }.drop(1).collect {
-                Log.i(TAG + "Observer", "pen change: ${state.pen}")
+                Log.v(TAG + "Observer", "pen change: ${state.pen}")
                 updatePenAndStroke()
                 refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.penSettings.toMap() }.drop(1).collect {
-                Log.i(TAG + "Observer", "pen settings change: ${state.penSettings}")
+                Log.v(TAG + "Observer", "pen settings change: ${state.penSettings}")
                 updatePenAndStroke()
                 refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.eraser }.drop(1).collect {
-                Log.i(TAG + "Observer", "eraser change: ${state.eraser}")
+                Log.v(TAG + "Observer", "eraser change: ${state.eraser}")
                 updatePenAndStroke()
                 refreshUiSuspend()
             }
@@ -368,7 +369,7 @@ class DrawCanvas(
         // observe is drawing
         coroutineScope.launch {
             snapshotFlow { state.isDrawing }.drop(1).collect {
-                Log.i(TAG + "Observer", "isDrawing change: ${state.isDrawing}")
+                Log.v(TAG + "Observer", "isDrawing change: ${state.isDrawing}")
                 updateIsDrawing()
             }
         }
@@ -376,7 +377,7 @@ class DrawCanvas(
         // observe toolbar open
         coroutineScope.launch {
             snapshotFlow { state.isToolbarOpen }.drop(1).collect {
-                Log.i(TAG + "Observer", "istoolbaropen change: ${state.isToolbarOpen}")
+                Log.v(TAG + "Observer", "istoolbaropen change: ${state.isToolbarOpen}")
                 updateActiveSurface()
             }
         }
@@ -384,7 +385,7 @@ class DrawCanvas(
         // observe mode
         coroutineScope.launch {
             snapshotFlow { getActualState().mode }.drop(1).collect {
-                Log.i(TAG + "Observer", "mode change: ${getActualState().mode}")
+                Log.v(TAG + "Observer", "mode change: ${getActualState().mode}")
                 updatePenAndStroke()
                 refreshUiSuspend()
             }
@@ -393,7 +394,7 @@ class DrawCanvas(
         coroutineScope.launch {
             //After 500ms add to history strokes
             commitHistorySignal.debounce(500).collect {
-                Log.i(TAG + "Observer", "Commiting to history")
+                Log.v(TAG + "Observer", "Commiting to history")
                 commitToHistory()
             }
         }
@@ -499,7 +500,15 @@ class DrawCanvas(
     private fun handleImage(imageUri: Uri) {
         // Convert the image to a software-backed bitmap
         val imageBitmap = uriToBitmap(context, imageUri)?.asImageBitmap()
-
+        if (imageBitmap == null)
+            coroutineScope.launch {
+                SnackState.globalSnackFlow.emit(
+                    SnackConf(
+                        text = "There was an error during image processing.",
+                        duration = 3000,
+                    )
+                )
+            }
         val softwareBitmap =
             imageBitmap?.asAndroidBitmap()?.copy(Bitmap.Config.ARGB_8888, true)
         if (softwareBitmap != null) {
@@ -556,7 +565,7 @@ class DrawCanvas(
     }
 
     private suspend fun updateIsDrawing() {
-        Log.i(TAG, "Update is drawing : ${state.isDrawing}")
+        Log.i(TAG, "Update is drawing: ${state.isDrawing}")
         if (state.isDrawing) {
             touchHelper.setRawDrawingEnabled(true)
         } else {

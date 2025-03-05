@@ -38,7 +38,7 @@ jobs:
         env:
           FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
         run: |
-          echo $FIREBASE_CONFIG | base64 --decode > google-services.json
+          echo $FIREBASE_CONFIG | base64 --decode > ${{ github.workspace }}/app/google-services.json
 
       - name: Execute Gradle build
         env:

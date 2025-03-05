@@ -2,36 +2,32 @@ package com.ethran.notable.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import com.ethran.notable.TAG
+import io.shipbook.shipbooksdk.Log
 
 @Composable
 fun LineToolbarButton(
     icon: Int,
     isSelected: Boolean,
     onSelect: () -> Unit,
-    onStrokeMenuOpenChange: ((Boolean) -> Unit)? = null
+    unSelect: () -> Unit
 ) {
-    var isStrokeMenuOpen by remember { mutableStateOf(false) }
-
-    if (onStrokeMenuOpenChange != null) {
-        LaunchedEffect(isStrokeMenuOpen) {
-            onStrokeMenuOpenChange(isStrokeMenuOpen)
-        }
-    }
-
 
     Box {
 
         ToolbarButton(
             isSelected = isSelected,
             onSelect = {
-                if (isSelected) isStrokeMenuOpen = !isStrokeMenuOpen
-                else onSelect()
+                if (isSelected) {
+                    // If it's already selected, deselect it
+                    Log.d(TAG, "Deselecting line")
+                    unSelect()
+                } else {
+                    // Otherwise, select it
+                    Log.d(TAG, "Selecting line")
+                    onSelect()
+                }
             },
             penColor = Color.LightGray,
             iconId = icon,

@@ -101,12 +101,22 @@ fun PdfDocument.writePage(context: Context, number: Int, repo: PageRepository, i
  * @return The Bitmap representation of the image, or null if conversion fails.
  * https://medium.com/@munbonecci/how-to-display-an-image-loaded-from-the-gallery-using-pick-visual-media-in-jetpack-compose-df83c78a66bf
  */
-fun uriToBitmap(context: Context, uri: Uri): Bitmap {
-    // Obtain the content resolver from the context
-    val contentResolver: ContentResolver = context.contentResolver
+fun uriToBitmap(context: Context, uri: Uri): Bitmap? {
+    return try {
+        // Obtain the content resolver from the context
+        val contentResolver: ContentResolver = context.contentResolver
 
-    // Since the minimum SDK is 29, we can directly use ImageDecoder to decode the Bitmap
-    val source = ImageDecoder.createSource(contentResolver, uri)
-    return ImageDecoder.decodeBitmap(source)
-
+        // Since the minimum SDK is 29, we can directly use ImageDecoder to decode the Bitmap
+        val source = ImageDecoder.createSource(contentResolver, uri)
+        ImageDecoder.decodeBitmap(source)
+    } catch (e: SecurityException) {
+        Log.e(TAG, "SecurityException: ${e.message}", e)
+        null
+    } catch (e: ImageDecoder.DecodeException) {
+        Log.e(TAG, "DecodeException: ${e.message}", e)
+        null
+    } catch (e: Exception) {
+        Log.e(TAG, "Unexpected error: ${e.message}", e)
+        null
+    }
 }

@@ -3,23 +3,23 @@ package com.ethran.notable.classes
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
-import io.shipbook.shipbooksdk.Log
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
+import com.ethran.notable.TAG
 import com.ethran.notable.utils.EditorState
+import com.ethran.notable.utils.History
 import com.ethran.notable.utils.Mode
+import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.PlacementMode
 import com.ethran.notable.utils.SimplePointF
-import com.ethran.notable.TAG
 import com.ethran.notable.utils.divideStrokesFromCut
+import com.ethran.notable.utils.drawImage
 import com.ethran.notable.utils.imageBoundsInt
 import com.ethran.notable.utils.offsetImage
 import com.ethran.notable.utils.offsetStroke
 import com.ethran.notable.utils.pageAreaToCanvasArea
 import com.ethran.notable.utils.strokeBounds
-import com.ethran.notable.utils.History
-import com.ethran.notable.utils.Operation
-import com.ethran.notable.utils.drawImage
+import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -117,7 +117,7 @@ class EditorControlTower(
             }
         }
         if (selectedImages != null) {
-            Log.i(TAG, "Commit images to history." )
+            Log.i(TAG, "Commit images to history.")
 
             val displacedImages = selectedImages.map {
                 offsetImage(it, offset = offset.toOffset())
@@ -237,15 +237,16 @@ class EditorControlTower(
         applySelectionDisplace()
         // set operation to paste only
         state.selectionState.placementMode = PlacementMode.Paste
+        if (!state.selectionState.selectedStrokes.isNullOrEmpty())
         // change the selected stokes' ids - it's a copy
-        state.selectionState.selectedStrokes = state.selectionState.selectedStrokes!!.map {
-            it.copy(
-                id = UUID
-                    .randomUUID()
-                    .toString(),
-                createdAt = Date()
-            )
-        }
+            state.selectionState.selectedStrokes = state.selectionState.selectedStrokes!!.map {
+                it.copy(
+                    id = UUID
+                        .randomUUID()
+                        .toString(),
+                    createdAt = Date()
+                )
+            }
         if (!state.selectionState.selectedImages.isNullOrEmpty())
             state.selectionState.selectedImages = state.selectionState.selectedImages!!.map {
                 it.copy(
