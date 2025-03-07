@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">Notable</string>
+    <string name="app_name" translatable="false">Notable</string>
+    <string name="home__quick_pages">Quick pages</string>
+    <string name="home__notebooks">Notebooks</string>
+    <string name="home__add_new_folder">Add new folder</string>
+    <string name="home__new_folder">New Folder</string>
 </resources>
