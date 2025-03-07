@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home__quick_pages">Szybkie notatki</string>
+    <string name="home__notebooks">Zeszyty</string>
+    <string name="home__add_new_folder">Dodaj nowy folder</string>
+    <string name="home__new_folder">Nowy Folder</string>
+</resources>
