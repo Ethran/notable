@@ -168,7 +168,7 @@ fun EditorView(
                 ScrollIndicator(context = context, state = editorState)
             }
             Toolbar(
-                navController = navController, state = editorState
+                navController = navController, state = editorState, controlTower = editorControlTower
             )
 
         }

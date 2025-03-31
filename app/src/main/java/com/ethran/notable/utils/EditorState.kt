@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
+import com.ethran.notable.classes.ClipboardContent
 import com.ethran.notable.classes.PageView
 import com.ethran.notable.datastore.EditorSettingCacheManager
 import com.ethran.notable.db.Image
@@ -41,9 +42,20 @@ class EditorState(val bookId: String? = null, val pageId: String, val pageView: 
     )
 
     val selectionState = SelectionState()
+
+    private var _clipboard by mutableStateOf(Clipboard.content)
+    var clipboard
+        get() = _clipboard
+        set(value) {
+            this._clipboard = value
+
+            // The clipboard content must survive the EditorState, so we store a copy in
+            // a singleton that lives outside of the EditorState
+            Clipboard.content = value
+        }
 }
 
-// if state is Move then applySelectionDisplace() will delete original strokes(images in future)
+// if state is Move then applySelectionDisplace() will delete original strokes and images
 enum class PlacementMode {
     Move,
     Paste
@@ -71,4 +83,8 @@ class SelectionState {
         selectionDisplaceOffset = null
         placementMode = null
     }
+}
+
+object Clipboard {
+    var content : ClipboardContent? = null;
 }

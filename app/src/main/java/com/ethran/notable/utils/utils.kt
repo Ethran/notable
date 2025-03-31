@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Point
 import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.RectF
@@ -307,6 +308,14 @@ fun imageBounds(image: Image): RectF {
     )
 }
 
+fun imagePoints(image: Image): Array<Point> {
+    return arrayOf(
+        Point(image.x, image.y),
+        Point(image.x, image.y + image.height),
+        Point(image.x + image.width, image.y),
+        Point(image.x + image.width, image.y + image.height),
+    );
+}
 
 fun strokeBounds(strokes: List<Stroke>): Rect {
     if (strokes.isEmpty()) return Rect()
@@ -410,6 +419,23 @@ fun selectStrokesFromPath(strokes: List<Stroke>, path: Path): List<Stroke> {
     return strokes.filter {
         strokeBounds(it).intersect(bounds)
     }.filter { it.points.any { region.contains(it.x.toInt(), (it.y-bounds.top).toInt()) } }
+}
+
+fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
+    val bounds = RectF()
+    path.computeBounds(bounds, true)
+
+    //region is only 16 bit, so we need to move our region
+    val translatedPath = Path(path)
+    translatedPath.offset(0f, -bounds.top)
+    val region = pathToRegion(translatedPath)
+
+    return images.filter {
+        imageBounds(it).intersect(bounds)
+    }.filter {
+        // include image if all its corners are within region
+        imagePoints(it).all { region.contains(it.x, (it.y - bounds.top).toInt()) }
+    }
 }
 
 fun offsetStroke(stroke: Stroke, offset: Offset): Stroke {
