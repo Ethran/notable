@@ -10,6 +10,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import com.ethran.notable.TAG
+import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import io.shipbook.shipbooksdk.Log
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
@@ -83,4 +85,10 @@ class KvProxy(context: Context) {
         Log.i(TAG, jsonValue)
         kvRepository.set(Kv(key, jsonValue))
     }
+
+    fun setAppSettings(value: AppSettings) {
+        setKv("APP_SETTINGS", value, AppSettings.serializer())
+        GlobalAppSettings.update(value)
+    }
+
 }

@@ -38,7 +38,7 @@ import com.ethran.notable.classes.SnackState
 import com.ethran.notable.datastore.EditorSettingCacheManager
 import com.ethran.notable.db.KvProxy
 import com.ethran.notable.modals.AppSettings
-import com.ethran.notable.modals.NeoTools
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.views.Router
 import com.onyx.android.sdk.api.device.epd.EpdController
@@ -81,10 +81,8 @@ class MainActivity : ComponentActivity() {
         // Refactor - we prob don't need this
         EditorSettingCacheManager.init(applicationContext)
 
-        // it is workaround for now
-        NeoTools =
-            KvProxy(applicationContext).get("APP_SETTINGS", AppSettings.serializer())?.neoTools
-                ?: false
+        GlobalAppSettings.update(KvProxy(this).get("APP_SETTINGS", AppSettings.serializer())
+            ?: AppSettings(version = 1))
 
         //EpdDeviceManager.enterAnimationUpdate(true);
 

@@ -19,10 +19,9 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
 import com.ethran.notable.db.AppDatabase
 import com.ethran.notable.db.Image
-import com.ethran.notable.db.KvProxy
 import com.ethran.notable.db.Page
 import com.ethran.notable.db.Stroke
-import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.drawBg
 import com.ethran.notable.utils.drawImage
 import com.ethran.notable.utils.drawStroke
@@ -355,7 +354,7 @@ class PageView(
 
             val timeToDraw = measureTimeMillis {
                 drawBg(this, pageFromDb?.nativeTemplate ?: "blank", scroll)
-                val appSettings = KvProxy(context).get("APP_SETTINGS", AppSettings.serializer())
+                val appSettings = GlobalAppSettings.current
 
                 if (appSettings?.debugMode == true) {
 //              Draw the gray edge of the rectangle

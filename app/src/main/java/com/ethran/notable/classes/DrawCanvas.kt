@@ -22,6 +22,8 @@ import com.ethran.notable.db.StrokeRepository
 import com.ethran.notable.db.handleSelect
 import com.ethran.notable.db.selectImage
 import com.ethran.notable.db.selectImagesAndStrokes
+import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.Eraser
 import com.ethran.notable.utils.History
@@ -589,19 +591,26 @@ class DrawCanvas(
     fun updateActiveSurface() {
         Log.i(TAG, "Update editable surface")
 
-        val exclusionHeight =
+        val toolbarHeight =
             if (state.isToolbarOpen) convertDpToPixel(40.dp, context).toInt() else 0
 
         touchHelper.setRawDrawingEnabled(false)
         touchHelper.closeRawDrawing()
 
-        touchHelper.setLimitRect(
-            mutableListOf(
-                Rect(
-                    0, 0, this.width, this.height
-                )
-            )
-        ).setExcludeRect(listOf(Rect(0, 0, this.width, exclusionHeight)))
+        // Determine the exclusion area based on toolbar position
+        val excludeRect: Rect =
+            if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
+                Rect(0, 0, this.width, toolbarHeight)
+            } else {
+                Rect(0, this.height - toolbarHeight, this.width, this.height)
+            }
+
+        val limitRect = if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
+            Rect(0, toolbarHeight, this.width, this.height)
+        else
+            Rect(0, 0, this.width, this.height - toolbarHeight)
+
+        touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
             .openRawDrawing()
 
         touchHelper.setRawDrawingEnabled(true)

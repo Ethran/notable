@@ -2,10 +2,15 @@ package com.ethran.notable.views
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.Button
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -14,6 +19,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.AppRepository
@@ -26,6 +33,8 @@ import com.ethran.notable.components.ScrollIndicator
 import com.ethran.notable.components.SelectedBitmap
 import com.ethran.notable.components.Toolbar
 import com.ethran.notable.datastore.EditorSettingCacheManager
+import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.History
@@ -148,7 +157,7 @@ fun EditorView(
             }
         }
 
-
+        val toolbarPosition = GlobalAppSettings.current.toolbarPosition
 
         InkaTheme {
             EditorSurface(
@@ -173,11 +182,28 @@ fun EditorView(
                 Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(context = context, state = editorState)
             }
-            Toolbar(
-                navController = navController,
-                state = editorState,
-                controlTower = editorControlTower
-            )
+            // Toolbar at Top or Bottom
+            when (toolbarPosition) {
+                AppSettings.Position.Top -> {
+                    Toolbar(
+                        navController = navController,
+                        state = editorState,
+                        controlTower = editorControlTower
+                    )
+                }
+
+                AppSettings.Position.Bottom -> {
+                    Column(Modifier.fillMaxWidth().fillMaxHeight()) { //this fixes this
+                        Spacer(modifier = Modifier.weight(1f))
+                        // Top/center content here
+                        Toolbar(
+                            navController = navController,
+                            state = editorState,
+                            controlTower = editorControlTower
+                        )
+                    }
+                }
+            }
 
         }
     }

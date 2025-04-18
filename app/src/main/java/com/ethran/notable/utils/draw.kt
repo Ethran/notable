@@ -15,14 +15,14 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
-import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
+import com.ethran.notable.classes.DrawCanvas
+import com.ethran.notable.classes.pressure
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
-import com.ethran.notable.modals.NeoTools
-import com.ethran.notable.classes.pressure
+import com.ethran.notable.modals.GlobalAppSettings
 import com.onyx.android.sdk.data.note.ShapeCreateArgs
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.pen.NeoBrushPen
@@ -150,14 +150,14 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: IntOffset) {
 
             Pen.BRUSH -> NeoBrushPen.drawStroke(canvas, paint, points, stroke.size, pressure, false)
             Pen.MARKER -> {
-                if (NeoTools)
+                if (GlobalAppSettings.current.neoTools)
                     NeoMarkerPen.drawStroke(canvas, paint, points, stroke.size, false)
                 else
                     drawMarkerStroke(canvas, paint, stroke.size, points)
             }
 
             Pen.FOUNTAIN -> {
-                if (NeoTools)
+                if (GlobalAppSettings.current.neoTools)
                     NeoFountainPen.drawStroke(
                         canvas,
                         paint,

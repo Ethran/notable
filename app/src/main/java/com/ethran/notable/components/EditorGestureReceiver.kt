@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -22,18 +21,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.TAG
-import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.EditorControlTower
 import com.ethran.notable.classes.GestureState
 import com.ethran.notable.classes.showHint
 import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.History
 import com.ethran.notable.utils.Mode
@@ -67,11 +65,7 @@ fun EditorGestureReceiver(
 ) {
 
     val coroutineScope = rememberCoroutineScope()
-    val appSettings by AppRepository(LocalContext.current)
-        .kvProxy
-        .observeKv("APP_SETTINGS", AppSettings.serializer(), AppSettings(version = 1))
-        .observeAsState()
-
+    val appSettings = remember { GlobalAppSettings.current }
     var crossPosition by remember { mutableStateOf<IntOffset?>(null) }
     var rectangleBounds by remember { mutableStateOf<Rect?>(null) }
     var isSelection by remember { mutableStateOf(false) }

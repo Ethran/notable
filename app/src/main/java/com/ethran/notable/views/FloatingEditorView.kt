@@ -21,6 +21,7 @@ import androidx.navigation.NavController
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.db.Page
 import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -68,9 +69,7 @@ fun FloatingEditorView(
                                 val page = Page(
                                     notebookId = null,
                                     parentFolderId = null,
-                                    nativeTemplate = appRepository.kvProxy.get(
-                                        "APP_SETTINGS", AppSettings.serializer()
-                                    )?.defaultNativeTemplate ?: "blank"
+                                    nativeTemplate = GlobalAppSettings.current.defaultNativeTemplate
                                 )
                                 EditorView(
                                     navController = navController,

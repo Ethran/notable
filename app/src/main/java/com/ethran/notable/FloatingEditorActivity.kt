@@ -20,7 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.db.Page
-import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.utils.exportBook
 import com.ethran.notable.utils.exportPageToPng
@@ -104,9 +104,7 @@ class FloatingEditorActivity : ComponentActivity() {
                     id = pageId,
                     notebookId = null,
                     parentFolderId = null,
-                    nativeTemplate = appRepository.kvProxy.get(
-                        "APP_SETTINGS", AppSettings.serializer()
-                    )?.defaultNativeTemplate ?: "blank"
+                    nativeTemplate = GlobalAppSettings.current.defaultNativeTemplate
                 )
                 appRepository.pageRepository.create(page)
             }
@@ -128,7 +126,7 @@ class FloatingEditorActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         pageId?.let { id ->
-            val context =this
+            val context = this
             lifecycleScope.launch(Dispatchers.IO) {
                 exportPageToPng(context, id)
             }

@@ -61,9 +61,9 @@ import com.ethran.notable.db.BookRepository
 import com.ethran.notable.db.Folder
 import com.ethran.notable.db.Notebook
 import com.ethran.notable.db.Page
-import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.AppSettingsModal
 import com.ethran.notable.modals.FolderConfigDialog
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.modals.NotebookConfigDialog
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.noRippleClickable
@@ -246,9 +246,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                 val page = Page(
                                     notebookId = null,
                                     parentFolderId = folderId,
-                                    nativeTemplate = appRepository.kvProxy.get(
-                                        "APP_SETTINGS", AppSettings.serializer()
-                                    )?.defaultNativeTemplate ?: "blank"
+                                    nativeTemplate = GlobalAppSettings.current.defaultNativeTemplate
                                 )
                                 appRepository.pageRepository.create(page)
                                 navController.navigate("pages/${page.id}")
@@ -321,9 +319,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                         appRepository.bookRepository.create(
                                             Notebook(
                                                 parentFolderId = folderId,
-                                                defaultNativeTemplate = appRepository.kvProxy.get(
-                                                    "APP_SETTINGS", AppSettings.serializer()
-                                                )?.defaultNativeTemplate ?: "blank"
+                                                defaultNativeTemplate = GlobalAppSettings.current.defaultNativeTemplate
                                             )
                                         )
                                     }
