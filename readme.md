@@ -40,14 +40,18 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 ---
 <details>
   <summary>Table of Contents</summary>
-    - [About This Fork](#about-this-fork)
-    - [Features](#features)
-    - [Download](#download)
-    - [Gestures](#gestures)
-    - [Supported Devices](#supported-devices)
-    - [Screenshots](#screenshots)
-    - [Contribute](#contribute)
+
+- [About This Fork](#about-this-fork)  
+- [Features](#features)  
+- [Download](#download)  
+- [Gestures](#gestures)  
+- [Supported Devices](#supported-devices)  
+- [Roadmap](#roadmap)  
+- [Screenshots](#screenshots)  
+- [Contribute](#contribute)  
+
 </details>
+
 
 ---
 
@@ -118,6 +122,33 @@ This does not imply any commitment from the developers.
 | [Boox Note 3](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-3)    | ✔       |  ✘   https://github.com/Ethran/notable/issues/24        |    ✔    |        |        |
 
 Feel free to add your device if tested successfully!
+
+## Roadmap
+
+Features I’d like to implement in the future (some might take a while — or a long while):
+
+- [ ] Bookmarks support, tags, and internal links — [Issue #52](https://github.com/Ethran/notable/issues/52)  
+  - [ ] Export links to PDF  
+
+- [ ] Better notebook covers, provide default styles of title page
+
+- [ ] PDF annotation  
+
+- [ ] Figure and text recognition — [Issue #44](https://github.com/Ethran/notable/issues/44)  
+  - [ ] Searchable notes  
+  - [ ] Automatic creation of tag descriptions  
+  - [ ] Shape recognition  
+
+- [ ] Better selection tools  
+  - [ ] Stroke editing: color, size, etc.  
+  - [ ] Rotate  
+  - [ ] Flip selection  
+  - [ ] Auto-scroll when dragging selection to screen edges  
+  - [ ] Easier selection movement (e.g. dragging to scroll page)
+
+- [ ] More dynamic page and notebook movement. Currently, pages can only be moved left/right — add drag-and-drop support
+
+- [ ] Custom drawing tools, might not be possible.
 
 
 ---
