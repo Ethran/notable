@@ -20,7 +20,7 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 [![Download Latest][download-shield]][download-url]
 [![💡 Request Feature][feature-shield]][feature-url]
 
-<a href="https://github.com/sponsors/rethran">
+<a href="https://github.com/sponsors/ethran">
   <img src="https://img.shields.io/badge/Sponsor_on-GitHub-%23ea4aaa?logo=githubsponsors&style=for-the-badge" alt="Sponsor on GitHub">
 </a>
 
