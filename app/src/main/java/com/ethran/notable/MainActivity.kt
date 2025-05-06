@@ -135,6 +135,7 @@ class MainActivity : ComponentActivity() {
             enableFullScreen() // Re-apply full-screen mode when focus is regained
             this.lifecycleScope.launch {
                 DrawCanvas.refreshUi.emit(Unit)
+                DrawCanvas.isDrawing.emit(true)
             }
         } else {
             lifecycleScope.launch {
