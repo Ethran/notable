@@ -111,8 +111,13 @@ fun EditorGestureReceiver(
                                 // is already consumed return
                                 if (fingerChange.find { it.isConsumed } != null) {
                                     Log.i(TAG, "Canceling gesture - already consumed")
-                                    crossPosition = null
-                                    rectangleBounds = null
+                                    if (isSelection) {
+                                        crossPosition = null
+                                        rectangleBounds = null
+                                        isSelection = false
+                                        if (!state.isDrawing)
+                                            state.isDrawing = true
+                                    }
                                     return@awaitEachGesture
                                 }
                                 fingerChange.forEach { change ->
@@ -131,10 +136,9 @@ fun EditorGestureReceiver(
                                 crossPosition = gestureState.getLastPositionIO()
                                 rectangleBounds = gestureState.calculateRectangleBounds()
                             } else if (gestureState.getElapsedTime() >= HOLD_THRESHOLD_MS && gestureState.getInputCount() == 1) {
-                                Log.e(TAG, gestureState.calculateTotalDelta().toString() +"Hold for:" + gestureState.getElapsedTime() )
                                 if (gestureState.calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE) {
                                     isSelection = true
-                                    state.isDrawing =false // unfreeze the screen
+                                    state.isDrawing = false // unfreeze the screen
                                     crossPosition = gestureState.getLastPositionIO()
                                     rectangleBounds = gestureState.calculateRectangleBounds()
                                     showHint("Selection mode!", coroutineScope, 1500)
@@ -157,6 +161,8 @@ fun EditorGestureReceiver(
                             crossPosition = null
                             rectangleBounds = null
                             isSelection = false
+                            if (!state.isDrawing)
+                                state.isDrawing = true
                             return@awaitEachGesture
                         }
                         // Calculate the total delta (movement distance) for all pointers

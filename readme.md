@@ -108,7 +108,7 @@ The following table lists devices confirmed by users to be compatible with speci
 This does not imply any commitment from the developers.
 | Device Name                                                                           | v0.0.10 | v0.0.11dev |   v0.0.14+     |        |        |
 |---------------------------------------------------------------------------------------|---------|------------|--------|--------|--------|
-| [ONYX BOOX Go 10.3](https://onyxboox.com/boox_go103)                                  | ✔       | ?          |    ✔    |        |        |
+| [ONYX Boox Go 10.3](https://onyxboox.com/boox_go103)                                  | ✔       | ?          |    ✔    |        |        |
 | [Onyx Boox Note Air 4 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-4-c) | ✘       | ✔          |    ✔    |        |        |
 | [Onyx Boox Note Air 3 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-3-c) | ✘       | ✔          |    ✔    |        |        |
 | [Onyx Boox Note Max](https://shop.boox.com/products/notemax)                          | ✘       | ✔          |    ✔    |        |        |
@@ -123,7 +123,7 @@ Features I’d like to implement in the future (some might take a while — or a
 - [ ] Bookmarks support, tags, and internal links — [Issue #52](https://github.com/Ethran/notable/issues/52)  
   - [ ] Export links to PDF  
 
-- [ ] Better notebook covers, provide default styles of title page
+- [x] Better notebook covers, provide default styles of title page
 
 - [ ] PDF annotation  
 
