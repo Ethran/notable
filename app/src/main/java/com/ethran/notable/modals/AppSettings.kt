@@ -79,6 +79,7 @@ data class AppSettings(
     val debugMode: Boolean = false,
     val neoTools: Boolean = false,
     val toolbarPosition: Position = Position.Top,
+    val smoothScroll: Boolean = false,
 
     val doubleTapAction: GestureAction? = defaultDoubleTapAction,
     val twoFingerTapAction: GestureAction? = defaultTwoFingerTapAction,
@@ -199,6 +200,20 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             checked = settings.neoTools,
             onCheckedChange = { isChecked ->
                 kv.setAppSettings(settings.copy(neoTools = isChecked))
+            }
+        )
+    }
+    Spacer(Modifier.height(10.dp))
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = "Enable smooth scrolling")
+        Spacer(Modifier.width(10.dp))
+        Switch(
+            checked = settings.smoothScroll,
+            onCheckedChange = { isChecked ->
+                kv.setAppSettings(settings.copy(smoothScroll = isChecked))
             }
         )
     }

@@ -1,6 +1,7 @@
 package com.ethran.notable.classes
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import com.ethran.notable.TAG
@@ -15,9 +16,10 @@ import com.ethran.notable.utils.divideStrokesFromCut
 import com.ethran.notable.utils.offsetStroke
 import com.ethran.notable.utils.pageAreaToCanvasArea
 import com.ethran.notable.utils.strokeBounds
-import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Date
 import java.util.UUID
 
@@ -27,22 +29,31 @@ class EditorControlTower(
     private val history: History,
     val state: EditorState
 ) {
+    private var scrollInProgress = Mutex()
 
-    fun onSingleFingerVerticalSwipe(startPosition: SimplePointF, delta: Int) {
-        if (!page.scrolable)
-            return
-        if (state.mode == Mode.Select) {
-            if (state.selectionState.firstPageCut != null) {
-                onOpenPageCut(delta)
-            } else {
-                onPageScroll(-delta)
+
+    fun onSingleFingerVerticalSwipe(startPosition: SimplePointF, delta: Int): Int {
+        if (!page.scrolable) return 0
+        if (scrollInProgress.isLocked) {
+            Log.w(TAG, "Scroll in progress -- skipping")
+            return delta
+        } // Return unhandled part
+
+        scope.launch {
+            scrollInProgress.withLock {
+                if (state.mode == Mode.Select) {
+                    if (state.selectionState.firstPageCut != null) {
+                        onOpenPageCut(delta)
+                    } else {
+                        onPageScroll(-delta)
+                    }
+                } else {
+                    onPageScroll(-delta)
+                }
             }
-        } else {
-            onPageScroll(-delta)
+            DrawCanvas.refreshUi.emit(Unit)
         }
-
-        scope.launch { DrawCanvas.refreshUi.emit(Unit) }
-
+        return 0 // All handled
     }
 
     private fun onOpenPageCut(offset: Int) {
@@ -78,7 +89,7 @@ class EditorControlTower(
         )
     }
 
-    private fun onPageScroll(delta: Int) {
+    private suspend fun onPageScroll(delta: Int) {
         page.updateScroll(delta)
     }
 

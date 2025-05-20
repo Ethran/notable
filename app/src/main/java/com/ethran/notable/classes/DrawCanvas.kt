@@ -101,6 +101,26 @@ class DrawCanvas(
         var addImageByUri = MutableStateFlow<Uri?>(null)
         var rectangleToSelect = MutableStateFlow<Rect?>(null)
         var drawingInProgress = Mutex()
+        private suspend fun waitForDrawing() {
+            withTimeoutOrNull(3000) {
+                // Just to make sure wait 1ms before checking lock.
+                delay(1)
+                // Wait until drawingInProgress is unlocked before proceeding
+                while (drawingInProgress.isLocked) {
+                    delay(5)
+                }
+            } ?: Log.e(TAG, "Timeout while waiting for drawing lock. Potential deadlock.")
+        }
+
+        suspend fun waitForDrawingWithSnack() {
+            if (drawingInProgress.isLocked) {
+                val snack = SnackConf(text = "Waiting for drawing to finish…", duration = 60000)
+                SnackState.globalSnackFlow.emit(snack)
+                waitForDrawing()
+                SnackState.cancelGlobalSnack.emit(snack.id)
+            }
+        }
+
     }
 
     fun getActualState(): EditorState {
@@ -483,17 +503,6 @@ class DrawCanvas(
         if (drawingInProgress.isLocked)
             Log.w(TAG, "Lock was acquired during refreshing UI. It might cause errors.")
         touchHelper.setRawDrawingEnabled(true)
-    }
-
-    private suspend fun waitForDrawing() {
-        withTimeoutOrNull(3000) {
-            // Just to make sure wait 1ms before checking lock.
-            delay(1)
-            // Wait until drawingInProgress is unlocked before proceeding
-            while (drawingInProgress.isLocked) {
-                delay(5)
-            }
-        } ?: Log.e(TAG, "Timeout while waiting for drawing lock. Potential deadlock.")
     }
 
     private fun handleImage(imageUri: Uri) {

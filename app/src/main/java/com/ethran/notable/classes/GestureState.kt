@@ -9,12 +9,22 @@ import com.ethran.notable.utils.SimplePointF
 import kotlin.math.abs
 
 
+enum class GestureMode {
+    Selection,
+    Scroll,
+    Normal
+}
+
+
 data class GestureState(
     val initialPositions: MutableMap<PointerId, Offset> = mutableMapOf(),
     val lastPositions: MutableMap<PointerId, Offset> = mutableMapOf(),
     var initialTimestamp: Long = System.currentTimeMillis(),
     var lastTimestamp: Long = initialTimestamp,
+    var gestureMode: GestureMode = GestureMode.Normal,
 ) {
+    private var lastCheckForMovementPosition: Offset? = null
+
     fun getElapsedTime(): Long {
         return lastTimestamp - initialTimestamp
     }
@@ -118,5 +128,19 @@ data class GestureState(
             }
         }
         return minVerticalMovement ?: 0f
+    }
+
+    fun getVerticalDragDelta(): Int {
+        if (lastPositions.isEmpty()) return 0
+        val currentPosition = lastPositions.values.lastOrNull() ?: return 0
+        if (lastCheckForMovementPosition == null) {
+            lastCheckForMovementPosition = currentPosition
+            return 0
+        }
+        val initial = lastCheckForMovementPosition?.y ?: return 0
+        val last = currentPosition.y
+        val delta = (last - initial).toInt()
+        lastCheckForMovementPosition = currentPosition
+        return delta
     }
 }

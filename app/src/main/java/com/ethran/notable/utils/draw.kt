@@ -557,8 +557,13 @@ fun drawBg(
     background: String,
     scroll: Int = 0,
     scale: Float = 1f, // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
-    page: PageView? = null
+    page: PageView? = null,
+    clipRect: Rect? = null
 ) {
+    clipRect?.let {
+        canvas.save()
+        canvas.clipRect(it)
+    }
     when (backgroundType) {
         is BackgroundType.Image -> {
             drawBackgroundImages(context, canvas, background, scroll, page, scale)
@@ -602,6 +607,9 @@ fun drawBg(
             (SCREEN_HEIGHT - padding).toFloat(),
             paint
         )
+    }
+    if (clipRect != null) {
+        canvas.restore()
     }
 }
 

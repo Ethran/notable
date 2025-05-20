@@ -12,6 +12,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import com.ethran.notable.SCREEN_HEIGHT
@@ -46,8 +48,6 @@ import kotlin.io.path.Path
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.system.measureTimeMillis
-import androidx.core.graphics.createBitmap
-import androidx.core.graphics.scale
 
 class PageView(
     val context: Context,
@@ -462,35 +462,55 @@ class PageView(
         }
     }
 
-    fun updateScroll(_delta: Int) {
+    suspend fun updateScroll(_delta: Int) {
         var delta = _delta
         if (scroll + delta < 0) delta = 0 - scroll
 
         // There is nothing to do, return.
         if (delta == 0) return
 
+        // before scrolling, make sure that strokes are drawn.
+        DrawCanvas.waitForDrawingWithSnack()
+
         scroll += delta
 
-        // scroll bitmap
-        val tmp = windowedBitmap.copy(windowedBitmap.config!!, false)
+
+        // Shift the existing bitmap content
+        val shiftedBitmap =
+            createBitmap(windowedBitmap.width, windowedBitmap.height, windowedBitmap.config!!)
+        val shiftedCanvas = Canvas(shiftedBitmap)
+        shiftedCanvas.drawBitmap(windowedBitmap, 0f, -delta.toFloat(), null)
+
+        // Swap in the shifted bitmap
+        windowedBitmap.recycle() // Recycle old bitmap
+        windowedBitmap = shiftedBitmap
+        windowedCanvas.setBitmap(windowedBitmap)
+
+
+        // Calculate area to redraw
+        val redrawTop = if (delta > 0) windowedBitmap.height - delta else 0
+        val redrawBottom = redrawTop + abs(delta)
+
+        val redrawRect = Rect(
+            0,
+            redrawTop,
+            windowedBitmap.width,
+            redrawBottom.coerceAtMost(windowedBitmap.height)
+        )
+
+        // Redraw the new/invalidated area (background + strokes)
         drawBg(
-            context, windowedCanvas, pageFromDb?.getBackgroundType() ?: BackgroundType.Native,
-            pageFromDb?.background ?: "blank", scroll, 1f, this
+            context,
+            windowedCanvas,
+            pageFromDb?.getBackgroundType() ?: BackgroundType.Native,
+            pageFromDb?.background ?: "blank",
+            scroll,
+            1f,
+            this,
+            redrawRect
         )
-        windowedCanvas.drawBitmap(tmp, 0f, -delta.toFloat(), Paint())
-        tmp.recycle()
 
-        // where is the new rendering area starting ?
-        val canvasOffset = if (delta > 0) windowedCanvas.height - delta else 0
-
-        drawArea(
-            area = Rect(
-                0,
-                canvasOffset,
-                windowedCanvas.width,
-                canvasOffset + abs(delta)
-            ),
-        )
+        drawArea(redrawRect)
 
         persistBitmapDebounced()
         saveToPersistLayer()
