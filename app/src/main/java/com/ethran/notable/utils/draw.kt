@@ -394,9 +394,9 @@ fun drawBackgroundImages(
 
             else -> {
                 if (page != null) {
-                    page.getOrLoadBackground(backgroundImage, -1)
+                    page.getOrLoadBackground(backgroundImage, -1, scale)
                 } else {
-                    loadBackgroundBitmap(backgroundImage, -1)
+                    loadBackgroundBitmap(backgroundImage, -1, scale)
                 }
             }
         }
@@ -462,9 +462,9 @@ fun drawPdfPage(
     }
     try {
         val imageBitmap = if (page != null) {
-            page.getOrLoadBackground(pdfUriString, pageNumber)
+            page.getOrLoadBackground(pdfUriString, pageNumber, scale)
         } else {
-            loadBackgroundBitmap(pdfUriString, pageNumber)
+            loadBackgroundBitmap(pdfUriString, pageNumber,scale)
         }
         if (imageBitmap.isNotNull()) {
             drawBitmapToCanvas(canvas, imageBitmap, scroll, scale, false)
@@ -602,11 +602,7 @@ fun drawBg(
             this.color = Color.MAGENTA
             this.strokeWidth = 2f
         }
-        val margin =
-            if (scale < 1.0f)
-                canvas.width
-            else
-                SCREEN_HEIGHT
+        val margin = min( SCREEN_HEIGHT, SCREEN_WIDTH)
         // Draw vertical line with x= SCREEN_HEIGHT
         canvas.drawLine(
             margin.toFloat(),

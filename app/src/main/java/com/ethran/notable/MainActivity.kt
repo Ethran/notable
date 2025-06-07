@@ -71,10 +71,9 @@ class MainActivity : ComponentActivity() {
         Log.i(TAG, "Notable started")
 
 
-        if (SCREEN_WIDTH == 0) {
-            SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
-            SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
-        }
+        SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
+        SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
+
 
         val snackState = SnackState()
         snackState.registerGlobalSnackObserver()
@@ -131,22 +130,13 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
+        Log.d(TAG, "OnWindowFocusChanged: $hasFocus")
         super.onWindowFocusChanged(hasFocus)
-
         if (hasFocus) {
             enableFullScreen()
-            lifecycleScope.launch {
-                if (DrawCanvas.wasDrawingBeforeFocusLost.value) {
-                    DrawCanvas.refreshUi.emit(Unit)
-                    DrawCanvas.isDrawing.emit(true)
-                }
-            }
-        } else {
-            lifecycleScope.launch {
-                val currentDrawing = DrawCanvas.isDrawingState.value
-                DrawCanvas.wasDrawingBeforeFocusLost.value = currentDrawing
-                DrawCanvas.isDrawing.emit(false)
-            }
+        }
+        lifecycleScope.launch {
+            DrawCanvas.onFocusChange.emit(hasFocus)
         }
     }
 

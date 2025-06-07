@@ -53,6 +53,7 @@ import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,8 +90,7 @@ class DrawCanvas(
         var restartAfterConfChange = MutableSharedFlow<Unit>()
 
         // used for managing drawing state on regain focus
-        val isDrawingState = MutableStateFlow(false)
-        val wasDrawingBeforeFocusLost = MutableStateFlow(false)
+        val onFocusChange = MutableSharedFlow<Boolean>()
 
         // before undo we need to commit changes
         val commitHistorySignal = MutableSharedFlow<Unit>()
@@ -199,7 +199,8 @@ class DrawCanvas(
 
                 }
             } else thread {
-                val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+                val points =
+                    copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
                 if (getActualState().mode == Mode.Erase) {
                     handleErase(
                         this@DrawCanvas.page,
@@ -304,6 +305,16 @@ class DrawCanvas(
     fun registerObservers() {
 
         coroutineScope.launch {
+            onFocusChange.collect { hasFocus ->
+                Log.i(TAG + "Observer", "App has focus: $hasFocus")
+                if (hasFocus) {
+                    state.checkForSelectionsAndMenus()
+                } else {
+                    isDrawing.emit(false)
+                }
+            }
+        }
+        coroutineScope.launch {
             page.zoomLevel.collect {
                 updatePenAndStroke()
             }
@@ -387,8 +398,15 @@ class DrawCanvas(
         // observe is drawing
         coroutineScope.launch {
             snapshotFlow { state.isDrawing }.drop(1).collect {
-                Log.v(TAG + "Observer", "isDrawing change: ${state.isDrawing}")
-                isDrawingState.value = it
+                Log.v(TAG + "Observer", "isDrawing change to $it")
+                // We need to close all menus
+                if (it) {
+                    Log.v(TAG + "Observer", "closing all menus")
+                    val stackTrace = Thread.currentThread().stackTrace.joinToString("\n")
+                    Log.d(TAG, "Current stack trace:\n$stackTrace")
+                    state.closeAllMenus()
+                    repeat(3) { awaitFrame() }
+                }
                 updateIsDrawing()
             }
         }
@@ -463,6 +481,7 @@ class DrawCanvas(
     }
 
     private fun refreshUi() {
+        Log.d(TAG, "refreshUi")
         // Use only if you have confidence that there are no strokes being drawn at the moment
         if (!state.isDrawing) {
             Log.w(TAG, "Not in drawing mode, skipping refreshUI")
@@ -482,6 +501,7 @@ class DrawCanvas(
     }
 
     private suspend fun refreshUiSuspend() {
+        Log.d(TAG, "refreshUiSuspend")
         // Do not use, if refresh need to be preformed without delay.
         // This function waits for strokes to be fully rendered.
         if (!state.isDrawing) {
@@ -538,7 +558,6 @@ class DrawCanvas(
             // image will be added to database when released, the same as with paste element.
             state.selectionState.placementMode = PlacementMode.Paste
             // make sure, that after regaining focus, we wont go back to drawing mode
-            wasDrawingBeforeFocusLost.value = false
         } else {
             // Handle cases where the bitmap could not be created
             Log.e("ImageProcessing", "Failed to create software bitmap from URI.")

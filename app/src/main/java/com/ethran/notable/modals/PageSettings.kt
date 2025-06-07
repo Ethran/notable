@@ -51,6 +51,7 @@ import java.io.File
 
 @Composable
 fun PageSettingsModal(pageView: PageView, onClose: () -> Unit) {
+    Log.d(TAG, "PageSettingsModal: $pageView")
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var pageBackground by remember { mutableStateOf(pageView.pageFromDb?.background ?: "blank") }

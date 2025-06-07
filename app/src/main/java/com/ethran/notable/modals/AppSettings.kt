@@ -205,7 +205,7 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
     )
 
     SettingToggleRow(
-        label = "Continuous Zoom (NOT IMPLEMENTED)",
+        label = "Continuous Zoom (Work in progress)",
         value = settings.continuousZoom,
         onToggle = { isChecked ->
             kv.setAppSettings(settings.copy(continuousZoom = isChecked))

@@ -133,7 +133,7 @@ fun EditorView(
 
         fun goToNextPage() {
             if (bookId != null) {
-                val newPageId = appRepository.getNextPageIdFromBookAndPage(
+                val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
                     pageId = pageId, notebookId = bookId
                 )
                 navController.navigate("books/${bookId}/pages/${newPageId}") {

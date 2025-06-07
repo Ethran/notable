@@ -1,5 +1,6 @@
 package com.ethran.notable.views
 
+import android.util.Log
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -27,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.components.QuickNav
 
@@ -40,6 +42,7 @@ fun Router() {
         mutableStateOf(false)
     }
     LaunchedEffect(isQuickNavOpen) {
+        Log.d(TAG, "Changing drawing state, isQuickNavOpen: $isQuickNavOpen")
         DrawCanvas.isDrawing.emit(!isQuickNavOpen)
     }
 

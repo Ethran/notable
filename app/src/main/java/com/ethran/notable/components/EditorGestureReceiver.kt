@@ -26,13 +26,16 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.ethran.notable.SCREEN_HEIGHT
-import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
+import com.ethran.notable.classes.DOUBLE_TAP_MIN_MS
+import com.ethran.notable.classes.DOUBLE_TAP_TIMEOUT_MS
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.EditorControlTower
 import com.ethran.notable.classes.GestureMode
 import com.ethran.notable.classes.GestureState
+import com.ethran.notable.classes.HOLD_THRESHOLD_MS
+import com.ethran.notable.classes.PINCH_ZOOM_THRESHOLD
+import com.ethran.notable.classes.SWIPE_THRESHOLD
 import com.ethran.notable.classes.showHint
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
@@ -46,19 +49,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
-
-
-private const val HOLD_THRESHOLD_MS = 300
-private const val ONE_FINGER_TOUCH_TAP_TIME = 100L
-private const val TAP_MOVEMENT_TOLERANCE = 15f
-private const val SWIPE_THRESHOLD = 200f
-private const val SWIPE_THRESHOLD_SMOOTH = 100f
-private const val DOUBLE_TAP_TIMEOUT_MS = 170L
-private const val DOUBLE_TAP_MIN_MS = 20L
-private const val TWO_FINGER_TOUCH_TAP_MAX_TIME = 200L
-private const val TWO_FINGER_TOUCH_TAP_MIN_TIME = 20L
-private const val TWO_FINGER_TAP_MOVEMENT_TOLERANCE = 20f
-private const val PINCH_ZOOM_THRESHOLD = 0.5f
 
 
 @Composable
@@ -143,18 +133,16 @@ fun EditorGestureReceiver(
                                 rectangleBounds = gestureState.calculateRectangleBounds()
                             } else {
                                 // set selection mode
-                                if (gestureState.getElapsedTime() >= HOLD_THRESHOLD_MS && gestureState.getInputCount() == 1) {
-                                    if (gestureState.calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE) {
-                                        gestureState.gestureMode = GestureMode.Selection
-                                        state.isDrawing = false // unfreeze the screen
-                                        crossPosition = gestureState.getLastPositionIO()
-                                        rectangleBounds = gestureState.calculateRectangleBounds()
-                                        showHint("Selection mode!", coroutineScope, 1500)
-                                    }
+                                if (gestureState.isHolding()) {
+                                    gestureState.gestureMode = GestureMode.Selection
+                                    state.isDrawing = false // unfreeze the screen
+                                    crossPosition = gestureState.getLastPositionIO()
+                                    rectangleBounds = gestureState.calculateRectangleBounds()
+                                    showHint("Selection mode!", coroutineScope, 1500)
                                 }
-                                if (GlobalAppSettings.current.smoothScroll && abs(gestureState.getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && gestureState.getInputCount() == 1) {
-                                    gestureState.gestureMode = GestureMode.Scroll
-                                }
+                                gestureState.checkSmoothScrolling()
+                                gestureState.checkContinuousZoom()
+
                             }
                             if (gestureState.gestureMode == GestureMode.Scroll) {
                                 val delta = gestureState.getVerticalDragDelta()
@@ -162,6 +150,11 @@ fun EditorGestureReceiver(
                                     delta = delta + overdueScroll
                                 )
                             }
+                            if (gestureState.gestureMode == GestureMode.Zoom) {
+                                val delta = gestureState.getPinchDelta()
+                                controlTower.onPinchToZoom(delta)
+                            }
+
 
                         } while (true)
 
@@ -183,20 +176,13 @@ fun EditorGestureReceiver(
                                 state.isDrawing = true
                             return@awaitEachGesture
                         }
-                        // Calculate the total delta (movement distance) for all pointers
-                        val totalDelta = gestureState.calculateTotalDelta()
-                        val gestureDuration = gestureState.getElapsedTime()
-                        Log.v(
-                            TAG,
-                            "Leaving gesture. totalDelta: ${totalDelta}, gestureDuration: $gestureDuration "
-                        )
                         if (!coroutineScope.isActive) return@awaitEachGesture
                         // if window lost focus, ignore input
                         if (!view.hasWindowFocus()) return@awaitEachGesture
 
 
-                        if (gestureState.getInputCount() == 1) {
-                            if (totalDelta < TAP_MOVEMENT_TOLERANCE && gestureDuration < ONE_FINGER_TOUCH_TAP_TIME) {
+                        if (gestureState.isOneFinger()) {
+                            if (gestureState.isOneFingerTap()) {
                                 if (withTimeoutOrNull(DOUBLE_TAP_TIMEOUT_MS) {
                                         val secondDown = awaitFirstDown()
                                         val deltaTime =
@@ -207,7 +193,7 @@ fun EditorGestureReceiver(
                                         )
                                         if (deltaTime < DOUBLE_TAP_MIN_MS) {
                                             showHint(
-                                                text = "Too quick for double click! delta: $totalDelta, time between: $deltaTime",
+                                                text = "Too quick for double click! time between: $deltaTime",
                                                 coroutineScope
                                             )
                                             return@withTimeoutOrNull null
@@ -234,12 +220,9 @@ fun EditorGestureReceiver(
 
                                     } != null) return@awaitEachGesture
                             }
-                        } else if (gestureState.getInputCount() == 2) {
+                        } else if (gestureState.isTwoFingers()) {
                             Log.v(TAG, "Two finger tap")
-                            if (totalDelta < TWO_FINGER_TAP_MOVEMENT_TOLERANCE &&
-                                gestureDuration < TWO_FINGER_TOUCH_TAP_MAX_TIME &&
-                                gestureDuration > TWO_FINGER_TOUCH_TAP_MIN_TIME
-                            ) {
+                            if (gestureState.isTwoFingersTap()) {
                                 resolveGesture(
                                     settings = appSettings,
                                     default = AppSettings.defaultTwoFingerTapAction,
@@ -251,34 +234,21 @@ fun EditorGestureReceiver(
                                 )
                             }
                             // zoom gesture
-                            var zoomDelta = gestureState.getPinchZoomDelta()
-                            if (!appSettings.continuousZoom) {
-                                if (abs(zoomDelta - 1f) > PINCH_ZOOM_THRESHOLD) {
-                                    zoomDelta = if (zoomDelta <= 1.0f)
-                                        if (SCREEN_HEIGHT > SCREEN_WIDTH)
-                                            SCREEN_WIDTH.toFloat() / SCREEN_HEIGHT.toFloat()
-                                        else
-                                            1.0f
-                                    else {
-                                        if (SCREEN_HEIGHT > SCREEN_WIDTH)
-                                            1.0f
-                                        else
-                                            SCREEN_WIDTH.toFloat() / SCREEN_HEIGHT.toFloat()
-                                    }
-                                    controlTower.onPinchToZoom(zoomDelta)
-                                    Log.d(TAG, "Discrete zoom: $zoomDelta")
-                                }
+                            val zoomDelta = gestureState.getPinchDrag()
+                            if (!appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
+                                controlTower.onPinchToZoom(zoomDelta)
+                                Log.d(TAG, "Discrete zoom: $zoomDelta")
                             }
                         }
 
                         val horizontalDrag = gestureState.getHorizontalDrag()
-                        val verticalDrag = gestureState
-                            .getVerticalDrag()
-                            .toInt()
+                        val verticalDrag = gestureState.getVerticalDrag()
 
                         Log.v(TAG, "horizontalDrag $horizontalDrag, verticalDrag $verticalDrag")
-                        when {
-                            horizontalDrag < -SWIPE_THRESHOLD -> {
+
+
+                        if (gestureState.gestureMode == GestureMode.Normal) {
+                            if (horizontalDrag < -SWIPE_THRESHOLD)
                                 resolveGesture(
                                     settings = appSettings,
                                     default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeLeftAction else AppSettings.defaultTwoFingerSwipeLeftAction,
@@ -288,9 +258,7 @@ fun EditorGestureReceiver(
                                     previousPage = goToPreviousPage,
                                     nextPage = goToNextPage,
                                 )
-                            }
-
-                            horizontalDrag > SWIPE_THRESHOLD -> {
+                            else if (horizontalDrag > SWIPE_THRESHOLD)
                                 resolveGesture(
                                     settings = appSettings,
                                     default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeRightAction else AppSettings.defaultTwoFingerSwipeRightAction,
@@ -300,11 +268,10 @@ fun EditorGestureReceiver(
                                     previousPage = goToPreviousPage,
                                     nextPage = goToNextPage,
                                 )
-                            }
-
                         }
-
-                        if (!GlobalAppSettings.current.smoothScroll && abs(verticalDrag) > SWIPE_THRESHOLD && gestureState.getInputCount() == 1) {
+                        if (!GlobalAppSettings.current.smoothScroll && gestureState.isOneFinger()
+                            && abs(verticalDrag) > SWIPE_THRESHOLD
+                        ) {
                             controlTower.onSingleFingerVerticalSwipe(
                                 verticalDrag
                             )

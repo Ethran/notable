@@ -18,11 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -92,10 +88,6 @@ fun Toolbar(
     navController: NavController, state: EditorState, controlTower: EditorControlTower
 ) {
     val scope = rememberCoroutineScope()
-    var isStrokeSelectionOpen by remember { mutableStateOf(false) }
-    var isMenuOpen by remember { mutableStateOf(false) }
-    var isPageSettingsModalOpen by remember { mutableStateOf(false) }
-
     val context = LocalContext.current
 
 
@@ -120,13 +112,15 @@ fun Toolbar(
             }
         }
 
-    LaunchedEffect(isMenuOpen) {
-        state.isDrawing = !isMenuOpen
+    // on exit of toolbar, update drawing state
+    LaunchedEffect(state.menuStates.isPageSettingsModalOpen, state.menuStates.isMenuOpen) {
+        // TODO: move it to menuState.
+        Log.i("Toolbar", "Updating drawing state")
+        state.checkForSelectionsAndMenus()
     }
-
     fun handleChangePen(pen: Pen) {
         if (state.mode == Mode.Draw && state.pen == pen) {
-            isStrokeSelectionOpen = true
+            state.menuStates.isStrokeSelectionOpen = true
         } else {
             state.mode = Mode.Draw
             state.pen = pen
@@ -151,9 +145,10 @@ fun Toolbar(
         state.penSettings = settings
     }
 
-    if (isPageSettingsModalOpen) {
+    if (state.menuStates.isPageSettingsModalOpen) {
+        Log.i("PageSettings", "Opening page settings modal")
         PageSettingsModal(pageView = state.pageView) {
-            isPageSettingsModalOpen = false
+            state.menuStates.isPageSettingsModalOpen = false
         }
     }
     if (state.isToolbarOpen) {
@@ -199,7 +194,7 @@ fun Toolbar(
                     penSetting = state.penSettings[Pen.BALLPEN.penName] ?: return,
                     onChangeSetting = { onChangeStrokeSetting(Pen.BALLPEN.penName, it) })
 
-                if(!GlobalAppSettings.current.monochromeMode) {
+                if (!GlobalAppSettings.current.monochromeMode) {
                     PenToolbarButton(
                         onStrokeMenuOpenChange = { state.isDrawing = !it },
                         pen = Pen.REDBALLPEN,
@@ -301,7 +296,7 @@ fun Toolbar(
                     onSelect = {
                         handleEraser()
                     },
-                    onMenuOpenChange = { isStrokeSelectionOpen = it },
+                    onMenuOpenChange = { state.menuStates.isStrokeSelectionOpen = it },
                     value = state.eraser,
                     onChange = { state.eraser = it })
                 Box(
@@ -439,14 +434,17 @@ fun Toolbar(
                 Column {
                     ToolbarButton(
                         onSelect = {
-                            isMenuOpen = !isMenuOpen
+                            state.menuStates.isMenuOpen = !state.menuStates.isMenuOpen
                         }, iconId = R.drawable.menu, contentDescription = "menu"
                     )
-                    if (isMenuOpen) ToolbarMenu(
+                    if (state.menuStates.isMenuOpen) ToolbarMenu(
                         navController = navController,
                         state = state,
-                        onClose = { isMenuOpen = false },
-                        onPageSettingsOpen = { isPageSettingsModalOpen = true })
+                        onClose = { state.menuStates.isMenuOpen = false },
+                        onPageSettingsOpen = {
+                            Log.i("PageSettings", "Opening page settings modal")
+                            state.menuStates.isPageSettingsModalOpen = true
+                        })
                 }
             }
 

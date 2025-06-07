@@ -11,7 +11,6 @@ import com.ethran.notable.utils.History
 import com.ethran.notable.utils.Mode
 import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.PlacementMode
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.divideStrokesFromCut
 import com.ethran.notable.utils.offsetStroke
 import com.ethran.notable.utils.strokeBounds
@@ -34,6 +33,7 @@ class EditorControlTower(
     // returns delta if could not scroll, to be added to next request,
     // this ensures that smooth scroll works reliably even if rendering takes to long
     fun onSingleFingerVerticalSwipe(delta: Int): Int {
+        if (delta == 0) return 0
         if (!page.scrollable) return 0
         if (scrollInProgress.isLocked) {
             Log.w(TAG, "Scroll in progress -- skipping")

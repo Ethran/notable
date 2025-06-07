@@ -62,7 +62,7 @@ This fork is maintained by **Ethran** as a continuation and personal enhancement
 
 ## Features
 * ⚡ **Fast Page Turn with Caching:** Notable leverages caching techniques to ensure smooth and swift page transitions, allowing you to navigate through your notes seamlessly. (next and previous pages are cached)
-* ↕️ **Infinite Vertical Scroll:** Enjoy a virtually endless canvas for your notes. Scroll vertically without limitations.
+* ↕️ **Infinite Vertical Scroll:** Enjoy a virtually endless canvas for your notes. Scroll vertically without limitations. You can even enjoy smooth scrolling.
 * 📝 **Quick Pages:** Quickly create a new page using the Quick Pages feature.
 * 📒 **Notebooks:** Keep related notes together and easily switch between different noteboo︂︂ks based on your needs.
 * 📁 **Folders:** Create folders to organize your notes.
@@ -97,6 +97,7 @@ Notable features intuitive gestures controls within Editor's Mode, to optimize t
 #### ✌️ 2 Fingers
 * **Swipe left or right:** Show or hide the toolbar.
 * **Single tap:** Switch between writing modes and eraser modes.
+* **Pinch**: Zoom in and out.
 
 #### 🔲 Selection
 * **Drag:** Move the selected writing around.
@@ -125,12 +126,17 @@ Features I’d like to implement in the future (some might take a while — or a
 
 - [x] Better notebook covers, provide default styles of title page
 
-- [ ] PDF annotation  
+- [ ] PDF annotation
+  - [x] basic support
+  - [ ] Show annotation from other programs
+  - [ ] Allow to save annotations to original pdf file
 
 - [ ] Figure and text recognition — [Issue #44](https://github.com/Ethran/notable/issues/44)  
   - [ ] Searchable notes  
   - [ ] Automatic creation of tag descriptions  
   - [ ] Shape recognition  
+
+- [ ] Moving page horizontally -- it would be nice to write on margins.
 
 - [ ] Better selection tools  
   - [ ] Stroke editing: color, size, etc.  

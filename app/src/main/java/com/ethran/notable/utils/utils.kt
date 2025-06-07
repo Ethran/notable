@@ -605,7 +605,8 @@ fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
 }
 
 
-fun loadBackgroundBitmap(filePath: String, pageNumber: Int): Bitmap? {
+fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
+    Log.v(TAG, "Reloading background, path: $filePath, scale: $scale")
     val file = File(filePath)
     if (!file.exists()) {
         Log.e(TAG, "getOrLoadBackground: File does not exist at path: $filePath")
@@ -627,7 +628,7 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int): Bitmap? {
                 }
 
                 renderer.openPage(pageNumber).use { pdfPage ->
-                    val targetWidth = min(SCREEN_WIDTH, SCREEN_HEIGHT)
+                    val targetWidth = SCREEN_WIDTH*scale
                     val scaleFactor = targetWidth.toFloat() / pdfPage.width
 
                     val width = (pdfPage.width * scaleFactor).toInt()
