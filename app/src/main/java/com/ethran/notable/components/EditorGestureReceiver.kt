@@ -50,7 +50,6 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 
-
 @Composable
 @ExperimentalComposeUiApi
 fun EditorGestureReceiver(
@@ -175,7 +174,12 @@ fun EditorGestureReceiver(
                             if (!state.isDrawing)
                                 state.isDrawing = true
                             return@awaitEachGesture
+                        } else if (gestureState.gestureMode == GestureMode.Scroll || gestureState.gestureMode == GestureMode.Zoom) {
+                            // return screen updates to normal.
+                            gestureState.gestureMode = GestureMode.Normal
+                            return@awaitEachGesture
                         }
+
                         if (!coroutineScope.isActive) return@awaitEachGesture
                         // if window lost focus, ignore input
                         if (!view.hasWindowFocus()) return@awaitEachGesture

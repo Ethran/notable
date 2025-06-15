@@ -15,10 +15,10 @@ import com.ethran.notable.utils.divideStrokesFromCut
 import com.ethran.notable.utils.drawImage
 import com.ethran.notable.utils.drawStroke
 import com.ethran.notable.utils.imageBoundsInt
-//import com.ethran.notable.utils.pageAreaToCanvasArea
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.selectImagesFromPath
 import com.ethran.notable.utils.selectStrokesFromPath
+import com.ethran.notable.utils.setAnimationMode
 import com.ethran.notable.utils.strokeBounds
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
@@ -81,6 +81,7 @@ fun selectImagesAndStrokes(
     editorState.selectionState.selectionStartOffset = startOffset
     editorState.selectionState.selectionDisplaceOffset = IntOffset(0, 0)
     editorState.selectionState.placementMode = PlacementMode.Move
+    setAnimationMode(true)
     page.drawAreaPageCoordinates(
         pageBounds,
         ignoredImageIds = imagesToSelect.map { it.id },

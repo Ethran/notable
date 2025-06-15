@@ -21,6 +21,7 @@ import com.ethran.notable.utils.drawImage
 import com.ethran.notable.utils.imageBoundsInt
 import com.ethran.notable.utils.offsetImage
 import com.ethran.notable.utils.offsetStroke
+import com.ethran.notable.utils.setAnimationMode
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import java.util.Date
@@ -52,6 +53,7 @@ class SelectionState {
         selectionStartOffset = null
         selectionDisplaceOffset = null
         placementMode = null
+        setAnimationMode(false)
     }
 
     fun isNonEmpty(): Boolean {

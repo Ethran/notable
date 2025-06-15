@@ -8,7 +8,6 @@ import android.util.Log
 import com.ethran.notable.TAG
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
-import com.ethran.notable.utils.logCallStack
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

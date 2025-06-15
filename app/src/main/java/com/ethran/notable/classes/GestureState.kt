@@ -7,6 +7,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.SimplePointF
+import com.ethran.notable.utils.setAnimationMode
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -39,8 +40,21 @@ data class GestureState(
     val lastPositions: MutableMap<PointerId, Offset> = mutableMapOf(),
     var initialTimestamp: Long = System.currentTimeMillis(),
     var lastTimestamp: Long = initialTimestamp,
-    var gestureMode: GestureMode = GestureMode.Normal,
 ) {
+    var gestureMode: GestureMode = GestureMode.Normal
+        set(value) {
+            if (field != value) {
+                when (value) {
+                    GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection -> {
+                        setAnimationMode(true)
+                    }
+                    GestureMode.Normal -> {
+                        setAnimationMode(false)
+                    }
+                }
+                field = value
+            }
+        }
     private var lastCheckForMovementPosition: List<Offset>? = null
 
     fun getElapsedTime(): Long {
