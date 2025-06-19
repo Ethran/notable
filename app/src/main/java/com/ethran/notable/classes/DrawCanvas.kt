@@ -65,6 +65,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.thread
+import kotlin.random.Random
 
 
 val pressure = EpdController.getMaxTouchPressure()
@@ -83,6 +84,8 @@ class DrawCanvas(
     private val strokeHistoryBatch = mutableListOf<String>()
 //    private val commitHistorySignal = MutableSharedFlow<Unit>()
 
+    private var randomRectangle: RectF? = null
+    private val randomRectanglePaint = Paint().apply { color = Color.BLUE }
 
     companion object {
         var forceUpdate = MutableSharedFlow<Rect?>()
@@ -125,6 +128,26 @@ class DrawCanvas(
             }
         }
 
+    }
+
+    private fun generateRandomRectangle() {
+        val left = Random.nextFloat() * page.viewWidth
+        val top = Random.nextFloat() * page.viewHeight
+        var right = Random.nextFloat() * page.viewWidth
+        var bottom = Random.nextFloat() * page.viewHeight
+
+        // Ensure right > left and bottom > top
+        if (right < left) {
+            val temp = left
+            left = right
+            right = temp
+        }
+        if (bottom < top) {
+            val temp = top
+            top = bottom
+            bottom = temp
+        }
+        randomRectangle = RectF(left, top, right, bottom)
     }
 
     fun getActualState(): EditorState {
@@ -375,7 +398,8 @@ class DrawCanvas(
             snapshotFlow { state.pen }.drop(1).collect {
                 Log.v(TAG + "Observer", "pen change: ${state.pen}")
                 updatePenAndStroke()
-                refreshUiSuspend()
+                generateRandomRectangle()
+                refreshUi.emit(Unit)
             }
         }
         coroutineScope.launch {
@@ -566,6 +590,9 @@ class DrawCanvas(
     fun drawCanvasToView() {
         val canvas = this.holder.lockCanvas() ?: return
         canvas.drawBitmap(page.windowedBitmap, 0f, 0f, Paint())
+        randomRectangle?.let {
+            canvas.drawRect(it, randomRectanglePaint)
+        }
         if (getActualState().mode == Mode.Select) {
             // render selection
             if (getActualState().selectionState.firstPageCut != null) {
