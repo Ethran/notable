@@ -64,6 +64,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Random
 import kotlin.concurrent.thread
 
 
@@ -375,6 +376,9 @@ class DrawCanvas(
             snapshotFlow { state.pen }.drop(1).collect {
                 Log.v(TAG + "Observer", "pen change: ${state.pen}")
                 updatePenAndStroke()
+                if (state.mode == Mode.Draw) {
+                    drawRandomRectangle()
+                }
                 refreshUiSuspend()
             }
         }
@@ -441,6 +445,39 @@ class DrawCanvas(
             }
         }
 
+    }
+
+    private fun drawRandomRectangle() {
+        val random = Random()
+
+        val bitmapWidth = page.windowedBitmap.width
+        val bitmapHeight = page.windowedBitmap.height
+
+        if (bitmapWidth <= 0 || bitmapHeight <= 0) {
+            Log.e(TAG, "Cannot draw random rectangle on an empty bitmap.")
+            return
+        }
+
+        // Random width and height between 50 and 200 pixels
+        val rectWidth = random.nextInt(151) + 50
+        val rectHeight = random.nextInt(151) + 50
+
+        // Ensure coordinates are within bounds
+        val left = random.nextInt(maxOf(1, bitmapWidth - rectWidth))
+        val top = random.nextInt(maxOf(1, bitmapHeight - rectHeight))
+        val right = left + rectWidth
+        val bottom = top + rectHeight
+
+        val randomRect = Rect(left, top, right, bottom)
+
+        val paint = Paint().apply {
+            color = Color.rgb(random.nextInt(256), random.nextInt(256), random.nextInt(256))
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+        }
+
+        page.windowedCanvas.drawRect(randomRect, paint)
+        drawCanvasToView()
     }
 
     private suspend fun selectRectangle(rectToSelect: Rect) {
