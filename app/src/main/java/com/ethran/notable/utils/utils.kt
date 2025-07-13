@@ -321,12 +321,14 @@ fun handleScribbleToErase(
     history: History,
     pen: Pen
 ): Boolean {
+    val currentTimeOfLastStrokeDrawn = timeOfLastStrokeDrawn
+    timeOfLastStrokeDrawn = System.currentTimeMillis()
     if (pen == Pen.MARKER) return false // do not erase with highlighter
     if (!GlobalAppSettings.current.scribbleToEraseEnabled)
         return false // scribble to erase is disabled
     if (!isScribble(touchPoints))
         return false // not scribble
-    if (touchPoints.first().timestamp < timeOfLastStrokeDrawn + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS)
+    if (touchPoints.first().timestamp < currentTimeOfLastStrokeDrawn + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS)
         return false // not enough time has passed since last stroke
 
     val points = touchPoints.map { SimplePointF(it.x, it.y) }
@@ -382,7 +384,6 @@ fun handleDraw(
     touchPoints: List<StrokePoint>
 ) {
     try {
-        timeOfLastStrokeDrawn = System.currentTimeMillis()
         val boundingBox = calculateBoundingBox(touchPoints)
 
         //move rectangle
