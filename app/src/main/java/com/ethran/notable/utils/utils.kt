@@ -56,9 +56,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
-const val SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS = 100L
+const val SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS = 200L
 const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
-var timeOfLastStrokeDrawn: Long = 0
 
 fun Modifier.noRippleClickable(
     onClick: () -> Unit
@@ -269,7 +268,7 @@ fun isScribble(points: List<StrokePoint>): Boolean {
         totalDistance += kotlin.math.abs(dx) + kotlin.math.abs(dy)
     }
 
-    val minLengthForScribble = kotlin.math.max(width, height) * 3
+    val minLengthForScribble = (width + height) * 3
     if (totalDistance < minLengthForScribble) return false
     return true
 }
@@ -295,6 +294,8 @@ fun filterStrokesByIntersection(
     }
 }
 
+// Counts the number of directional reversals (sharp turns) in a path based on dot products of
+// consecutive segments.
 fun calculateNumReversals(
     points: List<SimplePointF>,
     stepSize: Int = 10
@@ -319,16 +320,15 @@ fun handleScribbleToErase(
     page: PageView,
     touchPoints: List<StrokePoint>,
     history: History,
-    pen: Pen
+    pen: Pen,
+    currentLastStrokeEndTime: Long
 ): Boolean {
-    val currentTimeOfLastStrokeDrawn = timeOfLastStrokeDrawn
-    timeOfLastStrokeDrawn = System.currentTimeMillis()
     if (pen == Pen.MARKER) return false // do not erase with highlighter
     if (!GlobalAppSettings.current.scribbleToEraseEnabled)
         return false // scribble to erase is disabled
     if (!isScribble(touchPoints))
         return false // not scribble
-    if (touchPoints.first().timestamp < currentTimeOfLastStrokeDrawn + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS)
+    if (touchPoints.first().timestamp < currentLastStrokeEndTime + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS)
         return false // not enough time has passed since last stroke
 
     val points = touchPoints.map { SimplePointF(it.x, it.y) }

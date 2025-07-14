@@ -82,6 +82,7 @@ class DrawCanvas(
     private val strokeHistoryBatch = mutableListOf<String>()
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
     private val log =  ShipBook.getLogger("DrawCanvas")
+    var lastStrokeEndTime: Long = 0
     //private val commitHistorySignal = MutableSharedFlow<Unit>()
 
     companion object {
@@ -132,6 +133,9 @@ class DrawCanvas(
     }
 
     private val inputCallback: RawInputCallback = object : RawInputCallback() {
+        // Documentation: https://github.com/onyx-intl/OnyxAndroidDemo/blob/d3a1ffd3af231fe4de60a2a0da692c17cb35ce31/doc/Onyx-Pen-SDK.md#L40-L62
+        // - pen : `onBeginRawDrawing()` -> `onRawDrawingTouchPointMoveReceived()` -> `onRawDrawingTouchPointListReceived()` -> `onEndRawDrawing()`
+        // - erase :  `onBeginRawErasing()` -> `onRawErasingTouchPointMoveReceived()` -> `onRawErasingTouchPointListReceived()` -> `onEndRawErasing()`
 
         override fun onBeginRawDrawing(p0: Boolean, p1: TouchPoint?) {
         }
@@ -143,6 +147,8 @@ class DrawCanvas(
         }
 
         override fun onRawDrawingTouchPointListReceived(plist: TouchPointList) {
+            val currentLastStrokeEndTime = lastStrokeEndTime
+            lastStrokeEndTime = System.currentTimeMillis()
             val startTime = System.currentTimeMillis()
             // sometimes UI will get refreshed and frozen before we draw all the strokes.
             // I think, its because of doing it in separate thread. Commented it for now, to
@@ -177,7 +183,13 @@ class DrawCanvas(
                             else
                                 copyInput(plist.points, page.scroll, page.zoomLevel.value)
 
-                        val erasedByScribble = handleScribbleToErase(page, scaledPoints, history, getActualState().pen)
+                        val erasedByScribble = handleScribbleToErase(
+                            page,
+                            scaledPoints,
+                            history,
+                            getActualState().pen,
+                            currentLastStrokeEndTime
+                        )
                         if (!erasedByScribble) {
                             // draw the stroke
                             handleDraw(
