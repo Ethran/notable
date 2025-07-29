@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home__quick_pages">(fr) Quick pages</string>
+    <string name="home__notebooks">(fr) Notebooks</string>
+    <string name="home__add_new_folder">(fr) Add new folder</string>
+    <string name="home__new_folder">(fr) New Folder</string>
+</resources>
