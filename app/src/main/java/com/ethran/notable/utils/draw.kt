@@ -27,6 +27,7 @@ import com.ethran.notable.classes.pressure
 import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
+import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.modals.GlobalAppSettings
 import com.onyx.android.sdk.data.note.ShapeCreateArgs
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -76,6 +77,39 @@ fun drawBallPenStroke(
         drawUtilsLog.e("Exception during draw", e)
     }
 }
+
+private val eraserPaint = Paint().apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+    color = Color.BLACK
+    isAntiAlias = false
+}
+private val reusablePath = Path()
+fun drawEraserStroke(canvas: Canvas, points: List<StrokePoint>, strokeSize: Float) {
+    eraserPaint.strokeWidth = strokeSize
+
+    reusablePath.reset()
+    if (points.isEmpty()) return
+
+    val prePoint = PointF(points[0].x, points[0].y)
+    reusablePath.moveTo(prePoint.x, prePoint.y)
+
+    for (i in 1 until points.size) {
+        val point = points[i]
+        if (abs(prePoint.y - point.y) >= 30) continue
+        reusablePath.quadTo(prePoint.x, prePoint.y, point.x, point.y)
+        prePoint.x = point.x
+        prePoint.y = point.y
+    }
+
+    try {
+        canvas.drawPath(reusablePath, eraserPaint)
+    } catch (e: Exception) {
+        drawUtilsLog.e("Exception during draw", e)
+    }
+}
+
 
 fun drawMarkerStroke(
     canvas: Canvas, paint: Paint, strokeSize: Float, points: List<TouchPoint>
