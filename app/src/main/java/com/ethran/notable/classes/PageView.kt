@@ -214,14 +214,7 @@ class PageView(
             } finally {
                 snack?.let { SnackState.cancelGlobalSnack.emit(it.id) }
                 coroutineScope.launch(Dispatchers.Main.immediate) {
-                    DrawCanvas.forceUpdate.emit(
-                        Rect(
-                            0,
-                            0,
-                            windowedCanvas.width,
-                            windowedCanvas.height
-                        )
-                    )
+                    DrawCanvas.forceUpdate.emit(null)
                 }
 
                 logCache.d("Loaded page from persistent layer $id")
@@ -290,14 +283,7 @@ class PageView(
             height = PageDataManager.getPageHeight(id) ?: viewHeight //TODO: correct
             redrawAll(coroutineScope)
             coroutineScope.launch(Dispatchers.Main.immediate) {
-                DrawCanvas.forceUpdate.emit(
-                    Rect(
-                        0,
-                        0,
-                        windowedCanvas.width,
-                        windowedCanvas.height
-                    )
-                )
+                DrawCanvas.forceUpdate.emit(null)
             }
         } else {
             logCache.i("Page not found in cache")
