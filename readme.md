@@ -176,6 +176,7 @@ The app can be used as a **primitive second monitor** for LaTeX editing — prev
 - Locate the PDF file on your tablet at:  
   `Internal shared storage/Documents/notabledb/backgrounds/pdfs/File_Name.pdf`
 - Connect your device to your computer via USB (MTP).
+- In global setting, enable monitoring for background file changes.
 - Set up automatic copying of the compiled PDF to the tablet:  
   <details>
   <summary>Example using a custom <code>latexmkrc</code>:</summary>
