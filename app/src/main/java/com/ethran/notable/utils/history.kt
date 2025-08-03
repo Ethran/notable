@@ -89,7 +89,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
             }
         }
     }
-    @Suppress("unused")
+
     fun cleanHistory() {
         undoList.clear()
         redoList.clear()

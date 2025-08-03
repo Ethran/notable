@@ -64,7 +64,7 @@ class EditorControlTower(
     fun switchPage(id:String)
     {
         state.changePage(id)
-        history = History(scope, page)
+        history.cleanHistory()
         page.updatePageID(id)
     }
 
