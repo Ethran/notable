@@ -149,6 +149,7 @@ class PageView(
     fun updatePageID(newId: String) {
         id = newId
         pageFromDb = AppRepository(context).pageRepository.getById(id)
+        zoomLevel.value = 1.0f
         PageDataManager.setPage(newId)
 
         PageDataManager.getCachedBitmap(newId)?.let { cached ->
