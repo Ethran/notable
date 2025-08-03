@@ -274,11 +274,13 @@ class DrawCanvas(
             override fun surfaceChanged(
                 holder: SurfaceHolder, format: Int, width: Int, height: Int
             ) {
-                log.i(  "surface changed $holder")
-                drawCanvasToView()
-                coroutineScope.launch {
-                    updatePenAndStroke()
-                }
+                // Only act if actual dimensions changed
+                if (page.viewWidth == width && page.viewHeight == height) return
+
+                logCanvasObserver.v("Surface dimension changed!")
+
+                // Update page dimensions, redraw and refresh
+                page.updateDimensions(width, height)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -361,8 +363,6 @@ class DrawCanvas(
             }
         }
 
-
-        // observe restartcount
         coroutineScope.launch {
             restartAfterConfChange.collect {
                 logCanvasObserver.v("Configuration changed!")

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -48,6 +49,7 @@ import com.ethran.notable.utils.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
+import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
 
@@ -390,8 +392,8 @@ fun Toolbar(
                     val book = AppRepository(context).bookRepository.getById(state.bookId)
 
                     // TODO maybe have generic utils for this ?
-                    val pageNumber = book!!.pageIds.indexOf(state.pageId) + 1
-                    val totalPageNumber = book.pageIds.size
+                    val pageNumber = remember (state.pageId) {   book!!.pageIds.indexOf(state.pageId) + 1}
+                    val totalPageNumber = book!!.pageIds.size
 
                     Box(
                         contentAlignment = Alignment.Center,
