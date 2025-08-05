@@ -26,7 +26,7 @@ import java.util.UUID
 class EditorControlTower(
     private val scope: CoroutineScope,
     val page: PageView,
-    private val history: History,
+    private var history: History,
     val state: EditorState
 ) {
     private var scrollInProgress = Mutex()
@@ -59,6 +59,13 @@ class EditorControlTower(
             DrawCanvas.refreshUi.emit(Unit)
         }
         return 0 // All handled
+    }
+
+    fun switchPage(id:String)
+    {
+        state.changePage(id)
+        history.cleanHistory()
+        page.updatePageID(id)
     }
 
     fun onPinchToZoom(delta: Float) {

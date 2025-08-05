@@ -31,7 +31,10 @@ class MenuStates {
 }
 
 
-class EditorState(val bookId: String? = null, val pageId: String, val pageView: PageView) {
+class EditorState(val bookId: String? = null, pageId: String, val pageView: PageView) {
+    var pageId by mutableStateOf(pageId)
+        private set
+
     private val log = ShipBook.getLogger("EditorState")
     private val persistedEditorSettings = EditorSettingCacheManager.getEditorSettings()
 
@@ -88,6 +91,14 @@ class EditorState(val bookId: String? = null, val pageId: String, val pageView: 
             log.d("Drawing state should be: $shouldBeDrawing (menus open: ${menuStates.anyMenuOpen}, selection active: ${selectionState.isNonEmpty()})")
             isDrawing = shouldBeDrawing
         }
+    }
+
+    fun changePage(id: String) {
+        log.d("Changing page to $id, from $pageId")
+        pageId = id
+        closeAllMenus()
+        selectionState.reset()
+        isDrawing = true
     }
 }
 
