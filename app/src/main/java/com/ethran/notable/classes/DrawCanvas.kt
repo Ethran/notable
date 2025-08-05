@@ -307,6 +307,7 @@ class DrawCanvas(
                logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
+                    drawCanvasToView()
                 } else {
                     isDrawing.emit(false)
                 }
