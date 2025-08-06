@@ -8,7 +8,6 @@ import android.graphics.Rect
 import android.os.FileObserver
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
-import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.loadBackgroundBitmap
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
@@ -191,10 +190,10 @@ object PageDataManager {
     }
 
 
-    fun setBackground(pageId: String, background: CachedBackground) {
+    fun setBackground(pageId: String, background: CachedBackground, observe: Boolean) {
         synchronized(accessLock) {
             cachedBackgrounds[pageId] = background
-            observeBackgroundFile(pageId, background.path)
+            if (observe) observeBackgroundFile(pageId, background.path)
         }
     }
 
@@ -209,8 +208,6 @@ object PageDataManager {
         filePath: String,
         onChange: suspend () -> Unit = {}
     ) {
-        if(!GlobalAppSettings.current.monitorBgFiles)
-            return
         synchronized(backgroundObservers) {
             if (backgroundObservers.containsKey(pageId)) return // Already observing
 

@@ -46,7 +46,7 @@ fun ToolbarMenu(
     navController: NavController,
     state: EditorState,
     onClose: () -> Unit,
-    onPageSettingsOpen: () -> Unit
+    onBackgroundSelectorModalOpen: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -287,10 +287,10 @@ fun ToolbarMenu(
                 Modifier
                     .padding(10.dp)
                     .noRippleClickable {
-                        onPageSettingsOpen()
+                        onBackgroundSelectorModalOpen()
                         onClose()
                     }
-            ) { Text("Page Settings") }
+            ) { Text("Change Background") }
 
             /*Box(
                 Modifier

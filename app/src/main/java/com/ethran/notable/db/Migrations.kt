@@ -1,5 +1,7 @@
 package com.ethran.notable.db
 
+import androidx.room.RenameColumn
+import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -31,3 +33,21 @@ val MIGRATION_22_23 = object : Migration(22, 23) {
         )
     }
 }
+
+@RenameColumn.Entries(
+    RenameColumn(
+        tableName = "Page",
+        fromColumnName = "nativeTemplate",
+        toColumnName = "background"
+    )
+)
+class AutoMigration30to31 : AutoMigrationSpec
+
+@RenameColumn.Entries(
+    RenameColumn(
+        tableName = "Notebook",
+        fromColumnName = "defaultNativeTemplate",
+        toColumnName = "defaultBackground"
+    )
+)
+class AutoMigration31to32 : AutoMigrationSpec

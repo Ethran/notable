@@ -19,15 +19,15 @@ enum class Mode {
 class MenuStates {
     var isStrokeSelectionOpen by mutableStateOf(false)
     var isMenuOpen by mutableStateOf(false)
-    var isPageSettingsModalOpen by mutableStateOf(false)
+    var isBackgroundSelectorModalOpen by mutableStateOf(false)
     fun closeAll() {
         isStrokeSelectionOpen = false
         isMenuOpen = false
-        isPageSettingsModalOpen = false
+        isBackgroundSelectorModalOpen = false
     }
 
     val anyMenuOpen: Boolean
-        get() = isStrokeSelectionOpen || isMenuOpen || isPageSettingsModalOpen
+        get() = isStrokeSelectionOpen || isMenuOpen || isBackgroundSelectorModalOpen
 }
 
 

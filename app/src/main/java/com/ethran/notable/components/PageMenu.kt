@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.classes.AppRepository
-import com.ethran.notable.db.Page
+import com.ethran.notable.db.newPage
 import com.ethran.notable.utils.deletePage
 import com.ethran.notable.utils.noRippleClickable
 
@@ -77,10 +77,7 @@ fun PageMenu(
                         .noRippleClickable {
                             val book = appRepository.bookRepository.getById(notebookId)
                                 ?: return@noRippleClickable
-                            val page = Page(
-                                notebookId = notebookId,
-                                background = book.defaultNativeTemplate,
-                            )
+                            val page = book.newPage()
                             appRepository.pageRepository.create(page)
                             appRepository.bookRepository.addPage(notebookId, page.id, index + 1)
                         }) {

@@ -372,7 +372,8 @@ fun Library(navController: NavController, folderId: String? = null) {
                                         appRepository.bookRepository.create(
                                             Notebook(
                                                 parentFolderId = folderId,
-                                                defaultNativeTemplate = GlobalAppSettings.current.defaultNativeTemplate
+                                                defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
+                                                defaultBackgroundType = "native"
                                             )
                                         )
                                     }
@@ -555,7 +556,8 @@ fun handlePdfImport(context: Context, folderId: String?, uri: Uri) {
     val book = Notebook(
         title = copiedFile.nameWithoutExtension,
         parentFolderId = folderId,
-        defaultNativeTemplate = "blank"
+        defaultBackground = copiedFile.toString(),
+        defaultBackgroundType = BackgroundType.AutoPdf.key
     )
     bookRepo.createEmpty(book)
 
