@@ -43,6 +43,7 @@ import com.ethran.notable.utils.handleErase
 import com.ethran.notable.utils.handleScribbleToErase
 import com.ethran.notable.utils.penToStroke
 import com.ethran.notable.utils.pointsToPath
+import com.ethran.notable.utils.refreshScreenRegion
 import com.ethran.notable.utils.selectPaint
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
@@ -270,6 +271,19 @@ class DrawCanvas(
 
         override fun onRawErasingTouchPointListReceived(plist: TouchPointList?) {
             if (plist == null) return
+
+            plist.points
+            // First return screen to previous state
+            val padding = 10
+            val boundingBox = (calculateBoundingBox(plist.points) { Pair(it.x, it.y) }).toRect()
+            val dirtyRect = Rect(
+                boundingBox.left - padding,
+                boundingBox.top - padding,
+                boundingBox.right + padding,
+                boundingBox.bottom + padding
+            )
+            restoreCanvas(dirtyRect)
+
             val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
             handleErase(
                 this@DrawCanvas.page,
@@ -734,11 +748,10 @@ class DrawCanvas(
         val pointsToDraw = queue.toList()
         timeOfLastRefresh = System.currentTimeMillis()
         queue.clear()
-//            queue.addAll(pointsToDraw.takeLast(2))
         queue.add(pointsToDraw.last())
 
 
-        val boundingBox = calculateBoundingBox(pointsToDraw).toRect()
+        val boundingBox = (calculateBoundingBox(pointsToDraw){ Pair(it.x, it.y) } ).toRect()
         val padding = (strokeSize / 2).toInt().coerceAtLeast(1)
         val dirtyRect = Rect(
             boundingBox.left - padding,
@@ -779,19 +792,33 @@ class DrawCanvas(
                 }
                 timer.step("Post")
                 // 3. Trigger partial refresh
-                EpdController.refreshScreenRegion(
-                    this@DrawCanvas,
-                    dirtyRect.left,
-                    dirtyRect.top,
-                    dirtyRect.width(),
-                    dirtyRect.height(),
-                    UpdateMode.DU
-                )
+                refreshScreenRegion(this@DrawCanvas, dirtyRect)
                 isRendering.set(false)
                 timer.step("onyx")
             }
         }
         timer.end("Done")
+    }
+
+    fun restoreCanvas(dirtyRect: Rect) {
+        post {
+            val holder = this@DrawCanvas.holder
+            var surfaceCanvas: Canvas? = null
+            try {
+                // 2. Then: draw the bitmap onto the visible surface
+                surfaceCanvas = holder.lockCanvas(dirtyRect)
+                surfaceCanvas.drawBitmap(page.windowedBitmap, dirtyRect, dirtyRect, null)
+            } catch (e: Exception) {
+                Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
+            } finally {
+                if (surfaceCanvas != null) {
+                    holder.unlockCanvasAndPost(surfaceCanvas)
+                }
+                // 3. Trigger partial refresh
+                refreshScreenRegion(this@DrawCanvas, dirtyRect)
+                isRendering.set(false)
+            }
+        }
     }
 
 }
