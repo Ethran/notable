@@ -73,8 +73,8 @@ import com.ethran.notable.db.PageRepository
 import com.ethran.notable.modals.FolderConfigDialog
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.modals.NotebookConfigDialog
-import com.ethran.notable.modals.getPdfPageCount
 import com.ethran.notable.utils.copyBackgroundToDatabase
+import com.ethran.notable.utils.getPdfPageCount
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.noRippleClickable
 import com.ethran.notable.utils.setAnimationMode

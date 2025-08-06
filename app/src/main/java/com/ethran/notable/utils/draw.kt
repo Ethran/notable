@@ -588,7 +588,10 @@ fun drawBg(
             if (page == null)
                 return
             val pageNumber = page.currentPageNumber
-            drawPdfPage(canvas, background, pageNumber, scroll, page, scale)
+            if (pageNumber < getPdfPageCount(background))
+                drawPdfPage(canvas, background, pageNumber, scroll, page, scale)
+            else
+                canvas.drawColor(Color.WHITE)
         }
         is BackgroundType.Pdf -> {
             drawPdfPage(canvas, background, backgroundType.page, scroll, page, scale)

@@ -650,6 +650,32 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
     return newBitmap?.asAndroidBitmap()
 }
 
+
+fun getPdfPageCount(uri: String): Int {
+    if (uri.isEmpty())
+        return 0
+    val file = File(uri)
+    if (!file.exists()) return 0
+
+    return try {
+        val fileDescriptor =
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+
+        if (fileDescriptor != null) {
+            PdfRenderer(fileDescriptor).use { renderer ->
+                renderer.pageCount
+            }
+        } else {
+            Log.e(TAG, "File descriptor is null for URI: $uri")
+            0
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to open PDF: ${e.message}, for file $uri")
+        logCallStack("getPdfPageCount")
+        0
+    }
+}
+
 fun logCallStack(reason: String) {
     val stackTrace = Thread.currentThread().stackTrace
         .drop(3) // Skip internal calls

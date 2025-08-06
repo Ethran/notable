@@ -5,9 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import android.os.ParcelFileDescriptor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -85,14 +83,13 @@ import com.ethran.notable.utils.drawHexedBg
 import com.ethran.notable.utils.drawLinedBg
 import com.ethran.notable.utils.drawSquaredBg
 import com.ethran.notable.utils.ensureBackgroundsFolder
-import com.ethran.notable.utils.logCallStack
+import com.ethran.notable.utils.getPdfPageCount
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Loader
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
-
 
 
 @Composable
@@ -328,31 +325,6 @@ fun BackgroundSelector(
     }
 }
 
-
-fun getPdfPageCount(uri: String): Int {
-    if (uri.isEmpty())
-        return 0
-    val file = File(uri)
-    if (!file.exists()) return 0
-
-    return try {
-        val fileDescriptor =
-            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-
-        if (fileDescriptor != null) {
-            PdfRenderer(fileDescriptor).use { renderer ->
-                renderer.pageCount
-            }
-        } else {
-            Log.e(TAG, "File descriptor is null for URI: $uri")
-            0
-        }
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to open PDF: ${e.message}, for file $uri")
-        logCallStack("getPdfPageCount")
-        0
-    }
-}
 
 @Composable
 fun ShowNativeOption(
