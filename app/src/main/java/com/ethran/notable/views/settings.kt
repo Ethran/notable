@@ -196,14 +196,6 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
     Spacer(Modifier.height(3.dp))
 
     SettingToggleRow(
-        label = "Monitor background for file changes (for working with LaTeX)",
-        value = settings.monitorBgFiles,
-        onToggle = { isChecked ->
-            kv.setAppSettings(settings.copy(monitorBgFiles = isChecked))
-        }
-    )
-
-    SettingToggleRow(
         label = "Show welcome screen",
         value = settings.showWelcome,
         onToggle = { isChecked ->
