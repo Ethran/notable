@@ -1,5 +1,8 @@
 package com.ethran.notable.utils
 
+import android.graphics.Rect
+import android.view.View
+import androidx.compose.ui.unit.DpRect
 import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
@@ -157,4 +160,16 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
             delay(10)
         }
     }
+}
+
+
+fun refreshScreenRegion(view: View, dirtyRect: Rect) {
+    EpdController.refreshScreenRegion(
+        view,
+        dirtyRect.left,
+        dirtyRect.top,
+        dirtyRect.width(),
+        dirtyRect.height(),
+        UpdateMode.DU
+    )
 }
