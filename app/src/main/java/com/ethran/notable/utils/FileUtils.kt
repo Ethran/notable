@@ -1,12 +1,17 @@
 package com.ethran.notable.utils
 
 import android.content.Context
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import com.ethran.notable.TAG
+import io.shipbook.shipbooksdk.Log
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import kotlin.use
 
 fun copyBackgroundToDatabase(context: Context, fileUri: Uri, subfolder: String): File {
     var outputDir = ensureBackgroundsFolder()
@@ -97,4 +102,30 @@ fun ensureBackgroundsFolder(): File {
         backgroundsDir.mkdirs()
     }
     return backgroundsDir
+}
+
+
+fun getPdfPageCount(uri: String): Int {
+    if (uri.isEmpty())
+        return 0
+    val file = File(uri)
+    if (!file.exists()) return 0
+
+    return try {
+        val fileDescriptor =
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+
+        if (fileDescriptor != null) {
+            PdfRenderer(fileDescriptor).use { renderer ->
+                renderer.pageCount
+            }
+        } else {
+            Log.e(TAG, "File descriptor is null for URI: $uri")
+            0
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to open PDF: ${e.message}, for file $uri")
+        logCallStack("getPdfPageCount")
+        0
+    }
 }
