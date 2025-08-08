@@ -1,9 +1,12 @@
 package com.ethran.notable.db
 
 import android.content.Context
-import android.os.Environment
-import androidx.room.*
-import androidx.room.migration.AutoMigrationSpec
+import androidx.room.AutoMigration
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import com.ethran.notable.utils.getDbDir
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -34,18 +37,10 @@ class Converters {
     }
 }
 
-@RenameColumn.Entries(
-    RenameColumn(
-        tableName = "Page",
-        fromColumnName = "nativeTemplate",
-        toColumnName = "background"
-    )
-)
-class AutoMigration30to31 : AutoMigrationSpec
 
 @Database(
     entities = [Folder::class, Notebook::class, Page::class, Stroke::class, Image::class, Kv::class],
-    version = 31,
+    version = 32,
     autoMigrations = [
         AutoMigration(19, 20),
         AutoMigration(20, 21),
@@ -57,7 +52,8 @@ class AutoMigration30to31 : AutoMigrationSpec
         AutoMigration(27, 28),
         AutoMigration(28, 29),
         AutoMigration(29, 30),
-        AutoMigration(30,  31, spec = AutoMigration30to31::class)
+        AutoMigration(30, 31, spec = AutoMigration30to31::class),
+        AutoMigration(31, 32, spec = AutoMigration31to32::class)
 
     ], exportSchema = true
 )

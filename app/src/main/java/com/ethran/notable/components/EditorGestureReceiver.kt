@@ -55,8 +55,8 @@ private val log = ShipBook.getLogger("GestureReceiver")
 @Composable
 @ExperimentalComposeUiApi
 fun EditorGestureReceiver(
-    goToNextPage: () -> Unit,
-    goToPreviousPage: () -> Unit,
+    goToNextPage: () -> String?,
+    goToPreviousPage: () -> String?,
     controlTower: EditorControlTower,
     state: EditorState
 ) {
@@ -168,7 +168,8 @@ fun EditorGestureReceiver(
                                 scope = coroutineScope,
                                 previousPage = goToPreviousPage,
                                 nextPage = goToNextPage,
-                                rectangle = rectangleBounds!!
+                                rectangle = rectangleBounds!!,
+                                controlTower = controlTower
                             )
                             crossPosition = null
                             rectangleBounds = null
@@ -215,6 +216,7 @@ fun EditorGestureReceiver(
                                             scope = coroutineScope,
                                             previousPage = goToPreviousPage,
                                             nextPage = goToNextPage,
+                                            controlTower = controlTower
                                         )
 
 
@@ -231,6 +233,7 @@ fun EditorGestureReceiver(
                                     scope = coroutineScope,
                                     previousPage = goToPreviousPage,
                                     nextPage = goToNextPage,
+                                    controlTower = controlTower
                                 )
                             }
                             // zoom gesture
@@ -257,6 +260,7 @@ fun EditorGestureReceiver(
                                     scope = coroutineScope,
                                     previousPage = goToPreviousPage,
                                     nextPage = goToNextPage,
+                                    controlTower = controlTower
                                 )
                             else if (horizontalDrag > SWIPE_THRESHOLD)
                                 resolveGesture(
@@ -267,6 +271,7 @@ fun EditorGestureReceiver(
                                     scope = coroutineScope,
                                     previousPage = goToPreviousPage,
                                     nextPage = goToNextPage,
+                                    controlTower = controlTower
                                 )
                         }
                         if (!GlobalAppSettings.current.smoothScroll && gestureState.isOneFinger()
@@ -350,14 +355,26 @@ private fun resolveGesture(
     override: AppSettings.() -> AppSettings.GestureAction?,
     state: EditorState,
     scope: CoroutineScope,
-    previousPage: () -> Unit,
-    nextPage: () -> Unit,
-    rectangle: Rect = Rect()
+    previousPage: () -> String?,
+    nextPage: () -> String?,
+    rectangle: Rect = Rect(),
+    controlTower: EditorControlTower
 ) {
     when (if (settings != null) override(settings) else default) {
         null -> log.i("No Action")
-        AppSettings.GestureAction.PreviousPage -> previousPage()
-        AppSettings.GestureAction.NextPage -> nextPage()
+        AppSettings.GestureAction.PreviousPage -> {
+            val previous = previousPage()
+            if (previous != null) {
+                controlTower.switchPage(previous)
+            }
+        }
+        AppSettings.GestureAction.NextPage ->
+        {
+            val next = nextPage()
+            if (next!= null) {
+                controlTower.switchPage(next)
+            }
+        }
 
         AppSettings.GestureAction.ChangeTool ->
             state.mode = if (state.mode == Mode.Draw) Mode.Erase else Mode.Draw

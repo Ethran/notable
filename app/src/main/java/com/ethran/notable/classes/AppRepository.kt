@@ -1,21 +1,21 @@
 package com.ethran.notable.classes
 
 import android.content.Context
+import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.BookRepository
 import com.ethran.notable.db.FolderRepository
 import com.ethran.notable.db.ImageRepository
 import com.ethran.notable.db.KvProxy
 import com.ethran.notable.db.KvRepository
-import com.ethran.notable.db.Page
 import com.ethran.notable.db.PageRepository
 import com.ethran.notable.db.StrokeRepository
+import com.ethran.notable.db.newPage
 import com.onyx.android.sdk.extension.isNotNull
 import java.util.Date
 import java.util.UUID
 
 
-class AppRepository(context: Context) {
-    val context = context
+class AppRepository(val context: Context) {
     val bookRepository = BookRepository(context)
     val pageRepository = PageRepository(context)
     val strokeRepository = StrokeRepository(context)
@@ -33,11 +33,7 @@ class AppRepository(context: Context) {
             return index
         val book = bookRepository.getById(notebookId = notebookId)
         // creating a new page
-        val page = Page(
-            notebookId = notebookId,
-            background = book!!.defaultNativeTemplate,
-            backgroundType = "native"
-        )
+        val page = book!!.newPage()
         pageRepository.create(page)
         bookRepository.addPage(notebookId, page.id)
         return page.id
@@ -112,5 +108,17 @@ class AppRepository(context: Context) {
         }
     }
 
+    fun isObservable(notebookId: String?): Boolean {
+        if (notebookId == null) return false
+        val book = bookRepository.getById(notebookId = notebookId) ?: return false
+        return BackgroundType.fromKey(book.defaultBackgroundType) == BackgroundType.AutoPdf
+    }
 
+    fun getPageNumber(
+        notebookId: String?, pageId: String
+    ): Int {
+        if (notebookId == null) return -2
+        val book = bookRepository.getById(notebookId = notebookId) ?: return -3
+        return book.pageIds.indexOf(pageId)
+    }
 }

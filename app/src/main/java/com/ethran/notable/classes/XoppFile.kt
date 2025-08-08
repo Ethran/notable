@@ -299,7 +299,8 @@ object XoppFile {
         val book = Notebook(
             title = bookTitle,
             parentFolderId = parentFolderId,
-            defaultNativeTemplate = "blank"
+            defaultBackground = "blank",
+            defaultBackgroundType = "native"
         )
         bookRepo.createEmpty(book)
 

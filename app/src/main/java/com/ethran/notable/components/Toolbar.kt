@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -35,8 +36,8 @@ import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.EditorControlTower
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.BUTTON_SIZE
+import com.ethran.notable.modals.BackgroundSelector
 import com.ethran.notable.modals.GlobalAppSettings
-import com.ethran.notable.modals.PageSettingsModal
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.History
 import com.ethran.notable.utils.Mode
@@ -111,7 +112,7 @@ fun Toolbar(
         }
 
     // on exit of toolbar, update drawing state
-    LaunchedEffect(state.menuStates.isPageSettingsModalOpen, state.menuStates.isMenuOpen) {
+    LaunchedEffect(state.menuStates.isBackgroundSelectorModalOpen, state.menuStates.isMenuOpen) {
         // TODO: move it to menuState.
         toolbarLog.i("Updating drawing state")
         state.checkForSelectionsAndMenus()
@@ -143,10 +144,29 @@ fun Toolbar(
         state.penSettings = settings
     }
 
-    if (state.menuStates.isPageSettingsModalOpen) {
+    if (state.menuStates.isBackgroundSelectorModalOpen) {
         toolbarLog.i("Opening page settings modal")
-        PageSettingsModal(pageView = state.pageView) {
-            state.menuStates.isPageSettingsModalOpen = false
+        BackgroundSelector(
+            initialPageBackgroundType = state.pageView.pageFromDb?.backgroundType ?: "native",
+            initialPageBackground = state.pageView.pageFromDb?.background ?: "blank",
+            initialPageNumberInPdf = state.pageView.getBackgroundPageNumber(),
+            notebookId = state.pageView.pageFromDb?.notebookId,
+            pageNumberInBook = state.pageView.currentPageNumber,
+            onChange = { backgroundType, background ->
+                val updatedPage =
+                    if (background == null)
+                        state.pageView.pageFromDb!!.copy(
+                            backgroundType = backgroundType
+                        )
+                    else state.pageView.pageFromDb!!.copy(
+                        background = background,
+                        backgroundType = backgroundType
+                    )
+                state.pageView.updatePageSettings(updatedPage)
+                scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+            }
+        ) {
+            state.menuStates.isBackgroundSelectorModalOpen = false
         }
     }
     if (state.isToolbarOpen) {
@@ -390,8 +410,8 @@ fun Toolbar(
                     val book = AppRepository(context).bookRepository.getById(state.bookId)
 
                     // TODO maybe have generic utils for this ?
-                    val pageNumber = book!!.pageIds.indexOf(state.pageId) + 1
-                    val totalPageNumber = book.pageIds.size
+                    val pageNumber = remember (state.pageId) {   book!!.pageIds.indexOf(state.pageId) + 1}
+                    val totalPageNumber = book!!.pageIds.size
 
                     Box(
                         contentAlignment = Alignment.Center,
@@ -439,9 +459,9 @@ fun Toolbar(
                         navController = navController,
                         state = state,
                         onClose = { state.menuStates.isMenuOpen = false },
-                        onPageSettingsOpen = {
+                        onBackgroundSelectorModalOpen = {
                             toolbarLog.i("Opening page settings modal")
-                            state.menuStates.isPageSettingsModalOpen = true
+                            state.menuStates.isBackgroundSelectorModalOpen = true
                         })
                 }
             }

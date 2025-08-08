@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,48 +45,40 @@ import io.shipbook.shipbooksdk.Log
 fun EditorView(
     navController: NavController, bookId: String?, pageId: String
 ) {
-
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val appRepository = remember { AppRepository(context) }
 
     // control if we do have a page
-    if (AppRepository(context).pageRepository.getById(pageId) == null) {
+    if (appRepository.pageRepository.getById(pageId) == null) {
         if (bookId != null) {
             // clean the book
             Log.i(TAG, "Cleaning book")
-            AppRepository(context).bookRepository.removePage(bookId, pageId)
+            appRepository.bookRepository.removePage(bookId, pageId)
         }
         navController.navigate("library")
         return
     }
+    var currentPageId by remember { mutableStateOf(pageId) }
 
     BoxWithConstraints {
         val height = convertDpToPixel(this.maxHeight, context).toInt()
         val width = convertDpToPixel(this.maxWidth, context).toInt()
 
 
-        val page = remember {
+        val page = remember(currentPageId) {
             PageView(
                 context = context,
                 coroutineScope = scope,
-                id = pageId,
+                id = currentPageId,
                 width = width,
                 viewWidth = width,
                 viewHeight = height
             )
         }
 
-
-        // Dynamically update the page width when the Box constraints change
-        LaunchedEffect(width, height) {
-            if (page.width != width || page.viewHeight != height) {
-                page.updateDimensions(width, height)
-                DrawCanvas.refreshUi.emit(Unit)
-            }
-        }
-
         val editorState =
-            remember { EditorState(bookId = bookId, pageId = pageId, pageView = page) }
+            remember { EditorState(bookId = bookId, pageId = currentPageId, pageView = page) }
 
         val history = remember {
             History(scope, page)
@@ -92,12 +87,10 @@ fun EditorView(
             EditorControlTower(scope, page, history, editorState)
         }
 
-        val appRepository = AppRepository(context)
-
         // update opened page
-        LaunchedEffect(Unit) {
+        LaunchedEffect(currentPageId) {
             if (bookId != null) {
-                appRepository.bookRepository.setOpenPageId(bookId, pageId)
+                appRepository.bookRepository.setOpenPageId(bookId, currentPageId)
             }
         }
 
@@ -130,31 +123,27 @@ fun EditorView(
             )
         }
 
-        val lastRoute = navController.previousBackStackEntry
-
-        fun goToNextPage() {
-            if (bookId != null) {
+        fun goToNextPage(): String? {
+            return if (bookId != null) {
                 val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
-                    pageId = pageId, notebookId = bookId
+                    pageId = currentPageId, notebookId = bookId
                 )
-                navController.navigate("books/${bookId}/pages/${newPageId}") {
-                    popUpTo(lastRoute!!.destination.id) {
-                        inclusive = false
-                    }
-                }
-            }
+                currentPageId = newPageId
+                newPageId
+            } else
+                null
         }
 
-        fun goToPreviousPage() {
-            if (bookId != null) {
+        fun goToPreviousPage(): String? {
+            return if (bookId != null) {
                 val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
-                    pageId = pageId, notebookId = bookId
+                    pageId = currentPageId, notebookId = bookId
                 )
-                if (newPageId != null) navController.navigate("books/${bookId}/pages/${newPageId}")
-            }
+                if (newPageId != null)
+                    currentPageId = newPageId
+                newPageId
+            } else null
         }
-
-        val toolbarPosition = GlobalAppSettings.current.toolbarPosition
 
         InkaTheme {
             EditorSurface(
@@ -179,35 +168,33 @@ fun EditorView(
                 Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(context = context, state = editorState)
             }
-            // Toolbar at Top or Bottom
-            when (toolbarPosition) {
-                AppSettings.Position.Top -> {
-                    Toolbar(
-                        navController = navController,
-                        state = editorState,
-                        controlTower = editorControlTower
-                    )
-                }
-
-                AppSettings.Position.Bottom -> {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                    ) { //this fixes this
-                        Spacer(modifier = Modifier.weight(1f))
-                        // Top/center content here
-                        Toolbar(
-                            navController = navController,
-                            state = editorState,
-                            controlTower = editorControlTower
-                        )
-                    }
-                }
-            }
-
+            PositionedToolbar(navController, editorState, editorControlTower)
         }
     }
 }
 
 
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun PositionedToolbar(
+    navController: NavController, editorState: EditorState, editorControlTower: EditorControlTower
+) {
+    val position = GlobalAppSettings.current.toolbarPosition
+
+    when (position) {
+        AppSettings.Position.Top -> {
+            Toolbar(navController, editorState, editorControlTower)
+        }
+
+        AppSettings.Position.Bottom -> {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+                Toolbar(navController, editorState, editorControlTower)
+            }
+        }
+    }
+}

@@ -24,6 +24,7 @@ object GlobalAppSettings {
 @Serializable
 data class AppSettings(
     val version: Int,
+    val monitorBgFiles: Boolean = false,
     val showWelcome: Boolean = true,
     val defaultNativeTemplate: String = "blank",
     val quickNavPages: List<String> = listOf(),

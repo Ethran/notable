@@ -86,7 +86,7 @@ class DrawCanvas(
     //private val commitHistorySignal = MutableSharedFlow<Unit>()
 
     companion object {
-        var forceUpdate = MutableSharedFlow<Rect?>()
+        var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
         var refreshUi = MutableSharedFlow<Unit>()
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
@@ -291,9 +291,13 @@ class DrawCanvas(
             override fun surfaceChanged(
                 holder: SurfaceHolder, format: Int, width: Int, height: Int
             ) {
-                log.i(  "surface changed $holder")
-                drawCanvasToView()
-                updatePenAndStroke()
+                // Only act if actual dimensions changed
+                if (page.viewWidth == width && page.viewHeight == height) return
+
+                logCanvasObserver.v("Surface dimension changed!")
+
+                // Update page dimensions, redraw and refresh
+                page.updateDimensions(width, height)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -320,6 +324,7 @@ class DrawCanvas(
                logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
+                    drawCanvasToView()
                 } else {
                     isDrawing.emit(false)
                 }
@@ -333,12 +338,12 @@ class DrawCanvas(
         }
 
         // observe forceUpdate, takes rect in screen coordinates
+        // given null it will redraw whole page
         coroutineScope.launch {
             forceUpdate.collect { zoneAffected ->
                 logCanvasObserver.v("Force update, zone: $zoneAffected")
-                // Its unused and untested.
-                if (zoneAffected != null) page.drawAreaScreenCoordinates(zoneAffected)
-                else logCanvasObserver.w("Zone affected is null")
+                val zoneToRedraw = zoneAffected ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+                page.drawAreaScreenCoordinates(zoneToRedraw)
                 refreshUiSuspend()
             }
         }
@@ -376,8 +381,6 @@ class DrawCanvas(
             }
         }
 
-
-        // observe restartcount
         coroutineScope.launch {
             restartAfterConfChange.collect {
                 logCanvasObserver.v("Configuration changed!")
@@ -611,6 +614,7 @@ class DrawCanvas(
     }
 
     fun updatePenAndStroke() {
+        // it takes around 11 ms to run on Note 4c.
         log.i(  "Update pen and stroke")
         when (state.mode) {
             // we need to change size according to zoom level before drawing on screen
@@ -639,31 +643,40 @@ class DrawCanvas(
     }
 
     fun updateActiveSurface() {
-        log.i(  "Update editable surface")
+        // Takes at least 50ms on Note 4c,
+        // and I don't think that we need it immediately
+        log.i("Update editable surface")
+        coroutineScope.launch {
+            val toolbarHeight =
+                if (state.isToolbarOpen) convertDpToPixel(40.dp, context).toInt() else 0
 
-        val toolbarHeight =
-            if (state.isToolbarOpen) convertDpToPixel(40.dp, context).toInt() else 0
+            touchHelper.setRawDrawingEnabled(false)
+            touchHelper.closeRawDrawing()
 
-        touchHelper.setRawDrawingEnabled(false)
-        touchHelper.closeRawDrawing()
+            // Store view dimensions locally before using in Rect
+            val viewWidth = this@DrawCanvas.width
+            val viewHeight = this@DrawCanvas.height
 
-        // Determine the exclusion area based on toolbar position
-        val excludeRect: Rect =
-            if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
-                Rect(0, 0, this.width, toolbarHeight)
-            } else {
-                Rect(0, this.height - toolbarHeight, this.width, this.height)
-            }
+            // Determine the exclusion area based on toolbar position
+            val excludeRect: Rect =
+                if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
+                    Rect(0, 0, viewWidth, toolbarHeight)
+                } else {
+                    Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
+                }
 
-        val limitRect = if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
-            Rect(0, toolbarHeight, this.width, this.height)
-        else
-            Rect(0, 0, this.width, this.height - toolbarHeight)
+            val limitRect =
+                if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
+                    Rect(0, toolbarHeight, viewWidth, viewHeight)
+                else
+                    Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
 
-        touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
-            .openRawDrawing()
+            touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
+                .openRawDrawing()
 
-        touchHelper.setRawDrawingEnabled(true)
+            touchHelper.setRawDrawingEnabled(true)
+            log.i("Update editable surface completed")
+        }
     }
 
 }

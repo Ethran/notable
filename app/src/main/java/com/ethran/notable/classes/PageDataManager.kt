@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.FileObserver
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
 import com.ethran.notable.utils.loadBackgroundBitmap
@@ -14,9 +15,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import java.lang.ref.SoftReference
 
 
@@ -43,6 +46,7 @@ object PageDataManager {
 
     private val cachedBackgrounds = LinkedHashMap<String, CachedBackground>()
     private val bitmapCache = LinkedHashMap<String, SoftReference<Bitmap>>()
+    private val backgroundObservers = mutableMapOf<String, FileObserver>()
 
 
     private var pageHigh = LinkedHashMap<String, Int>()
@@ -186,15 +190,60 @@ object PageDataManager {
     }
 
 
-    fun setBackground(pageId: String, background: CachedBackground) {
+    fun setBackground(pageId: String, background: CachedBackground, observe: Boolean) {
         synchronized(accessLock) {
             cachedBackgrounds[pageId] = background
+            if (observe) observeBackgroundFile(pageId, background.path)
         }
     }
 
     fun getBackground(pageId: String): CachedBackground {
         return synchronized(accessLock) {
             cachedBackgrounds[pageId] ?: CachedBackground("", 0, 1.0f)
+        }
+    }
+
+    private fun observeBackgroundFile(
+        pageId: String,
+        filePath: String,
+        onChange: suspend () -> Unit = {}
+    ) {
+        synchronized(backgroundObservers) {
+            if (backgroundObservers.containsKey(pageId)) return // Already observing
+
+            val file = File(filePath)
+            if (!file.exists() || !file.canRead()) {
+                log.w("Cannot observe background file: $filePath does not exist or is not readable")
+                return
+            }
+
+            val observer = object : FileObserver(file, CLOSE_WRITE or MODIFY or MOVED_TO) {
+                override fun onEvent(event: Int, path: String?) {
+                    log.i("Background file changed: $filePath [event=$event]")
+                    dataLoadingScope.launch {
+                        log.d("Background file changed: $filePath [event=$event]")
+                        delay(100) // Allow file to settle
+                        invalidateBackground(pageId)
+                        DrawCanvas.forceUpdate.emit(null)
+                        onChange()
+                    }
+                }
+            }
+            observer.startWatching()
+            backgroundObservers[pageId] = observer
+        }
+    }
+
+    private fun stopObservingBackground(pageId: String) {
+        synchronized(backgroundObservers) {
+            backgroundObservers.remove(pageId)?.stopWatching()
+        }
+    }
+    private fun invalidateBackground(pageId: String) {
+        synchronized(accessLock) {
+            cachedBackgrounds.remove(pageId)
+            bitmapCache.remove(pageId)
+            log.d("Invalidated background cache for page: $pageId")
         }
     }
 
@@ -216,6 +265,7 @@ object PageDataManager {
             strokes.remove(pageId)
             images.remove(pageId)
             cachedBackgrounds.remove(pageId)
+            stopObservingBackground(pageId)
             pageHigh.remove(pageId)
             bitmapCache.remove(pageId)
             strokesById.remove(pageId)
