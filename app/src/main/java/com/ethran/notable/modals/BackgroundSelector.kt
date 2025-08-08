@@ -200,12 +200,7 @@ fun BackgroundSelector(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Background Mode Buttons
-                    listOf(
-                        "Native" to BackgroundType.Native,
-                        "Image" to BackgroundType.Image,
-                        "Cover" to BackgroundType.CoverImage,
-                        "PDF" to BackgroundType.Pdf(1)
-                    ).forEach { (modeName, backgroundType) ->
+                    listOf("Native", "Image", "Cover", "PDF").forEach { modeName ->
                         Button(
                             onClick = {
                                 selectedBackgroundMode = modeName

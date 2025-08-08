@@ -80,8 +80,10 @@ class SnackState {
 
     /**
      * Shows a snackbar that remains visible until the provided task completes
-     * @param conf Configuration for the snackbar
+     * @param text Text to display in the snackbar
      * @param task Suspending task to execute while snackbar is visible
+     * @return Result of the task
+     * @throws Exception If the task throws an exception, it will be displayed as an error snackbar, and the exception will be rethrown
      */
     suspend fun <T> showSnackDuring(
         text: String,
