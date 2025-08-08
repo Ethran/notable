@@ -19,6 +19,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.Page
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
@@ -61,13 +62,14 @@ fun FloatingEditorView(
                         } else if (bookId != null) {
                             // get first page of notebook and use it as pageId
                             val appRepository = AppRepository(LocalContext.current)
-                            val firstPageId =
-                                appRepository.bookRepository.getById(bookId)?.pageIds?.firstOrNull()
+                            val book = appRepository.bookRepository.getById(bookId)
+                            val firstPageId = book?.pageIds?.firstOrNull()
                             if (firstPageId == null) {
                                 // new page uuid
                                 val page = Page(
                                     notebookId = null,
                                     background = GlobalAppSettings.current.defaultNativeTemplate,
+                                    backgroundType = BackgroundType.Native.key,
                                     parentFolderId = null
                                 )
                                 EditorView(

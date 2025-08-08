@@ -376,6 +376,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                 val page = Page(
                                     notebookId = null,
                                     background = GlobalAppSettings.current.defaultNativeTemplate,
+                                    backgroundType = BackgroundType.Native.key,
                                     parentFolderId = folderId
                                 )
                                 appRepository.pageRepository.create(page)
@@ -451,7 +452,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                             Notebook(
                                                 parentFolderId = folderId,
                                                 defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
-                                                defaultBackgroundType = "native"
+                                                defaultBackgroundType = BackgroundType.Native.key
                                             )
                                         )
                                     }
