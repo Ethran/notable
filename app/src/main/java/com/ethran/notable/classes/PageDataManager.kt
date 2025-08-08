@@ -211,7 +211,13 @@ object PageDataManager {
         synchronized(backgroundObservers) {
             if (backgroundObservers.containsKey(pageId)) return // Already observing
 
-            val observer = object : FileObserver(File(filePath), CLOSE_WRITE or MODIFY or MOVED_TO) {
+            val file = File(filePath)
+            if (!file.exists() || !file.canRead()) {
+                log.w("Cannot observe background file: $filePath does not exist or is not readable")
+                return
+            }
+
+            val observer = object : FileObserver(file, CLOSE_WRITE or MODIFY or MOVED_TO) {
                 override fun onEvent(event: Int, path: String?) {
                     log.i("Background file changed: $filePath [event=$event]")
                     dataLoadingScope.launch {
