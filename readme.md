@@ -70,7 +70,7 @@ This fork is maintained by **Ethran** as a continuation and personal enhancement
 * 🤏 **Editors' Mode Gestures:** [Intuitive gesture controls](#gestures) to enhance the editing experience.
 * 🌅 **Images:** Add, move, scale, and remove images.
 * ︂︂᠋︁➤  **Selection export:** share selected text.
-* ∲  **Refresh on background change** can be use to use tablet for socond display -- see [Working with LaTeX](#working-with-latex).
+* ∲  **Refresh on background change** can be used to use tablet for second display -- see [Working with LaTeX](#working-with-latex).
 
 ## Download
 **Download the latest stable version of the [Notable app here.](https://github.com/Ethran/notable/releases/latest)**
