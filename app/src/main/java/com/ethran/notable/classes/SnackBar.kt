@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 
 val LocalSnackContext = staticCompositionLocalOf { SnackState() }
 
@@ -75,6 +76,30 @@ class SnackState {
 
     private suspend fun removeSnack(id: String) {
         cancelSnackFlow.emit(id)
+    }
+
+    /**
+     * Shows a snackbar that remains visible until the provided task completes
+     * @param conf Configuration for the snackbar
+     * @param task Suspending task to execute while snackbar is visible
+     */
+    suspend fun <T> showSnackDuring(
+        text: String,
+        task: suspend () -> T,
+    ): T {
+        val dismissSnack = displaySnack(SnackConf(text = text))
+        return try {
+            val result = task()
+            dismissSnack()
+            result
+        } catch (e: CancellationException) {
+            dismissSnack()
+            throw e
+        } catch (e: Exception) {
+            dismissSnack()
+            displaySnack(SnackConf(text = "Error: ${e.message}", duration = 3000))
+            throw e
+        }
     }
 }
 

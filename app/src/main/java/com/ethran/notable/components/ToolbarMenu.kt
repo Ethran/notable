@@ -49,7 +49,7 @@ fun ToolbarMenu(
     onBackgroundSelectorModalOpen: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope = CoroutineScope(Dispatchers.IO)
     val snackManager = LocalSnackContext.current
     val page = AppRepository(context).pageRepository.getById(state.pageId)!!
     val parentFolder =
@@ -80,9 +80,8 @@ fun ToolbarMenu(
                     .padding(10.dp)
                     .noRippleClickable {
                         navController.navigate(
-                            route =
-                                if (parentFolder != null) "library?folderId=${parentFolder}"
-                                else "library"
+                            route = if (parentFolder != null) "library?folderId=${parentFolder}"
+                            else "library"
                         )
                     }
             ) { Text("Library") }
@@ -91,25 +90,22 @@ fun ToolbarMenu(
                     .padding(10.dp)
                     .noRippleClickable {
                         scope.launch {
-                            val removeSnack =
-                                snackManager.displaySnack(
-                                    SnackConf(text = "Exporting the page to PDF...")
-                                )
-                            delay(10L)
-                            // Q:  Why do I need this ?
-                            // A: I guess that we need to wait for strokes to be drawn.
-                            // checking if drawingInProgress.isLocked should be enough
-                            // but I do not have time to test it.
-                            val message = withContext(Dispatchers.IO) {
-                                exportPage(context, state.pageId)
-                            }
-                            removeSnack()
+                            val message =
+                                snackManager.showSnackDuring("Exporting the page to PDF...") {
+                                    delay(10L)
+                                    // Q:  Why do I need this ?
+                                    // A: I guess that we need to wait for strokes to be drawn.
+                                    // checking if drawingInProgress.isLocked should be enough
+                                    // but I do not have time to test it.
+                                    withContext(Dispatchers.IO) {
+                                        exportPage(context, state.pageId)
+                                    }
+                                }
                             snackManager.displaySnack(
                                 SnackConf(text = message, duration = 2000)
                             )
-
-                            onClose()
                         }
+                        onClose()
                     }
             ) { Text("Export page to PDF") }
 
@@ -118,22 +114,18 @@ fun ToolbarMenu(
                     .padding(10.dp)
                     .noRippleClickable {
                         scope.launch {
-                            val removeSnack =
-                                snackManager.displaySnack(
-                                    SnackConf(text = "Exporting the page to PNG...")
-                                )
-                            delay(10L)
-
                             val message =
-                                withContext(Dispatchers.IO) {
-                                    exportPageToPng(context, state.pageId)
+                                snackManager.showSnackDuring(text = "Exporting the page to PNG...") {
+                                    delay(10L)
+                                    withContext(Dispatchers.IO) {
+                                        exportPageToPng(context, state.pageId)
+                                    }
                                 }
-                            removeSnack()
                             snackManager.displaySnack(
                                 SnackConf(text = message, duration = 2000)
                             )
-                            onClose()
                         }
+                        onClose()
                     }
             ) { Text("Export page to PNG") }
 
@@ -147,8 +139,8 @@ fun ToolbarMenu(
                             snackManager.displaySnack(
                                 SnackConf(text = "Copied page link for obsidian", duration = 2000)
                             )
-                            onClose()
                         }
+                        onClose()
                     }
             ) { Text("Copy page png link for obsidian") }
 
@@ -157,21 +149,19 @@ fun ToolbarMenu(
                     .padding(10.dp)
                     .noRippleClickable {
                         scope.launch {
-                            val removeSnack =
-                                snackManager.displaySnack(
-                                    SnackConf(text = "Exporting the page to JPEG...")
-                                )
-                            delay(10L)
+                            val message =
+                                snackManager.showSnackDuring(text = "Exporting the page to JPEG...") {
+                                    delay(10L)
 
-                            val message = withContext(Dispatchers.IO) {
-                                exportPageToJpeg(context, state.pageId)
-                            }
-                            removeSnack()
+                                    withContext(Dispatchers.IO) {
+                                        exportPageToJpeg(context, state.pageId)
+                                    }
+                                }
                             snackManager.displaySnack(
                                 SnackConf(text = message, duration = 2000)
                             )
-                            onClose()
                         }
+                        onClose()
                     }
             ) { Text("Export page to JPEG") }
 
@@ -180,17 +170,14 @@ fun ToolbarMenu(
                     .padding(10.dp)
                     .noRippleClickable {
                         scope.launch {
-                            val removeSnack =
-                                snackManager.displaySnack(
-                                    SnackConf(text = "Exporting the page to xopp")
-                                )
-                            delay(10L)
-                            CoroutineScope(Dispatchers.IO).launch {
+                            snackManager.showSnackDuring(
+                                text = "Exporting the page to xopp"
+                            ) {
+                                delay(10L)
                                 XoppFile.exportPage(context, state.pageId)
-                                removeSnack()
                             }
-                            onClose()
                         }
+                        onClose()
                     }
             ) { Text("Export page to xopp") }
 
@@ -199,29 +186,19 @@ fun ToolbarMenu(
                     Modifier
                         .padding(10.dp)
                         .noRippleClickable {
-                            // Should I rather use:
-                            // CoroutineScope(Dispatchers.IO).launch
-                            // ?
                             scope.launch {
-                                val removeSnack =
-                                    snackManager.displaySnack(
-                                        SnackConf(
-                                            text = "Exporting the book to PDF...",
-                                            id = "exportSnack"
-                                        )
-                                    )
-                                delay(10L)
-
                                 val message =
-                                    withContext(Dispatchers.IO) {
-                                        exportBook(context, state.bookId)
+                                    snackManager.showSnackDuring("Exporting the book to PDF...") {
+                                        delay(10L)
+                                        withContext(Dispatchers.IO) {
+                                            exportBook(context, state.bookId)
+                                        }
                                     }
-                                removeSnack()
                                 snackManager.displaySnack(
                                     SnackConf(text = message, duration = 2000)
                                 )
-                                onClose()
                             }
+                            onClose()
                         }
                 ) { Text("Export book to PDF") }
 
@@ -231,24 +208,19 @@ fun ToolbarMenu(
                         .padding(10.dp)
                         .noRippleClickable {
                             scope.launch {
-                                val removeSnack =
-                                    snackManager.displaySnack(
-                                        SnackConf(
-                                            text = "Exporting the book to PNG...",
-                                            id = "exportSnack"
-                                        )
-                                    )
-                                delay(10L)
-
-                                val message = withContext(Dispatchers.IO) {
-                                    exportBookToPng(context, state.bookId)
+                                val message = snackManager.showSnackDuring(
+                                    text = "Exporting the book to PNG..."
+                                ) {
+                                    delay(10L)
+                                    withContext(Dispatchers.IO) {
+                                        exportBookToPng(context, state.bookId)
+                                    }
                                 }
-                                removeSnack()
                                 snackManager.displaySnack(
                                     SnackConf(text = message, duration = 2000)
                                 )
-                                onClose()
                             }
+                            onClose()
                         }
                 ) { Text("Export book to PNG") }
                 Box(
@@ -256,17 +228,15 @@ fun ToolbarMenu(
                         .padding(10.dp)
                         .noRippleClickable {
                             scope.launch {
-                                val removeSnack =
-                                    snackManager.displaySnack(
-                                        SnackConf(text = "Exporting the book to xopp")
-                                    )
-                                delay(10L)
-                                CoroutineScope(Dispatchers.IO).launch {
+                                snackManager.showSnackDuring(
+                                    text = "Exporting the book to xopp"
+                                ) {
+                                    delay(10L)
                                     XoppFile.exportBook(context, state.bookId)
-                                    removeSnack()
                                 }
-                                onClose()
+
                             }
+                            onClose()
                         }
                 ) { Text("Export book to xopp") }
             }
