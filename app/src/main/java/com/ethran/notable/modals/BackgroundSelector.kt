@@ -103,14 +103,12 @@ fun BackgroundSelector(
     onChange: (backgroundType: String, background: String?) -> Unit,
     onClose: () -> Unit
 ) {
-    Log.d(TAG, "BackgroundSelectorModal")
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var pageBackground by remember { mutableStateOf(initialPageBackground) }
     var maxPages: Int? by remember { mutableStateOf(getPdfPageCount(pageBackground)) }
     val currentPage: Int? by remember { mutableIntStateOf(initialPageNumberInPdf) }
 
-    Log.e(TAG, "BackgroundSelectorModal initial: $initialPageBackgroundType")
     var pageBackgroundType: BackgroundType by remember {
         mutableStateOf(
             BackgroundType.fromKey(
@@ -118,7 +116,6 @@ fun BackgroundSelector(
             )
         )
     }
-    Log.e(TAG, "BackgroundSelectorModal current: $pageBackgroundType")
 
     var selectedBackgroundMode by remember {
         mutableStateOf(
