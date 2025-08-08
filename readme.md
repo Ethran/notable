@@ -40,7 +40,8 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 - [Gestures](#gestures)  
 - [Supported Devices](#supported-devices)  
 - [Roadmap](#roadmap)  
-- [Screenshots](#screenshots)  
+- [Screenshots](#screenshots)
+- [Working with LaTeX](#working-with-latex) 
 - [Contribute](#contribute)  
 
 </details>
@@ -69,6 +70,7 @@ This fork is maintained by **Ethran** as a continuation and personal enhancement
 * 🤏 **Editors' Mode Gestures:** [Intuitive gesture controls](#gestures) to enhance the editing experience.
 * 🌅 **Images:** Add, move, scale, and remove images.
 * ︂︂᠋︁➤  **Selection export:** share selected text.
+* ∲  **Refresh on background change** can be used to use tablet for second display -- see [Working with LaTeX](#working-with-latex).
 
 ## Download
 **Download the latest stable version of the [Notable app here.](https://github.com/Ethran/notable/releases/latest)**
@@ -164,6 +166,41 @@ Features I’d like to implement in the future (some might take a while — or a
 </div>
 
 ---
+
+## Working with LaTeX
+
+The app can be used as a **primitive second monitor** for LaTeX editing — previewing compiled PDFs
+in real time on your tablet.
+
+### Steps:
+
+- Connect your device to your computer via USB (MTP).
+- Set up automatic copying of the compiled PDF to the tablet:  
+  <details>
+  <summary>Example using a custom <code>latexmkrc</code>:</summary>
+
+  ```perl
+  $pdf_mode = 1;
+  $out_dir = 'build';
+
+  sub postprocess {
+      system("cp build/main.pdf '/run/user/1000/gvfs/mtp:host=DEVICE/Internal shared storage/Documents/Filename.pdf'");
+  }
+
+  END {
+      postprocess();
+  }
+  ```
+
+  </details>
+- Compile, and test if it copies file to the tablet.
+- Import your compiled PDF document into Notable, choose to observe pdf file.
+
+> After each recompilation, Notable will detect the updated PDF and automatically refresh the view.
+
+
+---
+
 
 ## Contribute
 

@@ -267,7 +267,7 @@ fun drawLinedBg(canvas: Canvas, scroll: Int, scale: Float) {
     }
 }
 
-fun drawDottedBg(canvas: Canvas, offset: Int, scale: Float) {
+fun drawDottedBg(canvas: Canvas, scroll: Int, scale: Float) {
     val height = (canvas.height / scale).toInt()
     val width = (canvas.width / scale).toInt()
     // white bg
@@ -281,7 +281,7 @@ fun drawDottedBg(canvas: Canvas, offset: Int, scale: Float) {
 
     // dots
     for (y in 0..height) {
-        val line = offset + y
+        val line = scroll + y
         if (line % lineHeight == 0 && line >= padding) {
             for (x in padding..width - padding step lineHeight) {
                 canvas.drawOval(
@@ -456,8 +456,9 @@ fun drawPdfPage(
     page: PageView? = null,
     scale: Float = 1.0f
 ) {
-    if (pageNumber == -1) {
-        drawUtilsLog.e("Page number should not be -1, uri: $pdfUriString")
+    if (pageNumber < 0) {
+        drawUtilsLog.e("Page number should not be ${pageNumber}, uri: $pdfUriString")
+        logCallStack("DrawPdfPage")
         return
     }
     try {
@@ -583,7 +584,15 @@ fun drawBg(
             drawBackgroundImages(context, canvas, background, 0, page, scale)
             drawTitleBox(canvas)
         }
-
+        is BackgroundType.AutoPdf -> {
+            if (page == null)
+                return
+            val pageNumber = page.currentPageNumber
+            if (pageNumber < getPdfPageCount(background))
+                drawPdfPage(canvas, background, pageNumber, scroll, page, scale)
+            else
+                canvas.drawColor(Color.WHITE)
+        }
         is BackgroundType.Pdf -> {
             drawPdfPage(canvas, background, backgroundType.page, scroll, page, scale)
         }

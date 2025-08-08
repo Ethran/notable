@@ -84,7 +84,7 @@ class DrawCanvas(
     //private val commitHistorySignal = MutableSharedFlow<Unit>()
 
     companion object {
-        var forceUpdate = MutableSharedFlow<Rect?>()
+        var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
         var refreshUi = MutableSharedFlow<Unit>()
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
@@ -321,12 +321,12 @@ class DrawCanvas(
         }
 
         // observe forceUpdate, takes rect in screen coordinates
+        // given null it will redraw whole page
         coroutineScope.launch {
             forceUpdate.collect { zoneAffected ->
                 logCanvasObserver.v("Force update, zone: $zoneAffected")
-                // Its unused and untested.
-                if (zoneAffected != null) page.drawAreaScreenCoordinates(zoneAffected)
-                else logCanvasObserver.w("Zone affected is null")
+                val zoneToRedraw = zoneAffected ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+                page.drawAreaScreenCoordinates(zoneToRedraw)
                 refreshUiSuspend()
             }
         }

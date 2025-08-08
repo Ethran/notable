@@ -34,7 +34,9 @@ data class Notebook(
     val parentFolderId: String? = null,
 
     @ColumnInfo(defaultValue = "blank")
-    val defaultNativeTemplate: String = "blank",
+    val defaultBackground: String = "blank",
+    @ColumnInfo(defaultValue = "native")
+    val defaultBackgroundType: String = "native",
 
     val createdAt: Date = Date(),
     val updatedAt: Date = Date()
@@ -74,7 +76,11 @@ class BookRepository(context: Context) {
 
     fun create(notebook: Notebook) {
         db.create(notebook)
-        val page = Page(notebookId = notebook.id, background = notebook.defaultNativeTemplate)
+        val page = Page(
+            notebookId = notebook.id,
+            background = notebook.defaultBackground,
+            backgroundType = notebook.defaultBackgroundType
+        )
         pageDb.create(page)
 
         db.setPageIds(notebook.id, listOf(page.id))
@@ -152,4 +158,17 @@ class BookRepository(context: Context) {
         db.delete(id)
     }
 
+}
+
+
+fun Notebook.getBackgroundType(): BackgroundType {
+    return BackgroundType.fromKey(defaultBackgroundType)
+}
+
+fun Notebook.newPage(): Page {
+    return Page(
+        notebookId = id,
+        background = defaultBackground,
+        backgroundType = defaultBackgroundType
+    )
 }
