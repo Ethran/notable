@@ -110,7 +110,7 @@ fun BackgroundSelector(
     var maxPages: Int? by remember { mutableStateOf(getPdfPageCount(pageBackground)) }
     val currentPage: Int? by remember { mutableIntStateOf(initialPageNumberInPdf) }
 
-
+    Log.e(TAG, "BackgroundSelectorModal initial: $initialPageBackgroundType")
     var pageBackgroundType: BackgroundType by remember {
         mutableStateOf(
             BackgroundType.fromKey(
@@ -118,12 +118,14 @@ fun BackgroundSelector(
             )
         )
     }
+    Log.e(TAG, "BackgroundSelectorModal current: $pageBackgroundType")
 
     var selectedBackgroundMode by remember {
         mutableStateOf(
             when (pageBackgroundType) {
                 is BackgroundType.CoverImage -> "Cover"
                 is BackgroundType.Image, is BackgroundType.ImageRepeating -> "Image"
+                is BackgroundType.Pdf, is BackgroundType.AutoPdf -> "PDF"
                 else -> "Native"
             }
         )
@@ -207,7 +209,6 @@ fun BackgroundSelector(
                         Button(
                             onClick = {
                                 selectedBackgroundMode = modeName
-                                pageBackgroundType = backgroundType
                             },
                             modifier = Modifier.padding(horizontal = 5.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -227,27 +228,13 @@ fun BackgroundSelector(
             )
             Column(Modifier.padding(20.dp, 10.dp)) {
                 when (selectedBackgroundMode) {
-                    "Image", "imagerepeating" -> {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Repeat background")
-                            Spacer(Modifier.width(10.dp))
-                            Switch(
-                                checked = pageBackgroundType == BackgroundType.ImageRepeating,
-                                onCheckedChange = { isChecked ->
-                                    pageBackgroundType =
-                                        if (isChecked) BackgroundType.ImageRepeating else BackgroundType.Image
-
-                                    onChange(pageBackgroundType.key, null)
-                                }
-                            )
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-
-                        // Here you can add an Image Grid if you have predefined images
+                    "Image" -> {
+                        val currentBackgroundType =
+                            if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image)
+                                pageBackgroundType else BackgroundType.Image
                         ShowImageOption(
                             currentBackground = pageBackground,
-                            currentBackgroundType = pageBackgroundType,
+                            currentBackgroundType = currentBackgroundType,
                             onBackgroundChange = { background, type ->
                                 onChange(type.key, background)
                                 pageBackground = background
@@ -257,12 +244,29 @@ fun BackgroundSelector(
                                 pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
                             }
                         )
+                        if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image) {
+                            Spacer(Modifier.height(10.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Repeat background")
+                                Spacer(Modifier.width(10.dp))
+                                Switch(
+                                    checked = pageBackgroundType == BackgroundType.ImageRepeating,
+                                    onCheckedChange = { isChecked ->
+                                        pageBackgroundType =
+                                            if (isChecked) BackgroundType.ImageRepeating else BackgroundType.Image
+
+                                        onChange(pageBackgroundType.key, null)
+                                    }
+                                )
+                            }
+                        }
                     }
 
                     "Cover" -> {
                         ShowImageOption(
                             currentBackground = pageBackground,
-                            currentBackgroundType = pageBackgroundType,
+                            currentBackgroundType = BackgroundType.CoverImage,
                             onBackgroundChange = { background, type ->
                                 onChange(type.key, background)
                                 pageBackground = background
@@ -279,7 +283,7 @@ fun BackgroundSelector(
                     "Native" -> {
                         ShowNativeOption(
                             currentBackground = pageBackground,
-                            currentBackgroundType = pageBackgroundType,
+                            currentBackgroundType = BackgroundType.Native,
                             onBackgroundChange = { background, type ->
                                 onChange(type.key, background)
                                 pageBackground = background
@@ -289,6 +293,9 @@ fun BackgroundSelector(
                     }
 
                     "PDF" -> {
+                        val currentBackgroundType =
+                            if (pageBackgroundType == BackgroundType.AutoPdf || pageBackgroundType is BackgroundType.Pdf)
+                                pageBackgroundType else BackgroundType.Pdf(1)
                         fun onBackgroundChange(type: BackgroundType, background: String) {
                             onChange(type.key, background)
                             pageBackground = background
@@ -297,7 +304,7 @@ fun BackgroundSelector(
                         }
                         ShowPdfOption(
                             currentBackground = pageBackground,
-                            currentBackgroundType = pageBackgroundType,
+                            currentBackgroundType = currentBackgroundType,
                             onBackgroundChange = ::onBackgroundChange,
                             onRequestFilePicker = {
                                 Log.e(TAG, "onRequestFilePicker: $pageBackgroundType")
@@ -308,8 +315,8 @@ fun BackgroundSelector(
                             BackgroundType.AutoPdf, pageBackground
                         )
                         else PageNumberSelector(
-                            pageBackground,
-                            pageBackgroundType,
+                            currentBackground = pageBackground,
+                            currentBackgroundType = pageBackgroundType,
                             maxPages = maxPages,
                             currentPage = currentPage,
                             onBackgroundChange = ::onBackgroundChange,
@@ -735,6 +742,7 @@ fun PageNumberSelector(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text("Auto Pages")
+                        Log.e(TAG, "PageNumberSelector: $isSelected, $currentBackgroundType")
                     }
                 }
             }
