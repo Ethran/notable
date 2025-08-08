@@ -70,7 +70,9 @@ This fork is maintained by **Ethran** as a continuation and personal enhancement
 * 🤏 **Editors' Mode Gestures:** [Intuitive gesture controls](#gestures) to enhance the editing experience.
 * 🌅 **Images:** Add, move, scale, and remove images.
 * ︂︂᠋︁➤  **Selection export:** share selected text.
+* ✏️ **Scribble to Erase:** Erase content naturally by scribbling over it (disabled by default) – *Contributed by [@niknal357](https://github.com/niknal357)*
 * ∲  **Refresh on background change** can be used to use tablet for second display -- see [Working with LaTeX](#working-with-latex).
+
 
 ## Download
 **Download the latest stable version of the [Notable app here.](https://github.com/Ethran/notable/releases/latest)**
