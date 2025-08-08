@@ -341,7 +341,7 @@ fun handleScribbleToErase(
     // Require scribble to be long enough relative to bounding box
     val minLengthForScribble = (width + height) * 3
     if (strokeLength < minLengthForScribble) {
-        Log.e("ScribbleToErase", "Stroke is too short, $strokeLength < $minLengthForScribble")
+        Log.d("ScribbleToErase", "Stroke is too short, $strokeLength < $minLengthForScribble")
         return false
     }
 
