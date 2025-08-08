@@ -9,9 +9,12 @@ sealed class BackgroundType(val key: String, val folderName: String) {
     data object ImageRepeating : BackgroundType("imagerepeating", "images")
     data object CoverImage : BackgroundType("coverImage", "covers")
     data object Native : BackgroundType("native", "")
-    data object AutoPdf: BackgroundType("autoPdf", "pdfs") // Page number in pdf the page number in notebook, can be used for default value in notebooks.
 
+    // If notebook is of type AutoPdf, its consider Observable.
+    // If page is of type AutoPdf, it will follow the page number in notebook.
+    data object AutoPdf: BackgroundType("autoPdf", "pdfs")
 
+    // Static page of pdf
     data class Pdf(val page: Int) : BackgroundType("pdf$page", "pdfs")
 
 

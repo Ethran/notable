@@ -168,15 +168,13 @@ Features I’d like to implement in the future (some might take a while — or a
 ---
 
 ## Working with LaTeX
-The app can be used as a **primitive second monitor** for LaTeX editing — previewing compiled PDFs in real time on your tablet. While this setup is currently a bit hacky, it’s functional for basic workflows.
+
+The app can be used as a **primitive second monitor** for LaTeX editing — previewing compiled PDFs
+in real time on your tablet.
 
 ### Steps:
 
-- Import your compiled PDF document into Notable.
-- Locate the PDF file on your tablet at:  
-  `Internal shared storage/Documents/notabledb/backgrounds/pdfs/File_Name.pdf`
 - Connect your device to your computer via USB (MTP).
-- In global setting, enable monitoring for background file changes.
 - Set up automatic copying of the compiled PDF to the tablet:  
   <details>
   <summary>Example using a custom <code>latexmkrc</code>:</summary>
@@ -186,7 +184,7 @@ The app can be used as a **primitive second monitor** for LaTeX editing — prev
   $out_dir = 'build';
 
   sub postprocess {
-      system("cp build/main.pdf '/run/user/1000/gvfs/mtp:host=DEVICE/Internal shared storage/Documents/notabledb/backgrounds/pdfs/main.pdf'");
+      system("cp build/main.pdf '/run/user/1000/gvfs/mtp:host=DEVICE/Internal shared storage/Documents/Filename.pdf'");
   }
 
   END {
@@ -195,6 +193,8 @@ The app can be used as a **primitive second monitor** for LaTeX editing — prev
   ````
 
   </details>
+- Compile, and test if it copies file to the tablet.
+- Import your compiled PDF document into Notable, choose to observe pdf file.
 
 > After each recompilation, Notable will detect the updated PDF and automatically refresh the view.
 

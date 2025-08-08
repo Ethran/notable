@@ -56,9 +56,10 @@ import com.ethran.notable.classes.LocalSnackContext
 import com.ethran.notable.classes.SnackConf
 import com.ethran.notable.components.BreadCrumb
 import com.ethran.notable.components.PagePreview
-import com.ethran.notable.components.ShowConfirmationDialog
 import com.ethran.notable.components.ShowExportDialog
 import com.ethran.notable.components.ShowFolderSelectionDialog
+import com.ethran.notable.components.ShowSimpleConfirmationDialog
+import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.BookRepository
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
@@ -95,7 +96,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
         BackgroundSelector(
             initialPageBackgroundType = book!!.defaultBackgroundType,
             initialPageBackground = book!!.defaultBackground,
-            forceAutoPdf = true,
+            isNotebookBgSelector = true,
             notebookId = book!!.id,
             onChange = { backgroundType, background ->
                 if (background == null) {
@@ -118,7 +119,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
     }
     // Confirmation Dialog for Deletion
     if (showDeleteDialog) {
-        ShowConfirmationDialog(
+        ShowSimpleConfirmationDialog(
             title = "Confirm Deletion",
             message = "Are you sure you want to delete \"${book!!.title}\"?",
             onConfirm = {
@@ -263,8 +264,16 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                             shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(1.dp, Color.Black)
                         ) {
+                            val typeName= when (BackgroundType.fromKey(book?.defaultBackgroundType ?:"" ) ){
+                                BackgroundType.AutoPdf -> "Observe Pdf"
+                                BackgroundType.CoverImage -> "Cover Image"
+                                BackgroundType.Image -> "Image"
+                                BackgroundType.ImageRepeating -> "Repeating Image"
+                                BackgroundType.Native -> "Native"
+                                is BackgroundType.Pdf -> "Static pdf Page"
+                            }
                             Text(
-                                text = book?.defaultBackgroundType ?: "Unknown",
+                                text = typeName,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Spacer(modifier = Modifier.width(4.dp))

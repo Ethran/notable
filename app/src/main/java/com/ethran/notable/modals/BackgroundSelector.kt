@@ -97,7 +97,7 @@ fun BackgroundSelector(
     initialPageBackgroundType: String,
     initialPageBackground: String,
     initialPageNumberInPdf: Int = 0,
-    forceAutoPdf: Boolean = false, // for notebook default background
+    isNotebookBgSelector: Boolean = false, // for notebook default background
     notebookId: String? = null,
     pageNumberInBook: Int = -1,
     onChange: (backgroundType: String, background: String?) -> Unit,
@@ -311,10 +311,7 @@ fun BackgroundSelector(
                                 pickPdf.launch(arrayOf("application/pdf"))
                             }
                         )
-                        if (forceAutoPdf) onBackgroundChange(
-                            BackgroundType.AutoPdf, pageBackground
-                        )
-                        else PageNumberSelector(
+                        PageNumberSelector(
                             currentBackground = pageBackground,
                             currentBackgroundType = pageBackgroundType,
                             maxPages = maxPages,
@@ -322,6 +319,7 @@ fun BackgroundSelector(
                             onBackgroundChange = ::onBackgroundChange,
                             showAutoPdfOption = (notebookId != null) && ((maxPages
                                 ?: 0) > pageNumberInBook),
+                            isNotebookBgSelector = isNotebookBgSelector
                         )
 
                     }
@@ -633,7 +631,8 @@ fun PageNumberSelector(
     maxPages: Int?,
     currentPage: Int?,
     onBackgroundChange: (BackgroundType, String) -> Unit,
-    showAutoPdfOption: Boolean
+    showAutoPdfOption: Boolean,
+    isNotebookBgSelector: Boolean
 ) {
     val pdfSelectorEnabled =
         currentBackground.endsWith(".pdf") && maxPages != null && currentPage != null
@@ -735,13 +734,14 @@ fun PageNumberSelector(
                             contentColor = Color.Black
                         )
                     ) {
+                        val name = if (isNotebookBgSelector) "Observe PDF" else "Current Page"
                         Icon(
                             imageVector = Icons.Default.Autorenew,
-                            contentDescription = "Auto pages",
+                            contentDescription = name,
                             modifier = Modifier.size(ButtonDefaults.IconSize)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("Auto Pages")
+                        Text(name)
                         Log.e(TAG, "PageNumberSelector: $isSelected, $currentBackgroundType")
                     }
                 }

@@ -1,12 +1,17 @@
 package com.ethran.notable.utils
 
+import android.content.ContentUris
 import android.content.Context
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Environment
 import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import androidx.core.net.toUri
 import com.ethran.notable.TAG
+import com.onyx.android.sdk.utils.UriUtils.getDataColumn
 import io.shipbook.shipbooksdk.Log
 import java.io.File
 import java.io.FileOutputStream
@@ -127,5 +132,49 @@ fun getPdfPageCount(uri: String): Int {
         Log.e(TAG, "Failed to open PDF: ${e.message}, for file $uri")
         logCallStack("getPdfPageCount")
         0
+    }
+}
+
+
+// Requires android.permission.READ_EXTERNAL_STORAGE
+fun getFilePathFromUri(context: Context, uri: Uri): String? {
+    return when {
+        DocumentsContract.isDocumentUri(context, uri) -> {
+            val docId = DocumentsContract.getDocumentId(uri)
+            when {
+                uri.authority?.contains("media") == true -> {
+                    val split = docId.split(":")
+                    val type = split[0]
+                    val contentUri = when (type) {
+                        "image" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                        "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                        "audio" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                        else -> MediaStore.Files.getContentUri("external")
+                    }
+                    val selection = "_id=?"
+                    val selectionArgs = arrayOf(split[1])
+                    getDataColumn(context, contentUri, selection, selectionArgs)
+                }
+
+                uri.authority?.contains("downloads") == true -> {
+                    val contentUri = ContentUris.withAppendedId(
+                        "content://downloads/public_downloads".toUri(), docId.toLong()
+                    )
+                    getDataColumn(context, contentUri, null, null)
+                }
+
+                else -> null
+            }
+        }
+
+        "content".equals(uri.scheme, ignoreCase = true) -> {
+            getDataColumn(context, uri, null, null)
+        }
+
+        "file".equals(uri.scheme, ignoreCase = true) -> {
+            uri.path
+        }
+
+        else -> null
     }
 }
