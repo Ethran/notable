@@ -190,7 +190,7 @@ in real time on your tablet.
   END {
       postprocess();
   }
-  ````
+  ```
 
   </details>
 - Compile, and test if it copies file to the tablet.
