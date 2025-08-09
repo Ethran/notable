@@ -316,7 +316,7 @@ fun handleScribbleToErase(
         return false
 
     val strokeLength = calculateStrokeLength(touchPoints)
-    val boundingBox = calculateBoundingBox(touchPoints)
+    val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
     val width = boundingBox.width()
     val height = boundingBox.height()
     if (width == 0f || height == 0f) return false

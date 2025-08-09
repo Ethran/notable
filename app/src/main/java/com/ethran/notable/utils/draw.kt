@@ -9,6 +9,8 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.graphics.ImageBitmap
@@ -83,6 +85,7 @@ private val eraserPaint = Paint().apply {
     strokeCap = Paint.Cap.ROUND
     strokeJoin = Paint.Join.ROUND
     color = Color.BLACK
+    xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
     isAntiAlias = false
 }
 private val reusablePath = Path()

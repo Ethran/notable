@@ -12,6 +12,7 @@ import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
@@ -36,21 +37,21 @@ import com.ethran.notable.utils.calculateBoundingBox
 import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
 import com.ethran.notable.utils.copyInputToSimplePointF
-import com.ethran.notable.utils.drawEraserStroke
 import com.ethran.notable.utils.drawImage
 import com.ethran.notable.utils.handleDraw
 import com.ethran.notable.utils.handleErase
 import com.ethran.notable.utils.handleScribbleToErase
 import com.ethran.notable.utils.penToStroke
 import com.ethran.notable.utils.pointsToPath
+import com.ethran.notable.utils.prepareForPartialUpdate
 import com.ethran.notable.utils.refreshScreenRegion
+import com.ethran.notable.utils.restoreDefaults
 import com.ethran.notable.utils.selectPaint
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
 import com.ethran.notable.utils.uriToBitmap
 import com.ethran.notable.utils.waitForEpdRefresh
 import com.onyx.android.sdk.api.device.epd.EpdController
-import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.extension.isNotNull
 import com.onyx.android.sdk.pen.RawInputCallback
@@ -70,7 +71,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 
@@ -93,11 +93,24 @@ class DrawCanvas(
     var lastStrokeEndTime: Long = 0
     //private val commitHistorySignal = MutableSharedFlow<Unit>()
 
+    private val glRenderer = OpenGLRenderer(this)
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        glRenderer.attachSurfaceView(this)
+    }
+
+    override fun onDetachedFromWindow() {
+        glRenderer.release()
+        super.onDetachedFromWindow()
+    }
+    var isErasing: Boolean = false
+
     companion object {
         var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
         var refreshUi = MutableSharedFlow<Unit>()
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
+        var eraserTouchPoint = MutableSharedFlow<Offset?>() //TODO: replace with proper solution
 
         // used for managing drawing state on regain focus
         val onFocusChange = MutableSharedFlow<Boolean>()
@@ -255,23 +268,21 @@ class DrawCanvas(
         }
 
         // Handle button/eraser tip of the pen:
-
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
-            EpdController.setViewDefaultUpdateMode(
-                this@DrawCanvas,
-                UpdateMode.HAND_WRITING_REPAINT_MODE
-            )
-            EpdController.enablePost(this@DrawCanvas, 1)
+            prepareForPartialUpdate(this@DrawCanvas)
+            isErasing = true
         }
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
-            EpdController.resetViewUpdateMode(this@DrawCanvas)
-            queue.clear()
+            restoreDefaults(this@DrawCanvas)
+            glRenderer.clearPointBuffer()
+            glRenderer.frontBufferRenderer?.cancel()
         }
 
         override fun onRawErasingTouchPointListReceived(plist: TouchPointList?) {
-            if (plist == null) return
+            isErasing = false
 
+            if (plist == null) return
             plist.points
             // First return screen to previous state
             val padding = 10
@@ -296,8 +307,7 @@ class DrawCanvas(
         }
 
         override fun onRawErasingTouchPointMoveReceived(p0: TouchPoint?) {
-            if (p0 == null) return
-            drawEraserIndicator(p0)
+//            if (p0 == null) return
         }
 
         override fun onPenUpRefresh(refreshRect: RectF?) {
@@ -316,6 +326,10 @@ class DrawCanvas(
 
     fun init() {
         log.i(  "Initializing Canvas")
+        glRenderer.attachSurfaceView(this)
+
+        // This does not work, as EditorGestureReceiver is stealing all the events.
+        setOnTouchListener(glRenderer.onTouchListener)
 
         val surfaceCallback: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -423,6 +437,29 @@ class DrawCanvas(
                 logCanvasObserver.v("Configuration changed!")
                 init()
                 drawCanvasToView()
+            }
+        }
+        coroutineScope.launch {
+            eraserTouchPoint.collect { p ->
+                if(!isErasing)
+                {
+                    logCanvasObserver.v("Didn't draw point: $p -- eraser is not active")
+                    return@collect
+                }
+                logCanvasObserver.v("collected: $p")
+                if (p == null)
+                    return@collect
+                val strokePoint =
+                    StrokePoint(
+                        x = p.x,
+                        y = p.y,
+                        pressure = 1f,
+                        size = 10f,
+                        tiltX = 0,
+                        tiltY = 0,
+                        timestamp = 0,
+                    )
+                glRenderer.frontBufferRenderer?.renderFrontBufferedLayer(strokePoint)
             }
         }
 
@@ -716,90 +753,6 @@ class DrawCanvas(
         }
     }
 
-
-    private val queue = mutableListOf<StrokePoint>()
-    private var timeOfLastRefresh = 0L
-    private val isRendering = AtomicBoolean(false)
-
-    fun drawEraserIndicator(p: TouchPoint) {
-        val timer = Timing("Canvas Lock Timing")
-        val strokeSize = 10f
-        queue.add(
-            StrokePoint(
-                x = p.x,
-                y = p.y,
-                pressure = p.pressure,
-                size = p.size,
-                tiltX = p.tiltX,
-                tiltY = p.tiltY,
-                timestamp = p.timestamp,
-            )
-        )
-        if (System.currentTimeMillis() - timeOfLastRefresh < 16)
-            return
-        if (!isAttachedToWindow || holder.surface?.isValid != true) {
-            Log.w("DrawCanvas", "Surface not ready, skipping draw")
-            return
-        }
-        if (queue.size < 3)
-            return
-        if (!isRendering.compareAndSet(false, true))
-            return
-        val pointsToDraw = queue.toList()
-        timeOfLastRefresh = System.currentTimeMillis()
-        queue.clear()
-        queue.add(pointsToDraw.last())
-
-
-        val boundingBox = (calculateBoundingBox(pointsToDraw){ Pair(it.x, it.y) } ).toRect()
-        val padding = (strokeSize / 2).toInt().coerceAtLeast(1)
-        val dirtyRect = Rect(
-            boundingBox.left - padding,
-            boundingBox.top - padding,
-            boundingBox.right + padding,
-            boundingBox.bottom + padding
-        )
-        timer.step("init")
-
-        // firstly drawing on page Canvas doesn't produce any visual bugs on joints
-
-//            val offscreenCanvas = page.windowedCanvas
-//            offscreenCanvas.setBitmap(page.windowedBitmap)
-//            drawEraserStroke(offscreenCanvas, pointsToDraw, strokeSize)
-
-        timer.step("draw")
-        post {
-            val holder = this@DrawCanvas.holder
-            var surfaceCanvas: Canvas? = null
-            try {
-                // 2. Then: draw the bitmap onto the visible surface
-                surfaceCanvas = holder.lockCanvas(dirtyRect)
-                timer.step("lock")
-//                    surfaceCanvas.drawBitmap(
-//                        page.windowedBitmap,
-//                        dirtyRect,      // src
-//                        dirtyRect,      // dst
-//                        null            // paint
-//                    )
-                drawEraserStroke(surfaceCanvas, pointsToDraw, strokeSize)
-                timer.step("drawn on surface")
-
-            } catch (e: Exception) {
-                Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
-            } finally {
-                if (surfaceCanvas != null) {
-                    holder.unlockCanvasAndPost(surfaceCanvas)
-                }
-                timer.step("Post")
-                // 3. Trigger partial refresh
-                refreshScreenRegion(this@DrawCanvas, dirtyRect)
-                isRendering.set(false)
-                timer.step("onyx")
-            }
-        }
-        timer.end("Done")
-    }
-
     fun restoreCanvas(dirtyRect: Rect) {
         post {
             val holder = this@DrawCanvas.holder
@@ -816,7 +769,6 @@ class DrawCanvas(
                 }
                 // 3. Trigger partial refresh
                 refreshScreenRegion(this@DrawCanvas, dirtyRect)
-                isRendering.set(false)
             }
         }
     }
