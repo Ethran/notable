@@ -15,7 +15,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,8 +45,12 @@ object PageDataManager {
 
     private val cachedBackgrounds = LinkedHashMap<String, CachedBackground>()
     private val bitmapCache = LinkedHashMap<String, SoftReference<Bitmap>>()
-    private val backgroundObservers = mutableMapOf<String, FileObserver>()
 
+    // observe background file changes
+    // fileObservers: filename to observer
+    // fileToPages: filename to files with this file
+    private val fileObservers = mutableMapOf<String, FileObserver>()
+    private val fileToPages = mutableMapOf<String, MutableSet<String>>()
 
     private var pageHigh = LinkedHashMap<String, Int>()
 
@@ -208,8 +211,9 @@ object PageDataManager {
         filePath: String,
         onChange: suspend () -> Unit = {}
     ) {
-        synchronized(backgroundObservers) {
-            if (backgroundObservers.containsKey(pageId)) return // Already observing
+        synchronized(fileObservers) {
+            fileToPages.getOrPut(filePath) { mutableSetOf() }.add(pageId)
+            if (fileObservers.containsKey(filePath)) return // Already observing this file
 
             val file = File(filePath)
             if (!file.exists() || !file.canRead()) {
@@ -217,26 +221,33 @@ object PageDataManager {
                 return
             }
 
-            val observer = object : FileObserver(file, CLOSE_WRITE or MODIFY or MOVED_TO) {
+            val observer = object : FileObserver(file, CLOSE_WRITE or MOVED_TO) {
                 override fun onEvent(event: Int, path: String?) {
-                    log.i("Background file changed: $filePath [event=$event]")
                     dataLoadingScope.launch {
                         log.d("Background file changed: $filePath [event=$event]")
-                        delay(100) // Allow file to settle
-                        invalidateBackground(pageId)
-                        DrawCanvas.forceUpdate.emit(null)
+                        // Invalidate all pages that use this file
+                        fileToPages[filePath]?.forEach { pid ->
+                            invalidateBackground(pid)
+                            if (pid == currentPage) {
+                                DrawCanvas.forceUpdate.emit(null)
+                            }
+                        }
                         onChange()
                     }
                 }
             }
             observer.startWatching()
-            backgroundObservers[pageId] = observer
+            fileObservers[filePath] = observer
         }
     }
 
     private fun stopObservingBackground(pageId: String) {
-        synchronized(backgroundObservers) {
-            backgroundObservers.remove(pageId)?.stopWatching()
+        fileToPages.forEach { (filePath, pageIds) ->
+            if (pageIds.remove(pageId) && pageIds.isEmpty()) {
+                // No more pages using this file
+                fileObservers.remove(filePath)?.stopWatching()
+                fileToPages.remove(filePath)
+            }
         }
     }
     private fun invalidateBackground(pageId: String) {
