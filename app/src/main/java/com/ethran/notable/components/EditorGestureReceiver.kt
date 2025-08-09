@@ -68,11 +68,34 @@ fun EditorGestureReceiver(
     val view = LocalView.current
     Box(
         modifier = Modifier
+            // TODO: Change to // .pointerInteropFilter { ev -> ……}
+            // for now it consumes all gestures - even stylus one.
             .pointerInput(Unit) {
                 awaitEachGesture {
                     try {
                         // Detect initial touch
                         val down = awaitFirstDown()
+
+                        // Ignore non-touch input
+                        if (down.type == PointerType.Stylus) {
+                            log.i("Redirecting stylus input")
+
+                            // TODO: It's only temporary workaround.
+                            // Track all moves until the stylus is lifted
+                            do {
+                                val event = awaitPointerEvent()
+                                val stylus = event.changes.firstOrNull { it.type == PointerType.Stylus }
+                                stylus?.let {
+                                    coroutineScope.launch {
+                                        DrawCanvas.eraserTouchPoint.emit(it.position)
+                                    }
+                                    it.consume()
+                                }
+                            } while (stylus?.pressed == true)
+
+                            return@awaitEachGesture
+                        }
+
                         // testing if it will fixed exception:
                         // kotlinx.coroutines.CompletionHandlerException: Exception in resume
                         // onCancellation handler for CancellableContinuation(DispatchedContinuation[AndroidUiDispatcher@145d639,
