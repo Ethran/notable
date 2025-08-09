@@ -36,6 +36,7 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
@@ -143,6 +144,10 @@ class PageView(
         }
 
         coroutineScope.launch {
+            delay(25) // Give collector time to start
+            DrawCanvas.forceUpdate.emit(null)
+        }
+        coroutineScope.launch {
             loadPage()
             saveTopic.debounce(1000).collect {
                 launch { persistBitmap() }
@@ -170,12 +175,9 @@ class PageView(
         }
 
         log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $id")
-        // Trigger immediate re-render
-        coroutineScope.launch(Dispatchers.Main.immediate) {
-            DrawCanvas.forceUpdate.emit(null)
-        }
 
         coroutineScope.launch {
+            DrawCanvas.forceUpdate.emit(null)
             loadPage()
             saveTopic.debounce(1000).collect {
                 launch { persistBitmap() }
@@ -285,8 +287,7 @@ class PageView(
         if (isInCache) {
             logCache.i("Page loaded from cache")
             height = PageDataManager.getPageHeight(id) ?: viewHeight //TODO: correct
-            redrawAll(coroutineScope)
-            coroutineScope.launch(Dispatchers.Main.immediate) {
+            coroutineScope.launch {
                 DrawCanvas.forceUpdate.emit(null)
             }
         } else {

@@ -428,8 +428,6 @@ fun transformToLine(
 }
 
 
-inline fun Modifier.ifTrue(predicate: Boolean, builder: () -> Modifier) =
-    then(if (predicate) builder() else Modifier)
 
 fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
     return stroke.points.map {
@@ -627,5 +625,5 @@ fun logCallStack(reason: String) {
         .joinToString("\n") {
             "${it.className.removePrefix("com.ethran.notable.")}.${it.methodName} (${it.fileName}:${it.lineNumber})"
         }
-    Log.d(TAG, "$reason Call stack:\n$stackTrace")
+    Log.w(TAG, "$reason Call stack:\n$stackTrace")
 }
