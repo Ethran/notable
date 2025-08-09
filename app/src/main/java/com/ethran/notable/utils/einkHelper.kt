@@ -1,6 +1,9 @@
 package com.ethran.notable.utils
 
+import android.graphics.Rect
+import android.view.View
 import com.onyx.android.sdk.api.device.epd.EpdController
+import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_SCRIBBLE
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.Device
@@ -157,4 +160,33 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
             delay(10)
         }
     }
+}
+
+
+fun prepareForPartialUpdate(view: View){
+    EpdController.setViewDefaultUpdateMode(
+        view,
+        UpdateMode.HAND_WRITING_REPAINT_MODE
+    )
+    EpdController.setDisplayScheme(SCHEME_SCRIBBLE)
+    EpdController.useFastScheme()
+    EpdController.enableA2ForSpecificView(view)
+    EpdController.enablePost(view, 1)
+    EpdController.setEpdTurbo(100)
+}
+
+fun refreshScreenRegion(view: View, dirtyRect: Rect) {
+    EpdController.refreshScreenRegion(
+        view,
+        dirtyRect.left,
+        dirtyRect.top,
+        dirtyRect.width(),
+        dirtyRect.height(),
+        UpdateMode.ANIMATION_MONO
+    )
+//    EpdController.handwritingRepaint(view, dirtyRect)
+}
+
+fun restoreDefaults(view: View){
+    EpdController.resetViewUpdateMode(view)
 }

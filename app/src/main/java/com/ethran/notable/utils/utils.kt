@@ -222,18 +222,20 @@ fun copyInputToSimplePointF(
     return points
 }
 
-fun calculateBoundingBox(touchPoints: List<StrokePoint>): RectF {
-    val initialPoint = touchPoints[0]
-    val boundingBox = RectF(
-        initialPoint.x,
-        initialPoint.y,
-        initialPoint.x,
-        initialPoint.y
-    )
+fun <T> calculateBoundingBox(
+    touchPoints: List<T>,
+    getCoordinates: (T) -> Pair<Float, Float>
+): RectF {
+    require(touchPoints.isNotEmpty()) { "touchPoints cannot be empty" }
+
+    val (startX, startY) = getCoordinates(touchPoints[0])
+    val boundingBox = RectF(startX, startY, startX, startY)
 
     for (point in touchPoints) {
-        boundingBox.union(point.x, point.y)
+        val (x, y) = getCoordinates(point)
+        boundingBox.union(x, y)
     }
+
     return boundingBox
 }
 
@@ -312,7 +314,7 @@ fun handleScribbleToErase(
         return false
 
     val strokeLength = calculateStrokeLength(touchPoints)
-    val boundingBox = calculateBoundingBox(touchPoints)
+    val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
     val width = boundingBox.width()
     val height = boundingBox.height()
     if (width == 0f || height == 0f) return false
@@ -365,7 +367,7 @@ fun handleDraw(
     touchPoints: List<StrokePoint>
 ) {
     try {
-        val boundingBox = calculateBoundingBox(touchPoints)
+        val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
 
         //move rectangle
         boundingBox.inset(-strokeSize, -strokeSize)
