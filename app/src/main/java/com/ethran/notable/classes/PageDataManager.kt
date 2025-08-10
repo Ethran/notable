@@ -149,7 +149,6 @@ object PageDataManager {
     }
 
 
-
     fun setPage(pageId: String) {
         currentPage = pageId
     }
@@ -284,14 +283,17 @@ object PageDataManager {
     }
 
     private fun stopObservingBackground(pageId: String) {
-        fileToPages.forEach { (filePath, pageIds) ->
-            if (pageIds.remove(pageId) && pageIds.isEmpty()) {
-                // No more pages using this file
-                fileObservers.remove(filePath)?.stopWatching()
-                fileToPages.remove(filePath)
+        synchronized(fileObservers) {
+            fileToPages.forEach { (filePath, pageIds) ->
+                if (pageIds.remove(pageId) && pageIds.isEmpty()) {
+                    // No more pages using this file
+                    fileObservers.remove(filePath)?.stopWatching()
+                    fileToPages.remove(filePath)
+                }
             }
         }
     }
+
     private fun invalidateBackground(pageId: String) {
         synchronized(accessLock) {
             cachedBackgrounds.remove(pageId)
@@ -303,7 +305,9 @@ object PageDataManager {
 
     fun isPageLoaded(pageId: String): Boolean {
         return synchronized(accessLock) {
-            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(pageId)
+            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(
+                pageId
+            )
         }
     }
 
@@ -422,7 +426,7 @@ object PageDataManager {
         val availableMem = ((Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory())/(1024*1024)).toInt()
         if (availableMem > requiredMb)
             return true
-        val toFree =  requiredMb - availableMem
+        val toFree = requiredMb - availableMem
         freeMemory(toFree)
         return hasEnoughMemory(requiredMb)
     }
