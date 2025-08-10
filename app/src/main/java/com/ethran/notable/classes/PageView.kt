@@ -7,14 +7,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
-import android.graphics.RectF
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
-import androidx.core.graphics.toRect
-import androidx.core.graphics.withClip
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.classes.PageDataManager.collectAndPersistBitmapsBatch
@@ -24,14 +21,11 @@ import com.ethran.notable.db.Image
 import com.ethran.notable.db.Page
 import com.ethran.notable.db.Stroke
 import com.ethran.notable.db.getBackgroundType
+import com.ethran.notable.drawing.drawBg
+import com.ethran.notable.drawing.drawOnCanvasFromPage
 import com.ethran.notable.modals.GlobalAppSettings
-import com.ethran.notable.utils.drawBg
-import com.ethran.notable.utils.drawImage
-import com.ethran.notable.utils.drawStroke
-import com.ethran.notable.utils.imageBounds
 import com.ethran.notable.utils.loadPersistBitmap
 import com.ethran.notable.utils.logCallStack
-import com.ethran.notable.utils.strokeBounds
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -249,7 +243,7 @@ class PageView(
         }
     }
 
-
+    // To be removed.
     private fun redrawAll(scope: CoroutineScope) {
         scope.launch(Dispatchers.Main.immediate) {
             val viewRectangle = Rect(0, 0, windowedCanvas.width, windowedCanvas.height)
@@ -459,56 +453,6 @@ class PageView(
     }
 
 
-    private fun drawDebugRectWithLabels(
-        canvas: Canvas,
-        rect: RectF,
-        rectColor: Int = Color.RED,
-        labelColor: Int = Color.BLUE
-    ) {
-        val rectPaint = Paint().apply {
-            color = rectColor
-            style = Paint.Style.STROKE
-            strokeWidth = 6f
-        }
-        log.w("Drawing debug rect $rect")
-        // Draw rectangle outline
-        canvas.drawRect(rect, rectPaint)
-
-        // Setup label paint
-        val labelPaint = Paint().apply {
-            color = labelColor
-            textAlign = Paint.Align.LEFT
-            textSize = 40f
-            isAntiAlias = true
-        }
-
-        // Helper to format text
-        fun format(x: Float, y: Float) = "(${x.toInt()}, ${y.toInt()})"
-
-        val topLeftLabel = format(rect.left, rect.top)
-        val topRightLabel = format(rect.right, rect.top)
-        val bottomLeftLabel = format(rect.left, rect.bottom)
-        val bottomRightLabel = format(rect.right, rect.bottom)
-
-        val topRightTextWidth = labelPaint.measureText(topRightLabel)
-        val bottomRightTextWidth = labelPaint.measureText(bottomRightLabel)
-
-        // Draw coordinate labels at corners
-        canvas.drawText(topLeftLabel, rect.left + 8f, rect.top + labelPaint.textSize, labelPaint)
-        canvas.drawText(
-            topRightLabel,
-            rect.right - topRightTextWidth - 8f,
-            rect.top + labelPaint.textSize,
-            labelPaint
-        )
-        canvas.drawText(bottomLeftLabel, rect.left + 8f, rect.bottom - 8f, labelPaint)
-        canvas.drawText(
-            bottomRightLabel,
-            rect.right - bottomRightTextWidth - 8f,
-            rect.bottom - 8f,
-            labelPaint
-        )
-    }
 
 
     fun drawAreaPageCoordinates(
@@ -532,65 +476,17 @@ class PageView(
         ignoredImageIds: List<String> = listOf(),
         canvas: Canvas? = null
     ) {
-        // TODO: make sure that rounding errors are not happening
         val activeCanvas = canvas ?: windowedCanvas
         val pageArea = toPageCoordinates(screenArea)
         val pageAreaWithoutScroll = removeScroll(pageArea)
-
-        // Canvas is scaled, it will scale page area.
-        activeCanvas.withClip(pageAreaWithoutScroll) {
-            drawColor(Color.BLACK)
-
-            val timeToDraw = measureTimeMillis {
-                drawBg(
-                    context, this, pageFromDb?.getBackgroundType() ?: BackgroundType.Native,
-                    pageFromDb?.background ?: "blank", scroll, zoomLevel.value, this@PageView
-                )
-                if (GlobalAppSettings.current.debugMode) {
-                    drawDebugRectWithLabels(activeCanvas, RectF(pageAreaWithoutScroll), Color.BLACK)
-//                    drawDebugRectWithLabels(activeCanvas, RectF(screenArea))
-                }
-                // Trying to find what throws error when drawing quickly
-                try {
-                    images.forEach { image ->
-                        if (ignoredImageIds.contains(image.id)) return@forEach
-                        log.i("PageView.kt: drawing image!")
-                        val bounds = imageBounds(image)
-                        // if stroke is not inside page section
-                        if (!bounds.toRect().intersect(pageArea)) return@forEach
-                        drawImage(context, this, image, IntOffset(0, -scroll))
-
-                    }
-                } catch (e: Exception) {
-                    log.e("PageView.kt: Drawing images failed: ${e.message}", e)
-
-                    val errorMessage =
-                        if (e.message?.contains("does not have permission") == true) {
-                            "Permission error: Unable to access image."
-                        } else {
-                            "Failed to load images."
-                        }
-                    showHint(errorMessage, coroutineScope)
-                }
-                try {
-                    strokes.forEach { stroke ->
-                        if (ignoredStrokeIds.contains(stroke.id)) return@forEach
-                        val bounds = strokeBounds(stroke)
-                        // if stroke is not inside page section
-                        if (!bounds.toRect().intersect(pageArea)) return@forEach
-
-                        drawStroke(
-                            this, stroke, IntOffset(0, -scroll)
-                        )
-                    }
-                } catch (e: Exception) {
-                    log.e("PageView.kt: Drawing strokes failed: ${e.message}", e)
-                    showHint("Error drawing strokes", coroutineScope)
-                }
-
-            }
-            log.i("Drew area in ${timeToDraw}ms")
-        }
+        drawOnCanvasFromPage(
+            page = this,
+            canvas = activeCanvas,
+            canvasClipBounds = pageAreaWithoutScroll,
+            pageArea = pageArea,
+            ignoredStrokeIds = ignoredStrokeIds,
+            ignoredImageIds = ignoredImageIds,
+        )
     }
 
     @Suppress("unused")

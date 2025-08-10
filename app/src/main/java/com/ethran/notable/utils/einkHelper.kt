@@ -1,9 +1,14 @@
 package com.ethran.notable.utils
 
+import android.graphics.Rect
+import android.view.View
+import com.ethran.notable.TAG
 import com.onyx.android.sdk.api.device.epd.EpdController
+import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_SCRIBBLE
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.Device
+import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.delay
 
@@ -131,6 +136,9 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
     // depending on device, it may take different amount of time to
     // refresh the screen. So for example, when closing menus, we
     // need to wait before we freeze screen.
+
+    // Onyx library might change
+    @Suppress("REDUNDANT_ELSE_IN_WHEN")
     when (updateOption) {
         UpdateOption.NORMAL -> {
             // HD mode
@@ -154,7 +162,54 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
         }
         else -> {
             // Default fallback
+            Log.e(TAG, "Unknown refresh mode: $updateOption")
             delay(10)
         }
     }
+}
+
+
+fun onSurfaceInit(view: View) {
+    EpdController.setViewDefaultUpdateMode(
+        view,
+        UpdateMode.HAND_WRITING_REPAINT_MODE
+    )
+}
+
+fun prepareForPartialUpdate(view: View) {
+    EpdController.setDisplayScheme(SCHEME_SCRIBBLE)
+//    EpdController.useFastScheme() // the same as above
+    EpdController.enableA2ForSpecificView(view)
+    EpdController.enablePost(view, 1)
+    EpdController.setEpdTurbo(100)
+}
+
+fun refreshScreenRegion(view: View, dirtyRect: Rect) {
+    if(!view.isAttachedToWindow)
+    {
+        einkLogger.e("View is not attached to window")
+        logCallStack("refreshScreenRegion")
+    }
+    EpdController.refreshScreenRegion(
+        view,
+        dirtyRect.left,
+        dirtyRect.top,
+        dirtyRect.width(),
+        dirtyRect.height(),
+        UpdateMode.ANIMATION_MONO
+    )
+//    EpdController.handwritingRepaint(view, dirtyRect)
+}
+
+fun restoreDefaults(view: View){
+    EpdController.resetViewUpdateMode(view)
+//    EpdController.setDisplayScheme(SCHEME_NORMAL)
+
+}
+
+
+fun partialRefreshRegionOnce(view: View, dirtyRect: Rect) {
+    EpdController.enablePost(view, 1)
+    refreshScreenRegion(view, dirtyRect)
+    EpdController.enablePost(view, 0)
 }

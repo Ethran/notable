@@ -131,13 +131,13 @@ fun pointsToPath(points: List<SimplePointF>): Path {
     return path
 }
 
-// points is in page coordinates
+// points is in page coordinates, returns effected area.
 fun handleErase(
     page: PageView,
     history: History,
     points: List<SimplePointF>,
     eraser: Eraser
-) {
+): Rect? {
     val paint = Paint().apply {
         this.strokeWidth = 30f
         this.style = Paint.Style.STROKE
@@ -161,13 +161,14 @@ fun handleErase(
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
+    if(deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 
     history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
 
-    page.drawAreaScreenCoordinates(
-        screenArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
-    )
+    val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
+    page.drawAreaScreenCoordinates(screenArea = effectedArea)
+    return effectedArea
 }
 
 enum class SelectPointPosition {
@@ -197,19 +198,22 @@ fun toPageCoordinates(rect: Rect, scale: Float, scroll: Int): Rect {
 
 fun copyInput(touchPoints: List<TouchPoint>, scroll: Int, scale: Float): List<StrokePoint> {
     val points = touchPoints.map {
-        StrokePoint(
-            x = it.x / scale,
-            y = (it.y / scale + scroll),
-            pressure = it.pressure,
-            size = it.size,
-            tiltX = it.tiltX,
-            tiltY = it.tiltY,
-            timestamp = it.timestamp,
-        )
+        it.toStrokePoint(scroll, scale)
     }
     return points
 }
 
+fun TouchPoint.toStrokePoint(scroll: Int, scale: Float): StrokePoint {
+    return StrokePoint(
+        x = x / scale,
+        y = (y / scale + scroll),
+        pressure = pressure,
+        size = size,
+        tiltX = tiltX,
+        tiltY = tiltY,
+        timestamp = timestamp,
+    )
+}
 fun copyInputToSimplePointF(
     touchPoints: List<TouchPoint>,
     scroll: Int,
@@ -224,18 +228,20 @@ fun copyInputToSimplePointF(
     return points
 }
 
-fun calculateBoundingBox(touchPoints: List<StrokePoint>): RectF {
-    val initialPoint = touchPoints[0]
-    val boundingBox = RectF(
-        initialPoint.x,
-        initialPoint.y,
-        initialPoint.x,
-        initialPoint.y
-    )
+fun <T> calculateBoundingBox(
+    touchPoints: List<T>,
+    getCoordinates: (T) -> Pair<Float, Float>
+): RectF {
+    require(touchPoints.isNotEmpty()) { "touchPoints cannot be empty" }
+
+    val (startX, startY) = getCoordinates(touchPoints[0])
+    val boundingBox = RectF(startX, startY, startX, startY)
 
     for (point in touchPoints) {
-        boundingBox.union(point.x, point.y)
+        val (x, y) = getCoordinates(point)
+        boundingBox.union(x, y)
     }
+
     return boundingBox
 }
 
@@ -295,35 +301,36 @@ fun calculateStrokeLength(points: List<StrokePoint>): Float {
 
 const val MINIMUM_SCRIBBLE_POINTS = 15
 // Erases strokes if touchPoints are "scribble", returns true if erased.
+// returns null if not erased, dirty rectangle otherwise
 fun handleScribbleToErase(
     page: PageView,
     touchPoints: List<StrokePoint>,
     history: History,
     pen: Pen,
     currentLastStrokeEndTime: Long
-): Boolean {
+): Rect? {
     if (pen == Pen.MARKER)
-        return false // do not erase with highlighter
+        return null // do not erase with highlighter
     if (!GlobalAppSettings.current.scribbleToEraseEnabled)
-        return false // scribble to erase is disabled
+        return null // scribble to erase is disabled
     if (touchPoints.size < MINIMUM_SCRIBBLE_POINTS)
-        return false
+        return null
     if (touchPoints.first().timestamp < currentLastStrokeEndTime + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS)
-        return false // not enough time has passed since last stroke
+        return null // not enough time has passed since last stroke
     if (calculateNumReversals(touchPoints) < 2)
-        return false
+        return null
 
     val strokeLength = calculateStrokeLength(touchPoints)
-    val boundingBox = calculateBoundingBox(touchPoints)
+    val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
     val width = boundingBox.width()
     val height = boundingBox.height()
-    if (width == 0f || height == 0f) return false
+    if (width == 0f || height == 0f) return null
 
     // Require scribble to be long enough relative to bounding box
     val minLengthForScribble = (width + height) * 3
     if (strokeLength < minLengthForScribble) {
         Log.d("ScribbleToErase", "Stroke is too short, $strokeLength < $minLengthForScribble")
-        return false
+        return null
     }
 
     // calculate stroke width based on bounding box
@@ -351,10 +358,11 @@ fun handleScribbleToErase(
         val deletedStrokeIds = deletedStrokes.map { it.id }
         page.removeStrokes(deletedStrokeIds)
         history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
-        page.drawAreaPageCoordinates(strokeBounds(deletedStrokes))
-        return true
+        val dirtyRect = strokeBounds(deletedStrokes)
+        page.drawAreaPageCoordinates(dirtyRect)
+        return dirtyRect
     }
-    return false
+    return null
 }
 
 // touchpoints are in page coordinates
@@ -367,7 +375,7 @@ fun handleDraw(
     touchPoints: List<StrokePoint>
 ) {
     try {
-        val boundingBox = calculateBoundingBox(touchPoints)
+        val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
 
         //move rectangle
         boundingBox.inset(-strokeSize, -strokeSize)
@@ -397,19 +405,9 @@ fun handleDraw(
 * The line consist of 100 points, I do not know how it works (for 20 it want draw correctly)
  */
 fun transformToLine(
-    touchPoints: List<TouchPoint>
-): List<TouchPoint> {
-    val startPoint = touchPoints.first()
-    val endPoint = touchPoints.last()
-
-    // Setting intermediate values for tilt and pressure
-    startPoint.tiltX = touchPoints[touchPoints.size / 10].tiltX
-    startPoint.tiltY = touchPoints[touchPoints.size / 10].tiltY
-    startPoint.pressure = touchPoints[touchPoints.size / 10].pressure
-    endPoint.tiltX = touchPoints[9 * touchPoints.size / 10].tiltX
-    endPoint.tiltY = touchPoints[9 * touchPoints.size / 10].tiltY
-    endPoint.pressure = touchPoints[9 * touchPoints.size / 10].pressure
-
+    startPoint: StrokePoint,
+    endPoint: StrokePoint,
+): List<StrokePoint> {
     // Helper function to interpolate between two values
     fun lerp(start: Float, end: Float, fraction: Float) = start + (end - start) * fraction
 
@@ -424,7 +422,7 @@ fun transformToLine(
         val tiltY = (lerp(startPoint.tiltY.toFloat(), endPoint.tiltY.toFloat(), fraction)).toInt()
         val timestamp = System.currentTimeMillis()
 
-        TouchPoint(x, y, pressure, size, tiltX, tiltY, timestamp)
+        StrokePoint(x, y, pressure, size, tiltX, tiltY, timestamp)
     }
     return (points2)
 }
@@ -648,4 +646,32 @@ fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
             buffer.clear()
         }
     }
+}
+
+fun getModifiedStrokeEndpoints(
+    points: List<TouchPoint>,
+    scroll: Int, // Replace with your actual type
+    zoomLevel: Float
+): Pair<StrokePoint, StrokePoint> {
+    if (points.isEmpty()) throw IllegalArgumentException("points list is empty")
+
+    val startIdx = points.size / 10
+    val endIdx = (9 * points.size) / 10
+
+    val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel)
+    val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel)
+
+    val startPoint = baseStartPoint.copy(
+        tiltX = points[startIdx].tiltX,
+        tiltY = points[startIdx].tiltY,
+        pressure = points[startIdx].pressure
+    )
+
+    val endPoint = baseEndPoint.copy(
+        tiltX = points[endIdx].tiltX,
+        tiltY = points[endIdx].tiltY,
+        pressure = points[endIdx].pressure
+    )
+
+    return Pair(startPoint, endPoint)
 }
