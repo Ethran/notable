@@ -113,7 +113,7 @@ object PageDataManager {
     }
 
     val saveTopic = MutableSharedFlow<String>()
-    fun functionThatWillSetUpSavingPersistentBitmap(
+    fun collectAndPersistBitmapsBatch(
         context: Context,
         scope: CoroutineScope
     ) {

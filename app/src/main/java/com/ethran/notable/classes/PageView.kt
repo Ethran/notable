@@ -17,7 +17,7 @@ import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.classes.PageDataManager.functionThatWillSetUpSavingPersistentBitmap
+import com.ethran.notable.classes.PageDataManager.collectAndPersistBitmapsBatch
 import com.ethran.notable.db.AppDatabase
 import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.Image
@@ -140,7 +140,7 @@ class PageView(
         }
         coroutineScope.launch {
             loadPage()
-            functionThatWillSetUpSavingPersistentBitmap(context, coroutineScope)
+            collectAndPersistBitmapsBatch(context, coroutineScope)
         }
     }
 
