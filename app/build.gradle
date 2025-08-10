@@ -18,8 +18,8 @@ android {
         minSdk 29
         targetSdk 35
 
-        versionCode 18
-        versionName '0.0.18'
+        versionCode 19
+        versionName '0.0.19'
         if (project.hasProperty('IS_NEXT') && project.IS_NEXT.toBoolean()) {
             def timestamp = new Date().format('dd.MM.YYYY-HH:mm')
             versionName = "${versionName}-next-${timestamp}"
@@ -130,7 +130,7 @@ dependencies {
     implementation "androidx.compose.material:material:$compose_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_version"
     implementation "androidx.compose.material:material-icons-extended:$compose_version"
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.9.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.9.2'
     implementation 'androidx.activity:activity-compose:1.10.1'
     implementation 'androidx.fragment:fragment-ktx:1.8.8'
     implementation 'androidx.graphics:graphics-core:1.0.3'
@@ -145,29 +145,29 @@ dependencies {
         exclude group: 'com.android.support', module: 'appcompat-v7'
     }
 
-    implementation('com.onyx.android.sdk:onyxsdk-base:1.8.1.3') {
+    implementation('com.onyx.android.sdk:onyxsdk-base:1.8.1.6') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
     }
 
     // Temporary (?) fix for https://github.com/gaborauth/toolsboox-android/issues/305
-    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3") // required by onyx sdk
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1") // required by onyx sdk
 
     // used in RawInputManager.
     implementation group: 'io.reactivex.rxjava2', name: 'rxjava', version: '2.2.21'
     implementation group: 'io.reactivex.rxjava2', name: 'rxandroid', version: '2.1.1'
 
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_version"
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_version"
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_version"
     implementation "androidx.compose.runtime:runtime-livedata:$compose_version"
     implementation "androidx.compose.runtime:runtime:$compose_version"
-    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0'
 
-    implementation "androidx.navigation:navigation-compose:2.9.0"
+    implementation "androidx.navigation:navigation-compose:2.9.3"
 
     def room_version = "2.7.1"
 
@@ -177,11 +177,11 @@ dependencies {
     ksp "androidx.room:room-compiler:$room_version"
 
     // For testing:
-    implementation 'androidx.room:room-testing-android:2.7.1'
+    implementation 'androidx.room:room-testing-android:2.7.2'
     testImplementation "androidx.room:room-testing:$room_version"
     testImplementation "androidx.arch.core:core-testing:2.2.0"
 
-    implementation "io.coil-kt:coil-compose:2.2.2"
+    implementation "io.coil-kt:coil-compose:2.7.0"
 
 
     implementation 'com.aventrix.jnanoid:jnanoid:2.0.0'
@@ -190,14 +190,14 @@ dependencies {
     implementation 'com.google.firebase:firebase-analytics-ktx'
 
     implementation 'br.com.devsrsouza.compose.icons.android:feather:1.0.0'
-    implementation "com.beust:klaxon:5.5"
+    implementation "com.beust:klaxon:5.6"
 
     //noinspection GradleDynamicVersion
     implementation 'io.shipbook:shipbooksdk:1.+'
 
     // For xopp file format
-    implementation("org.apache.commons:commons-compress:1.27.1") // GZip support
-    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0"
+    implementation("org.apache.commons:commons-compress:1.28.0") // GZip support
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
 }
 
 tasks.register('printVersionName') {
