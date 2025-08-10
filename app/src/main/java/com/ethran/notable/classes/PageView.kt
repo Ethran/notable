@@ -783,6 +783,9 @@ class PageView(
         }
     }
 
+    // should be run after every modification of widowedBitmap.
+    // Especially, on major ones -- this persistent bitmap will be used to reinitialize page.
+    // if its not correct, might cause ghosting
     private fun persistBitmapDebounced(pageId: String = this.id) {
         coroutineScope.launch {
             PageDataManager.saveTopic.emit(pageId)

@@ -120,7 +120,7 @@ object PageDataManager {
         scope.launch(Dispatchers.IO) {
             saveTopic
                 .buffer(100)
-                .chunked(2000)
+                .chunked(1000)
                 .collect { pageIdBatch ->
                     // 3. Take only the unique page IDs from the batch.
                     val uniquePageIds = pageIdBatch.distinct()
@@ -443,14 +443,17 @@ object PageDataManager {
     // In PageDataManager:
     fun registerComponentCallbacks(context: Context) {
         context.registerComponentCallbacks(object : ComponentCallbacks2 {
+            @Suppress("DEPRECATION")
             override fun onTrimMemory(level: Int) {
                 log.d("onTrimMemory: $level, currentCacheSizeMB: $currentCacheSizeMB")
                 when (level) {
+                    // for API <34
                     ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> clearAllCache()
                     ComponentCallbacks2.TRIM_MEMORY_MODERATE -> freeMemory(32)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> freeMemory(64)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> freeMemory(128)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> freeMemory(256)
+
                     ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> freeMemory(32)
                     ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> freeMemory(10)
                 }
