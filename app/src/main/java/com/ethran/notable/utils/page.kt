@@ -19,6 +19,9 @@ import com.ethran.notable.db.Page
 import com.ethran.notable.db.PageRepository
 import com.ethran.notable.db.Stroke
 import com.ethran.notable.db.getBackgroundType
+import com.ethran.notable.drawing.drawBg
+import com.ethran.notable.drawing.drawImage
+import com.ethran.notable.drawing.drawStroke
 import com.ethran.notable.modals.A4_HEIGHT
 import com.ethran.notable.modals.A4_WIDTH
 import com.ethran.notable.modals.GlobalAppSettings

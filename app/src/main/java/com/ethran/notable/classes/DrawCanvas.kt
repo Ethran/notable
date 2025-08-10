@@ -25,6 +25,7 @@ import com.ethran.notable.db.selectImage
 import com.ethran.notable.db.selectImagesAndStrokes
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
+import com.ethran.notable.drawing.OpenGLRenderer
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.Eraser
 import com.ethran.notable.utils.History
@@ -37,7 +38,7 @@ import com.ethran.notable.utils.calculateBoundingBox
 import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
 import com.ethran.notable.utils.copyInputToSimplePointF
-import com.ethran.notable.utils.drawImage
+import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.utils.handleDraw
 import com.ethran.notable.utils.handleErase
@@ -49,7 +50,7 @@ import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.prepareForPartialUpdate
 import com.ethran.notable.utils.refreshScreenRegion
 import com.ethran.notable.utils.restoreDefaults
-import com.ethran.notable.utils.selectPaint
+import com.ethran.notable.drawing.selectPaint
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
 import com.ethran.notable.utils.uriToBitmap

@@ -78,10 +78,10 @@ import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.utils.copyBackgroundToDatabase
-import com.ethran.notable.utils.drawDottedBg
-import com.ethran.notable.utils.drawHexedBg
-import com.ethran.notable.utils.drawLinedBg
-import com.ethran.notable.utils.drawSquaredBg
+import com.ethran.notable.drawing.drawDottedBg
+import com.ethran.notable.drawing.drawHexedBg
+import com.ethran.notable.drawing.drawLinedBg
+import com.ethran.notable.drawing.drawSquaredBg
 import com.ethran.notable.utils.ensureBackgroundsFolder
 import com.ethran.notable.utils.getPdfPageCount
 import compose.icons.FeatherIcons

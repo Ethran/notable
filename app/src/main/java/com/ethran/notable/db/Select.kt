@@ -12,8 +12,8 @@ import com.ethran.notable.utils.PlacementMode
 import com.ethran.notable.utils.SelectPointPosition
 import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.divideStrokesFromCut
-import com.ethran.notable.utils.drawImage
-import com.ethran.notable.utils.drawStroke
+import com.ethran.notable.drawing.drawImage
+import com.ethran.notable.drawing.drawStroke
 import com.ethran.notable.utils.imageBoundsInt
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.selectImagesFromPath

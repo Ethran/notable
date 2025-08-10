@@ -1,10 +1,11 @@
-package com.ethran.notable.classes
+package com.ethran.notable.drawing
 
 import android.graphics.Color
 import android.graphics.Rect
 import android.opengl.GLES20
 import android.util.Log
 import com.ethran.notable.TAG
+import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.utils.refreshScreenRegion
 import java.nio.ByteBuffer

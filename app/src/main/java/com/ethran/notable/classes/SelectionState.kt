@@ -17,7 +17,7 @@ import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.PlacementMode
 import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.copyBitmapToClipboard
-import com.ethran.notable.utils.drawImage
+import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.utils.imageBoundsInt
 import com.ethran.notable.utils.offsetImage
 import com.ethran.notable.utils.offsetStroke

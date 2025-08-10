@@ -1,45 +1,29 @@
-package com.ethran.notable.utils
+package com.ethran.notable.drawing
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.PointF
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.imageResource
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.toOffset
-import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.PageView
-import com.ethran.notable.classes.pressure
 import com.ethran.notable.db.BackgroundType
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Stroke
-import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.modals.GlobalAppSettings
-import com.onyx.android.sdk.data.note.ShapeCreateArgs
-import com.onyx.android.sdk.data.note.TouchPoint
+import com.ethran.notable.utils.getPdfPageCount
+import com.ethran.notable.utils.loadBackgroundBitmap
+import com.ethran.notable.utils.logCallStack
+import com.ethran.notable.utils.scaleRect
 import com.onyx.android.sdk.extension.isNotNull
-import com.onyx.android.sdk.pen.NeoBrushPen
-import com.onyx.android.sdk.pen.NeoCharcoalPen
-import com.onyx.android.sdk.pen.NeoFountainPen
-import com.onyx.android.sdk.pen.NeoMarkerPen
 import io.shipbook.shipbooksdk.ShipBook
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
@@ -47,233 +31,7 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private val drawUtilsLog = ShipBook.getLogger("DrawUtilsLog")
-
-
-fun drawBallPenStroke(
-    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<TouchPoint>
-) {
-    val copyPaint = Paint(paint).apply {
-        this.strokeWidth = strokeSize
-        this.style = Paint.Style.STROKE
-        this.strokeCap = Paint.Cap.ROUND
-        this.strokeJoin = Paint.Join.ROUND
-
-        this.isAntiAlias = true
-    }
-
-    val path = Path()
-    val prePoint = PointF(points[0].x, points[0].y)
-    path.moveTo(prePoint.x, prePoint.y)
-
-    for (point in points) {
-        // skip strange jump point.
-        if (abs(prePoint.y - point.y) >= 30) continue
-        path.quadTo(prePoint.x, prePoint.y, point.x, point.y)
-        prePoint.x = point.x
-        prePoint.y = point.y
-    }
-    try {
-        canvas.drawPath(path, copyPaint)
-    } catch (e: Exception) {
-        drawUtilsLog.e("Exception during draw", e)
-    }
-}
-
-val eraserPaint = Paint().apply {
-    style = Paint.Style.STROKE
-    strokeCap = Paint.Cap.ROUND
-    strokeJoin = Paint.Join.ROUND
-    color = Color.BLACK
-    xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
-    isAntiAlias = false
-}
-private val reusablePath = Path()
-fun drawEraserStroke(canvas: Canvas, points: List<StrokePoint>, strokeSize: Float) {
-    eraserPaint.strokeWidth = strokeSize
-
-    reusablePath.reset()
-    if (points.isEmpty()) return
-
-    val prePoint = PointF(points[0].x, points[0].y)
-    reusablePath.moveTo(prePoint.x, prePoint.y)
-
-    for (i in 1 until points.size) {
-        val point = points[i]
-        if (abs(prePoint.y - point.y) >= 30) continue
-        reusablePath.quadTo(prePoint.x, prePoint.y, point.x, point.y)
-        prePoint.x = point.x
-        prePoint.y = point.y
-    }
-
-    try {
-        canvas.drawPath(reusablePath, eraserPaint)
-    } catch (e: Exception) {
-        drawUtilsLog.e("Exception during draw", e)
-    }
-}
-
-
-fun drawMarkerStroke(
-    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<TouchPoint>
-) {
-    val copyPaint = Paint(paint).apply {
-        this.strokeWidth = strokeSize
-        this.style = Paint.Style.STROKE
-        this.strokeCap = Paint.Cap.ROUND
-        this.strokeJoin = Paint.Join.ROUND
-        this.isAntiAlias = true
-        this.alpha = 100
-
-    }
-
-    val path = pointsToPath(points.map { SimplePointF(it.x, it.y) })
-
-    canvas.drawPath(path, copyPaint)
-}
-
-fun drawFountainPenStroke(
-    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<TouchPoint>
-) {
-    val copyPaint = Paint(paint).apply {
-        this.strokeWidth = strokeSize
-        this.style = Paint.Style.STROKE
-        this.strokeCap = Paint.Cap.ROUND
-        this.strokeJoin = Paint.Join.ROUND
-//        this.blendMode = BlendMode.OVERLAY
-        this.isAntiAlias = true
-    }
-
-    val path = Path()
-    val prePoint = PointF(points[0].x, points[0].y)
-    path.moveTo(prePoint.x, prePoint.y)
-
-    for (point in points) {
-        // skip strange jump point.
-        if (abs(prePoint.y - point.y) >= 30) continue
-        path.quadTo(prePoint.x, prePoint.y, point.x, point.y)
-        prePoint.x = point.x
-        prePoint.y = point.y
-        copyPaint.strokeWidth =
-            (1.5f - strokeSize / 40f) * strokeSize * (1 - cos(0.5f * 3.14f * point.pressure / pressure))
-        point.tiltX
-        point.tiltY
-        point.timestamp
-
-        canvas.drawPath(path, copyPaint)
-        path.reset()
-        path.moveTo(point.x, point.y)
-    }
-}
-
-fun drawStroke(canvas: Canvas, stroke: Stroke, offset: IntOffset) {
-    //canvas.save()
-    //canvas.translate(offset.x.toFloat(), offset.y.toFloat())
-
-    val paint = Paint().apply {
-        color = stroke.color
-        this.strokeWidth = stroke.size
-    }
-
-    val points = strokeToTouchPoints(offsetStroke(stroke, offset.toOffset()))
-
-    // Trying to find what throws error when drawing quickly
-    try {
-        when (stroke.pen) {
-            Pen.BALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.REDBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.GREENBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.BLUEBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            // TODO: this functions for drawing are slow and unreliable
-            // replace them with something better
-            Pen.PENCIL -> NeoCharcoalPen.drawNormalStroke(
-                null,
-                canvas,
-                paint,
-                points,
-                stroke.color,
-                stroke.size,
-                ShapeCreateArgs(),
-                Matrix(),
-                false
-            )
-
-            Pen.BRUSH -> NeoBrushPen.drawStroke(canvas, paint, points, stroke.size, pressure, false)
-            Pen.MARKER -> {
-                if (GlobalAppSettings.current.neoTools)
-                    NeoMarkerPen.drawStroke(canvas, paint, points, stroke.size, false)
-                else
-                    drawMarkerStroke(canvas, paint, stroke.size, points)
-            }
-
-            Pen.FOUNTAIN -> {
-                if (GlobalAppSettings.current.neoTools)
-                    NeoFountainPen.drawStroke(
-                        canvas,
-                        paint,
-                        points,
-                        1f,
-                        stroke.size,
-                        pressure,
-                        false
-                    )
-                else
-                    drawFountainPenStroke(canvas, paint, stroke.size, points)
-            }
-
-
-        }
-    } catch (e: Exception) {
-        drawUtilsLog.e("draw.kt: Drawing strokes failed: ${e.message}")
-    }
-    //canvas.restore()
-}
-
-
-/**
- * Draws an image onto the provided Canvas at a specified location and size, using its URI.
- *
- * This function performs the following steps:
- * 1. Converts the URI of the image into a `Bitmap` object.
- * 2. Converts the `ImageBitmap` to a software-backed `Bitmap` for compatibility.
- * 3. Clears the value of `DrawCanvas.addImageByUri` to null.
- * 4. Draws the specified bitmap onto the provided Canvas within a destination rectangle
- *    defined by the `Image` object coordinates (`x`, `y`) and its dimensions (`width`, `height`),
- *    adjusted by the `offset`.
- * 5. Logs the success or failure of the operation.
- *
- * @param context The context used to retrieve the image from the URI.
- * @param canvas The Canvas object where the image will be drawn.
- * @param image The `Image` object containing details about the image (URI, position, and size).
- * @param offset The `IntOffset` used to adjust the drawing position relative to the Canvas.
- */
-fun drawImage(context: Context, canvas: Canvas, image: Image, offset: IntOffset) {
-    if (image.uri.isNullOrEmpty())
-        return
-    val imageBitmap = uriToBitmap(context, image.uri.toUri())?.asImageBitmap()
-    if (imageBitmap != null) {
-        // Convert the image to a software-backed bitmap
-        val softwareBitmap =
-            imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
-
-        DrawCanvas.addImageByUri.value = null
-
-        val rectOnImage = Rect(0, 0, imageBitmap.width, imageBitmap.height)
-        val rectOnCanvas = Rect(
-            image.x + offset.x,
-            image.y + offset.y,
-            image.x + image.width + offset.x,
-            image.y + image.height + offset.y
-        )
-        // Draw the bitmap on the canvas at the center of the page
-        canvas.drawBitmap(softwareBitmap, rectOnImage, rectOnCanvas, null)
-
-        // Log after drawing
-        drawUtilsLog.i("Image drawn successfully at center!")
-    } else
-        drawUtilsLog.e("Could not get image from: ${image.uri}")
-}
-
+private val backgroundsLog = ShipBook.getLogger("BackgroundsLog")
 
 const val padding = 0
 const val lineHeight = 80
@@ -441,10 +199,10 @@ fun drawBackgroundImages(
         if (imageBitmap != null) {
             drawBitmapToCanvas(canvas, imageBitmap, scroll, scale, repeat)
         } else {
-            drawUtilsLog.e("Failed to load image from $backgroundImage")
+            backgroundsLog.e("Failed to load image from $backgroundImage")
         }
     } catch (e: Exception) {
-        drawUtilsLog.e("Error loading background image: ${e.message}", e)
+        backgroundsLog.e("Error loading background image: ${e.message}", e)
     }
 }
 
@@ -494,7 +252,7 @@ fun drawPdfPage(
     scale: Float = 1.0f
 ) {
     if (pageNumber < 0) {
-        drawUtilsLog.e("Page number should not be ${pageNumber}, uri: $pdfUriString")
+        backgroundsLog.e("Page number should not be ${pageNumber}, uri: $pdfUriString")
         logCallStack("DrawPdfPage")
         return
     }
@@ -512,7 +270,7 @@ fun drawPdfPage(
         }
 
     } catch (e: Exception) {
-        drawUtilsLog.e("drawPdfPage: Failed to render PDF", e)
+        backgroundsLog.e("drawPdfPage: Failed to render PDF", e)
     }
 }
 
@@ -718,17 +476,9 @@ fun drawPaginationLine(canvas: Canvas, scroll: Int, scale: Float) {
                 textPaint
             )
         } else {
-            drawUtilsLog.d("Skipping line at $yPos (above visible area)")
+            backgroundsLog.d("Skipping line at $yPos (above visible area)")
         }
         yPos += pageHeight
         pageNum++
     }
-}
-
-val selectPaint = Paint().apply {
-    strokeWidth = 5f
-    style = Paint.Style.STROKE
-    pathEffect = DashPathEffect(floatArrayOf(20f, 10f), 0f)
-    isAntiAlias = true
-    color = Color.GRAY
 }

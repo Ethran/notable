@@ -1,4 +1,4 @@
-package com.ethran.notable.classes
+package com.ethran.notable.drawing
 
 
 import android.annotation.SuppressLint
@@ -15,6 +15,8 @@ import androidx.graphics.lowlatency.BufferInfo
 import androidx.graphics.lowlatency.GLFrontBufferedRenderer
 import androidx.graphics.opengl.egl.EGLManager
 import androidx.input.motionprediction.MotionEventPredictor
+import com.ethran.notable.classes.DrawCanvas
+import com.ethran.notable.classes.Timing
 import com.ethran.notable.db.StrokePoint
 import io.shipbook.shipbooksdk.Log
 
