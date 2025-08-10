@@ -137,7 +137,7 @@ fun handleErase(
     history: History,
     points: List<SimplePointF>,
     eraser: Eraser
-): Rect {
+): Rect? {
     val paint = Paint().apply {
         this.strokeWidth = 30f
         this.style = Paint.Style.STROKE
@@ -161,14 +161,13 @@ fun handleErase(
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
+    if(deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 
     history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
 
-    val effectedArea = strokeBounds(deletedStrokes)
-    page.drawAreaScreenCoordinates(
-        screenArea = page.toScreenCoordinates(effectedArea)
-    )
+    val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
+    page.drawAreaScreenCoordinates(screenArea = effectedArea)
     return effectedArea
 }
 

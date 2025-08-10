@@ -80,7 +80,7 @@ fun drawBallPenStroke(
     }
 }
 
-private val eraserPaint = Paint().apply {
+val eraserPaint = Paint().apply {
     style = Paint.Style.STROKE
     strokeCap = Paint.Cap.ROUND
     strokeJoin = Paint.Join.ROUND

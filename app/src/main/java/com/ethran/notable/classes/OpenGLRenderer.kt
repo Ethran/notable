@@ -150,9 +150,13 @@ class OpenGLRenderer(
     }
 
     fun attachSurfaceView(surfaceView: SurfaceView) {
+        if (isAttached)
+            Log.e("OpenGLRenderer", "Already attached")
         frontBufferRenderer = GLFrontBufferedRenderer(surfaceView, this)
         motionEventPredictor = MotionEventPredictor.newInstance(surfaceView)
     }
+    val isAttached: Boolean
+        get() = frontBufferRenderer != null
 
     fun release() {
         frontBufferRenderer?.release(true)

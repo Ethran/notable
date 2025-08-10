@@ -99,13 +99,16 @@ class DrawCanvas(
     var lastStrokeEndTime: Long = 0
     //private val commitHistorySignal = MutableSharedFlow<Unit>()
 
-    private val glRenderer = OpenGLRenderer(this)
+    private var glRenderer = OpenGLRenderer(this)
     override fun onAttachedToWindow() {
+        log.d("Attached to window")
+        glRenderer = OpenGLRenderer(this@DrawCanvas)
         super.onAttachedToWindow()
         glRenderer.attachSurfaceView(this)
     }
 
     override fun onDetachedFromWindow() {
+        log.d("Detached from window")
         glRenderer.release()
         super.onDetachedFromWindow()
     }
@@ -301,6 +304,7 @@ class DrawCanvas(
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             prepareForPartialUpdate(this@DrawCanvas)
+            log.d("Eraser Mode")
             isErasing = true
         }
 
@@ -324,7 +328,6 @@ class DrawCanvas(
                 boundingBox.right + padding,
                 boundingBox.bottom + padding
             )
-            restoreCanvas(strokeArea)
 
             val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
             val zoneEffected = handleErase(
@@ -333,7 +336,8 @@ class DrawCanvas(
                 points,
                 eraser = getActualState().eraser
             )
-            refreshUi(zoneEffected)
+           if (zoneEffected != null)
+                refreshUi(zoneEffected)
         }
 
         override fun onRawErasingTouchPointMoveReceived(p0: TouchPoint?) {
@@ -378,6 +382,7 @@ class DrawCanvas(
 
                 // Update page dimensions, redraw and refresh
                 page.updateDimensions(width, height)
+                updateActiveSurface()
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {

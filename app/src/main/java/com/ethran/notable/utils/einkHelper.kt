@@ -185,6 +185,11 @@ fun prepareForPartialUpdate(view: View) {
 }
 
 fun refreshScreenRegion(view: View, dirtyRect: Rect) {
+    if(!view.isAttachedToWindow)
+    {
+        einkLogger.e("View is not attached to window")
+        logCallStack("refreshScreenRegion")
+    }
     EpdController.refreshScreenRegion(
         view,
         dirtyRect.left,
