@@ -140,8 +140,6 @@ class PageView(
         }
         coroutineScope.launch {
             loadPage()
-            DrawCanvas.waitForObservers()
-            DrawCanvas.forceUpdate.emit(null)
             functionThatWillSetUpSavingPersistentBitmap(context, coroutineScope)
         }
     }
@@ -204,6 +202,9 @@ class PageView(
                 logCache.d("All strokes loaded in $timeToLoad ms")
             } finally {
                 snack?.let { SnackState.cancelGlobalSnack.emit(it.id) }
+                coroutineScope.launch(Dispatchers.Main.immediate) {
+                    DrawCanvas.forceUpdate.emit(null)
+                }
                 logCache.d("Loaded page from persistent layer $id")
             }
         }
@@ -267,6 +268,9 @@ class PageView(
         if (isInCache) {
             logCache.i("Page loaded from cache")
             height = PageDataManager.getPageHeight(id) ?: viewHeight //TODO: correct
+            coroutineScope.launch(Dispatchers.Main.immediate) {
+                DrawCanvas.forceUpdate.emit(null)
+            }
         } else {
             logCache.i("Page not found in cache")
             // If cache is incomplete, load from persistent storage
