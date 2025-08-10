@@ -24,7 +24,6 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
-import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -176,10 +175,12 @@ fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
 fun persistBitmapFull(context: Context, bitmap: Bitmap, pageID: String) {
     val file = File(context.filesDir, "pages/previews/full/$pageID")
     Files.createDirectories(Path(file.absolutePath).parent)
-    BufferedOutputStream(FileOutputStream(file)).use { os ->
+
+    file.outputStream().buffered().use { os ->
         val success = bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
         if (!success) {
-            logCallStack("Failed to compress bitmap")
+            log.e("Failed to compress bitmap")
+            logCallStack("persistBitmapFull")
         }
     }
 }
@@ -187,11 +188,16 @@ fun persistBitmapFull(context: Context, bitmap: Bitmap, pageID: String) {
 fun persistBitmapThumbnail(context: Context, bitmap: Bitmap, pageID: String) {
     val file = File(context.filesDir, "pages/previews/thumbs/$pageID")
     Files.createDirectories(Path(file.absolutePath).parent)
-    val os = BufferedOutputStream(FileOutputStream(file))
     val ratio = bitmap.height.toFloat() / bitmap.width.toFloat()
-    bitmap.scale(500, (500 * ratio).toInt(), false)
-        .compress(Bitmap.CompressFormat.JPEG, 80, os)
-    os.close()
+    val scaledBitmap = bitmap.scale(500, (500 * ratio).toInt(), false)
+
+    file.outputStream().buffered().use { os ->
+        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, os)
+    }
+
+    if (scaledBitmap != bitmap) {
+        scaledBitmap.recycle()
+    }
 }
 
 fun loadPersistBitmap(context: Context, pageID: String): Bitmap? {
