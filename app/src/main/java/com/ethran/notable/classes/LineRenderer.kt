@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.opengl.GLES20
 import android.util.Log
+import com.ethran.notable.TAG
 import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.utils.refreshScreenRegion
 import java.nio.ByteBuffer
@@ -130,6 +131,10 @@ class LineRenderer {
                 refreshScreenRegion(viewModel, dirtyRect) }
         }
         GLES20.glDisableVertexAttribArray(positionHandle)
+        val error = GLES20.glGetError()
+        if (error != GLES20.GL_NO_ERROR) {
+            Log.e(TAG,"GL error: $error")
+        }
     }
 
 
