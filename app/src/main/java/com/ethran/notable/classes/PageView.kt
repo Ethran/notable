@@ -243,7 +243,7 @@ class PageView(
         }
     }
 
-
+    // To be removed.
     private fun redrawAll(scope: CoroutineScope) {
         scope.launch(Dispatchers.Main.immediate) {
             val viewRectangle = Rect(0, 0, windowedCanvas.width, windowedCanvas.height)
