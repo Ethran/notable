@@ -8,14 +8,18 @@ import android.graphics.Rect
 import android.os.FileObserver
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
+import com.ethran.notable.utils.chunked
 import com.ethran.notable.utils.loadBackgroundBitmap
+import com.ethran.notable.utils.persistBitmapFull
+import com.ethran.notable.utils.persistBitmapThumbnail
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,8 +50,12 @@ object PageDataManager {
 
     private val cachedBackgrounds = LinkedHashMap<String, CachedBackground>()
     private val bitmapCache = LinkedHashMap<String, SoftReference<Bitmap>>()
-    private val backgroundObservers = mutableMapOf<String, FileObserver>()
 
+    // observe background file changes
+    // fileObservers: filename to observer
+    // fileToPages: filename to files with this file
+    private val fileObservers = mutableMapOf<String, FileObserver>()
+    private val fileToPages = mutableMapOf<String, MutableSet<String>>()
 
     private var pageHigh = LinkedHashMap<String, Int>()
 
@@ -101,6 +109,42 @@ object PageDataManager {
     suspend fun isPageLoading(pageId: String): Boolean {
         lockLoadingPages.withLock {
             return loadingPages.containsKey(pageId)
+        }
+    }
+
+    val saveTopic = MutableSharedFlow<String>()
+    fun collectAndPersistBitmapsBatch(
+        context: Context,
+        scope: CoroutineScope
+    ) {
+        scope.launch(Dispatchers.IO) {
+            saveTopic
+                .buffer(100)
+                .chunked(1000)
+                .collect { pageIdBatch ->
+                    // 3. Take only the unique page IDs from the batch.
+                    val uniquePageIds = pageIdBatch.distinct()
+
+                    if (uniquePageIds.isEmpty()) return@collect
+
+                    log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
+
+                    // 4. Process each unique ID.
+                    for (pageId in uniquePageIds) {
+                        val ref = bitmapCache[pageId]
+                        val bitmap = ref?.get()
+
+                        if (bitmap == null || bitmap.isRecycled) {
+                            log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
+                            continue // Skip to the next ID in the batch
+                        }
+
+                        scope.launch(Dispatchers.IO) {
+                            persistBitmapFull(context, bitmap, pageId)
+                            persistBitmapThumbnail(context, bitmap, pageId)
+                        }
+                    }
+                }
         }
     }
 
@@ -208,8 +252,9 @@ object PageDataManager {
         filePath: String,
         onChange: suspend () -> Unit = {}
     ) {
-        synchronized(backgroundObservers) {
-            if (backgroundObservers.containsKey(pageId)) return // Already observing
+        synchronized(fileObservers) {
+            fileToPages.getOrPut(filePath) { mutableSetOf() }.add(pageId)
+            if (fileObservers.containsKey(filePath)) return // Already observing this file
 
             val file = File(filePath)
             if (!file.exists() || !file.canRead()) {
@@ -217,28 +262,38 @@ object PageDataManager {
                 return
             }
 
-            val observer = object : FileObserver(file, CLOSE_WRITE or MODIFY or MOVED_TO) {
+            val observer = object : FileObserver(file, CLOSE_WRITE or MOVED_TO) {
                 override fun onEvent(event: Int, path: String?) {
-                    log.i("Background file changed: $filePath [event=$event]")
                     dataLoadingScope.launch {
                         log.d("Background file changed: $filePath [event=$event]")
-                        delay(100) // Allow file to settle
-                        invalidateBackground(pageId)
-                        DrawCanvas.forceUpdate.emit(null)
+                        // Invalidate all pages that use this file
+                        fileToPages[filePath]?.forEach { pid ->
+                            invalidateBackground(pid)
+                            if (pid == currentPage) {
+                                DrawCanvas.forceUpdate.emit(null)
+                            }
+                        }
                         onChange()
                     }
                 }
             }
             observer.startWatching()
-            backgroundObservers[pageId] = observer
+            fileObservers[filePath] = observer
         }
     }
 
     private fun stopObservingBackground(pageId: String) {
-        synchronized(backgroundObservers) {
-            backgroundObservers.remove(pageId)?.stopWatching()
+        synchronized(fileObservers) {
+            fileToPages.forEach { (filePath, pageIds) ->
+                if (pageIds.remove(pageId) && pageIds.isEmpty()) {
+                    // No more pages using this file
+                    fileObservers.remove(filePath)?.stopWatching()
+                    fileToPages.remove(filePath)
+                }
+            }
         }
     }
+
     private fun invalidateBackground(pageId: String) {
         synchronized(accessLock) {
             cachedBackgrounds.remove(pageId)
@@ -250,7 +305,9 @@ object PageDataManager {
 
     fun isPageLoaded(pageId: String): Boolean {
         return synchronized(accessLock) {
-            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(pageId)
+            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(
+                pageId
+            )
         }
     }
 
@@ -369,7 +426,7 @@ object PageDataManager {
         val availableMem = ((Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory())/(1024*1024)).toInt()
         if (availableMem > requiredMb)
             return true
-        val toFree =  requiredMb - availableMem
+        val toFree = requiredMb - availableMem
         freeMemory(toFree)
         return hasEnoughMemory(requiredMb)
     }
@@ -390,14 +447,17 @@ object PageDataManager {
     // In PageDataManager:
     fun registerComponentCallbacks(context: Context) {
         context.registerComponentCallbacks(object : ComponentCallbacks2 {
+            @Suppress("DEPRECATION")
             override fun onTrimMemory(level: Int) {
                 log.d("onTrimMemory: $level, currentCacheSizeMB: $currentCacheSizeMB")
                 when (level) {
+                    // for API <34
                     ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> clearAllCache()
                     ComponentCallbacks2.TRIM_MEMORY_MODERATE -> freeMemory(32)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> freeMemory(64)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> freeMemory(128)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> freeMemory(256)
+
                     ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> freeMemory(32)
                     ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> freeMemory(10)
                 }

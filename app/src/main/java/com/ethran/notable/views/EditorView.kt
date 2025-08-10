@@ -21,7 +21,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.AppRepository
-import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.EditorControlTower
 import com.ethran.notable.classes.PageView
 import com.ethran.notable.components.EditorGestureReceiver
@@ -66,7 +65,7 @@ fun EditorView(
         val width = convertDpToPixel(this.maxWidth, context).toInt()
 
 
-        val page = remember(currentPageId) {
+        val page = remember {
             PageView(
                 context = context,
                 coroutineScope = scope,

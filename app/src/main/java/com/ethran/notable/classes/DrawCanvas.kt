@@ -126,6 +126,10 @@ class DrawCanvas(
             }
         }
 
+        suspend fun waitForObservers(){
+            delay(25)
+            // TODO: Find proper solution
+        }
     }
 
     fun getActualState(): EditorState {
@@ -341,6 +345,7 @@ class DrawCanvas(
         // given null it will redraw whole page
         coroutineScope.launch {
             forceUpdate.collect { zoneAffected ->
+                // On loading, make sure that the loaded strokes are visible to it.
                 logCanvasObserver.v("Force update, zone: $zoneAffected")
                 val zoneToRedraw = zoneAffected ?: Rect(0, 0, page.viewWidth, page.viewHeight)
                 page.drawAreaScreenCoordinates(zoneToRedraw)
