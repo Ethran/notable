@@ -126,6 +126,10 @@ class DrawCanvas(
             }
         }
 
+        suspend fun waitForObservers(){
+            delay(50)
+            // TODO: Find proper solution
+        }
     }
 
     fun getActualState(): EditorState {

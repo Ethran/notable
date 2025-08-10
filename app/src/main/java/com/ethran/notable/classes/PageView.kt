@@ -36,7 +36,6 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -136,11 +135,12 @@ class PageView(
         }
 
         coroutineScope.launch {
-            delay(25) // Give collector time to start
+            DrawCanvas.waitForObservers()
             DrawCanvas.refreshUi.emit(Unit)
         }
         coroutineScope.launch {
             loadPage()
+            DrawCanvas.waitForObservers()
             DrawCanvas.forceUpdate.emit(null)
             functionThatWillSetUpSavingPersistentBitmap(context, coroutineScope)
         }
