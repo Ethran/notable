@@ -29,8 +29,10 @@ import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
 import com.onyx.android.sdk.data.note.TouchPoint
 import io.shipbook.shipbooksdk.Log
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -626,4 +628,24 @@ fun logCallStack(reason: String) {
             "${it.className.removePrefix("com.ethran.notable.")}.${it.methodName} (${it.fileName}:${it.lineNumber})"
         }
     Log.w(TAG, "$reason Call stack:\n$stackTrace")
+}
+
+// Helper function to achieve time-based chunking
+fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
+    val buffer = mutableListOf<T>()
+    coroutineScope {
+        val channel = produceIn(this)
+        while (true) {
+            val start = System.currentTimeMillis()
+            val received = channel.receiveCatching().getOrNull() ?: break
+            buffer.add(received)
+
+            while (System.currentTimeMillis() - start < timeoutMillisSelector) {
+                val next = channel.tryReceive().getOrNull() ?: continue
+                buffer.add(next)
+            }
+            emit(buffer.toList())
+            buffer.clear()
+        }
+    }
 }

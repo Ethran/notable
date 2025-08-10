@@ -3,7 +3,6 @@ package com.ethran.notable.classes
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -14,11 +13,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
-import androidx.core.graphics.scale
 import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
+import com.ethran.notable.classes.PageDataManager.functionThatWillSetUpSavingPersistentBitmap
 import com.ethran.notable.db.AppDatabase
 import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.Image
@@ -30,6 +29,7 @@ import com.ethran.notable.utils.drawBg
 import com.ethran.notable.utils.drawImage
 import com.ethran.notable.utils.drawStroke
 import com.ethran.notable.utils.imageBounds
+import com.ethran.notable.utils.loadPersistBitmap
 import com.ethran.notable.utils.logCallStack
 import com.ethran.notable.utils.strokeBounds
 import io.shipbook.shipbooksdk.ShipBook
@@ -37,16 +37,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
-import java.io.BufferedOutputStream
-import java.io.File
-import java.io.FileOutputStream
-import java.nio.file.Files
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.io.path.Path
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.system.measureTimeMillis
@@ -101,7 +94,6 @@ class PageView(
     // we need to observe zoom level, to adjust strokes size.
     var zoomLevel = MutableStateFlow(1.0f)
 
-    private val saveTopic = MutableSharedFlow<Unit>()
 
     var height by mutableIntStateOf(viewHeight) // is observed by ui
 
@@ -145,19 +137,21 @@ class PageView(
 
         coroutineScope.launch {
             delay(25) // Give collector time to start
-            DrawCanvas.forceUpdate.emit(null)
+            DrawCanvas.refreshUi.emit(Unit)
         }
         coroutineScope.launch {
             loadPage()
-            saveTopic.debounce(1000).collect {
-                launch { persistBitmap() }
-                launch { persistBitmapThumbnail() }
-            }
+            DrawCanvas.forceUpdate.emit(null)
+            functionThatWillSetUpSavingPersistentBitmap(context, coroutineScope)
         }
     }
 
     fun updatePageID(newId: String) {
+        val oldId = id
         id = newId
+        coroutineScope.launch {
+            updateOnExit(oldId)
+        }
         pageFromDb = AppRepository(context).pageRepository.getById(id)
         zoomLevel.value = 1.0f
         PageDataManager.setPage(newId)
@@ -177,12 +171,10 @@ class PageView(
         log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $id")
 
         coroutineScope.launch {
-            DrawCanvas.forceUpdate.emit(null)
+            DrawCanvas.refreshUi.emit(Unit)
+            log.d("loaded, waiting, ID: $id")
             loadPage()
-            saveTopic.debounce(1000).collect {
-                launch { persistBitmap() }
-                launch { persistBitmapThumbnail() }
-            }
+            DrawCanvas.forceUpdate.emit(null)
         }
     }
 
@@ -190,15 +182,7 @@ class PageView(
         Cancel loading strokes, and save bitmap to disk
     */
     fun disposeOldPage() {
-        PageDataManager.setPageHeight(id, computeHeight())
-        PageDataManager.calculateMemoryUsage(id, 0)
-        logCache.d("disposeOldPage, ${loadingJob?.isActive}")
-        if (loadingJob?.isActive != true) {
-            // only if job is not active or it's false
-            persistBitmap()
-            persistBitmapThumbnail()
-            // TODO: if we exited the book, we should clear the cache.
-        }
+        updateOnExit(id)
         cleanJob()
     }
 
@@ -220,10 +204,6 @@ class PageView(
                 logCache.d("All strokes loaded in $timeToLoad ms")
             } finally {
                 snack?.let { SnackState.cancelGlobalSnack.emit(it.id) }
-                coroutineScope.launch(Dispatchers.Main.immediate) {
-                    DrawCanvas.forceUpdate.emit(null)
-                }
-
                 logCache.d("Loaded page from persistent layer $id")
             }
         }
@@ -287,9 +267,6 @@ class PageView(
         if (isInCache) {
             logCache.i("Page loaded from cache")
             height = PageDataManager.getPageHeight(id) ?: viewHeight //TODO: correct
-            coroutineScope.launch {
-                DrawCanvas.forceUpdate.emit(null)
-            }
         } else {
             logCache.i("Page not found in cache")
             // If cache is incomplete, load from persistent storage
@@ -437,24 +414,15 @@ class PageView(
     }
 
     private fun loadInitialBitmap(): Boolean {
-        val imgFile = File(context.filesDir, "pages/previews/full/$id")
-        val imgBitmap: Bitmap?
-        if (imgFile.exists()) {
-            imgBitmap = BitmapFactory.decodeFile(imgFile.absolutePath)
-            if (imgBitmap != null) {
-                windowedCanvas.drawBitmap(imgBitmap, 0f, 0f, Paint())
-                log.i("Initial Bitmap for page rendered from cache")
-                // let's control that the last preview fits the present orientation. Otherwise we'll ask for a redraw.
-                if (imgBitmap.height == windowedCanvas.height && imgBitmap.width == windowedCanvas.width) {
-                    return true
-                } else {
-                    log.i("Image preview does not fit canvas area - redrawing")
-                }
-            } else {
-                log.i("Cannot read cache image")
-            }
-        } else {
-            log.i("Cannot find cache image")
+        val bitmapFromDisc = loadPersistBitmap(context, id)
+        if (bitmapFromDisc != null) {
+            // let's control that the last preview fits the present orientation. Otherwise we'll ask for a redraw.
+            if (bitmapFromDisc.height == windowedCanvas.height && bitmapFromDisc.width == windowedCanvas.width) {
+                windowedCanvas.drawBitmap(bitmapFromDisc, 0f, 0f, Paint())
+                log.d("loaded initial bitmap")
+                return true
+            } else
+                log.i("Image preview does not fit canvas area - redrawing")
         }
         // draw just background.
         drawBg(
@@ -464,29 +432,14 @@ class PageView(
         return false
     }
 
-    private fun persistBitmap() {
-        if (windowedBitmap.isRecycled) {
-            log.e("Bitmap is recycled — cannot persist it")
-            return
+    fun updateOnExit(targetPageId: String) {
+        logCache.i("Page exit, is page loaded: ${PageDataManager.isPageLoaded(targetPageId)}")
+        if (PageDataManager.isPageLoaded(targetPageId)) {
+            PageDataManager.setPageHeight(targetPageId, computeHeight())
+            PageDataManager.calculateMemoryUsage(targetPageId, 0)
+            persistBitmapDebounced(targetPageId)
+            // TODO: if we exited the book, we should clear the cache.
         }
-        val file = File(context.filesDir, "pages/previews/full/$id")
-        Files.createDirectories(Path(file.absolutePath).parent)
-        BufferedOutputStream(FileOutputStream(file)).use { os ->
-            val success = windowedBitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
-            if (!success) {
-                logCallStack("Failed to compress bitmap")
-            }
-        }
-    }
-
-    private fun persistBitmapThumbnail() {
-        val file = File(context.filesDir, "pages/previews/thumbs/$id")
-        Files.createDirectories(Path(file.absolutePath).parent)
-        val os = BufferedOutputStream(FileOutputStream(file))
-        val ratio = windowedBitmap.height.toFloat() / windowedBitmap.width.toFloat()
-        windowedBitmap.scale(500, (500 * ratio).toInt(), false)
-            .compress(Bitmap.CompressFormat.JPEG, 80, os)
-        os.close()
     }
 
     private fun cleanJob() {
@@ -689,7 +642,7 @@ class PageView(
         shiftedCanvas.drawBitmap(windowedBitmap, 0f, -movement.toFloat(), null)
 
         // Swap in the shifted bitmap
-        windowedBitmap.recycle() // Recycle old bitmap
+//        windowedBitmap.recycle() // Recycle old bitmap
         windowedBitmap = shiftedBitmap
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
@@ -830,9 +783,9 @@ class PageView(
         }
     }
 
-    private fun persistBitmapDebounced() {
+    private fun persistBitmapDebounced(pageId: String = this.id) {
         coroutineScope.launch {
-            saveTopic.emit(Unit)
+            PageDataManager.saveTopic.emit(pageId)
         }
     }
 
