@@ -119,15 +119,18 @@ class LineRenderer {
             )
             // Render
             GLES20.glDrawArrays(GLES20.GL_LINES, 0, VERTEX_COUNT)
+            val margin = 20
             dirtyRect = Rect(
-                p1.x.toInt() - 100,
-                p1.y.toInt() - 100,
-                p1.x.toInt() + 100,
-                p1.y.toInt() + 100
+                p1.x.toInt() - margin,
+                p1.y.toInt() - margin,
+                p1.x.toInt() + margin,
+                p1.y.toInt() + margin
             )
 
             GLES20.glDisableVertexAttribArray(positionHandle)
-//
+//  TODO: Address copilot suggestion:
+//   Creating a new thread for each refresh operation could lead to thread creation overhead and
+//   potential race conditions. Consider using a shared thread pool or coroutine dispatcher instead.
             thread {
                 refreshScreenRegion(viewModel, dirtyRect) }
         }
