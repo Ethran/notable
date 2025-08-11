@@ -27,8 +27,6 @@ fun ScrollIndicator(context: Context, state: EditorState) {
         .fillMaxHeight()) {
         val height = convertDpToPixel(this.maxHeight, LocalContext.current).toInt()
         val page = state.pageView
-        Log.d(TAG, "Scroll + Height: ${page.scroll + height}")
-        Log.d(TAG, "Page Height: ${page.height}")
         val virtualHeight = max(page.height, page.scroll + height)
         if (virtualHeight <= height) return@BoxWithConstraints
 

@@ -1,6 +1,8 @@
 package com.ethran.notable.modals
 
 
+import android.text.format.DateFormat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,10 +17,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Icon
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowCircleRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -32,11 +40,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,10 +56,10 @@ import com.ethran.notable.classes.LocalSnackContext
 import com.ethran.notable.classes.SnackConf
 import com.ethran.notable.components.BreadCrumb
 import com.ethran.notable.components.PagePreview
-import com.ethran.notable.components.SelectMenu
-import com.ethran.notable.components.ShowConfirmationDialog
 import com.ethran.notable.components.ShowExportDialog
 import com.ethran.notable.components.ShowFolderSelectionDialog
+import com.ethran.notable.components.ShowSimpleConfirmationDialog
+import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.BookRepository
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
@@ -70,19 +80,46 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
         mutableStateOf(book!!.title)
     }
     val formattedCreatedAt =
-        remember { android.text.format.DateFormat.format("dd MMM yyyy HH:mm", book!!.createdAt) }
+        remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.createdAt) }
     val formattedUpdatedAt =
-        remember { android.text.format.DateFormat.format("dd MMM yyyy HH:mm", book!!.updatedAt) }
+        remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.updatedAt) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showBackgroundSelector by remember { mutableStateOf(false) }
+
 
     var bookFolder by remember {  mutableStateOf(book?.parentFolderId)}
 
 
+    if (showBackgroundSelector) {
+        BackgroundSelector(
+            initialPageBackgroundType = book!!.defaultBackgroundType,
+            initialPageBackground = book!!.defaultBackground,
+            isNotebookBgSelector = true,
+            notebookId = book!!.id,
+            onChange = { backgroundType, background ->
+                if (background == null) {
+                    if (book!!.defaultBackgroundType != backgroundType){
+                        val updatedBook = book!!.copy(
+                            defaultBackgroundType = backgroundType)
+                        bookRepository.update(updatedBook)
+                    }
+                } else if (book!!.defaultBackgroundType != backgroundType || book!!.defaultBackground != background) {
+                    val updatedBook = book!!.copy(
+                        defaultBackgroundType = backgroundType,
+                        defaultBackground = background
+                    )
+                    bookRepository.update(updatedBook)
+                }
+            }
+        ) {
+            showBackgroundSelector =false
+        }
+    }
     // Confirmation Dialog for Deletion
     if (showDeleteDialog) {
-        ShowConfirmationDialog(
+        ShowSimpleConfirmationDialog(
             title = "Confirm Deletion",
             message = "Are you sure you want to delete \"${book!!.title}\"?",
             onConfirm = {
@@ -123,7 +160,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
             onConfirm = { selectedFolder ->
                 showMoveDialog = false
                 onClose()
-                Log.i(TAG, "folder:" + selectedFolder.toString())
+                Log.i(TAG, "folder: $selectedFolder")
                 val updatedBook = book!!.copy(parentFolderId = selectedFolder)
                 bookFolder = selectedFolder
                 scope.launch {
@@ -186,7 +223,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Text,
-                                imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                                imeAction = ImeAction.Done
                             ),
                             onValueChange = { bookTitle = it },
                             keyboardActions = KeyboardActions(onDone = {
@@ -209,29 +246,45 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                         )
                     }
 
-                    Row {
-                        Text(text = "Default Background Template")
-
-                        Spacer(Modifier.width(30.dp))
-                        SelectMenu(
-                            options = listOf(
-                                "blank" to "Blank page",
-                                "dotted" to "Dot grid",
-                                "lined" to "Lines",
-                                "squared" to "Small squares grid",
-                                "hexed" to "Hexagon grid",
-                            ),
-                            onChange = {
-                                if (book!!.defaultNativeTemplate != it) {
-                                    val updatedBook = book!!.copy(defaultNativeTemplate = it)
-                                    bookRepository.update(updatedBook)
-                                }
-                            },
-                            // this once thrown null ptr exception, when deleting notebook.
-                            value = book!!.defaultNativeTemplate
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Default Background Template",
                         )
-
+                        Spacer(modifier = Modifier.width(40.dp))
+                        Button(
+                            onClick = { showBackgroundSelector = !showBackgroundSelector },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color(Color.White.toArgb()),
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color.Black)
+                        ) {
+                            val typeName= when (BackgroundType.fromKey(book?.defaultBackgroundType ?:"" ) ){
+                                BackgroundType.AutoPdf -> "Observe Pdf"
+                                BackgroundType.CoverImage -> "Cover Image"
+                                BackgroundType.Image -> "Image"
+                                BackgroundType.ImageRepeating -> "Repeating Image"
+                                BackgroundType.Native -> "Native"
+                                is BackgroundType.Pdf -> "Static pdf Page"
+                            }
+                            Text(
+                                text = typeName,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowCircleRight,
+                                contentDescription = "Expand selector",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
+
                     Text("Pages: ${book!!.pageIds.size}")
                     Text("Size: TODO!")
                     Row {

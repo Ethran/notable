@@ -27,13 +27,34 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+@Composable
+fun ShowSimpleConfirmationDialog(
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    confirmButtonText: String = "Confirm",
+    cancelButtonText: String = "Cancel"
+) {
+    ShowConfirmationDialog(
+        title = title,
+        content = { Text(text = message, fontSize = 16.sp) },
+        onConfirm = onConfirm,
+        onCancel = onCancel,
+        confirmButtonText = confirmButtonText,
+        cancelButtonText = cancelButtonText
+    )
+}
+
 
 @Composable
 fun ShowConfirmationDialog(
     title: String,
-    message: String,
+    content: @Composable (() -> Unit),
     onConfirm: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    confirmButtonText: String = "Confirm",
+    cancelButtonText: String = "Cancel"
 ) {
     Dialog(onDismissRequest = { onCancel() }) {
         Column(
@@ -45,15 +66,15 @@ fun ShowConfirmationDialog(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(text = title, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text(text = message, fontSize = 16.sp)
+            content()
             Row(
                 horizontalArrangement = Arrangement.SpaceAround,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp)
             ) {
-                ActionButton(text = "Cancel", onClick = onCancel)
-                ActionButton(text = "Confirm", onClick = onConfirm)
+                ActionButton(text = cancelButtonText, onClick = onCancel)
+                ActionButton(text = confirmButtonText, onClick = onConfirm)
             }
         }
     }

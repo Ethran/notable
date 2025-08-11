@@ -1,11 +1,13 @@
 package com.ethran.notable.views
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,10 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.components.BreadCrumb
 import com.ethran.notable.components.PageMenu
 import com.ethran.notable.components.PagePreview
 import com.ethran.notable.components.Topbar
-import com.ethran.notable.utils.noRippleClickable
 
 @ExperimentalFoundationApi
 @Composable
@@ -40,6 +42,7 @@ fun PagesView(navController: NavController, bookId: String) {
 
     val pageIds = book!!.pageIds
     val openPageId = book?.openPageId
+    val bookFolder = book?.parentFolderId
 
     var selectedPageId by remember {
         mutableStateOf<String?>(null)
@@ -49,12 +52,13 @@ fun PagesView(navController: NavController, bookId: String) {
         Modifier
             .fillMaxSize()
     ) {
-        Topbar {
-            Text(text = "Library", modifier = Modifier
-                .noRippleClickable {
-                    navController.navigate("library")
-                }
-                .padding(10.dp))
+        Topbar{
+            Row(
+                Modifier
+                    .padding(10.dp)
+            ) {
+                BreadCrumb(bookFolder) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
+            }
         }
         Column(
             Modifier
@@ -83,6 +87,13 @@ fun PagesView(navController: NavController, bookId: String) {
                                     },
                                 ),
                             pageId
+                        )
+                        Text(
+                            text = (pageIndex + 1).toString(),
+                            modifier = Modifier
+                                .background(Color.Black)
+                                .padding(5.dp),
+                            color = Color.White
                         )
                         if (selectedPageId == pageId) PageMenu(
                             bookId,

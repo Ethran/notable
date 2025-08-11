@@ -7,7 +7,6 @@ import com.ethran.notable.utils.NamedSettings
 import com.ethran.notable.utils.Pen
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.db.Kv
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 const val persistVersion = 2

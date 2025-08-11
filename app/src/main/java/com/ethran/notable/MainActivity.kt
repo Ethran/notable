@@ -33,12 +33,13 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.LocalSnackContext
+import com.ethran.notable.classes.PageDataManager
 import com.ethran.notable.classes.SnackBar
 import com.ethran.notable.classes.SnackState
 import com.ethran.notable.datastore.EditorSettingCacheManager
 import com.ethran.notable.db.KvProxy
 import com.ethran.notable.modals.AppSettings
-import com.ethran.notable.modals.NeoTools
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.views.Router
 import com.onyx.android.sdk.api.device.epd.EpdController
@@ -51,6 +52,9 @@ var SCREEN_WIDTH = EpdController.getEpdHeight().toInt()
 var SCREEN_HEIGHT = EpdController.getEpdWidth().toInt()
 
 var TAG = "MainActivity"
+const val APP_SETTINGS_KEY = "APP_SETTINGS"
+const val PACKAGE_NAME = "com.ethran.notable"
+
 
 @ExperimentalAnimationApi
 @ExperimentalComposeUiApi
@@ -59,9 +63,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableFullScreen()
-        requestPermissions()
-
-
         ShipBook.start(
             this.application, BuildConfig.SHIPBOOK_APP_ID, BuildConfig.SHIPBOOK_APP_KEY
         )
@@ -69,22 +70,23 @@ class MainActivity : ComponentActivity() {
         Log.i(TAG, "Notable started")
 
 
-        if (SCREEN_WIDTH == 0) {
-            SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
-            SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
-        }
+        SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
+        SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
+
 
         val snackState = SnackState()
         snackState.registerGlobalSnackObserver()
         snackState.registerCancelGlobalSnackObserver()
-
-        // Refactor - we prob don't need this
-        EditorSettingCacheManager.init(applicationContext)
-
-        // it is workaround for now
-        NeoTools =
-            KvProxy(applicationContext).get("APP_SETTINGS", AppSettings.serializer())?.neoTools
-                ?: false
+        PageDataManager.registerComponentCallbacks(this)
+        if (hasRequiredPermissions()) {
+            GlobalAppSettings.update(
+                KvProxy(this).get(APP_SETTINGS_KEY, AppSettings.serializer())
+                    ?: AppSettings(version = 1)
+            )
+            // Used to load up app settings, latter used in
+            // class EditorState
+            EditorSettingCacheManager.init(applicationContext)
+        }
 
         //EpdDeviceManager.enterAnimationUpdate(true);
 
@@ -122,23 +124,26 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         this.lifecycleScope.launch {
+            Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
+
             DrawCanvas.refreshUi.emit(Unit)
         }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
+        Log.d(TAG, "OnWindowFocusChanged: $hasFocus")
         super.onWindowFocusChanged(hasFocus)
-        // It is really necessary?
         if (hasFocus) {
-            enableFullScreen() // Re-apply full-screen mode when focus is regained
+            enableFullScreen()
         }
-        this.lifecycleScope.launch {
-            DrawCanvas.refreshUi.emit(Unit)
+        lifecycleScope.launch {
+            DrawCanvas.onFocusChange.emit(hasFocus)
         }
     }
 
-    // when the screen orientation is changed, set new screen width  restart is not necessary,
-    // as we need first to update page dimensions which is done in EditorView
+
+    // when the screen orientation is changed, set new screen width restart is not necessary,
+    // as we need first to update page dimensions which is done in EditorView()
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -153,6 +158,18 @@ class MainActivity : ComponentActivity() {
 //        }
     }
 
+    private fun hasRequiredPermissions(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED
+            )
+                return false
+        } else if (!Environment.isExternalStorageManager())
+            return false
+        return true
+    }
     private fun requestPermissions() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             if (ContextCompat.checkSelfPermission(
@@ -182,6 +199,14 @@ class MainActivity : ComponentActivity() {
     // written by GPT, but it works
     // needs to be checked if it is ok approach.
     private fun enableFullScreen() {
+        // Turn on onyx optimization, no idea what it does.
+        // https://github.com/onyx-intl/OnyxAndroidDemo/blob/3290434f0edba751ec907d777fe95208378ae752/app/OnyxAndroidDemo/src/main/java/com/android/onyx/demo/AppOptimizeActivity.java#L4
+        Intent().apply {
+            action = "com.onyx.app.optimize.setting"
+            putExtra("optimize_fullScreen", true)
+            putExtra("optimize_pkgName", "com.ethran.notable")
+            sendBroadcast(this)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // For Android 11 and above
             // 'setDecorFitsSystemWindows(Boolean): Unit' is deprecated. Deprecated in Java

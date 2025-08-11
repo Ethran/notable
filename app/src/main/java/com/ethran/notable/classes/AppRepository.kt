@@ -1,20 +1,21 @@
 package com.ethran.notable.classes
 
 import android.content.Context
+import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.BookRepository
 import com.ethran.notable.db.FolderRepository
 import com.ethran.notable.db.ImageRepository
 import com.ethran.notable.db.KvProxy
 import com.ethran.notable.db.KvRepository
-import com.ethran.notable.db.Page
 import com.ethran.notable.db.PageRepository
 import com.ethran.notable.db.StrokeRepository
+import com.ethran.notable.db.newPage
+import com.onyx.android.sdk.extension.isNotNull
 import java.util.Date
 import java.util.UUID
 
 
-class AppRepository(context: Context) {
-    val context = context
+class AppRepository(val context: Context) {
     val bookRepository = BookRepository(context)
     val pageRepository = PageRepository(context)
     val strokeRepository = StrokeRepository(context)
@@ -23,20 +24,30 @@ class AppRepository(context: Context) {
     val kvRepository = KvRepository(context)
     val kvProxy = KvProxy(context)
 
-    fun getNextPageIdFromBookAndPage(
+    fun getNextPageIdFromBookAndPageOrCreate(
         notebookId: String,
         pageId: String
     ): String {
+        val index = getNextPageIdFromBookAndPage(notebookId, pageId)
+        if (index.isNotNull())
+            return index
+        val book = bookRepository.getById(notebookId = notebookId)
+        // creating a new page
+        val page = book!!.newPage()
+        pageRepository.create(page)
+        bookRepository.addPage(notebookId, page.id)
+        return page.id
+    }
+
+    fun getNextPageIdFromBookAndPage(
+        notebookId: String,
+        pageId: String
+    ): String? {
         val book = bookRepository.getById(notebookId = notebookId)
         val pages = book!!.pageIds
         val index = pages.indexOf(pageId)
-        if (index == pages.size - 1) {
-            // creating a new page
-            val page = Page(notebookId = notebookId, nativeTemplate = book.defaultNativeTemplate)
-            pageRepository.create(page)
-            bookRepository.addPage(notebookId, page.id)
-            return page.id
-        }
+        if (index == pages.size - 1)
+            return null
         return pages[index + 1]
     }
 
@@ -97,5 +108,17 @@ class AppRepository(context: Context) {
         }
     }
 
+    fun isObservable(notebookId: String?): Boolean {
+        if (notebookId == null) return false
+        val book = bookRepository.getById(notebookId = notebookId) ?: return false
+        return BackgroundType.fromKey(book.defaultBackgroundType) == BackgroundType.AutoPdf
+    }
 
+    fun getPageNumber(
+        notebookId: String?, pageId: String
+    ): Int {
+        if (notebookId == null) return -2
+        val book = bookRepository.getById(notebookId = notebookId) ?: return -3
+        return book.pageIds.indexOf(pageId)
+    }
 }

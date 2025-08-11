@@ -1,14 +1,13 @@
 package com.ethran.notable.db
 
 import android.content.Context
-import android.os.Environment
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import kotlinx.serialization.encodeToString
+import com.ethran.notable.utils.getDbDir
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.Date
@@ -41,7 +40,7 @@ class Converters {
 
 @Database(
     entities = [Folder::class, Notebook::class, Page::class, Stroke::class, Image::class, Kv::class],
-    version = 30,
+    version = 32,
     autoMigrations = [
         AutoMigration(19, 20),
         AutoMigration(20, 21),
@@ -53,6 +52,9 @@ class Converters {
         AutoMigration(27, 28),
         AutoMigration(28, 29),
         AutoMigration(29, 30),
+        AutoMigration(30, 31, spec = AutoMigration30to31::class),
+        AutoMigration(31, 32, spec = AutoMigration31to32::class)
+
     ], exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -71,12 +73,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun getDatabase(context: Context): AppDatabase {
             if (INSTANCE == null) {
                 synchronized(this) {
-                    val documentsDir =
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                    val dbDir = File(documentsDir, "notabledb")
-                    if (!dbDir.exists()) {
-                        dbDir.mkdirs()
-                    }
+                    val dbDir = getDbDir()
                     val dbFile = File(dbDir, "app_database")
 
                     // Use Room to build the database

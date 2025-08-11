@@ -32,7 +32,8 @@ import java.util.UUID
 data class Page(
     @PrimaryKey val id: String = UUID.randomUUID().toString(), val scroll: Int = 0,
     @ColumnInfo(index = true) val notebookId: String? = null,
-    @ColumnInfo(defaultValue = "blank") val nativeTemplate: String = "blank",
+    @ColumnInfo(defaultValue = "blank") val background: String = "blank", // path or native subtype
+    @ColumnInfo(defaultValue = "native") val backgroundType: String = "native", // image, imageRepeating, coverImage, native
     @ColumnInfo(index = true) val parentFolderId: String? = null,
     val createdAt: Date = Date(), val updatedAt: Date = Date()
 )
@@ -48,6 +49,7 @@ data class PageWithImages(
         parentColumn = "id", entityColumn = "pageId", entity = Image::class
     ) val images: List<Image>
 )
+
 
 // DAO
 @Dao
@@ -105,7 +107,7 @@ class PageRepository(context: Context) {
         return db.getPageWithStrokesById(pageId)
     }
 
-   suspend fun getWithStrokeByIdSuspend(pageId: String): PageWithStrokes {
+    suspend fun getWithStrokeByIdSuspend(pageId: String): PageWithStrokes {
         return db.getPageWithStrokesByIdSuspend(pageId)
     }
 
@@ -124,4 +126,10 @@ class PageRepository(context: Context) {
     fun delete(pageId: String) {
         return db.delete(pageId)
     }
+
+
+}
+
+fun Page.getBackgroundType(): BackgroundType {
+    return BackgroundType.fromKey(backgroundType)
 }

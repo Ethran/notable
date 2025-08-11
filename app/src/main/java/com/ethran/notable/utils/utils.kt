@@ -1,13 +1,6 @@
 package com.ethran.notable.utils
 
-import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Point
@@ -15,7 +8,6 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Region
-import android.net.Uri
 import android.util.TypedValue
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,13 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
-import androidx.core.app.ShareCompat
-import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
-import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toRect
 import androidx.core.graphics.toRegion
-import com.ethran.notable.R
+import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.PageView
@@ -38,15 +26,19 @@ import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
 import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.onyx.android.sdk.data.note.TouchPoint
 import io.shipbook.shipbooksdk.Log
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
+
+const val SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS = 150L
+const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
 
 fun Modifier.noRippleClickable(
     onClick: () -> Unit
@@ -55,7 +47,14 @@ fun Modifier.noRippleClickable(
         onClick()
     }
 }
-
+fun RectF.expandBy(amount: Float): RectF {
+    return RectF(
+        left - amount,
+        top - amount,
+        right + amount,
+        bottom + amount
+    )
+}
 
 fun convertDpToPixel(dp: Dp, context: Context): Float {
 //    val resources = context.resources
@@ -72,7 +71,7 @@ fun deletePage(context: Context, pageId: String) {
     val appRepository = AppRepository(context)
     val page = appRepository.pageRepository.getById(pageId) ?: return
     val proxy = appRepository.kvProxy
-    val settings = proxy.get("APPS_SETTINGS", AppSettings.serializer())
+    val settings = proxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
 
 
     runBlocking {
@@ -84,7 +83,7 @@ fun deletePage(context: Context, pageId: String) {
         // remove from quick nav
         if (settings != null && settings.quickNavPages.contains(pageId)) {
             proxy.setKv(
-                "APPS_SETTINGS",
+                APP_SETTINGS_KEY,
                 settings.copy(quickNavPages = settings.quickNavPages - pageId),
                 AppSettings.serializer()
             )
@@ -132,13 +131,13 @@ fun pointsToPath(points: List<SimplePointF>): Path {
     return path
 }
 
-// points is in page coordinates
+// points is in page coordinates, returns effected area.
 fun handleErase(
     page: PageView,
     history: History,
     points: List<SimplePointF>,
     eraser: Eraser
-) {
+): Rect? {
     val paint = Paint().apply {
         this.strokeWidth = 30f
         this.style = Paint.Style.STROKE
@@ -162,13 +161,14 @@ fun handleErase(
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
+    if(deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 
     history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
 
-    page.drawArea(
-        area = pageAreaToCanvasArea(strokeBounds(deletedStrokes), page.scroll)
-    )
+    val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
+    page.drawAreaScreenCoordinates(screenArea = effectedArea)
+    return effectedArea
 }
 
 enum class SelectPointPosition {
@@ -177,37 +177,207 @@ enum class SelectPointPosition {
     CENTER
 }
 
-// touchpoints is in view coordinates
+
+fun scaleRect(rect: Rect, scale: Float): Rect {
+    return Rect(
+        (rect.left / scale).toInt(),
+        (rect.top / scale).toInt(),
+        (rect.right / scale).toInt(),
+        (rect.bottom / scale).toInt()
+    )
+}
+
+fun toPageCoordinates(rect: Rect, scale: Float, scroll: Int): Rect {
+    return Rect(
+        (rect.left.toFloat() / scale).toInt(),
+        ((rect.top.toFloat() / scale) + scroll).toInt(),
+        (rect.right.toFloat() / scale).toInt(),
+        ((rect.bottom.toFloat() / scale) + scroll).toInt()
+    )
+}
+
+fun copyInput(touchPoints: List<TouchPoint>, scroll: Int, scale: Float): List<StrokePoint> {
+    val points = touchPoints.map {
+        it.toStrokePoint(scroll, scale)
+    }
+    return points
+}
+
+fun TouchPoint.toStrokePoint(scroll: Int, scale: Float): StrokePoint {
+    return StrokePoint(
+        x = x / scale,
+        y = (y / scale + scroll),
+        pressure = pressure,
+        size = size,
+        tiltX = tiltX,
+        tiltY = tiltY,
+        timestamp = timestamp,
+    )
+}
+fun copyInputToSimplePointF(
+    touchPoints: List<TouchPoint>,
+    scroll: Int,
+    scale: Float
+): List<SimplePointF> {
+    val points = touchPoints.map {
+        SimplePointF(
+            x = it.x / scale,
+            y = (it.y / scale + scroll),
+        )
+    }
+    return points
+}
+
+fun <T> calculateBoundingBox(
+    touchPoints: List<T>,
+    getCoordinates: (T) -> Pair<Float, Float>
+): RectF {
+    require(touchPoints.isNotEmpty()) { "touchPoints cannot be empty" }
+
+    val (startX, startY) = getCoordinates(touchPoints[0])
+    val boundingBox = RectF(startX, startY, startX, startY)
+
+    for (point in touchPoints) {
+        val (x, y) = getCoordinates(point)
+        boundingBox.union(x, y)
+    }
+
+    return boundingBox
+}
+
+// Filters strokes that significantly intersect with a given bounding box
+fun filterStrokesByIntersection(
+    candidateStrokes: List<Stroke>,
+    boundingBox: RectF,
+    threshold: Float = SCRIBBLE_INTERSECTION_THRESHOLD
+): List<Stroke> {
+    return candidateStrokes.filter { stroke ->
+        val strokeRect = strokeBounds(stroke)
+        val intersection = RectF()
+        
+        if (intersection.setIntersect(strokeRect, boundingBox)) {
+            val strokeArea = strokeRect.width() * strokeRect.height()
+            val intersectionArea = intersection.width() * intersection.height()
+            val intersectionRatio = if (strokeArea > 0) intersectionArea / strokeArea else 0f
+
+            intersectionRatio >= threshold
+        } else {
+            false
+        }
+    }
+}
+
+// Counts the number of direction changes (sharp reversals) in a stroke
+fun calculateNumReversals(
+    points: List<StrokePoint>,
+    stepSize: Int = 10
+): Int {
+    var numReversals = 0
+    for (i in 0 until points.size - 2 * stepSize step stepSize) {
+        val p1 = points[i]
+        val p2 = points[i + stepSize]
+        val p3 = points[i + 2 * stepSize]
+        val segment1 = SimplePointF(p2.x - p1.x, p2.y - p1.y)
+        val segment2 = SimplePointF(p3.x - p2.x, p3.y - p2.y)
+        val dotProduct = segment1.x * segment2.x + segment1.y * segment2.y
+        // Reversal is detected when angle between segments > 90 degrees
+        if (dotProduct < 0) {
+            numReversals++
+        }
+    }
+    return numReversals
+}
+
+// Calculates total stroke length using Manhattan distance
+fun calculateStrokeLength(points: List<StrokePoint>): Float {
+    var totalDistance = 0.0f
+    for (i in 1 until points.size) {
+        val dx = points[i].x - points[i - 1].x
+        val dy = points[i].y - points[i - 1].y
+        totalDistance += kotlin.math.abs(dx) + kotlin.math.abs(dy)
+    }
+    return totalDistance
+}
+
+const val MINIMUM_SCRIBBLE_POINTS = 15
+// Erases strokes if touchPoints are "scribble", returns true if erased.
+// returns null if not erased, dirty rectangle otherwise
+fun handleScribbleToErase(
+    page: PageView,
+    touchPoints: List<StrokePoint>,
+    history: History,
+    pen: Pen,
+    currentLastStrokeEndTime: Long
+): Rect? {
+    if (pen == Pen.MARKER)
+        return null // do not erase with highlighter
+    if (!GlobalAppSettings.current.scribbleToEraseEnabled)
+        return null // scribble to erase is disabled
+    if (touchPoints.size < MINIMUM_SCRIBBLE_POINTS)
+        return null
+    if (touchPoints.first().timestamp < currentLastStrokeEndTime + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS)
+        return null // not enough time has passed since last stroke
+    if (calculateNumReversals(touchPoints) < 2)
+        return null
+
+    val strokeLength = calculateStrokeLength(touchPoints)
+    val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
+    val width = boundingBox.width()
+    val height = boundingBox.height()
+    if (width == 0f || height == 0f) return null
+
+    // Require scribble to be long enough relative to bounding box
+    val minLengthForScribble = (width + height) * 3
+    if (strokeLength < minLengthForScribble) {
+        Log.d("ScribbleToErase", "Stroke is too short, $strokeLength < $minLengthForScribble")
+        return null
+    }
+
+    // calculate stroke width based on bounding box
+    // bigger swinging in scribble = bigger bounding box => larger stroke size
+    val minDim = kotlin.math.min(boundingBox.width(), boundingBox.height())
+    val maxDim = kotlin.math.max(boundingBox.width(), boundingBox.height())
+    val aspectRatio = if (minDim > 0) maxDim / minDim else 1f
+    val scaleFactor = kotlin.math.min(1f + (aspectRatio - 1f) / 2f, 2f)
+    val strokeSizeForDetection = minDim * 0.15f * scaleFactor
+
+
+    // Get strokes that might intersect with the scribble path
+    val path = pointsToPath(touchPoints.map { SimplePointF(it.x, it.y) })
+    val outPath = Path()
+    Paint().apply { this.strokeWidth = strokeSizeForDetection }.getFillPath(path, outPath)
+    val candidateStrokes = selectStrokesFromPath(page.strokes, outPath)
+
+
+    // Filter intersecting strokes based on intersection ratio
+    val expandedBoundingBox = boundingBox.expandBy(strokeSizeForDetection / 2)
+    val deletedStrokes = filterStrokesByIntersection(candidateStrokes, expandedBoundingBox)
+
+    // If strokes were found, remove them and update history
+    if (deletedStrokes.isNotEmpty()) {
+        val deletedStrokeIds = deletedStrokes.map { it.id }
+        page.removeStrokes(deletedStrokeIds)
+        history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
+        val dirtyRect = strokeBounds(deletedStrokes)
+        page.drawAreaPageCoordinates(dirtyRect)
+        return dirtyRect
+    }
+    return null
+}
+
+// touchpoints are in page coordinates
 fun handleDraw(
     page: PageView,
     historyBucket: MutableList<String>,
     strokeSize: Float,
     color: Int,
     pen: Pen,
-    touchPoints: List<TouchPoint>
+    touchPoints: List<StrokePoint>
 ) {
     try {
-        val initialPoint = touchPoints[0]
-        val boundingBox = RectF(
-            initialPoint.x,
-            initialPoint.y + page.scroll,
-            initialPoint.x,
-            initialPoint.y + page.scroll
-        )
+        val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
 
-        val points = touchPoints.map {
-            boundingBox.union(it.x, it.y + page.scroll)
-            StrokePoint(
-                x = it.x,
-                y = it.y + page.scroll,
-                pressure = it.pressure,
-                size = it.size,
-                tiltX = it.tiltX,
-                tiltY = it.tiltY,
-                timestamp = it.timestamp,
-            )
-        }
-
+        //move rectangle
         boundingBox.inset(-strokeSize, -strokeSize)
 
         val stroke = Stroke(
@@ -218,12 +388,12 @@ fun handleDraw(
             bottom = boundingBox.bottom,
             left = boundingBox.left,
             right = boundingBox.right,
-            points = points,
+            points = touchPoints,
             color = color
         )
         page.addStrokes(listOf(stroke))
         // this is causing lagging and crushing, neo pens are not good
-        page.drawArea(pageAreaToCanvasArea(strokeBounds(stroke).toRect(), page.scroll))
+        page.drawAreaPageCoordinates(strokeBounds(stroke).toRect())
         historyBucket.add(stroke.id)
     } catch (e: Exception) {
         Log.e(TAG, "Handle Draw: An error occurred while handling the drawing: ${e.message}")
@@ -233,27 +403,11 @@ fun handleDraw(
 /*
 * Gets list of points, and return line from first point to last.
 * The line consist of 100 points, I do not know how it works (for 20 it want draw correctly)
-* Then it cals handle draw to make mark on canvas.
  */
-fun handleLine(
-    page: PageView,
-    historyBucket: MutableList<String>,
-    strokeSize: Float,
-    color: Int,
-    pen: Pen,
-    touchPoints: List<TouchPoint>
-) {
-    val startPoint = touchPoints.first()
-    val endPoint = touchPoints.last()
-
-    // Setting intermediate values for tilt and pressure
-    startPoint.tiltX = touchPoints[touchPoints.size / 10].tiltX
-    startPoint.tiltY = touchPoints[touchPoints.size / 10].tiltY
-    startPoint.pressure = touchPoints[touchPoints.size / 10].pressure
-    endPoint.tiltX = touchPoints[9 * touchPoints.size / 10].tiltX
-    endPoint.tiltY = touchPoints[9 * touchPoints.size / 10].tiltY
-    endPoint.pressure = touchPoints[9 * touchPoints.size / 10].pressure
-
+fun transformToLine(
+    startPoint: StrokePoint,
+    endPoint: StrokePoint,
+): List<StrokePoint> {
     // Helper function to interpolate between two values
     fun lerp(start: Float, end: Float, fraction: Float) = start + (end - start) * fraction
 
@@ -268,15 +422,12 @@ fun handleLine(
         val tiltY = (lerp(startPoint.tiltY.toFloat(), endPoint.tiltY.toFloat(), fraction)).toInt()
         val timestamp = System.currentTimeMillis()
 
-        TouchPoint(x, y, pressure, size, tiltX, tiltY, timestamp)
+        StrokePoint(x, y, pressure, size, tiltX, tiltY, timestamp)
     }
-
-    handleDraw(page, historyBucket, strokeSize, color, pen, points2)
+    return (points2)
 }
 
 
-inline fun Modifier.ifTrue(predicate: Boolean, builder: () -> Modifier) =
-    then(if (predicate) builder() else Modifier)
 
 fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
     return stroke.points.map {
@@ -292,11 +443,13 @@ fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
     }
 }
 
-fun pageAreaToCanvasArea(pageArea: Rect, scroll: Int): Rect {
-    return Rect(
-        pageArea.left, pageArea.top - scroll, pageArea.right, pageArea.bottom - scroll
-    )
-}
+//fun pageAreaToCanvasArea(pageArea: Rect, scroll: Int, scale: Float = 1f): Rect {
+//    return scaleRect(
+//        Rect(
+//            pageArea.left, pageArea.top - scroll, pageArea.right, pageArea.bottom - scroll
+//        ), scale
+//    )
+//}
 
 fun strokeBounds(stroke: Stroke): RectF {
     return RectF(
@@ -464,94 +617,61 @@ fun offsetImage(image: Image, offset: Offset): Image {
     )
 }
 
-// Why it is needed? I try to removed it, and sharing bimap seems to work.
-class Provider : FileProvider(R.xml.file_paths)
 
-fun shareBitmap(context: Context, bitmap: Bitmap) {
-    val bmpWithBackground = createBitmap(bitmap.width, bitmap.height)
-    val canvas = Canvas(bmpWithBackground)
-    canvas.drawColor(Color.WHITE)
-    canvas.drawBitmap(bitmap, 0f, 0f, null)
-
-    val cachePath = File(context.cacheDir, "images")
-    Log.i(TAG, cachePath.toString())
-    cachePath.mkdirs()
-    try {
-        val stream = FileOutputStream(File(cachePath, "share.png"))
-        bmpWithBackground.compress(Bitmap.CompressFormat.PNG, 100, stream)
-        stream.close()
-    } catch (e: IOException) {
-        e.printStackTrace()
-        return
-    }
-
-    val bitmapFile = File(cachePath, "share.png")
-    val contentUri = FileProvider.getUriForFile(
-        context,
-        "com.ethran.notable.provider", //(use your app signature + ".provider" )
-        bitmapFile
-    )
-
-    // Use ShareCompat for safe sharing
-    val shareIntent = ShareCompat.IntentBuilder.from(context as Activity)
-        .setStream(contentUri)
-        .setType("image/png")
-        .intent
-        .apply {
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+fun logCallStack(reason: String) {
+    val stackTrace = Thread.currentThread().stackTrace
+        .drop(3) // Skip internal calls
+        .take(8) // Limit depth
+        .joinToString("\n") {
+            "${it.className.removePrefix("com.ethran.notable.")}.${it.methodName} (${it.fileName}:${it.lineNumber})"
         }
-
-    context.startActivity(Intent.createChooser(shareIntent, "Choose an app"))
+    Log.w(TAG, "$reason Call stack:\n$stackTrace")
 }
 
+// Helper function to achieve time-based chunking
+fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
+    val buffer = mutableListOf<T>()
+    coroutineScope {
+        val channel = produceIn(this)
+        while (true) {
+            val start = System.currentTimeMillis()
+            val received = channel.receiveCatching().getOrNull() ?: break
+            buffer.add(received)
 
-
-// move to SelectionState?
-fun copyBitmapToClipboard(context: Context, bitmap: Bitmap) {
-    // Save bitmap to cache and get a URI
-    val uri = saveBitmapToCache(context, bitmap) ?: return
-
-    // Grant temporary permission to read the URI
-    context.grantUriPermission(
-        context.packageName,
-        uri,
-        Intent.FLAG_GRANT_READ_URI_PERMISSION
-    )
-
-    // Create a ClipData holding the URI
-    val clipData = ClipData.newUri(context.contentResolver, "Image", uri)
-
-    // Set the ClipData to the clipboard
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(clipData)
-}
-
-fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
-    val bmpWithBackground = createBitmap(bitmap.width, bitmap.height)
-    val canvas = Canvas(bmpWithBackground)
-    canvas.drawColor(Color.WHITE)
-    canvas.drawBitmap(bitmap, 0f, 0f, null)
-
-    val cachePath = File(context.cacheDir, "images")
-    Log.i(TAG, cachePath.toString())
-    cachePath.mkdirs()
-    try {
-        val stream =
-            FileOutputStream("$cachePath/share.png")
-        bmpWithBackground.compress(
-            Bitmap.CompressFormat.PNG,
-            100,
-            stream
-        )
-        stream.close()
-    } catch (e: IOException) {
-        e.printStackTrace()
+            while (System.currentTimeMillis() - start < timeoutMillisSelector) {
+                val next = channel.tryReceive().getOrNull() ?: continue
+                buffer.add(next)
+            }
+            emit(buffer.toList())
+            buffer.clear()
+        }
     }
+}
 
-    val bitmapFile = File(cachePath, "share.png")
-    return FileProvider.getUriForFile(
-        context,
-        "com.ethran.notable.provider", //(use your app signature + ".provider" )
-        bitmapFile
+fun getModifiedStrokeEndpoints(
+    points: List<TouchPoint>,
+    scroll: Int, // Replace with your actual type
+    zoomLevel: Float
+): Pair<StrokePoint, StrokePoint> {
+    if (points.isEmpty()) throw IllegalArgumentException("points list is empty")
+
+    val startIdx = points.size / 10
+    val endIdx = (9 * points.size) / 10
+
+    val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel)
+    val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel)
+
+    val startPoint = baseStartPoint.copy(
+        tiltX = points[startIdx].tiltX,
+        tiltY = points[startIdx].tiltY,
+        pressure = points[startIdx].pressure
     )
+
+    val endPoint = baseEndPoint.copy(
+        tiltX = points[endIdx].tiltX,
+        tiltY = points[endIdx].tiltY,
+        pressure = points[endIdx].pressure
+    )
+
+    return Pair(startPoint, endPoint)
 }

@@ -19,8 +19,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.Page
-import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -55,33 +56,32 @@ fun FloatingEditorView(
                         if (pageId != null) {
                             EditorView(
                                 navController = navController,
-                                _bookId = null,
-                                _pageId = pageId
+                                bookId = null,
+                                pageId = pageId
                             )
                         } else if (bookId != null) {
                             // get first page of notebook and use it as pageId
                             val appRepository = AppRepository(LocalContext.current)
-                            val firstPageId =
-                                appRepository.bookRepository.getById(bookId)?.pageIds?.firstOrNull()
+                            val book = appRepository.bookRepository.getById(bookId)
+                            val firstPageId = book?.pageIds?.firstOrNull()
                             if (firstPageId == null) {
                                 // new page uuid
                                 val page = Page(
                                     notebookId = null,
-                                    parentFolderId = null,
-                                    nativeTemplate = appRepository.kvProxy.get(
-                                        "APP_SETTINGS", AppSettings.serializer()
-                                    )?.defaultNativeTemplate ?: "blank"
+                                    background = GlobalAppSettings.current.defaultNativeTemplate,
+                                    backgroundType = BackgroundType.Native.key,
+                                    parentFolderId = null
                                 )
                                 EditorView(
                                     navController = navController,
-                                    _bookId = bookId,
-                                    _pageId = page.id
+                                    bookId = bookId,
+                                    pageId = page.id
                                 )
                             } else {
                                 EditorView(
                                     navController = navController,
-                                    _bookId = bookId,
-                                    _pageId = firstPageId
+                                    bookId = bookId,
+                                    pageId = firstPageId
                                 )
                             }
 

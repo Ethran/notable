@@ -67,7 +67,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
                         }
                         val zoneAffected = undoRedo(type = it.type)
                         if (zoneAffected != null) {
-                            pageView.drawArea(pageAreaToCanvasArea(zoneAffected, pageView.scroll))
+                            pageView.drawAreaPageCoordinates(zoneAffected)
                             //moved to refresh after drawing
                             DrawCanvas.refreshUi.emit(Unit)
                         } else {
@@ -90,8 +90,13 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
         }
     }
 
+    fun cleanHistory() {
+        undoList.clear()
+        redoList.clear()
+    }
+
     private fun treatOperation(operation: Operation): Pair<Operation, Rect> {
-        return when (operation) {
+        when (operation) {
             is Operation.AddStroke -> {
                 pageModel.addStrokes(operation.strokes)
                 return Operation.DeleteStroke(strokeIds = operation.strokes.map { it.id }) to strokeBounds(

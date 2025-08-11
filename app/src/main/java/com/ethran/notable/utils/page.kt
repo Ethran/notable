@@ -10,13 +10,21 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Looper
 import androidx.compose.ui.unit.IntOffset
+import androidx.core.graphics.createBitmap
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
+import com.ethran.notable.db.Image
+import com.ethran.notable.db.Page
 import com.ethran.notable.db.PageRepository
 import com.ethran.notable.db.Stroke
+import com.ethran.notable.db.getBackgroundType
+import com.ethran.notable.drawing.drawBg
+import com.ethran.notable.drawing.drawImage
+import com.ethran.notable.drawing.drawStroke
 import com.ethran.notable.modals.A4_HEIGHT
 import com.ethran.notable.modals.A4_WIDTH
+import com.ethran.notable.modals.GlobalAppSettings
 import io.shipbook.shipbooksdk.Log
 
 
@@ -34,11 +42,11 @@ fun drawCanvas(context: Context, pageId: String): Bitmap {
     val height = strokeHeight.coerceAtLeast(SCREEN_HEIGHT)
     val width = strokeWidth.coerceAtLeast(SCREEN_WIDTH)
 
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(width, height)
     val canvas = Canvas(bitmap)
 
     // Draw background
-    drawBg(canvas, page.nativeTemplate, 0)
+    drawBg(context, canvas, page.getBackgroundType(), page.background)
 
     // Draw strokes
     for (stroke in strokes) {
@@ -58,36 +66,68 @@ fun PdfDocument.writePage(context: Context, number: Int, repo: PageRepository, i
     //TODO: improve that function
     val (_, images) = repo.getWithImageById(id)
 
-    val strokeHeight = if (strokes.isEmpty()) 0 else strokes.maxOf(Stroke::bottom).toInt() + 50
+    //add 50 only if we are not cutting pdf on export.
+    val strokeHeight = if (strokes.isEmpty()) 0 else strokes.maxOf(Stroke::bottom)
+        .toInt() + if (GlobalAppSettings.current.visualizePdfPagination) 0 else 50
     val strokeWidth = if (strokes.isEmpty()) 0 else strokes.maxOf(Stroke::right).toInt() + 50
     val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
 
-    // todo do not rely on this anymore
-    // I slightly modified it, should be better
     val contentHeight = strokeHeight.coerceAtLeast(SCREEN_HEIGHT)
     val pageHeight = (contentHeight * scaleFactor).toInt()
-    val contentWidth = strokeWidth.coerceAtLeast(SCREEN_WIDTH)
 
+    if (GlobalAppSettings.current.paginatePdf) {
+        var currentTop = 0
+        while (currentTop < pageHeight) {
+            // TODO: pageNumber are wrong
+            val documentPage =
+                startPage(PdfDocument.PageInfo.Builder(A4_WIDTH, A4_HEIGHT, number).create())
+            drawPageContent(
+                context,
+                documentPage.canvas,
+                page,
+                strokes,
+                images,
+                currentTop,
+                scaleFactor
+            )
+            finishPage(documentPage)
+            currentTop += A4_HEIGHT
+        }
+    } else {
+        val documentPage =
+            startPage(PdfDocument.PageInfo.Builder(A4_WIDTH, pageHeight, number).create())
+        drawPageContent(context, documentPage.canvas, page, strokes, images, 0, scaleFactor)
+        finishPage(documentPage)
+    }
+}
 
-    val documentPage =
-        startPage(PdfDocument.PageInfo.Builder(A4_WIDTH, pageHeight, number).create())
-
-    // Center content on the A4 page
-    val offsetX = (A4_WIDTH - (contentWidth * scaleFactor)) / 2
-    val offsetY = (A4_HEIGHT - (contentHeight * scaleFactor)) / 2
-
-    documentPage.canvas.scale(scaleFactor, scaleFactor)
-    drawBg(documentPage.canvas, page.nativeTemplate, 0, scaleFactor)
+private fun drawPageContent(
+    context: Context,
+    canvas: Canvas,
+    page: Page,
+    strokes: List<Stroke>,
+    images: List<Image>,
+    scroll: Int,
+    scaleFactor: Float
+) {
+    canvas.scale(scaleFactor, scaleFactor)
+    val scaledScroll = (scroll / scaleFactor).toInt()
+    drawBg(
+        context,
+        canvas,
+        page.getBackgroundType(),
+        page.background,
+        scaledScroll,
+        scaleFactor
+    )
 
     for (image in images) {
-        drawImage(context, documentPage.canvas, image, IntOffset(0, 0))
+        drawImage(context, canvas, image, IntOffset(0, -scaledScroll))
     }
 
     for (stroke in strokes) {
-        drawStroke(documentPage.canvas, stroke, IntOffset(0, 0))
+        drawStroke(canvas, stroke, IntOffset(0, -scaledScroll))
     }
-
-    finishPage(documentPage)
 }
 
 

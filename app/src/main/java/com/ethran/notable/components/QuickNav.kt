@@ -21,16 +21,15 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.classes.AppRepository
-import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Home
@@ -46,12 +45,8 @@ fun QuickNav(navController: NavController, onClose: () -> Unit) {
     val pageId = currentBackStackEntry?.arguments?.getString("pageId")
     val kv = appRepository.kvProxy
 
-    val settings by kv.observeKv("APP_SETTINGS", AppSettings.serializer(), AppSettings(version = 1))
-        .observeAsState()
+    val settings = remember { GlobalAppSettings.current }
 
-    fun setSettings(settings: AppSettings) {
-        kv.setKv("APP_SETTINGS", settings, AppSettings.serializer())
-    }
 
     val pages = settings?.quickNavPages ?: listOf()
 
@@ -84,30 +79,24 @@ fun QuickNav(navController: NavController, onClose: () -> Unit) {
             Row {
 
                 ToolbarButton(
-                    imageVector = FeatherIcons.Home,
-                    onSelect = {
+                    imageVector = FeatherIcons.Home, onSelect = {
                         val parentFolder =
                             if (pageId != null) appRepository.pageRepository.getById(pageId)?.parentFolderId else null
                         navController.navigate(
                             route = if (parentFolder != null) "library?folderId=${parentFolder}" else "library"
                         )
                         onClose()
-                    }
-                )
+                    })
 
 
                 if (pageId != null && !pages.contains(pageId)) {
                     Spacer(modifier = Modifier.width(5.dp))
                     ToolbarButton(
-                        imageVector = FeatherIcons.Plus,
-                        onSelect = {
+                        imageVector = FeatherIcons.Plus, onSelect = {
                             if (settings == null) return@ToolbarButton
                             if (settings!!.quickNavPages.contains(pageId)) return@ToolbarButton
-                            setSettings(
-                                settings!!.copy(quickNavPages = pages + pageId)
-                            )
-                        }
-                    )
+                            kv.setAppSettings(settings!!.copy(quickNavPages = pages + pageId))
+                        })
                 }
             }
 
@@ -123,29 +112,27 @@ fun QuickNav(navController: NavController, onClose: () -> Unit) {
 
                         items(pages.reversed()) { thisPageId ->
                             key(thisPageId) {
-                                PagePreview(modifier = Modifier
-                                    .border(1.dp, Color.Black)
-                                    .fillMaxWidth()
-                                    .aspectRatio(3f / 4f)
-                                    .noRippleClickable {
-                                        val bookId =
-                                            appRepository.pageRepository.getById(thisPageId)?.notebookId
-                                        val url =
-                                            if (bookId == null) "pages/${thisPageId}" else "books/${bookId}/pages/${thisPageId}"
-                                        navController.navigate(url)
-                                        onClose()
-                                    }
-                                    .draggable(
-                                        orientation = Orientation.Vertical,
-                                        onDragStopped = {
-                                            if (settings == null) return@draggable
-                                            setSettings(
-                                                settings!!.copy(quickNavPages = pages.filterNot { it == thisPageId })
-                                            )
-                                        },
-                                        state = rememberDraggableState(onDelta = {})
-                                    ),
-                                    pageId = thisPageId
+                                PagePreview(
+                                    modifier = Modifier
+                                        .border(1.dp, Color.Black)
+                                        .fillMaxWidth()
+                                        .aspectRatio(3f / 4f)
+                                        .noRippleClickable {
+                                            val bookId =
+                                                appRepository.pageRepository.getById(thisPageId)?.notebookId
+                                            val url =
+                                                if (bookId == null) "pages/${thisPageId}" else "books/${bookId}/pages/${thisPageId}"
+                                            navController.navigate(url)
+                                            onClose()
+                                        }
+                                        .draggable(
+                                            orientation = Orientation.Vertical,
+                                            onDragStopped = {
+                                                if (settings == null) return@draggable
+                                                kv.setAppSettings(settings!!.copy(quickNavPages = pages.filterNot { it == thisPageId }))
+                                            },
+                                            state = rememberDraggableState(onDelta = {})
+                                        ), pageId = thisPageId
                                 )
                             }
                         }

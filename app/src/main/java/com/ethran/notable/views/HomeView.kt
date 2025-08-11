@@ -1,6 +1,9 @@
 package com.ethran.notable.views
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -24,7 +27,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Badge
 import androidx.compose.material.BadgedBox
@@ -37,6 +42,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -44,30 +50,41 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.LocalSnackContext
+import com.ethran.notable.classes.PageDataManager
 import com.ethran.notable.classes.SnackConf
 import com.ethran.notable.classes.XoppFile
+import com.ethran.notable.classes.showHint
 import com.ethran.notable.components.BreadCrumb
 import com.ethran.notable.components.PageMenu
 import com.ethran.notable.components.PagePreview
 import com.ethran.notable.components.ShowConfirmationDialog
+import com.ethran.notable.components.ShowSimpleConfirmationDialog
 import com.ethran.notable.components.Topbar
+import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.BookRepository
 import com.ethran.notable.db.Folder
 import com.ethran.notable.db.Notebook
 import com.ethran.notable.db.Page
-import com.ethran.notable.modals.AppSettings
-import com.ethran.notable.modals.AppSettingsModal
+import com.ethran.notable.db.PageRepository
 import com.ethran.notable.modals.FolderConfigDialog
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.modals.NotebookConfigDialog
+import com.ethran.notable.utils.copyBackgroundToDatabase
+import com.ethran.notable.utils.getFilePathFromUri
+import com.ethran.notable.utils.getPdfPageCount
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.utils.setAnimationMode
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
 import compose.icons.feathericons.Folder
@@ -77,18 +94,20 @@ import compose.icons.feathericons.Upload
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import kotlin.concurrent.thread
 
 @ExperimentalFoundationApi
 @ExperimentalComposeUiApi
 @Composable
 fun Library(navController: NavController, folderId: String? = null) {
+    PageDataManager.clearAllPages()
+
     val context = LocalContext.current
 
-    var isSettingsOpen by remember {
-        mutableStateOf(false)
-    }
     val appRepository = AppRepository(LocalContext.current)
 
     val books by appRepository.bookRepository.getAllInFolder(folderId).observeAsState()
@@ -113,6 +132,115 @@ fun Library(navController: NavController, folderId: String? = null) {
 
     val snackManager = LocalSnackContext.current
 
+
+    // ensure scrolling is done in animation mode.
+    val lazyGridStateNotebooks = rememberLazyGridState()
+    val lazyListStateFolders = rememberLazyListState()
+    val lazyListStateQuickPages = rememberLazyListState()
+    var isScrolling by remember { mutableStateOf(false) }
+    var scrollJob by remember { mutableStateOf<Job?>(null) }
+    fun handleAnimations(scope: CoroutineScope, scrolling: Boolean){
+        if (scrolling) {
+            // User started scrolling
+            isScrolling = true
+            setAnimationMode(true)
+            scrollJob?.cancel()
+        } else {
+            // User stopped scrolling - delay before resetting
+            scrollJob = scope.launch {
+                delay(500) // Wait 500ms to ensure scrolling really stopped
+                setAnimationMode(false)
+                isScrolling = false
+            }
+        }
+    }
+
+    var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
+    fun importPdf(uri: Uri, copy: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val snackText = if (copy) {
+                "Importing PDF background (copy)"
+            } else {
+                "Setting up observer for PDF"
+            }
+            CoroutineScope(Dispatchers.IO).launch {
+                importInProgress = true
+                snackManager.showSnackDuring(snackText) {
+                    handlePdfImport(
+                        context, folderId, uri, copy
+                    )
+                }
+                importInProgress = false
+            }
+        }
+    }
+
+    @Composable
+    fun content() {
+        Column {
+            Text(
+                text = "Do you want to copy or observe the PDF?",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "• Observe: ", fontWeight = FontWeight.SemiBold, fontStyle = FontStyle.Italic
+            )
+            Text(
+                text = "The app will set up a listener for changes to the file. Useful for files that change often (e.g., when using LaTeX).",
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "• Copy: ", fontWeight = FontWeight.SemiBold, fontStyle = FontStyle.Italic
+            )
+            Text(
+                text = "The app will copy the file to its database. Use this for safe and static storage.",
+                fontSize = 14.sp
+            )
+        }
+    }
+
+    if (showPdfImportChoiceDialog != null) {
+        ShowConfirmationDialog(
+            title = "Import PDF Background",
+            content = { content() },
+            onConfirm = {
+                showPdfImportChoiceDialog?.let { uri ->
+                    showPdfImportChoiceDialog = null
+                    importPdf(uri, copy = true)
+                }
+            },
+            onCancel = {
+                showPdfImportChoiceDialog?.let { uri ->
+                    showPdfImportChoiceDialog = null
+                    importPdf(uri, copy = false)
+                }
+            },
+            confirmButtonText = "Copy",
+            cancelButtonText = "Observe"
+        )
+    }
+
+
+
+    LaunchedEffect(lazyGridStateNotebooks, lazyListStateFolders) {
+        snapshotFlow { lazyGridStateNotebooks.isScrollInProgress }
+            .collect { scrolling ->
+                handleAnimations(this, scrolling)
+            }
+        snapshotFlow { lazyListStateFolders.isScrollInProgress }
+            .collect { scrolling ->
+                handleAnimations(this, scrolling)
+            }
+        snapshotFlow { lazyListStateQuickPages.isScrollInProgress }
+            .collect { scrolling ->
+                handleAnimations(this, scrolling)
+            }
+    }
+
+
     Column(
         Modifier.fillMaxSize()
     ) {
@@ -123,7 +251,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                     badge = {
                         if (!isLatestVersion) Badge(
                             backgroundColor = Color.Black,
-                            modifier = Modifier.offset(-12.dp, 10.dp)
+                            modifier = Modifier.offset((-12).dp, 10.dp)
                         )
                     }
                 ) {
@@ -133,7 +261,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                         Modifier
                             .padding(8.dp)
                             .noRippleClickable {
-                                isSettingsOpen = true
+                                navController.navigate("settings")
                             })
                 }
             }
@@ -153,7 +281,7 @@ fun Library(navController: NavController, folderId: String? = null) {
 //                            notebookId = null,
 //                            parentFolderId = folderId,
 //                            nativeTemplate = appRepository.kvProxy.get(
-//                                "APP_SETTINGS", AppSettings.serializer()
+//                                APP_SETTINGS_KEY, AppSettings.serializer()
 //                            )?.defaultNativeTemplate ?: "blank"
 //                        )
 //                        appRepository.pageRepository.create(page)
@@ -171,6 +299,7 @@ fun Library(navController: NavController, folderId: String? = null) {
             Spacer(Modifier.height(10.dp))
 
             LazyRow(
+                state = lazyListStateFolders,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -235,6 +364,7 @@ fun Library(navController: NavController, folderId: String? = null) {
             Spacer(Modifier.height(10.dp))
 
             LazyRow(
+                state = lazyListStateQuickPages,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -249,10 +379,9 @@ fun Library(navController: NavController, folderId: String? = null) {
                             .noRippleClickable {
                                 val page = Page(
                                     notebookId = null,
-                                    parentFolderId = folderId,
-                                    nativeTemplate = appRepository.kvProxy.get(
-                                        "APP_SETTINGS", AppSettings.serializer()
-                                    )?.defaultNativeTemplate ?: "blank"
+                                    background = GlobalAppSettings.current.defaultNativeTemplate,
+                                    backgroundType = BackgroundType.Native.key,
+                                    parentFolderId = folderId
                                 )
                                 appRepository.pageRepository.create(page)
                                 navController.navigate("pages/${page.id}")
@@ -300,6 +429,7 @@ fun Library(navController: NavController, folderId: String? = null) {
             Spacer(Modifier.height(10.dp))
 
             LazyVerticalGrid(
+                state = lazyGridStateNotebooks,
                 columns = GridCells.Adaptive(100.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -325,9 +455,8 @@ fun Library(navController: NavController, folderId: String? = null) {
                                         appRepository.bookRepository.create(
                                             Notebook(
                                                 parentFolderId = folderId,
-                                                defaultNativeTemplate = appRepository.kvProxy.get(
-                                                    "APP_SETTINGS", AppSettings.serializer()
-                                                )?.defaultNativeTemplate ?: "blank"
+                                                defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
+                                                defaultBackgroundType = BackgroundType.Native.key
                                             )
                                         )
                                     }
@@ -345,15 +474,23 @@ fun Library(navController: NavController, folderId: String? = null) {
                                 contract = ActivityResultContracts.OpenDocument()
                             ) { uri: Uri? ->
                                 uri?.let {
-                                    CoroutineScope(Dispatchers.IO).launch {
-                                        val removeSnack =
-                                            snackManager.displaySnack(
-                                                SnackConf(text = "importing from xopp file")
-                                            )
-                                        importInProgress = true
-                                        XoppFile.importBook(context, uri, folderId)
-                                        importInProgress = false
-                                        removeSnack()
+                                    val mimeType = context.contentResolver.getType(uri)
+                                    Log.d(TAG, "Selected file mimeType: $mimeType, uri: $uri")
+                                    if (mimeType == "application/pdf" || uri.toString()
+                                            .endsWith(".pdf", ignoreCase = true)
+                                    ) {
+                                        showPdfImportChoiceDialog = uri
+                                    } else {
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            val removeSnack =
+                                                snackManager.displaySnack(
+                                                    SnackConf(text = "importing from xopp file")
+                                                )
+                                            importInProgress = true
+                                            XoppFile.importBook(context, uri, folderId)
+                                            importInProgress = false
+                                            removeSnack()
+                                        }
                                     }
                                 }
                             }
@@ -369,7 +506,8 @@ fun Library(navController: NavController, folderId: String? = null) {
                                             arrayOf(
                                                 "application/x-xopp",
                                                 "application/gzip",
-                                                "application/octet-stream"
+                                                "application/octet-stream",
+                                                "application/pdf"
                                             )
                                         )
                                     }
@@ -390,7 +528,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                     items(books!!.reversed()) { item ->
                         if (item.pageIds.isEmpty()) {
                             if (!importInProgress) {
-                                ShowConfirmationDialog(
+                                ShowSimpleConfirmationDialog(
                                     title = "There is a book without pages!!!",
                                     message = "We suggest deleting book title \"${item.title}\", it was created at ${item.createdAt}. Do you want to do it?",
                                     onConfirm = {
@@ -456,8 +594,6 @@ fun Library(navController: NavController, folderId: String? = null) {
         }
     }
 
-    if (isSettingsOpen) AppSettingsModal(onClose = { isSettingsOpen = false })
-
 // Add the FloatingEditorView here
     if (showFloatingEditor && floatingEditorPageId != null) {
         FloatingEditorView(
@@ -471,5 +607,49 @@ fun Library(navController: NavController, folderId: String? = null) {
     }
 }
 
+fun handlePdfImport(context: Context, folderId: String?, uri: Uri, copyFile: Boolean = true) {
+    Log.v(TAG, "Importing PDF from $uri")
+    if (Looper.getMainLooper().isCurrentThread)
+        Log.e(TAG, "Importing is done on main thread.")
 
+    //copy file:
+    val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
+    context.contentResolver.takePersistableUriPermission(uri, flag)
+    val subfolder = BackgroundType.Pdf(0).folderName
+    val fileToSave = if (copyFile) copyBackgroundToDatabase(context, uri, subfolder)
+    else {
+        val fileName = getFilePathFromUri(context, uri)
+        if (fileName == null) {
+            Log.e(TAG, "File name is null")
+            showHint(
+                "Couldn't determine file path. Does the app have permission to read external storage?",
+                duration = 5000
+            )
+            return
+        } else File(fileName)
+    } //content://com.android.providers.media.documents/document/document%3A1000000754
 
+    val pageRepo = PageRepository(context)
+    val bookRepo = BookRepository(context)
+
+    val book = Notebook(
+        title = fileToSave.nameWithoutExtension,
+        parentFolderId = folderId,
+        defaultBackground = fileToSave.toString(),
+        defaultBackgroundType = BackgroundType.AutoPdf.key
+    )
+    bookRepo.createEmpty(book)
+
+    val numberOfPages = getPdfPageCount(fileToSave.toString())
+
+    for (i in 0 until numberOfPages) {
+        val page = Page(
+            notebookId = book.id,
+            background = fileToSave.toString(),
+            backgroundType = if (copyFile) BackgroundType.Pdf(i).key else BackgroundType.AutoPdf.key
+        )
+        pageRepo.create(page)
+        bookRepo.addPage(book.id, page.id)
+    }
+
+}

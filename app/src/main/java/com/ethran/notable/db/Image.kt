@@ -1,7 +1,6 @@
 package com.ethran.notable.db
 
 import android.content.Context
-import android.graphics.Rect
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
@@ -62,34 +61,6 @@ interface ImageDao {
     @Transaction
     @Query("SELECT * FROM Image WHERE id = :imageId")
     fun getById(imageId: String): Image
-
-    @Query(
-        """
-    SELECT * FROM Image 
-    WHERE :x >= x AND :x <= (x + width) 
-      AND :y >= y AND :y <= (y + height)
-      AND pageId= :pageId
-    """
-    )
-    fun getImageAtPoint(x: Int, y: Int, pageId: String): Image?
-
-    @Query(
-        """
-    SELECT * FROM Image 
-    WHERE x < :right AND (x + width) > :left
-      AND y < :bottom AND (y + height) > :top
-      AND pageId = :pageId
-    """
-    )
-    fun getImagesInRectangle(
-        left: Int,
-        top: Int,
-        right: Int,
-        bottom: Int,
-        pageId: String
-    ): List<Image>
-
-
 }
 
 // Repository for stroke operations
@@ -138,14 +109,6 @@ class ImageRepository(context: Context) {
 
     fun getImageWithPointsById(imageId: String): Image {
         return db.getById(imageId)
-    }
-
-    fun getImageAtPoint(x: Int, y: Int, pageId: String): Image? {
-        return db.getImageAtPoint(x, y, pageId)
-    }
-
-    fun getImagesInRectangle(rect: Rect, pageId: String): List<Image> {
-        return db.getImagesInRectangle(rect.left, rect.top, rect.right, rect.bottom, pageId)
     }
 }
 

@@ -1,5 +1,6 @@
 package com.ethran.notable.views
 
+import android.util.Log
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -27,8 +28,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.components.QuickNav
+import com.ethran.notable.modals.GlobalAppSettings
 
 @ExperimentalAnimationApi
 @ExperimentalFoundationApi
@@ -40,12 +43,19 @@ fun Router() {
         mutableStateOf(false)
     }
     LaunchedEffect(isQuickNavOpen) {
+        Log.d(TAG, "Changing drawing state, isQuickNavOpen: $isQuickNavOpen")
         DrawCanvas.isDrawing.emit(!isQuickNavOpen)
     }
+    val startDestination =
+        if (GlobalAppSettings.current.showWelcome)
+            "welcome"
+        else
+            "library?folderId={folderId}"
+//            "bugReport"
 
     NavHost(
         navController = navController,
-        startDestination = "library?folderId={folderId}",
+        startDestination = startDestination,
 
         enterTransition = { EnterTransition.None },
         exitTransition = { ExitTransition.None },
@@ -62,6 +72,13 @@ fun Router() {
             )
         }
         composable(
+            route = "welcome",
+        ) {
+            WelcomeView(
+                navController = navController,
+            )
+        }
+        composable(
             route = "books/{bookId}/pages/{pageId}",
             arguments = listOf(
                 navArgument("bookId") {
@@ -75,8 +92,8 @@ fun Router() {
         ) {
             EditorView(
                 navController = navController,
-                _bookId = it.arguments?.getString("bookId")!!,
-                _pageId = it.arguments?.getString("pageId")!!,
+                bookId = it.arguments?.getString("bookId")!!,
+                pageId = it.arguments?.getString("pageId")!!,
             )
         }
         composable(
@@ -87,8 +104,8 @@ fun Router() {
         ) {
             EditorView(
                 navController = navController,
-                _bookId = null,
-                _pageId = it.arguments?.getString("pageId")!!,
+                bookId = null,
+                pageId = it.arguments?.getString("pageId")!!,
             )
         }
         composable(
@@ -102,6 +119,16 @@ fun Router() {
                 navController = navController,
                 bookId = it.arguments?.getString("bookId")!!,
             )
+        }
+        composable(
+            route = "settings",
+        ) {
+            SettingsView(navController = navController)
+        }
+        composable(
+            route = "bugReport",
+        ) {
+            BugReportScreen(navController = navController)
         }
     }
 

@@ -33,7 +33,8 @@ fun <T> SelectMenu(options: List<Pair<T, String>>, value: T, onChange: (T) -> Un
 
     Box {
         Row {
-            Text(text = options.find { it.first == value }?.second ?: "Undefined",
+            Text(
+                text = options.find { it.first == value }?.second ?: "Undefined",
                 fontWeight = FontWeight.Light,
                 modifier = Modifier.noRippleClickable { isExpanded = true })
 
@@ -50,7 +51,8 @@ fun <T> SelectMenu(options: List<Pair<T, String>>, value: T, onChange: (T) -> Un
                     .background(Color.White)
             ) {
                 options.map {
-                    Text(text = it.second,
+                    Text(
+                        text = it.second,
                         fontWeight = FontWeight.Light,
                         color = if (it.first == value) Color.White else Color.Black,
                         modifier = Modifier

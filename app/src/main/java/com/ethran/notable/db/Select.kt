@@ -1,9 +1,9 @@
 package com.ethran.notable.db
 
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
 import androidx.compose.ui.unit.IntOffset
+import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.PageView
@@ -12,13 +12,13 @@ import com.ethran.notable.utils.PlacementMode
 import com.ethran.notable.utils.SelectPointPosition
 import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.divideStrokesFromCut
-import com.ethran.notable.utils.drawImage
-import com.ethran.notable.utils.drawStroke
+import com.ethran.notable.drawing.drawImage
+import com.ethran.notable.drawing.drawStroke
 import com.ethran.notable.utils.imageBoundsInt
-import com.ethran.notable.utils.pageAreaToCanvasArea
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.selectImagesFromPath
 import com.ethran.notable.utils.selectStrokesFromPath
+import com.ethran.notable.utils.setAnimationMode
 import com.ethran.notable.utils.strokeBounds
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
@@ -48,12 +48,13 @@ fun selectImagesAndStrokes(
     val padding = if (strokesToSelect.isNotEmpty()) 30 else 0
 
     pageBounds.inset(-padding, -padding)
-    val bounds = pageAreaToCanvasArea(pageBounds, page.scroll)
 
     // create bitmap and draw images and strokes
-    val selectedBitmap =
-        Bitmap.createBitmap(bounds.width(), bounds.height(), Bitmap.Config.ARGB_8888)
+    val selectedBitmap= page.toScreenCoordinates(pageBounds).let { boundsScreen->
+        createBitmap(boundsScreen.width(), boundsScreen.height())
+    }
     val selectedCanvas = Canvas(selectedBitmap)
+    selectedCanvas.scale(page.zoomLevel.value, page.zoomLevel.value)
 
     imagesToSelect.forEach {
         drawImage(
@@ -70,16 +71,19 @@ fun selectImagesAndStrokes(
             IntOffset(-pageBounds.left, -pageBounds.top)
         )
     }
+    val startOffset = IntOffset(pageBounds.left, pageBounds.top - page.scroll)
+
     // set state
     editorState.selectionState.selectedImages = imagesToSelect
     editorState.selectionState.selectedStrokes = strokesToSelect
     editorState.selectionState.selectedBitmap = selectedBitmap
-    editorState.selectionState.selectionStartOffset = IntOffset(bounds.left, bounds.top)
-    editorState.selectionState.selectionRect = bounds
+    editorState.selectionState.selectionRect = pageBounds
+    editorState.selectionState.selectionStartOffset = startOffset
     editorState.selectionState.selectionDisplaceOffset = IntOffset(0, 0)
     editorState.selectionState.placementMode = PlacementMode.Move
-    page.drawArea(
-        bounds,
+    setAnimationMode(true)
+    page.drawAreaPageCoordinates(
+        pageBounds,
         ignoredImageIds = imagesToSelect.map { it.id },
         ignoredStrokeIds = strokesToSelect.map { it.id })
 
@@ -181,17 +185,17 @@ fun handleSelect(
     } else {
         // lasso selection
 
-        // rcreate the lasso selection
+        // recreate the lasso selection
         val selectionPath = pointsToPath(points)
         selectionPath.close()
 
         // get the selected strokes and images
         val selectedStrokes = selectStrokesFromPath(page.strokes, selectionPath)
-        val selectedImages = selectImagesFromPath(page.images, selectionPath);
+        val selectedImages = selectImagesFromPath(page.images, selectionPath)
 
         if (selectedStrokes.isEmpty() && selectedImages.isEmpty()) return
 
-        selectImagesAndStrokes(scope, page, editorState, selectedImages, selectedStrokes);
+        selectImagesAndStrokes(scope, page, editorState, selectedImages, selectedStrokes)
 
         // TODO collocate with control tower ?
     }

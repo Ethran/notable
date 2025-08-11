@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.PenSetting
 import com.ethran.notable.utils.convertDpToPixel
 
@@ -41,41 +42,43 @@ fun StrokeMenu(
     ) {
 
         Column {
-            // Color Selection Section
-            Row(
-                Modifier
-                    .background(Color.White)
-                    .border(1.dp, Color.Black)
-                    .height(IntrinsicSize.Max)
-            ) {
-                colorOptions.map { color ->
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(color)
-                            .border(
-                                3.dp,
-                                if (color == Color(value.color)) Color.Black else Color.Transparent
-                            )
-                            .clickable {
-                                onChange(
-                                    PenSetting(
-                                        strokeSize = value.strokeSize,
-                                        color = android.graphics.Color.argb(
-                                            (color.alpha * 255).toInt(),
-                                            (color.red * 255).toInt(),
-                                            (color.green * 255).toInt(),
-                                            (color.blue * 255).toInt()
+
+            if(!GlobalAppSettings.current.monochromeMode) {
+                // Color Selection Section
+                Row(
+                    Modifier
+                        .background(Color.White)
+                        .border(1.dp, Color.Black)
+                        .height(IntrinsicSize.Max)
+                ) {
+                    colorOptions.map { color ->
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(color)
+                                .border(
+                                    3.dp,
+                                    if (color == Color(value.color)) Color.Black else Color.Transparent
+                                )
+                                .clickable {
+                                    onChange(
+                                        PenSetting(
+                                            strokeSize = value.strokeSize,
+                                            color = android.graphics.Color.argb(
+                                                (color.alpha * 255).toInt(),
+                                                (color.red * 255).toInt(),
+                                                (color.green * 255).toInt(),
+                                                (color.blue * 255).toInt()
+                                            )
                                         )
                                     )
-                                )
-                            }
-                            .padding(8.dp)
-                    )
+                                }
+                                .padding(8.dp)
+                        )
+                    }
                 }
+                Spacer(Modifier.height(4.dp))
             }
-
-            Spacer(Modifier.height(4.dp))
 
             Row(
                 modifier = Modifier

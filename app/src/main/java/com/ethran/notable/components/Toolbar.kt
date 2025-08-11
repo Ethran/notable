@@ -18,11 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -37,24 +34,25 @@ import com.ethran.notable.R
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.EditorControlTower
-import com.ethran.notable.db.KvProxy
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.BUTTON_SIZE
-import com.ethran.notable.modals.PageSettingsModal
+import com.ethran.notable.modals.BackgroundSelector
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.History
 import com.ethran.notable.utils.Mode
 import com.ethran.notable.utils.Pen
 import com.ethran.notable.utils.PenSetting
 import com.ethran.notable.utils.UndoRedoType
-import com.ethran.notable.utils.createFileFromContentUri
+import com.ethran.notable.utils.copyImageToDatabase
 import com.ethran.notable.utils.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
 
+private val toolbarLog = ShipBook.getLogger("Toolbar")
 fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
     return when (mode) {
         Mode.Draw -> {
@@ -92,15 +90,8 @@ fun Toolbar(
     navController: NavController, state: EditorState, controlTower: EditorControlTower
 ) {
     val scope = rememberCoroutineScope()
-    var isStrokeSelectionOpen by remember { mutableStateOf(false) }
-    var isMenuOpen by remember { mutableStateOf(false) }
-    var isPageSettingsModalOpen by remember { mutableStateOf(false) }
-
     val context = LocalContext.current
 
-
-    // Create a remembered variable to track whether an image is loaded
-    var isImageLoaded by remember { mutableStateOf(false) }
 
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
@@ -111,26 +102,24 @@ fun Toolbar(
                 context.contentResolver.takePersistableUriPermission(uri, flag)
 
                 //  copy image to documents/notabledb/images/filename
-                val copiedFile = createFileFromContentUri(context, uri)
+                val copiedFile = copyImageToDatabase(context, uri)
 
                 // Set isImageLoaded to true
-                isImageLoaded = true
-                Log.i(
-                    "InsertImage",
-                    "Image was received and copied, it is now at:${copiedFile.toUri()}"
-                )
+                toolbarLog.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
                 DrawCanvas.addImageByUri.value = copiedFile.toUri()
 
             }
         }
 
-    LaunchedEffect(isMenuOpen) {
-        state.isDrawing = !isMenuOpen
+    // on exit of toolbar, update drawing state
+    LaunchedEffect(state.menuStates.isBackgroundSelectorModalOpen, state.menuStates.isMenuOpen) {
+        // TODO: move it to menuState.
+        toolbarLog.i("Updating drawing state")
+        state.checkForSelectionsAndMenus()
     }
-
     fun handleChangePen(pen: Pen) {
         if (state.mode == Mode.Draw && state.pen == pen) {
-            isStrokeSelectionOpen = true
+            state.menuStates.isStrokeSelectionOpen = true
         } else {
             state.mode = Mode.Draw
             state.pen = pen
@@ -155,15 +144,46 @@ fun Toolbar(
         state.penSettings = settings
     }
 
-    if (isPageSettingsModalOpen) {
-        PageSettingsModal(pageView = state.pageView) {
-            isPageSettingsModalOpen = false
+    if (state.menuStates.isBackgroundSelectorModalOpen) {
+        toolbarLog.i("Opening page settings modal")
+        BackgroundSelector(
+            initialPageBackgroundType = state.pageView.pageFromDb?.backgroundType ?: "native",
+            initialPageBackground = state.pageView.pageFromDb?.background ?: "blank",
+            initialPageNumberInPdf = state.pageView.getBackgroundPageNumber(),
+            notebookId = state.pageView.pageFromDb?.notebookId,
+            pageNumberInBook = state.pageView.currentPageNumber,
+            onChange = { backgroundType, background ->
+                val updatedPage =
+                    if (background == null)
+                        state.pageView.pageFromDb!!.copy(
+                            backgroundType = backgroundType
+                        )
+                    else state.pageView.pageFromDb!!.copy(
+                        background = background,
+                        backgroundType = backgroundType
+                    )
+                state.pageView.updatePageSettings(updatedPage)
+                scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+            }
+        ) {
+            state.menuStates.isBackgroundSelectorModalOpen = false
         }
     }
     if (state.isToolbarOpen) {
         Column(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .height((BUTTON_SIZE + 51).dp)
+                .padding(bottom = 50.dp) // TODO: fix this
         ) {
+            if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Bottom) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color.Black)
+                )
+            }
             Row(
                 Modifier
                     .background(Color.White)
@@ -192,41 +212,41 @@ fun Toolbar(
                     penSetting = state.penSettings[Pen.BALLPEN.penName] ?: return,
                     onChangeSetting = { onChangeStrokeSetting(Pen.BALLPEN.penName, it) })
 
-                PenToolbarButton(
-                    onStrokeMenuOpenChange = { state.isDrawing = !it },
-                    pen = Pen.REDBALLPEN,
-                    icon = R.drawable.ballpenred,
-                    isSelected = isSelected(state, Pen.REDBALLPEN),
-                    onSelect = { handleChangePen(Pen.REDBALLPEN) },
-                    sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
-                    penSetting = state.penSettings[Pen.REDBALLPEN.penName] ?: return,
-                    onChangeSetting = { onChangeStrokeSetting(Pen.REDBALLPEN.penName, it) },
-                )
+                if (!GlobalAppSettings.current.monochromeMode) {
+                    PenToolbarButton(
+                        onStrokeMenuOpenChange = { state.isDrawing = !it },
+                        pen = Pen.REDBALLPEN,
+                        icon = R.drawable.ballpenred,
+                        isSelected = isSelected(state, Pen.REDBALLPEN),
+                        onSelect = { handleChangePen(Pen.REDBALLPEN) },
+                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        penSetting = state.penSettings[Pen.REDBALLPEN.penName] ?: return,
+                        onChangeSetting = { onChangeStrokeSetting(Pen.REDBALLPEN.penName, it) },
+                    )
 
-                PenToolbarButton(
-                    onStrokeMenuOpenChange = { state.isDrawing = !it },
-                    pen = Pen.BLUEBALLPEN,
-                    icon = R.drawable.ballpenblue,
-                    isSelected = isSelected(state, Pen.BLUEBALLPEN),
-                    onSelect = { handleChangePen(Pen.BLUEBALLPEN) },
-                    sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
-                    penSetting = state.penSettings[Pen.BLUEBALLPEN.penName] ?: return,
-                    onChangeSetting = { onChangeStrokeSetting(Pen.BLUEBALLPEN.penName, it) },
-                )
+                    PenToolbarButton(
+                        onStrokeMenuOpenChange = { state.isDrawing = !it },
+                        pen = Pen.BLUEBALLPEN,
+                        icon = R.drawable.ballpenblue,
+                        isSelected = isSelected(state, Pen.BLUEBALLPEN),
+                        onSelect = { handleChangePen(Pen.BLUEBALLPEN) },
+                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        penSetting = state.penSettings[Pen.BLUEBALLPEN.penName] ?: return,
+                        onChangeSetting = { onChangeStrokeSetting(Pen.BLUEBALLPEN.penName, it) },
+                    )
 //              Removed to make space for insert tool
-                PenToolbarButton(
-                    onStrokeMenuOpenChange = { state.isDrawing = !it },
-                    pen = Pen.GREENBALLPEN,
-                    icon = R.drawable.ballpengreen,
-                    isSelected = isSelected(state, Pen.GREENBALLPEN),
-                    onSelect = { handleChangePen(Pen.GREENBALLPEN) },
-                    sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
-                    penSetting = state.penSettings[Pen.GREENBALLPEN.penName] ?: return,
-                    onChangeSetting = { onChangeStrokeSetting(Pen.GREENBALLPEN.penName, it) },
-                )
-
-                val appSettings = KvProxy(context).get("APP_SETTINGS", AppSettings.serializer())
-                if (appSettings?.neoTools == true) {
+                    PenToolbarButton(
+                        onStrokeMenuOpenChange = { state.isDrawing = !it },
+                        pen = Pen.GREENBALLPEN,
+                        icon = R.drawable.ballpengreen,
+                        isSelected = isSelected(state, Pen.GREENBALLPEN),
+                        onSelect = { handleChangePen(Pen.GREENBALLPEN) },
+                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        penSetting = state.penSettings[Pen.GREENBALLPEN.penName] ?: return,
+                        onChangeSetting = { onChangeStrokeSetting(Pen.GREENBALLPEN.penName, it) },
+                    )
+                }
+                if (GlobalAppSettings.current.neoTools) {
                     PenToolbarButton(
                         onStrokeMenuOpenChange = { state.isDrawing = !it },
                         pen = Pen.PENCIL,
@@ -294,7 +314,7 @@ fun Toolbar(
                     onSelect = {
                         handleEraser()
                     },
-                    onMenuOpenChange = { isStrokeSelectionOpen = it },
+                    onMenuOpenChange = { state.menuStates.isStrokeSelectionOpen = it },
                     value = state.eraser,
                     onChange = { state.eraser = it })
                 Box(
@@ -321,7 +341,7 @@ fun Toolbar(
                     contentDescription = "library",
                     onSelect = {
                         // Call insertImage when the button is tapped
-                        Log.i("InsertImage", "Launching image picker...")
+                        toolbarLog.i("Launching image picker...")
                         pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
                     }
                 )
@@ -390,8 +410,8 @@ fun Toolbar(
                     val book = AppRepository(context).bookRepository.getById(state.bookId)
 
                     // TODO maybe have generic utils for this ?
-                    val pageNumber = book!!.pageIds.indexOf(state.pageId) + 1
-                    val totalPageNumber = book.pageIds.size
+                    val pageNumber = remember (state.pageId) {   book!!.pageIds.indexOf(state.pageId) + 1}
+                    val totalPageNumber = book!!.pageIds.size
 
                     Box(
                         contentAlignment = Alignment.Center,
@@ -432,14 +452,17 @@ fun Toolbar(
                 Column {
                     ToolbarButton(
                         onSelect = {
-                            isMenuOpen = !isMenuOpen
+                            state.menuStates.isMenuOpen = !state.menuStates.isMenuOpen
                         }, iconId = R.drawable.menu, contentDescription = "menu"
                     )
-                    if (isMenuOpen) ToolbarMenu(
+                    if (state.menuStates.isMenuOpen) ToolbarMenu(
                         navController = navController,
                         state = state,
-                        onClose = { isMenuOpen = false },
-                        onPageSettingsOpen = { isPageSettingsModalOpen = true })
+                        onClose = { state.menuStates.isMenuOpen = false },
+                        onBackgroundSelectorModalOpen = {
+                            toolbarLog.i("Opening page settings modal")
+                            state.menuStates.isBackgroundSelectorModalOpen = true
+                        })
                 }
             }
 
@@ -460,7 +483,9 @@ fun Toolbar(
                 )
             } else null,
             contentDescription = "open toolbar",
-            modifier = Modifier.height(BUTTON_SIZE.dp)
+            modifier = Modifier
+                .height((BUTTON_SIZE + 51).dp)
+                .padding(bottom = 50.dp)
         )
     }
 }
