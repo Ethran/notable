@@ -322,6 +322,17 @@ class DrawCanvas(
             plist.points
 
             val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+
+            val padding = 10
+            val boundingBox = (calculateBoundingBox(plist.points) { Pair(it.x, it.y) }).toRect()
+            val strokeArea = Rect(
+                boundingBox.left - padding,
+                boundingBox.top - padding,
+                boundingBox.right + padding,
+                boundingBox.bottom + padding
+            )
+            refreshUi(strokeArea)
+
             val zoneEffected = handleErase(
                 this@DrawCanvas.page,
                 history,
