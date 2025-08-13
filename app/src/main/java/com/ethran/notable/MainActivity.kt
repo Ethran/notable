@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
         }
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
+        // Not necessary, done in DrawCanvas.surfaceChanged()
 //        this.lifecycleScope.launch {
 //            DrawCanvas.restartAfterConfChange.emit(Unit)
 //        }
