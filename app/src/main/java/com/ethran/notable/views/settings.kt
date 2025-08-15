@@ -185,17 +185,6 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             })
 
         SettingToggleRow(
-            label = "Show welcome screen", value = settings.showWelcome, onToggle = { isChecked ->
-                kv.setAppSettings(settings.copy(showWelcome = isChecked))
-            })
-        SettingToggleRow(
-            label = "Debug Mode (show changed area)",
-            value = settings.debugMode,
-            onToggle = { isChecked ->
-                kv.setAppSettings(settings.copy(debugMode = isChecked))
-            })
-
-        SettingToggleRow(
             label = "Use Onyx NeoTools (may cause crashes)",
             value = settings.neoTools,
             onToggle = { isChecked ->
