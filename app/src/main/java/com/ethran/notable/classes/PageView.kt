@@ -489,9 +489,9 @@ class PageView(
         )
     }
 
-    @Suppress("unused")
     suspend fun simpleUpdateScroll(dragDelta: Int) {
         // Just update scroll, for debugging.
+        // It will redraw whole screen, instead of trying to redraw only needed area.
         log.d("Simple update scroll")
         var delta = (dragDelta / zoomLevel.value).toInt()
         if (scroll + delta < 0) delta = 0 - scroll
@@ -505,8 +505,7 @@ class PageView(
         )
         val scrolledBitmap = createBitmap(SCREEN_WIDTH, SCREEN_HEIGHT, windowedBitmap.config!!)
 
-        // Swap in the new zoomed bitmap
-        windowedBitmap.recycle()
+        // Swap in the new scrolled bitmap
         windowedBitmap = scrolledBitmap
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
