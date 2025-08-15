@@ -2,7 +2,6 @@ package com.ethran.notable.views
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,12 +19,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
-import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Switch
+import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Tab
 import androidx.compose.material.TabRow
 import androidx.compose.material.TabRowDefaults
@@ -65,7 +64,6 @@ import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.isNext
 import kotlin.concurrent.thread
 
-@ExperimentalFoundationApi
 @Composable
 fun SettingsView(navController: NavController) {
     val context = LocalContext.current
@@ -77,13 +75,11 @@ fun SettingsView(navController: NavController) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colors.background
+        modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
             TitleBar(navController)
@@ -99,12 +95,10 @@ fun SettingsView(navController: NavController) {
                     )
                 },
                 divider = {
-                    // Optional: subtle divider
                     Divider(
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.12f), thickness = 1.dp
                     )
-                }
-            ) {
+                }) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTab == index,
@@ -124,21 +118,23 @@ fun SettingsView(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Tab content
-            Card(
+            // The scrollable tab content area, takes up all available space
+            Box(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                elevation = 2.dp,
-                shape = MaterialTheme.shapes.medium
             ) {
-
-                when (selectedTab) {
-                    0 -> GeneralSettings(kv, settings)
-                    1 -> EditGestures(kv, settings)
-                    2 -> DebugSettings(kv, settings)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    when (selectedTab) {
+                        0 -> GeneralSettings(kv, settings)
+                        1 -> EditGestures(kv, settings)
+                        2 -> DebugSettings(kv, settings)
+                    }
                 }
-
             }
 
             // Additional actions, only on main settings tab
@@ -169,22 +165,24 @@ fun SettingsView(navController: NavController) {
 @Composable
 fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
     Column {
-        Row {
-            Text(text = "Default Page Background Template")
-            Spacer(Modifier.width(10.dp))
-            SelectMenu(
-                options = listOf(
-                    "blank" to "Blank page",
-                    "dotted" to "Dot grid",
-                    "lined" to "Lines",
-                    "squared" to "Small squares grid",
-                    "hexed" to "Hexagon grid",
-                ), onChange = {
-                    kv.setAppSettings(settings.copy(defaultNativeTemplate = it))
-                }, value = settings.defaultNativeTemplate
-            )
-        }
-        Spacer(Modifier.height(3.dp))
+        SelectorRow(
+            label = "Default Page Background Template", options = listOf(
+                "blank" to "Blank page",
+                "dotted" to "Dot grid",
+                "lined" to "Lines",
+                "squared" to "Small squares grid",
+                "hexed" to "Hexagon grid",
+            ), value = settings.defaultNativeTemplate, onValueChange = {
+                kv.setAppSettings(settings.copy(defaultNativeTemplate = it))
+            })
+        SelectorRow(
+            label = "Toolbar Position (Work in progress)", options = listOf(
+                AppSettings.Position.Top to "Top", AppSettings.Position.Bottom to "Bottom"
+            ), value = settings.toolbarPosition, onValueChange = { newPosition ->
+                settings.let {
+                    kv.setAppSettings(it.copy(toolbarPosition = newPosition))
+                }
+            })
 
         SettingToggleRow(
             label = "Show welcome screen", value = settings.showWelcome, onToggle = { isChecked ->
@@ -242,42 +240,36 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(visualizePdfPagination = isChecked))
             })
-        Spacer(Modifier.height(5.dp))
-
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "Toolbar Position (Work in progress)")
-                Spacer(modifier = Modifier.width(10.dp))
-
-                SelectMenu(
-                    options = listOf(
-                        AppSettings.Position.Top to "Top", AppSettings.Position.Bottom to "Bottom"
-                    ), value = settings.toolbarPosition, onChange = { newPosition ->
-                        settings.let {
-                            kv.setAppSettings(it.copy(toolbarPosition = newPosition))
-                        }
-                    })
-            }
-        }
     }
 }
 
 @Composable
 fun SettingToggleRow(
-    label: String,
-    value: Boolean,
-    onToggle: (Boolean) -> Unit
+    label: String, value: Boolean, onToggle: (Boolean) -> Unit
 ) {
     Row(
-        verticalAlignment = Alignment.CenterVertically
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, start = 4.dp, end = 4.dp, bottom = 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = label)
-        Spacer(Modifier.width(10.dp))
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f), // Take all available space
+            style = MaterialTheme.typography.body1,
+            color = MaterialTheme.colors.onSurface,
+            maxLines = 2 // allow wrapping for long labels
+        )
         Switch(
-            checked = value,
-            onCheckedChange = onToggle
+            checked = value, onCheckedChange = onToggle, colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colors.onSurface,
+                uncheckedThumbColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                checkedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.2f),
+                uncheckedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.1f)
+            ), modifier = Modifier.padding(start = 8.dp)
         )
     }
+    SettingsDivider()
 }
 
 @Composable
@@ -313,36 +305,62 @@ fun TitleBar(navController: NavController) {
     }
 }
 
+
+@Composable
+fun <T> SelectorRow(
+    label: String,
+    options: List<Pair<T, String>>,
+    value: T,
+    onValueChange: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    labelMaxLines: Int = 2
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.body1,
+            color = MaterialTheme.colors.onSurface,
+            maxLines = labelMaxLines
+        )
+        SelectMenu(
+            options = options,
+            value = value,
+            onChange = onValueChange,
+        )
+    }
+    SettingsDivider()
+}
+
 @Composable
 fun GestureSelectorRow(
     title: String,
     kv: KvProxy,
     settings: AppSettings?,
-    update: AppSettings.(AppSettings.GestureAction?) -> AppSettings,
+    update: (AppSettings.GestureAction?) -> AppSettings?,
     default: AppSettings.GestureAction,
-    override: AppSettings.() -> AppSettings.GestureAction?,
+    override: (AppSettings) -> AppSettings.GestureAction?
 ) {
-    Row {
-        Text(text = title)
-        Spacer(Modifier.width(10.dp))
-        SelectMenu(
-            options = listOf(
-                null to "None",
-                AppSettings.GestureAction.Undo to "Undo",
-                AppSettings.GestureAction.Redo to "Redo",
-                AppSettings.GestureAction.PreviousPage to "Previous Page",
-                AppSettings.GestureAction.NextPage to "Next Page",
-                AppSettings.GestureAction.ChangeTool to "Toggle Pen / Eraser",
-                AppSettings.GestureAction.ToggleZen to "Toggle Zen Mode",
-            ),
-            value = if (settings != null) settings.override() else default,
-            onChange = {
-                if (settings != null) {
-                    kv.setAppSettings(settings.update(it))
-                }
-            },
-        )
-    }
+    SelectorRow(
+        label = title, options = listOf(
+            null to "None",
+            AppSettings.GestureAction.Undo to "Undo",
+            AppSettings.GestureAction.Redo to "Redo",
+            AppSettings.GestureAction.PreviousPage to "Previous Page",
+            AppSettings.GestureAction.NextPage to "Next Page",
+            AppSettings.GestureAction.ChangeTool to "Toggle Pen / Eraser",
+            AppSettings.GestureAction.ToggleZen to "Toggle Zen Mode",
+        ), value = if (settings != null) override(settings) else default, onValueChange = {
+            if (settings != null) {
+                val updated = update(it)
+                if (updated != null) kv.setAppSettings(updated)
+            }
+        })
 }
 
 
@@ -351,8 +369,7 @@ fun GitHubSponsorButton(modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
     Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
         Box(
@@ -367,8 +384,7 @@ fun GitHubSponsorButton(modifier: Modifier = Modifier) {
                         Intent.ACTION_VIEW, "https://github.com/sponsors/ethran".toUri()
                     )
                     context.startActivity(urlIntent)
-                },
-            contentAlignment = Alignment.Center
+                }, contentAlignment = Alignment.Center
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -385,8 +401,7 @@ fun GitHubSponsorButton(modifier: Modifier = Modifier) {
                     text = "Sponsor",
                     color = Color.White,
                     style = MaterialTheme.typography.button.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                        fontWeight = FontWeight.Bold, fontSize = 16.sp
                     ),
                 )
             }
@@ -413,12 +428,10 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
             Button(
                 onClick = {
                     val urlIntent = Intent(
-                        Intent.ACTION_VIEW,
-                        "https://github.com/ethran/notable/releases".toUri()
+                        Intent.ACTION_VIEW, "https://github.com/ethran/notable/releases".toUri()
                     )
                     context.startActivity(urlIntent)
-                },
-                modifier = Modifier.fillMaxWidth()
+                }, modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Upgrade, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -433,13 +446,11 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
                     isLatestVersion = isLatestVersion(context, true)
                     if (isLatestVersion) {
                         showHint(
-                            "You are on the latest version.",
-                            duration = 1000
+                            "You are on the latest version.", duration = 1000
                         )
                     }
                 }
-            },
-            modifier = modifier // Adjust the modifier as needed
+            }, modifier = modifier // Adjust the modifier as needed
         ) {
             Icon(Icons.Default.Update, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
@@ -451,64 +462,35 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
 
 @Composable
 fun EditGestures(kv: KvProxy, settings: AppSettings?) {
-    Column {
-        Divider(
-            color = Color.LightGray,
-            thickness = 1.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        val gestures = listOf(
+            Triple("Double Tap Action", AppSettings.defaultDoubleTapAction, AppSettings::doubleTapAction),
+            Triple("Two Finger Tap Action", AppSettings.defaultTwoFingerTapAction, AppSettings::twoFingerTapAction),
+            Triple("Swipe Left Action", AppSettings.defaultSwipeLeftAction, AppSettings::swipeLeftAction),
+            Triple("Swipe Right Action", AppSettings.defaultSwipeRightAction, AppSettings::swipeRightAction),
+            Triple("Two Finger Swipe Left Action", AppSettings.defaultTwoFingerSwipeLeftAction, AppSettings::twoFingerSwipeLeftAction),
+            Triple("Two Finger Swipe Right Action", AppSettings.defaultTwoFingerSwipeRightAction, AppSettings::twoFingerSwipeRightAction),
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        GestureSelectorRow(
-            title = "Double Tap Action",
-            kv = kv,
-            settings = settings,
-            update = { copy(doubleTapAction = it) },
-            default = AppSettings.defaultDoubleTapAction,
-            override = { doubleTapAction })
-
-        GestureSelectorRow(
-            title = "Two Finger Tap Action",
-            kv = kv,
-            settings = settings,
-            update = { copy(twoFingerTapAction = it) },
-            default = AppSettings.defaultTwoFingerTapAction,
-            override = { twoFingerTapAction })
-
-        GestureSelectorRow(
-            title = "Swipe Left Action",
-            kv = kv,
-            settings = settings,
-            update = { copy(swipeLeftAction = it) },
-            default = AppSettings.defaultSwipeLeftAction,
-            override = { swipeLeftAction })
-
-        GestureSelectorRow(
-            title = "Swipe Right Action",
-            kv = kv,
-            settings = settings,
-            update = { copy(swipeRightAction = it) },
-            default = AppSettings.defaultSwipeRightAction,
-            override = { swipeRightAction })
-
-        GestureSelectorRow(
-            title = "Two Finger Swipe Left Action",
-            kv = kv,
-            settings = settings,
-            update = { copy(twoFingerSwipeLeftAction = it) },
-            default = AppSettings.defaultTwoFingerSwipeLeftAction,
-            override = { twoFingerSwipeLeftAction })
-
-        GestureSelectorRow(
-            title = "Two Finger Swipe Right Action",
-            kv = kv,
-            settings = settings,
-            update = { copy(twoFingerSwipeRightAction = it) },
-            default = AppSettings.defaultTwoFingerSwipeRightAction,
-            override = { twoFingerSwipeRightAction })
+        gestures.forEachIndexed { index, (title, default, override) ->
+            GestureSelectorRow(
+                title = title, kv = kv, settings = settings, update = { action ->
+                    when (title) {
+                        "Double Tap Action" -> settings?.copy(doubleTapAction = action)
+                        "Two Finger Tap Action" -> settings?.copy(twoFingerTapAction = action)
+                        "Swipe Left Action" -> settings?.copy(swipeLeftAction = action)
+                        "Swipe Right Action" -> settings?.copy(swipeRightAction = action)
+                        "Two Finger Swipe Left Action" -> settings?.copy(twoFingerSwipeLeftAction = action)
+                        "Two Finger Swipe Right Action" -> settings?.copy(twoFingerSwipeRightAction = action)
+                        else -> settings
+                    } ?: settings
+                }, default = default, override = override
+            )
+        }
     }
 }
 
@@ -527,4 +509,13 @@ fun DebugSettings(kv: KvProxy, settings: AppSettings) {
                 kv.setAppSettings(settings.copy(debugMode = isChecked))
             })
     }
+}
+
+@Composable
+fun SettingsDivider() {
+    Divider(
+        color = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+        thickness = 1.dp,
+        modifier = Modifier.padding(top = 0.dp, bottom = 4.dp)
+    )
 }
