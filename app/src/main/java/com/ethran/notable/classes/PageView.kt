@@ -505,7 +505,7 @@ class PageView(
         )
         val scrolledBitmap = createBitmap(SCREEN_WIDTH, SCREEN_HEIGHT, windowedBitmap.config!!)
 
-        // Swap in the new zoomed bitmap
+        // Swap in the new scrolled bitmap
         windowedBitmap = scrolledBitmap
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
