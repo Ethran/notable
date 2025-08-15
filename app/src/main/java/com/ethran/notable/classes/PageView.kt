@@ -5,11 +5,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.RectF
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.SCREEN_HEIGHT
@@ -34,6 +37,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.system.measureTimeMillis
 
@@ -590,7 +595,7 @@ class PageView(
         }
     }
 
-    suspend fun updateZoom(scaleDelta: Float) {
+    suspend fun simpleUpdateZoom(scaleDelta: Float) {
         // TODO:
         // - Update only effected area if possible
         // - Find a better way to represent how much to zoom.
@@ -650,6 +655,116 @@ class PageView(
         saveToPersistLayer()
         PageDataManager.cacheBitmap(id, windowedBitmap)
         log.i("Zoom and redraw completed")
+    }
+
+
+    /**
+     * Update zoom by reusing the existing screen bitmap.
+     * - Scales the snapshot around the given center (screen coords).
+     * - Redraws only the uncovered bands when zooming out.
+     * - When zooming in, keeps the upscaled snapshot (even if low-res) for now.
+     */
+    suspend fun updateZoom(scaleDelta: Float, center: Offset?) {
+        log.d("Zoom(delta): $scaleDelta. Center: $center")
+
+        val oldZoom = zoomLevel.value
+        val newZoom = calculateZoomLevel(scaleDelta, oldZoom)
+        if (newZoom == oldZoom) {
+            log.d("Zoom unchanged. Current level: $oldZoom")
+            return
+        }
+
+        // Flush pending strokes/background before snapshot-based operations
+        DrawCanvas.waitForDrawingWithSnack()
+
+        val scaleFactor = newZoom / oldZoom
+        val oldBitmap = windowedBitmap
+        val screenW = oldBitmap.width
+        val screenH = oldBitmap.height
+
+        // Default pivot to screen center if none passed
+        val pivotX = center?.x ?: (screenW / 2f)
+        val pivotY = center?.y ?: (screenH / 2f)
+
+        // Draw scaled snapshot into a fresh screen-sized bitmap
+        val scaledBitmap = createBitmap(screenW, screenH, oldBitmap.config!!)
+        val scaledCanvas = Canvas(scaledBitmap)
+        scaledCanvas.drawColor(Color.BLACK) // clear
+
+        val matrix = Matrix().apply {
+            postScale(scaleFactor, scaleFactor, pivotX, pivotY)
+        }
+        scaledCanvas.drawBitmap(oldBitmap, matrix, null)
+
+        // Swap in the new bitmap and update zoom on the windowed canvas
+        windowedBitmap = scaledBitmap
+        windowedCanvas.setBitmap(windowedBitmap)
+
+        zoomLevel.value = newZoom
+        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+
+        // Calculate where the scaled snapshot ended up on screen.
+        // Map the original screen rect through the same matrix to get content bounds.
+        val srcRect = RectF(0f, 0f, screenW.toFloat(), screenH.toFloat())
+        val dstRect = RectF()
+        matrix.mapRect(dstRect, srcRect)
+
+        // Convert to ints with conservative rounding to avoid gaps
+        val contentLeft = floor(dstRect.left).toInt()
+        val contentTop = floor(dstRect.top).toInt()
+        val contentRight = ceil(dstRect.right).toInt()
+        val contentBottom = ceil(dstRect.bottom).toInt()
+
+        // Overlap to hide rounding seams
+        val overlap = 2
+
+        if (scaleFactor < 1f) {
+            // Uncovered top band
+            if (contentTop > 0) {
+                val r = Rect(
+                    0,
+                    0,
+                    screenW,
+                    (contentTop + overlap).coerceAtMost(screenH)
+                )
+                if (!r.isEmpty) drawAreaScreenCoordinates(r)
+            }
+            // Uncovered bottom band
+            if (contentBottom < screenH) {
+                val r = Rect(
+                    0,
+                    (contentBottom - overlap).coerceAtLeast(0),
+                    screenW,
+                    screenH
+                )
+                if (!r.isEmpty) drawAreaScreenCoordinates(r)
+            }
+            // Uncovered left band
+            if (contentLeft > 0) {
+                val r = Rect(
+                    0,
+                    (contentTop - overlap).coerceAtLeast(0),
+                    (contentLeft + overlap).coerceAtMost(screenW),
+                    (contentBottom + overlap).coerceAtMost(screenH)
+                )
+                if (!r.isEmpty) drawAreaScreenCoordinates(r)
+            }
+            // Uncovered right band
+            if (contentRight < screenW) {
+                val r = Rect(
+                    (contentRight - overlap).coerceAtLeast(0),
+                    (contentTop - overlap).coerceAtLeast(0),
+                    screenW,
+                    (contentBottom + overlap).coerceAtMost(screenH)
+                )
+                if (!r.isEmpty) drawAreaScreenCoordinates(r)
+            }
+        } // else: zooming in — keep upscaled snapshot per requirements
+
+        persistBitmapDebounced()
+        saveToPersistLayer()
+        PageDataManager.cacheBitmap(id, windowedBitmap)
+        log.i("Zoom updated using snapshot scaling. oldZoom=$oldZoom newZoom=$newZoom scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) bounds=[$contentLeft,$contentTop,$contentRight,$contentBottom)]")
     }
 
 

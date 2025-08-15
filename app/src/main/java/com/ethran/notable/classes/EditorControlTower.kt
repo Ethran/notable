@@ -2,6 +2,7 @@ package com.ethran.notable.classes
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import com.ethran.notable.TAG
@@ -69,10 +70,15 @@ class EditorControlTower(
         page.updatePageID(id)
     }
 
-    fun onPinchToZoom(delta: Float) {
+    fun onPinchToZoom(delta: Float, center: Offset?) {
+        // TODO: use center for drawing in right place.
+        //      For it to work, it needs to know scroll y -- so we need to transform scroll into OffSet
         scope.launch {
             scrollInProgress.withLock {
-                onPageZoom(delta)
+                if (GlobalAppSettings.current.simpleRendering)
+                    page.simpleUpdateZoom(delta)
+                else
+                    page.updateZoom(delta, Offset(0f,0f))
             }
             DrawCanvas.refreshUi.emit(Unit)
         }
@@ -115,9 +121,7 @@ class EditorControlTower(
             page.updateScroll(dragDelta)
     }
 
-    private suspend fun onPageZoom(delta: Float) {
-        page.updateZoom(delta)
-    }
+
 
     // when selection is moved, we need to redraw canvas
     fun applySelectionDisplace() {
