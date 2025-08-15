@@ -123,18 +123,14 @@ fun SettingsView(navController: NavController) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    when (selectedTab) {
-                        0 -> GeneralSettings(kv, settings)
-                        1 -> EditGestures(kv, settings)
-                        2 -> DebugSettings(kv, settings)
-                    }
+                when (selectedTab) {
+                    0 -> GeneralSettings(kv, settings)
+                    1 -> EditGestures(kv, settings)
+                    2 -> DebugSettings(kv, settings)
                 }
+
             }
 
             // Additional actions, only on main settings tab
