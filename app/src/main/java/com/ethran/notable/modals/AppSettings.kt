@@ -37,6 +37,7 @@ data class AppSettings(
     val visualizePdfPagination: Boolean = false,
     val paginatePdf: Boolean = true,
     val scribbleToEraseEnabled: Boolean = false,
+    val simpleRendering: Boolean = false,
 
     val doubleTapAction: GestureAction? = defaultDoubleTapAction,
     val twoFingerTapAction: GestureAction? = defaultTwoFingerTapAction,

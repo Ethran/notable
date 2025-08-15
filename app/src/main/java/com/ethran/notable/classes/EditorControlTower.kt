@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import com.ethran.notable.TAG
 import com.ethran.notable.db.selectImagesAndStrokes
+import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.History
 import com.ethran.notable.utils.Mode
@@ -108,7 +109,10 @@ class EditorControlTower(
 
     private suspend fun onPageScroll(dragDelta: Int) {
         // scroll is in Page coordinates
-        page.updateScroll(dragDelta)
+        if (GlobalAppSettings.current.simpleRendering)
+            page.simpleUpdateScroll(dragDelta)
+        else
+            page.updateScroll(dragDelta)
     }
 
     private suspend fun onPageZoom(delta: Float) {

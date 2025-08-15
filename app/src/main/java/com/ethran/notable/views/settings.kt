@@ -508,6 +508,12 @@ fun DebugSettings(kv: KvProxy, settings: AppSettings) {
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(debugMode = isChecked))
             })
+        SettingToggleRow(
+            label = "Use simple rendering for scroll and zoom -- uses more resources.",
+            value = settings.simpleRendering,
+            onToggle = { isChecked ->
+                kv.setAppSettings(settings.copy(simpleRendering = isChecked))
+            })
     }
 }
 
