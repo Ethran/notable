@@ -676,7 +676,7 @@ class PageView(
             //Reset zoom level.
             zoomLevel.value = 1.0f
             coroutineScope.launch {
-                DrawCanvas.forceUpdate.emit(Rect(0, 0, viewWidth, viewHeight))
+                DrawCanvas.forceUpdate.emit(null)
             }
             persistBitmapDebounced()
             PageDataManager.cacheBitmap(id, windowedBitmap)

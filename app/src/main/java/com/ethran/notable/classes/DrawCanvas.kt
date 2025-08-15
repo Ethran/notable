@@ -23,9 +23,11 @@ import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.db.handleSelect
 import com.ethran.notable.db.selectImage
 import com.ethran.notable.db.selectImagesAndStrokes
+import com.ethran.notable.drawing.OpenGLRenderer
+import com.ethran.notable.drawing.drawImage
+import com.ethran.notable.drawing.selectPaint
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
-import com.ethran.notable.drawing.OpenGLRenderer
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.Eraser
 import com.ethran.notable.utils.History
@@ -38,7 +40,6 @@ import com.ethran.notable.utils.calculateBoundingBox
 import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
 import com.ethran.notable.utils.copyInputToSimplePointF
-import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.utils.handleDraw
 import com.ethran.notable.utils.handleErase
@@ -50,7 +51,6 @@ import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.prepareForPartialUpdate
 import com.ethran.notable.utils.refreshScreenRegion
 import com.ethran.notable.utils.restoreDefaults
-import com.ethran.notable.drawing.selectPaint
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
 import com.ethran.notable.utils.uriToBitmap
@@ -322,6 +322,17 @@ class DrawCanvas(
             plist.points
 
             val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+
+            val padding = 10
+            val boundingBox = (calculateBoundingBox(plist.points) { Pair(it.x, it.y) }).toRect()
+            val strokeArea = Rect(
+                boundingBox.left - padding,
+                boundingBox.top - padding,
+                boundingBox.right + padding,
+                boundingBox.bottom + padding
+            )
+            refreshUi(strokeArea)
+
             val zoneEffected = handleErase(
                 this@DrawCanvas.page,
                 history,
@@ -416,6 +427,7 @@ class DrawCanvas(
 
         // observe forceUpdate, takes rect in screen coordinates
         // given null it will redraw whole page
+        // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
         coroutineScope.launch {
             forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
