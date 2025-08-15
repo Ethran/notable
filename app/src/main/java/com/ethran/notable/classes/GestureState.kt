@@ -228,6 +228,26 @@ data class GestureState(
         return currentDistance / lastDistance - 1f
     }
 
+    /**
+     * Returns the current focal point (center) of the pinch gesture in screen coordinates.
+     */
+    fun getPinchCenter(): Offset? {
+        val src: Collection<Offset> = when {
+            lastPositions.size >= 2 -> lastPositions.values
+            initialPositions.size >= 2 -> initialPositions.values
+            else -> return null
+        }
+        var sumX = 0f
+        var sumY = 0f
+        var count = 0
+        for (p in src) {
+            sumX += p.x
+            sumY += p.y
+            count++
+        }
+        if (count < 2) return null
+        return Offset(sumX / count, sumY / count)
+    }
 
     fun isHolding(): Boolean {
         return if (getElapsedTime() >= HOLD_THRESHOLD_MS && getInputCount() == 1)
