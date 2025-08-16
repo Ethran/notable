@@ -71,7 +71,7 @@ fun selectImagesAndStrokes(
             IntOffset(-pageBounds.left, -pageBounds.top)
         )
     }
-    val startOffset = IntOffset(pageBounds.left, pageBounds.top - page.scroll)
+    val startOffset = IntOffset(pageBounds.left, pageBounds.top) - page.scroll
 
     // set state
     editorState.selectionState.selectedImages = imagesToSelect

@@ -37,9 +37,9 @@ class EditorControlTower(
 
     // returns delta if could not scroll, to be added to next request,
     // this ensures that smooth scroll works reliably even if rendering takes to long
-    fun onSingleFingerVerticalSwipe(delta: Int): Int {
-        if (delta == 0) return 0
-        if (!page.scrollable) return 0
+    fun onSingleFingerVerticalSwipe(delta: IntOffset): IntOffset {
+        if (delta == IntOffset.Zero) return IntOffset.Zero
+        if (!page.scrollable) return IntOffset.Zero
         if (scrollInProgress.isLocked) {
             Log.w(TAG, "Scroll in progress -- skipping")
             return delta
@@ -47,7 +47,7 @@ class EditorControlTower(
 
         scrollJob = scope.launch(Dispatchers.Main.immediate) {
             scrollInProgress.withLock {
-                val scaledDelta = (delta / page.zoomLevel.value).toInt()
+                val scaledDelta = (delta / page.zoomLevel.value)
                 if (state.mode == Mode.Select) {
                     if (state.selectionState.firstPageCut != null) {
                         onOpenPageCut(scaledDelta)
@@ -60,7 +60,7 @@ class EditorControlTower(
             }
             DrawCanvas.refreshUi.emit(Unit)
         }
-        return 0 // All handled
+        return IntOffset.Zero // All handled
     }
 
     fun switchPage(id:String)
@@ -84,8 +84,9 @@ class EditorControlTower(
         }
     }
 
-    private fun onOpenPageCut(offset: Int) {
-        if (offset < 0) return
+    // TODO: add description
+    private fun onOpenPageCut(offset: IntOffset) {
+        if (offset.x < 0 || offset.y <0) return
         val cutLine = state.selectionState.firstPageCut!!
 
         val (_, previousStrokes) = divideStrokesFromCut(page.strokes, cutLine)
@@ -93,8 +94,9 @@ class EditorControlTower(
         // calculate new strokes to add to the page
         val nextStrokes = previousStrokes.map { stroke ->
             stroke.copy(points = stroke.points.map { point ->
-                point.copy(x = point.x, y = point.y + offset)
-            }, top = stroke.top + offset, bottom = stroke.bottom + offset)
+                point.copy(x = point.x + offset.x, y = point.y + offset.y)
+            }, top = stroke.top + offset.y, bottom = stroke.bottom + offset.y,
+            left = stroke.left + offset.x, right = stroke.right + offset.x)
         }
 
         // remove and paste
@@ -113,7 +115,7 @@ class EditorControlTower(
         page.drawAreaScreenCoordinates(strokeBounds(previousStrokes + nextStrokes))
     }
 
-    private suspend fun onPageScroll(dragDelta: Int) {
+    private suspend fun onPageScroll(dragDelta: IntOffset) {
         // scroll is in Page coordinates
         if (GlobalAppSettings.current.simpleRendering)
             page.simpleUpdateScroll(dragDelta)
@@ -180,10 +182,9 @@ class EditorControlTower(
 
         val now = Date()
         val scrollPos = page.scroll
-        val addPageScroll = IntOffset(0, scrollPos).toOffset()
 
         val pastedStrokes = strokes.map {
-            offsetStroke(it, offset = addPageScroll).copy(
+            offsetStroke(it, offset = scrollPos.toOffset()).copy(
                 // change the pasted strokes' ids - it's a copy
                 id = UUID
                     .randomUUID()
@@ -200,7 +201,8 @@ class EditorControlTower(
                 id = UUID
                     .randomUUID()
                     .toString(),
-                y = it.y + scrollPos,
+                x = it.x + scrollPos.x,
+                y = it.y + scrollPos.y,
                 createdAt = now,
                 // set the pageId to the current page
                 pageId = this.page.id

@@ -107,7 +107,7 @@ fun EditorGestureReceiver(
                         if (!view.hasWindowFocus()) return@awaitEachGesture
 
                         val gestureState = GestureState()
-                        var overdueScroll = 0
+                        var overdueScroll = IntOffset.Zero
 
                         // Ignore non-touch input
                         if (down.type != PointerType.Touch) {
@@ -172,7 +172,7 @@ fun EditorGestureReceiver(
                             if (gestureState.gestureMode == GestureMode.Scroll) {
                                 val delta = gestureState.getVerticalDragDelta()
                                 overdueScroll = controlTower.onSingleFingerVerticalSwipe(
-                                    delta = delta + overdueScroll
+                                    delta = IntOffset(overdueScroll.x, overdueScroll.y+delta )
                                 )
                             }
                             if (gestureState.gestureMode == GestureMode.Zoom) {
@@ -317,7 +317,7 @@ fun EditorGestureReceiver(
                             && abs(verticalDrag) > SWIPE_THRESHOLD
                         ) {
                             log.d("Discrete scrolling, verticalDrag: $verticalDrag")
-                            controlTower.onSingleFingerVerticalSwipe(verticalDrag)
+                            controlTower.onSingleFingerVerticalSwipe(IntOffset(0,verticalDrag))
                         }
                     } catch (e: CancellationException) {
                         log.w("Gesture coroutine canceled", e)

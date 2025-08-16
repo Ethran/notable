@@ -15,7 +15,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.db.Image
@@ -673,8 +672,8 @@ class DrawCanvas(
             val imageHeight = softwareBitmap.height
 
             // Calculate the center position for the image relative to the page dimensions
-            val centerX = (page.viewWidth - imageWidth) / 2
-            val centerY = (page.viewHeight - imageHeight) / 2 + page.scroll
+            val centerX = (page.viewWidth - imageWidth) / 2 + page.scroll.x
+            val centerY = (page.viewHeight - imageHeight) / 2 + page.scroll.y
             val imageToSave = Image(
                 x = centerX,
                 y = centerY,
@@ -684,7 +683,7 @@ class DrawCanvas(
                 pageId = page.id
             )
             drawImage(
-                context, page.windowedCanvas, imageToSave, IntOffset(0, -page.scroll)
+                context, page.windowedCanvas, imageToSave, -page.scroll
             )
             selectImage(coroutineScope, page, state, imageToSave)
             // image will be added to database when released, the same as with paste element.
@@ -711,7 +710,7 @@ class DrawCanvas(
                 log.i("render cut")
                 val path = pointsToPath(cutPoints.map {
                     SimplePointF(
-                        it.x, it.y - page.scroll
+                        it.x - page.scroll.x, it.y - page.scroll.y
                     )
                 })
                 canvas.drawPath(path, selectPaint)

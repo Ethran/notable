@@ -12,6 +12,7 @@ import android.graphics.RectF
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -38,7 +39,7 @@ const val lineHeight = 80
 const val dotSize = 6f
 const val hexVerticalCount = 26
 
-fun drawLinedBg(canvas: Canvas, scroll: Int, scale: Float) {
+fun drawLinedBg(canvas: Canvas, scroll: IntOffset, scale: Float) {
     val height = (canvas.height / scale).toInt()
     val width = (canvas.width / scale).toInt()
 
@@ -53,7 +54,7 @@ fun drawLinedBg(canvas: Canvas, scroll: Int, scale: Float) {
 
     // lines
     for (y in 0..height) {
-        val line = scroll + y
+        val line = scroll.y + y
         if (line % lineHeight == 0) {
             canvas.drawLine(
                 padding.toFloat(), y.toFloat(), (width - padding).toFloat(), y.toFloat(), paint
@@ -62,7 +63,7 @@ fun drawLinedBg(canvas: Canvas, scroll: Int, scale: Float) {
     }
 }
 
-fun drawDottedBg(canvas: Canvas, scroll: Int, scale: Float) {
+fun drawDottedBg(canvas: Canvas, scroll: IntOffset, scale: Float) {
     val height = (canvas.height / scale).toInt()
     val width = (canvas.width / scale).toInt()
     // white bg
@@ -75,8 +76,9 @@ fun drawDottedBg(canvas: Canvas, scroll: Int, scale: Float) {
     }
 
     // dots
+    // TODO: take into account horizontal scroll
     for (y in 0..height) {
-        val line = scroll + y
+        val line = scroll.y + y
         if (line % lineHeight == 0 && line >= padding) {
             for (x in padding..width - padding step lineHeight) {
                 canvas.drawOval(
@@ -92,7 +94,7 @@ fun drawDottedBg(canvas: Canvas, scroll: Int, scale: Float) {
 
 }
 
-fun drawSquaredBg(canvas: Canvas, scroll: Int, scale: Float) {
+fun drawSquaredBg(canvas: Canvas, scroll: IntOffset, scale: Float) {
     val height = (canvas.height / scale).toInt()
     val width = (canvas.width / scale).toInt()
 
@@ -107,14 +109,14 @@ fun drawSquaredBg(canvas: Canvas, scroll: Int, scale: Float) {
 
     // lines
     for (y in 0..height) {
-        val line = scroll + y
+        val line = scroll.y + y
         if (line % lineHeight == 0) {
             canvas.drawLine(
                 padding.toFloat(), y.toFloat(), (width - padding).toFloat(), y.toFloat(), paint
             )
         }
     }
-
+    // TODO: take into account horizontal scroll
     for (x in padding..width - padding step lineHeight) {
         canvas.drawLine(
             x.toFloat(), padding.toFloat(), x.toFloat(), height.toFloat(), paint
@@ -122,7 +124,7 @@ fun drawSquaredBg(canvas: Canvas, scroll: Int, scale: Float) {
     }
 }
 
-fun drawHexedBg(canvas: Canvas, scroll: Int, scale: Float) {
+fun drawHexedBg(canvas: Canvas, scroll: IntOffset, scale: Float) {
     val height = (canvas.height / scale)
     val width = (canvas.width / scale)
 
@@ -147,9 +149,10 @@ fun drawHexedBg(canvas: Canvas, scroll: Int, scale: Float) {
     for (row in 0..rows) {
         val offsetX = if (row % 2 == 0) 0f else hexWidth / 2
 
+        // TODO: Check if it is correct
         for (col in 0..cols) {
-            val x = col * hexWidth + offsetX
-            val y = row * hexHeight * 0.75f - scroll.toFloat().mod(hexHeight * 1.5f)
+            val x = col * hexWidth + offsetX - scroll.x.toFloat().mod(hexWidth * 1.5f)
+            val y = row * hexHeight * 0.75f - scroll.y.toFloat().mod(hexHeight * 1.5f)
             drawHexagon(canvas, x, y, r, paint)
         }
     }
@@ -175,7 +178,7 @@ fun drawBackgroundImages(
     context: Context,
     canvas: Canvas,
     backgroundImage: String,
-    scroll: Int,
+    scroll: IntOffset,
     page: PageView? = null,
     scale: Float = 1.0F,
     repeat: Boolean = false,
@@ -247,7 +250,7 @@ fun drawPdfPage(
     canvas: Canvas,
     pdfUriString: String,
     pageNumber: Int,
-    scroll: Int,
+    scroll: IntOffset,
     page: PageView? = null,
     scale: Float = 1.0f
 ) {
@@ -277,7 +280,7 @@ fun drawPdfPage(
 fun drawBitmapToCanvas(
     canvas: Canvas,
     imageBitmap: Bitmap,
-    scroll: Int,
+    scroll: IntOffset,
     scale: Float,
     repeat: Boolean
 ) {
@@ -293,22 +296,24 @@ fun drawBitmapToCanvas(
     val scaleFactor = widthOnCanvas.toFloat() / imageWidth
     val scaledHeight = (imageHeight * scaleFactor).toInt()
 
-
+    //TODO: check if it is correct
     // Draw the first image, considering the scroll offset
-    val srcTop = (scroll / scaleFactor).toInt() % imageHeight
-    val rectOnImage = Rect(0, srcTop.coerceAtLeast(0), imageWidth, imageHeight)
+    val srcTop = (scroll / scaleFactor) % imageHeight
+    val rectOnImage =
+        Rect(srcTop.x.coerceAtLeast(0), srcTop.y.coerceAtLeast(0), imageWidth, imageHeight)
     val rectOnCanvas = Rect(
         0,
         0,
         widthOnCanvas,
-        ((imageHeight - srcTop) * scaleFactor).toInt()
+        ((imageHeight - srcTop.y) * scaleFactor).toInt()
     )
 
     var filledHeight = 0
-    if (repeat || scroll < canvasHeight) {
+    if (repeat || scroll.y < canvasHeight) {
         canvas.drawBitmap(imageBitmap, rectOnImage, rectOnCanvas, null)
         filledHeight = rectOnCanvas.bottom
     }
+    // TODO: Should we also repeat horizontally?
 
 //    if (widthOnCanvas < canvasWidth / scale) {
 //        Log.e(
@@ -357,7 +362,7 @@ fun drawBg(
     canvas: Canvas,
     backgroundType: BackgroundType,
     background: String,
-    scroll: Int = 0,
+    scroll: IntOffset = IntOffset(0, 0),
     scale: Float = 1f, // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
     page: PageView? = null,
     clipRect: Rect? = null // before the scaling
@@ -376,7 +381,7 @@ fun drawBg(
         }
 
         is BackgroundType.CoverImage -> {
-            drawBackgroundImages(context, canvas, background, 0, page, scale)
+            drawBackgroundImages(context, canvas, background, IntOffset.Zero, page, scale)
             drawTitleBox(canvas)
         }
         is BackgroundType.AutoPdf -> {
@@ -412,6 +417,7 @@ fun drawBg(
     }
 }
 
+// TODO: make sure it respects horizontal scroll
 fun drawMargin(canvas: Canvas, scale: Float) {
     // in landscape orientation add margin to indicate what will be visible in vertical orientation.
     if (SCREEN_WIDTH > SCREEN_HEIGHT || scale < 1.0f) {
@@ -431,7 +437,7 @@ fun drawMargin(canvas: Canvas, scale: Float) {
     }
 }
 
-fun drawPaginationLine(canvas: Canvas, scroll: Int, scale: Float) {
+fun drawPaginationLine(canvas: Canvas, scroll: IntOffset, scale: Float) {
     val paint = Paint().apply {
         color = Color.RED
         strokeWidth = 4f
@@ -451,10 +457,10 @@ fun drawPaginationLine(canvas: Canvas, scroll: Int, scale: Float) {
 
     // Convert scroll position to canvas coordinates
     // Calculate current page number (1-based)
-    val currentPage = floor(scroll / pageHeight).toInt() + 1
+    val currentPage = floor(scroll.y / pageHeight).toInt() + 1
 
     // Calculate position of first page break
-    var yPos = (currentPage * pageHeight) - scroll
+    var yPos = (currentPage * pageHeight) - scroll.y
 
     var pageNum = currentPage
     while (yPos < canvas.height/scale) {
@@ -469,6 +475,7 @@ fun drawPaginationLine(canvas: Canvas, scroll: Int, scale: Float) {
             )
 
             // Draw page number label (offset slightly below the line)
+            //TODO: label will not respect horizontal scroll -- fix it.
             canvas.drawText(
                 "Subpage ${pageNum + 1}",
                 20f,

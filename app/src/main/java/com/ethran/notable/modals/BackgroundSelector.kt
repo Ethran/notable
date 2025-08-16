@@ -68,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -357,10 +358,10 @@ fun ShowNativeOption(
 
                 when (key) {
                     "blank" -> canvas.drawColor(Color.White.toArgb())
-                    "dotted" -> drawDottedBg(canvas, 0, 1f)
-                    "lined" -> drawLinedBg(canvas, 0, 1f)
-                    "squared" -> drawSquaredBg(canvas, 0, 1f)
-                    "hexed" -> drawHexedBg(canvas, 0, 0.4f)
+                    "dotted" -> drawDottedBg(canvas, IntOffset.Zero, 1f)
+                    "lined" -> drawLinedBg(canvas, IntOffset.Zero, 1f)
+                    "squared" -> drawSquaredBg(canvas, IntOffset.Zero, 1f)
+                    "hexed" -> drawHexedBg(canvas, IntOffset.Zero, 0.4f)
                 }
 
                 FileOutputStream(file).use { out ->

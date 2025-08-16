@@ -87,7 +87,7 @@ fun PdfDocument.writePage(context: Context, number: Int, repo: PageRepository, i
                 page,
                 strokes,
                 images,
-                currentTop,
+                IntOffset(0, currentTop),
                 scaleFactor
             )
             finishPage(documentPage)
@@ -96,7 +96,7 @@ fun PdfDocument.writePage(context: Context, number: Int, repo: PageRepository, i
     } else {
         val documentPage =
             startPage(PdfDocument.PageInfo.Builder(A4_WIDTH, pageHeight, number).create())
-        drawPageContent(context, documentPage.canvas, page, strokes, images, 0, scaleFactor)
+        drawPageContent(context, documentPage.canvas, page, strokes, images, IntOffset.Zero, scaleFactor)
         finishPage(documentPage)
     }
 }
@@ -107,11 +107,11 @@ private fun drawPageContent(
     page: Page,
     strokes: List<Stroke>,
     images: List<Image>,
-    scroll: Int,
+    scroll: IntOffset,
     scaleFactor: Float
 ) {
     canvas.scale(scaleFactor, scaleFactor)
-    val scaledScroll = (scroll / scaleFactor).toInt()
+    val scaledScroll = scroll / scaleFactor
     drawBg(
         context,
         canvas,
@@ -122,11 +122,11 @@ private fun drawPageContent(
     )
 
     for (image in images) {
-        drawImage(context, canvas, image, IntOffset(0, -scaledScroll))
+        drawImage(context, canvas, image, -scaledScroll)
     }
 
     for (stroke in strokes) {
-        drawStroke(canvas, stroke, IntOffset(0, -scaledScroll))
+        drawStroke(canvas, stroke, -scaledScroll)
     }
 }
 

@@ -221,15 +221,15 @@ class SelectionState {
         return operationList
     }
 
-    fun selectionToClipboard(scrollPos: Int, context: Context): ClipboardContent {
-        val removePageScroll = IntOffset(0, -scrollPos).toOffset()
+    fun selectionToClipboard(scrollPos: IntOffset, context: Context): ClipboardContent {
+        val removePageScroll = -scrollPos.toOffset()
 
         val strokes = selectedStrokes?.map {
             offsetStroke(it, offset = removePageScroll)
         }
 
         val images = selectedImages?.map {
-            it.copy(y = it.y - scrollPos)
+            it.copy(x = it.x - scrollPos.x,y = it.y - scrollPos.y)
         }
 
         selectedBitmap?.let {

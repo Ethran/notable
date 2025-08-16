@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.toRect
 import androidx.core.graphics.toRegion
 import com.ethran.notable.APP_SETTINGS_KEY
@@ -187,26 +188,26 @@ fun scaleRect(rect: Rect, scale: Float): Rect {
     )
 }
 
-fun toPageCoordinates(rect: Rect, scale: Float, scroll: Int): Rect {
+fun toPageCoordinates(rect: Rect, scale: Float, scroll: IntOffset): Rect {
     return Rect(
-        (rect.left.toFloat() / scale).toInt(),
-        ((rect.top.toFloat() / scale) + scroll).toInt(),
-        (rect.right.toFloat() / scale).toInt(),
-        ((rect.bottom.toFloat() / scale) + scroll).toInt()
+        (rect.left.toFloat() / scale).toInt() + scroll.x,
+        (rect.top.toFloat() / scale).toInt() + scroll.y,
+        (rect.right.toFloat() / scale).toInt() + scroll.x,
+        (rect.bottom.toFloat() / scale).toInt() + scroll.y
     )
 }
 
-fun copyInput(touchPoints: List<TouchPoint>, scroll: Int, scale: Float): List<StrokePoint> {
+fun copyInput(touchPoints: List<TouchPoint>, scroll: IntOffset, scale: Float): List<StrokePoint> {
     val points = touchPoints.map {
         it.toStrokePoint(scroll, scale)
     }
     return points
 }
 
-fun TouchPoint.toStrokePoint(scroll: Int, scale: Float): StrokePoint {
+fun TouchPoint.toStrokePoint(scroll: IntOffset, scale: Float): StrokePoint {
     return StrokePoint(
-        x = x / scale,
-        y = (y / scale + scroll),
+        x = x / scale + scroll.x,
+        y = y / scale + scroll.y,
         pressure = pressure,
         size = size,
         tiltX = tiltX,
@@ -216,13 +217,13 @@ fun TouchPoint.toStrokePoint(scroll: Int, scale: Float): StrokePoint {
 }
 fun copyInputToSimplePointF(
     touchPoints: List<TouchPoint>,
-    scroll: Int,
+    scroll: IntOffset,
     scale: Float
 ): List<SimplePointF> {
     val points = touchPoints.map {
         SimplePointF(
-            x = it.x / scale,
-            y = (it.y / scale + scroll),
+            x = it.x / scale + scroll.x,
+            y = (it.y / scale + scroll.y),
         )
     }
     return points
@@ -650,7 +651,7 @@ fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
 
 fun getModifiedStrokeEndpoints(
     points: List<TouchPoint>,
-    scroll: Int, // Replace with your actual type
+    scroll: IntOffset, // Replace with your actual type
     zoomLevel: Float
 ): Pair<StrokePoint, StrokePoint> {
     if (points.isEmpty()) throw IllegalArgumentException("points list is empty")

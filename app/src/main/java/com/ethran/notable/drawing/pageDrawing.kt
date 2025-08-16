@@ -157,7 +157,7 @@ fun drawOnCanvasFromPage(
                     val bounds = imageBounds(image)
                     // if stroke is not inside page section
                     if (!bounds.toRect().intersect(pageArea)) return@forEach
-                    drawImage(page.context, this, image, IntOffset(0, -page.scroll))
+                    drawImage(page.context, this, image, -page.scroll)
 
                 }
             } catch (e: Exception) {
@@ -178,9 +178,7 @@ fun drawOnCanvasFromPage(
                     // if stroke is not inside page section
                     if (!bounds.toRect().intersect(pageArea)) return@forEach
 
-                    drawStroke(
-                        this, stroke, IntOffset(0, -page.scroll)
-                    )
+                    drawStroke(this, stroke, -page.scroll)
                 }
             } catch (e: Exception) {
                 pageDrawingLog.e("PageView.kt: Drawing strokes failed: ${e.message}", e)
