@@ -676,6 +676,8 @@ class PageView(
      * - Scales the snapshot around the given center (screen coords).
      * - Redraws only the uncovered bands when zooming out.
      * - When zooming in, keeps the upscaled snapshot (even if low-res) for now.
+     * - Updates scroll (IntOffset) so that the top-left of the view is correct after zoom,
+     *   keeping the content under the pinch center stationary on screen.
      */
     suspend fun updateZoom(scaleDelta: Float, center: Offset?) {
         log.d("Zoom(delta): $scaleDelta. Center: $center")
@@ -728,6 +730,23 @@ class PageView(
         val contentRight = ceil(dstRect.right).toInt()
         val contentBottom = ceil(dstRect.bottom).toInt()
 
+        // Convert that screen offset to page coords using the NEW zoom.
+// This matches the pivot-in-place math: deltaScroll = -left/newZoom, -top/newZoom
+        val deltaScrollPage = IntOffset(
+            (-contentLeft / newZoom).toInt(),
+            (-contentTop / newZoom).toInt()
+        )
+
+// Apply and clamp in page coordinates for the NEW zoom
+        val visiblePageW = (viewWidth / newZoom).toInt().coerceAtLeast(1)
+        val visiblePageH = (viewHeight / newZoom).toInt().coerceAtLeast(1)
+        val maxScrollX = max(0, width - visiblePageW)
+        val maxScrollY = max(0, height - visiblePageH)
+
+        val newScrollX = (scroll.x + deltaScrollPage.x).coerceIn(0, maxScrollX)
+        val newScrollY = (scroll.y + deltaScrollPage.y).coerceIn(0, maxScrollY)
+        scroll = IntOffset(newScrollX, newScrollY)
+
         // Overlap to hide rounding seams
         val overlap = 2
 
@@ -777,7 +796,13 @@ class PageView(
         persistBitmapDebounced()
         saveToPersistLayer()
         PageDataManager.cacheBitmap(id, windowedBitmap)
-        log.i("Zoom updated using snapshot scaling. oldZoom=$oldZoom newZoom=$newZoom scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) bounds=[$contentLeft,$contentTop,$contentRight,$contentBottom)]")
+        log.i(
+            "Zoom updated using snapshot scaling. " +
+                    "oldZoom=$oldZoom newZoom=$newZoom " +
+                    "scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) " +
+                    "bounds=[$contentLeft,$contentTop,$contentRight,$contentBottom)] " +
+                    "scrollDelta=$deltaScrollPage newScroll=$scroll"
+        )
     }
 
 

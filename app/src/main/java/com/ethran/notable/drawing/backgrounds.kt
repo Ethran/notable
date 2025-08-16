@@ -296,7 +296,7 @@ fun drawBitmapToCanvas(
     val scaleFactor = widthOnCanvas.toFloat() / imageWidth
     val scaledHeight = (imageHeight * scaleFactor).toInt()
 
-    //TODO: check if it is correct
+    // TODO: It's not working correctly -- fix it.
     // Draw the first image, considering the scroll offset
     val srcTop = (scroll / scaleFactor) % imageHeight
     val rectOnImage =

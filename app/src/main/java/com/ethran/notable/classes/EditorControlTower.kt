@@ -78,7 +78,7 @@ class EditorControlTower(
                 if (GlobalAppSettings.current.simpleRendering)
                     page.simpleUpdateZoom(delta)
                 else
-                    page.updateZoom(delta, Offset(0f,0f))
+                    page.updateZoom(delta, center)
             }
             DrawCanvas.refreshUi.emit(Unit)
         }
