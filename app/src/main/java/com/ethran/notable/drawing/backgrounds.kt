@@ -140,19 +140,17 @@ fun drawHexedBg(canvas: Canvas, scroll: IntOffset, scale: Float) {
     }
 
     // https://www.redblobgames.com/grids/hexagons/#spacing
-    val r = max(width, height) / (hexVerticalCount * 1.5f)
+    val r = max(width, height) / (hexVerticalCount * 1.5f)*scale
     val hexHeight = r * 2
     val hexWidth = r * sqrt(3f)
 
     val rows = (height / hexVerticalCount).toInt()
-    val cols = (width / hexWidth).toInt()
+    val cols = (width / hexWidth).toInt()+1
 
     for (row in 0..rows) {
         val offsetX = if (row % 2 == 0) 0f else hexWidth / 2
-
-        // TODO: Check if it is correct
         for (col in 0..cols) {
-            val x = col * hexWidth + offsetX - scroll.x.toFloat().mod(hexWidth * 1.5f)
+            val x = col * hexWidth + offsetX - scroll.x.toFloat().mod(hexWidth)- hexWidth
             val y = row * hexHeight * 0.75f - scroll.y.toFloat().mod(hexHeight * 1.5f)
             drawHexagon(canvas, x, y, r, paint)
         }
