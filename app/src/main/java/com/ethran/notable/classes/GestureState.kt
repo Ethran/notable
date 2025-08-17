@@ -32,7 +32,8 @@ enum class GestureMode {
     Selection,
     Scroll,
     Zoom,
-    Normal
+    Normal,
+    Drag
 }
 
 
@@ -48,7 +49,7 @@ data class GestureState(
         set(value) {
             if (field != value) {
                 when (value) {
-                    GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection -> {
+                    GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection, GestureMode.Drag -> {
                         log.d("Entered ${value.name} gesture mode")
                         setAnimationMode(true)
                     }
@@ -182,6 +183,20 @@ data class GestureState(
         return delta
     }
 
+    fun getTotalDragDelta(): IntOffset {
+        if (lastPositions.isEmpty()) return IntOffset.Zero
+        val currentPosition = lastPositions.values.toList()
+        if (lastCheckForMovementPosition.isNullOrEmpty()) {
+            lastCheckForMovementPosition = currentPosition
+            return IntOffset.Zero
+        }
+        val initial = lastCheckForMovementPosition?.get(0) ?: return IntOffset.Zero
+        val last = currentPosition[0]
+        val delta = last - initial
+        lastCheckForMovementPosition = currentPosition
+        return IntOffset(delta.x.toInt(), delta.y.toInt())
+    }
+
     private fun calculateDistance(point1: Offset, point2: Offset): Float {
         val dx = point1.x - point2.x
         val dy = point1.y - point2.y
@@ -249,7 +264,7 @@ data class GestureState(
         return Offset(sumX / count, sumY / count)
     }
 
-    fun isHolding(): Boolean {
+    fun isHoldingOneFinger(): Boolean {
         return if (getElapsedTime() >= HOLD_THRESHOLD_MS && getInputCount() == 1)
             if (calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE)
                 true
@@ -259,18 +274,35 @@ data class GestureState(
             false
     }
 
+    fun checkHoldingTwoFingers(): Boolean {
+        return if (getElapsedTime() >= HOLD_THRESHOLD_MS && gestureMode == GestureMode.Normal)
+            if (calculateTotalDelta() < 2 * TAP_MOVEMENT_TOLERANCE && getInputCount() == 2) {
+                gestureMode = GestureMode.Drag
+                true
+            } else
+                false
+        else
+            false
+    }
+
     fun checkSmoothScrolling(): Boolean {
-        return if (GlobalAppSettings.current.smoothScroll && abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && getInputCount() == 1) {
+        return if (GlobalAppSettings.current.smoothScroll && gestureMode == GestureMode.Normal) {
+            if (abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && getInputCount() == 1) {
             gestureMode = GestureMode.Scroll
-            true
+                true
+            } else
+                false
         } else
             false
     }
 
     fun checkContinuousZoom(): Boolean {
-        return if (GlobalAppSettings.current.continuousZoom && abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS && getInputCount() == 2) {
-            gestureMode = GestureMode.Zoom
-            true
+        return if (GlobalAppSettings.current.continuousZoom && gestureMode == GestureMode.Normal) {
+            if (abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS && getInputCount() == 2) {
+                gestureMode = GestureMode.Zoom
+                true
+            } else
+                false
         } else
             false
     }

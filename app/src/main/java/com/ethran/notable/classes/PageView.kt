@@ -547,6 +547,7 @@ class PageView(
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
         val movement = deltaInPage * zoomLevel.value
+        if(movement.x == 0 && movement.y == 0) return
 
         // Shift the existing bitmap content
         val shiftedBitmap =
@@ -562,11 +563,25 @@ class PageView(
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
         //add 1 of overlap, to eliminate rounding errors.
-        val redrawRect =
-            if (deltaInPage.y > 0)
-                Rect(0, SCREEN_HEIGHT - movement.y - 5, SCREEN_WIDTH, SCREEN_HEIGHT)
-            else
-                Rect(0, 0, SCREEN_WIDTH, -movement.y + 1)
+        if(movement.y != 0) {
+            val redrawRect =
+                if (movement.y > 0)
+                    Rect(0, SCREEN_HEIGHT - movement.y - 1, SCREEN_WIDTH, SCREEN_HEIGHT)
+                else
+                    Rect(0, 0, SCREEN_WIDTH, -movement.y + 1)
+            drawAreaScreenCoordinates(redrawRect)
+        }
+        // TODO: remove small overlap between the redrawn areas.
+        if (movement.x != 0) {
+            val redrawRect =
+                if (movement.x > 0)
+                    Rect(SCREEN_WIDTH - movement.x -1, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+                else
+                    Rect(0, 0, -movement.x +1, SCREEN_HEIGHT)
+
+            log.d("Redrawing area: $redrawRect, movment: $movement")
+            drawAreaScreenCoordinates(redrawRect)
+        }
 
         // TODO: handle horizontal scroll
 
@@ -574,7 +589,6 @@ class PageView(
 //            removeScroll(toPageCoordinates(redrawRect)),
 //            Paint().apply { color = Color.RED })
 
-        drawAreaScreenCoordinates(redrawRect)
         persistBitmapDebounced()
         saveToPersistLayer()
     }

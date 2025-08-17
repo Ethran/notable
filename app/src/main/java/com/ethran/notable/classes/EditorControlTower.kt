@@ -37,7 +37,7 @@ class EditorControlTower(
 
     // returns delta if could not scroll, to be added to next request,
     // this ensures that smooth scroll works reliably even if rendering takes to long
-    fun onSingleFingerVerticalSwipe(delta: IntOffset): IntOffset {
+    fun processScroll(delta: IntOffset): IntOffset {
         if (delta == IntOffset.Zero) return IntOffset.Zero
         if (!page.scrollable) return IntOffset.Zero
         if (scrollInProgress.isLocked) {
