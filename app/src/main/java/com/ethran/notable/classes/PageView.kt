@@ -723,7 +723,6 @@ class PageView(
         val matrix = Matrix().apply {
             postScale(scaleFactor, scaleFactor, pivotX, pivotY)
         }
-        scaledCanvas.drawBitmap(oldBitmap, matrix, null)
 
         // Swap in the new bitmap and update zoom on the windowed canvas
         windowedBitmap = scaledBitmap
@@ -738,6 +737,17 @@ class PageView(
         val dstRect = RectF()
         matrix.mapRect(dstRect, srcRect)
 
+
+        //make sure that we won't go outside canvas.
+        val dx = ( scroll.x-dstRect.left).coerceAtMost(0f)
+        val dy = (scroll.y- dstRect.top).coerceAtMost(0f)
+        if (dx != 0f || dy != 0f) {
+            matrix.postTranslate(dx, dy)
+            matrix.mapRect(dstRect, srcRect)
+        }
+        scaledCanvas.drawBitmap(oldBitmap, matrix, null)
+
+
         // Convert to ints with conservative rounding to avoid gaps
         val contentLeft = floor(dstRect.left).toInt()
         val contentTop = floor(dstRect.top).toInt()
@@ -751,14 +761,9 @@ class PageView(
             (-contentTop / newZoom).toInt()
         )
 
-// Apply and clamp in page coordinates for the NEW zoom
-        val visiblePageW = (viewWidth / newZoom).toInt().coerceAtLeast(1)
-        val visiblePageH = (viewHeight / newZoom).toInt().coerceAtLeast(1)
-        val maxScrollX = max(0, width - visiblePageW)
-        val maxScrollY = max(0, height - visiblePageH)
 
-        val newScrollX = (scroll.x + deltaScrollPage.x).coerceIn(0, maxScrollX)
-        val newScrollY = (scroll.y + deltaScrollPage.y).coerceIn(0, maxScrollY)
+        val newScrollX = (scroll.x + deltaScrollPage.x).coerceAtLeast(0)
+        val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0)
         scroll = IntOffset(newScrollX, newScrollY)
 
         // Overlap to hide rounding seams
