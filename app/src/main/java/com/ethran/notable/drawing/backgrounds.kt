@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.res.imageResource
@@ -296,15 +297,15 @@ fun drawBitmapToCanvas(
     val scaleFactor = widthOnCanvas.toFloat() / imageWidth
     val scaledHeight = (imageHeight * scaleFactor).toInt()
 
-    // TODO: It's not working correctly -- fix it.
+    // TODO: It's working, but its not nice -- do it in better style.
     // Draw the first image, considering the scroll offset
-    val srcTop = (scroll / scaleFactor) % imageHeight
+    val srcTop = Offset((scroll.x / scaleFactor).coerceAtLeast(0f), ((scroll.y / scaleFactor) % imageHeight).coerceAtLeast(0f))
     val rectOnImage =
-        Rect(srcTop.x.coerceAtLeast(0), srcTop.y.coerceAtLeast(0), imageWidth, imageHeight)
+        Rect(0, srcTop.y.toInt(), imageWidth, imageHeight)
     val rectOnCanvas = Rect(
+        -scroll.x,
         0,
-        0,
-        widthOnCanvas,
+        widthOnCanvas-scroll.x,
         ((imageHeight - srcTop.y) * scaleFactor).toInt()
     )
 
@@ -315,45 +316,20 @@ fun drawBitmapToCanvas(
     }
     // TODO: Should we also repeat horizontally?
 
-//    if (widthOnCanvas < canvasWidth / scale) {
-//        Log.e(
-//            TAG,
-//            "left: $filledHeight, top: 0, right: $canvasWidth, bottom: $canvasHeight"
-//        )
-//        canvas.drawRect(
-//            widthOnCanvas.toFloat(),
-//            0f,
-//            canvasWidth.toFloat(),
-//            canvasHeight.toFloat(),
-//            paint
-//        )
-//    }
-
     if (repeat) {
         var currentTop = filledHeight
         val srcRect = Rect(0, 0, imageWidth, imageHeight)
         while (currentTop < canvasHeight / scale) {
 
-            val dstRect = RectF(
-                0f,
-                currentTop / scale,
-                widthOnCanvas / scale,
-                (currentTop + scaledHeight) / scale
+            val dstRect = Rect(
+                -scroll.x,
+                currentTop ,
+                widthOnCanvas -scroll.x,
+                currentTop + scaledHeight
             )
             canvas.drawBitmap(imageBitmap, srcRect, dstRect, null)
             currentTop += scaledHeight
         }
-    } else {
-//        // Fill the remaining area with white if necessary
-//        if (filledHeight < canvasHeight / scale) {
-//            canvas.drawRect(
-//                0f,
-//                filledHeight / scale,
-//                canvasWidth / scale,
-//                canvasHeight / scale,
-//                paint
-//            )
-//        }
     }
 }
 
