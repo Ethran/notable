@@ -108,19 +108,17 @@ fun drawSquaredBg(canvas: Canvas, scroll: IntOffset, scale: Float) {
         this.strokeWidth = 1f
     }
 
-    // lines
-    for (y in 0..height) {
-        val line = scroll.y + y
-        if (line % lineHeight == 0) {
-            canvas.drawLine(
-                padding.toFloat(), y.toFloat(), (width - padding).toFloat(), y.toFloat(), paint
-            )
-        }
+    val offset = IntOffset(lineHeight,lineHeight)-scroll%lineHeight
+
+    for (y in 0..height  step lineHeight) {
+        canvas.drawLine(
+            padding.toFloat(), y.toFloat()+offset.y, (width - padding).toFloat(), y.toFloat()+offset.y, paint
+        )
     }
-    // TODO: take into account horizontal scroll
+
     for (x in padding..width - padding step lineHeight) {
         canvas.drawLine(
-            x.toFloat(), padding.toFloat(), x.toFloat(), height.toFloat(), paint
+            x.toFloat()+offset.x, padding.toFloat(), x.toFloat()+offset.x, height.toFloat(), paint
         )
     }
 }
