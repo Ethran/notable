@@ -77,19 +77,17 @@ fun drawDottedBg(canvas: Canvas, scroll: IntOffset, scale: Float) {
     }
 
     // dots
-    // TODO: take into account horizontal scroll
-    for (y in 0..height) {
-        val line = scroll.y + y
-        if (line % lineHeight == 0 && line >= padding) {
-            for (x in padding..width - padding step lineHeight) {
-                canvas.drawOval(
-                    x.toFloat() - dotSize / 2,
-                    y.toFloat() - dotSize / 2,
-                    x.toFloat() + dotSize / 2,
-                    y.toFloat() + dotSize / 2,
-                    paint
-                )
-            }
+    val offset = IntOffset(lineHeight,lineHeight)-scroll%lineHeight
+
+    for (y in 0..height  step lineHeight) {
+        for (x in padding..width - padding step lineHeight) {
+            canvas.drawOval(
+                x.toFloat()+offset.x  - dotSize / 2,
+                y.toFloat() + offset.y  - dotSize / 2,
+                x.toFloat()+offset.x + dotSize / 2,
+                y.toFloat() + offset.y+ dotSize / 2,
+                paint
+            )
         }
     }
 
