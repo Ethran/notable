@@ -3,7 +3,10 @@ package com.ethran.notable.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -57,43 +60,39 @@ fun ScrollIndicator(state: EditorState) {
 /**
  * Horizontal scroll indicator (bottom).
  * Uses page.scroll.x (IntOffset) for the horizontal position.
- *
- * Place this composable in your editor overlay, aligned to the bottom center, e.g.:
- *
- * Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
- *     HorizontalScrollIndicator(context, editorState)
- * }
  */
 @Composable
 fun HorizontalScrollIndicator(state: EditorState) {
-    //TODO: TEST IT!
-    BoxWithConstraints(
-        modifier = Modifier
-            .height(5.dp)
-            .fillMaxWidth()
-    ) {
-        val viewportWidthPx = convertDpToPixel(this.maxWidth, LocalContext.current).toInt()
-        val page = state.pageView
-
-        // Total scrollable width approximation:
-        // page.width is the total content width (page coordinates)
-        // page.scroll.x + viewportWidthPx ensures indicator still shows while near right edge
-        val virtualWidth = max(page.width, page.scroll.x + viewportWidthPx)
-        if (virtualWidth <= viewportWidthPx) return@BoxWithConstraints
-
-        val indicatorSizeDp = (viewportWidthPx / virtualWidth.toFloat()) * this.maxWidth.value
-        val indicatorPositionDp = (page.scroll.x / virtualWidth.toFloat()) * this.maxWidth.value
-
-        if (!state.isToolbarOpen) return@BoxWithConstraints
-
-        Box(
+    Column(Modifier.fillMaxSize()) {
+        Spacer(Modifier.weight(1f))
+        BoxWithConstraints(
             modifier = Modifier
-                .fillMaxHeight()
-                .offset(
-                    x = indicatorPositionDp.dp
-                )
-                .background(Color.Black)
-                .width(indicatorSizeDp.dp)
-        )
+                .height(5.dp)
+                .fillMaxWidth()
+        ) {
+            val viewportWidthPx = convertDpToPixel(this.maxWidth, LocalContext.current).toInt()
+            val page = state.pageView
+
+            // Total scrollable width approximation:
+            // page.width is the total content width (page coordinates)
+            // page.scroll.x + viewportWidthPx ensures indicator still shows while near right edge
+            val virtualWidth = max(page.width, page.scroll.x + viewportWidthPx)
+            if (virtualWidth <= viewportWidthPx) return@BoxWithConstraints
+
+            val indicatorSizeDp = (viewportWidthPx / virtualWidth.toFloat()) * this.maxWidth.value
+            val indicatorPositionDp = (page.scroll.x / virtualWidth.toFloat()) * this.maxWidth.value
+
+            if (!state.isToolbarOpen) return@BoxWithConstraints
+
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .offset(
+                        x = indicatorPositionDp.dp
+                    )
+                    .background(Color.Black)
+                    .width(indicatorSizeDp.dp)
+            )
+        }
     }
 }
