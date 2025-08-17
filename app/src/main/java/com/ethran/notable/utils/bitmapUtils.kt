@@ -98,7 +98,7 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
                 }
 
                 renderer.openPage(pageNumber).use { pdfPage ->
-                    val targetWidth = SCREEN_WIDTH * scale
+                    val targetWidth = SCREEN_WIDTH * (scale.coerceAtMost(2f))
                     val scaleFactor = (targetWidth / pdfPage.width) *3f
 
                     val width = (pdfPage.width * scaleFactor).toInt()
