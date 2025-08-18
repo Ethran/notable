@@ -512,19 +512,7 @@ class PageView(
         scroll =
             Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
 
-        val redrawRect = Rect(
-            0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
-        )
-        val scrolledBitmap = createBitmap(SCREEN_WIDTH, SCREEN_HEIGHT, windowedBitmap.config!!)
-
-        // Swap in the new scrolled bitmap
-        windowedBitmap = scrolledBitmap
-        windowedCanvas.setBitmap(windowedBitmap)
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
-        drawAreaScreenCoordinates(redrawRect)
-        persistBitmapDebounced()
-        saveToPersistLayer()
-        PageDataManager.cacheBitmap(id, windowedBitmap)
+        DrawCanvas.forceUpdate.emit(null)
     }
 
 
@@ -579,26 +567,6 @@ class PageView(
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
         redrawOutsideRect(alreadyDrawnRectAfterShift(movement, SCREEN_WIDTH, SCREEN_HEIGHT), SCREEN_WIDTH, SCREEN_HEIGHT)
-
-//        //add overlap, to eliminate rounding errors.
-//        if (movement.y != 0) {
-//            val redrawRect =
-//                if (movement.y > 0)
-//                    Rect(0, SCREEN_HEIGHT - movement.y - OVERLAP, SCREEN_WIDTH, SCREEN_HEIGHT)
-//                else
-//                    Rect(0, 0, SCREEN_WIDTH, -movement.y + OVERLAP)
-//            drawAreaScreenCoordinates(redrawRect)
-//        }
-//        if (movement.x != 0) {
-//            val redrawRect =
-//                if (movement.x > 0)
-//                    Rect(SCREEN_WIDTH - movement.x - OVERLAP, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-//                else
-//                    Rect(0, 0, -movement.x + OVERLAP, SCREEN_HEIGHT)
-//
-//            log.d("Redrawing area: $redrawRect, movment: $movement")
-//            drawAreaScreenCoordinates(redrawRect)
-//        }
 
         persistBitmapDebounced()
         saveToPersistLayer()
