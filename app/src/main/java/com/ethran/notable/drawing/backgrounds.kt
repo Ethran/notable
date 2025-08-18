@@ -47,8 +47,18 @@ private val defaultPaint = Paint().apply {
     this.color = Color.GRAY
     this.strokeWidth = 1f
 }
+
 // For drawing Hexagons
 private val defaultPaintStroke = defaultPaint.copy().apply { this.style = Paint.Style.STROKE }
+private val marginPaint = Paint().apply {
+    this.color = Color.MAGENTA
+    this.strokeWidth = 2f
+}
+private val paginationLinePaint = Paint().apply {
+    color = Color.RED
+    strokeWidth = 4f
+    pathEffect = DashPathEffect(floatArrayOf(10f, 5f), 0f)
+}
 
 fun drawLinedBg(canvas: Canvas, scroll: Offset, scale: Float) {
     val height = (canvas.height / scale).toInt()
@@ -363,12 +373,7 @@ fun drawBg(
             if (page == null) return
             val pageNumber = page.currentPageNumber
             if (pageNumber < getPdfPageCount(background)) drawPdfPage(
-                canvas,
-                background,
-                pageNumber,
-                scroll,
-                page,
-                scale
+                canvas, background, pageNumber, scroll, page, scale
             )
             else canvas.drawColor(Color.WHITE)
         }
@@ -387,7 +392,7 @@ fun drawBg(
             }
         }
     }
-    drawMargin(canvas, scale)
+    drawMargin(canvas, scroll, scale)
 
     if (GlobalAppSettings.current.visualizePdfPagination) {
         drawPaginationLine(canvas, scroll, scale)
@@ -398,32 +403,18 @@ fun drawBg(
 }
 
 // TODO: make sure it respects horizontal scroll
-fun drawMargin(canvas: Canvas, scale: Float) {
+fun drawMargin(canvas: Canvas, scroll: Offset, scale: Float) {
     // in landscape orientation add margin to indicate what will be visible in vertical orientation.
-    if (SCREEN_WIDTH > SCREEN_HEIGHT || scale < 1.0f) {
-        val paint = Paint().apply {
-            this.color = Color.MAGENTA
-            this.strokeWidth = 2f
-        }
-        val margin = min(SCREEN_HEIGHT, SCREEN_WIDTH)
+    if (SCREEN_WIDTH > SCREEN_HEIGHT || scale < 1.0f || scroll.x > 1) {
+        val margin = min(SCREEN_HEIGHT, SCREEN_WIDTH) - scroll.x
         // Draw vertical line with x= SCREEN_HEIGHT
         canvas.drawLine(
-            margin.toFloat(),
-            padding.toFloat(),
-            margin.toFloat(),
-            (SCREEN_HEIGHT / scale - padding),
-            paint
+            margin, padding.toFloat(), margin, (SCREEN_HEIGHT / scale - padding), marginPaint
         )
     }
 }
 
 fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
-    val paint = Paint().apply {
-        color = Color.RED
-        strokeWidth = 4f
-        pathEffect = DashPathEffect(floatArrayOf(10f, 5f), 0f)
-    }
-
     val textPaint = Paint().apply {
         color = Color.BLACK
         textSize = 24f
@@ -447,13 +438,12 @@ fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
         if (yPos >= 0) { // Only draw visible lines
             val yPosScaled = yPos
             canvas.drawLine(
-                0f, yPosScaled, screenWidth.toFloat(), yPosScaled, paint
+                0f, yPosScaled, screenWidth.toFloat(), yPosScaled, paginationLinePaint
             )
 
             // Draw page number label (offset slightly below the line)
-            //TODO: label will not respect horizontal scroll -- fix it.
             canvas.drawText(
-                "Subpage ${pageNum + 1}", 20f, yPosScaled + 30f, textPaint
+                "Subpage ${pageNum + 1}", 20f - scroll.x, yPosScaled + 30f, textPaint
             )
         } else {
             backgroundsLog.d("Skipping line at $yPos (above visible area)")
