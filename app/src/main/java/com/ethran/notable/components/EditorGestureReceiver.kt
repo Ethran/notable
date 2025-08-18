@@ -212,15 +212,14 @@ fun EditorGestureReceiver(
                                 return@awaitEachGesture
                             }
 
-                            GestureMode.Scroll, GestureMode.Drag -> {
+                            GestureMode.Scroll -> {
                                 gestureState.gestureMode =
                                     GestureMode.Normal // return screen updates to normal.
                                 return@awaitEachGesture
                             }
 
-                            GestureMode.Zoom -> {
-
-                                log.d("Continuous zoom -- final redraw")
+                            GestureMode.Zoom, GestureMode.Drag -> {
+                                log.d("Zoom or drag -- final redraw")
                                 coroutineScope.launch {
                                     // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
                                     DrawCanvas.forceUpdate.emit(null)
