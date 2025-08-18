@@ -102,6 +102,8 @@ Notable features intuitive gestures controls within Editor's Mode, to optimize t
 * **Swipe left or right:** Show or hide the toolbar.
 * **Single tap:** Switch between writing modes and eraser modes.
 * **Pinch**: Zoom in and out.
+* **Hold and drag:** move canvas.
+
 
 #### 🔲 Selection
 * **Drag:** Move the selected writing around.
@@ -140,7 +142,7 @@ Features I’d like to implement in the future (some might take a while — or a
   - [ ] Automatic creation of tag descriptions  
   - [ ] Shape recognition  
 
-- [ ] Moving page horizontally -- it would be nice to write on margins.
+- [x] Moving page horizontally -- it would be nice to write on margins.
 
 - [ ] Better selection tools  
   - [ ] Stroke editing: color, size, etc.  
@@ -151,7 +153,7 @@ Features I’d like to implement in the future (some might take a while — or a
 
 - [ ] More dynamic page and notebook movement. Currently, pages can only be moved left/right — add drag-and-drop support
 
-- [ ] Custom drawing tools, might not be possible.
+- [!] Custom drawing tools: not possible.
 
 
 ---
