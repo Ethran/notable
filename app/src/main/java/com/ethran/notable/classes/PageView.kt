@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toRect
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.classes.PageDataManager.collectAndPersistBitmapsBatch
@@ -44,7 +45,10 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.system.measureTimeMillis
+
+const val OVERLAP = 2
 
 class PageView(
     val context: Context,
@@ -523,6 +527,21 @@ class PageView(
         PageDataManager.cacheBitmap(id, windowedBitmap)
     }
 
+
+    fun alreadyDrawnRectAfterShift(
+        movement: IntOffset,
+        screenW: Int,
+        screenH: Int
+    ): Rect {
+        val dx = -movement.x
+        val dy = -movement.y
+        val left = max(0, dx)
+        val top = max(0, dy)
+        val right = min(screenW, dx + screenW)
+        val bottom = min(screenH, dy + screenH)
+        return Rect(left, top, right, bottom)
+    }
+
     suspend fun updateScroll(dragDelta: Offset) {
 //        log.d("Update scroll, dragDelta: $dragDelta, scroll: $scroll, zoomLevel.value: $zoomLevel.value")
         // drag delta is in screen coordinates,
@@ -555,37 +574,31 @@ class PageView(
         shiftedCanvas.drawBitmap(windowedBitmap, -movement.x.toFloat(), -movement.y.toFloat(), null)
 
         // Swap in the shifted bitmap
-//        windowedBitmap.recycle() // Recycle old bitmap
         windowedBitmap = shiftedBitmap
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
-        //add 1 of overlap, to eliminate rounding errors.
-        if (movement.y != 0) {
-            val redrawRect =
-                if (movement.y > 0)
-                    Rect(0, SCREEN_HEIGHT - movement.y - 1, SCREEN_WIDTH, SCREEN_HEIGHT)
-                else
-                    Rect(0, 0, SCREEN_WIDTH, -movement.y + 1)
-            drawAreaScreenCoordinates(redrawRect)
-        }
-        // TODO: remove small overlap between the redrawn areas.
-        if (movement.x != 0) {
-            val redrawRect =
-                if (movement.x > 0)
-                    Rect(SCREEN_WIDTH - movement.x - 1, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-                else
-                    Rect(0, 0, -movement.x + 1, SCREEN_HEIGHT)
+        redrawOutsideRect(alreadyDrawnRectAfterShift(movement, SCREEN_WIDTH, SCREEN_HEIGHT), SCREEN_WIDTH, SCREEN_HEIGHT)
 
-            log.d("Redrawing area: $redrawRect, movment: $movement")
-            drawAreaScreenCoordinates(redrawRect)
-        }
-
-        // TODO: handle horizontal scroll
-
-//        windowedCanvas.drawRect(
-//            removeScroll(toPageCoordinates(redrawRect)),
-//            Paint().apply { color = Color.RED })
+//        //add overlap, to eliminate rounding errors.
+//        if (movement.y != 0) {
+//            val redrawRect =
+//                if (movement.y > 0)
+//                    Rect(0, SCREEN_HEIGHT - movement.y - OVERLAP, SCREEN_WIDTH, SCREEN_HEIGHT)
+//                else
+//                    Rect(0, 0, SCREEN_WIDTH, -movement.y + OVERLAP)
+//            drawAreaScreenCoordinates(redrawRect)
+//        }
+//        if (movement.x != 0) {
+//            val redrawRect =
+//                if (movement.x > 0)
+//                    Rect(SCREEN_WIDTH - movement.x - OVERLAP, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+//                else
+//                    Rect(0, 0, -movement.x + OVERLAP, SCREEN_HEIGHT)
+//
+//            log.d("Redrawing area: $redrawRect, movment: $movement")
+//            drawAreaScreenCoordinates(redrawRect)
+//        }
 
         persistBitmapDebounced()
         saveToPersistLayer()
@@ -650,8 +663,7 @@ class PageView(
         val zoomedBitmap = createBitmap(scaledWidth, scaledHeight, windowedBitmap.config!!)
 
         // Swap in the new zoomed bitmap
-//        windowedBitmap.recycle()
-// It causes race condition with init from persistent layer
+//        windowedBitmap.recycle() -- It causes race condition with init from persistent layer
         windowedBitmap = zoomedBitmap
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
@@ -753,51 +765,11 @@ class PageView(
         val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
         scroll = Offset(newScrollX, newScrollY)
 
-        // Overlap to hide rounding seams
-        val overlap = 2
 
-        if (scaleFactor < 1f) {
-            // Uncovered top band
-            if (dstRect.top > 0) {
-                val r = Rect(
-                    0,
-                    0,
-                    screenW,
-                    (dstRect.top.toInt() + overlap).coerceAtMost(screenH)
-                )
-                if (!r.isEmpty) drawAreaScreenCoordinates(r)
-            }
-            // Uncovered bottom band
-            if (dstRect.bottom < screenH) {
-                val r = Rect(
-                    0,
-                    (dstRect.bottom.toInt() - overlap).coerceAtLeast(0),
-                    screenW,
-                    screenH
-                )
-                if (!r.isEmpty) drawAreaScreenCoordinates(r)
-            }
-            // Uncovered left band
-            if (dstRect.left > 0) {
-                val r = Rect(
-                    0,
-                    (dstRect.top.toInt() - overlap).coerceAtLeast(0),
-                    (dstRect.left.toInt() + overlap).coerceAtMost(screenW),
-                    (dstRect.bottom.toInt() + overlap).coerceAtMost(screenH)
-                )
-                if (!r.isEmpty) drawAreaScreenCoordinates(r)
-            }
-            // Uncovered right band
-            if (dstRect.right < screenW) {
-                val r = Rect(
-                    (dstRect.right.toInt() - overlap).coerceAtLeast(0),
-                    (dstRect.top.toInt() - overlap).coerceAtLeast(0),
-                    screenW,
-                    (dstRect.bottom.toInt() + overlap).coerceAtMost(screenH)
-                )
-                if (!r.isEmpty) drawAreaScreenCoordinates(r)
-            }
-        } // else: zooming in — keep upscaled snapshot per requirements
+
+        if (scaleFactor < 1f)
+            redrawOutsideRect(dstRect.toRect(), screenW, screenH)
+
 
         persistBitmapDebounced()
         saveToPersistLayer()
@@ -809,6 +781,49 @@ class PageView(
                     "bounds=$dstRect" +
                     "scrollDelta=$deltaScrollPage newScroll=$scroll"
         )
+    }
+
+    fun redrawOutsideRect(dstRect: Rect, screenW: Int, screenH: Int ){
+        // Uncovered top band
+        if (dstRect.top > 0) {
+            val r = Rect(
+                0,
+                0,
+                screenW,
+                (dstRect.top + OVERLAP).coerceAtMost(screenH)
+            )
+            if (!r.isEmpty) drawAreaScreenCoordinates(r)
+        }
+        // Uncovered bottom band
+        if (dstRect.bottom < screenH) {
+            val r = Rect(
+                0,
+                (dstRect.bottom - OVERLAP).coerceAtLeast(0),
+                screenW,
+                screenH
+            )
+            if (!r.isEmpty) drawAreaScreenCoordinates(r)
+        }
+        // Uncovered left band
+        if (dstRect.left > 0) {
+            val r = Rect(
+                0,
+                (dstRect.top - OVERLAP).coerceAtLeast(0),
+                (dstRect.left + OVERLAP).coerceAtMost(screenW),
+                (dstRect.bottom + OVERLAP).coerceAtMost(screenH)
+            )
+            if (!r.isEmpty) drawAreaScreenCoordinates(r)
+        }
+        // Uncovered right band
+        if (dstRect.right < screenW) {
+            val r = Rect(
+                (dstRect.right - OVERLAP).coerceAtLeast(0),
+                (dstRect.top - OVERLAP).coerceAtLeast(0),
+                screenW,
+                (dstRect.bottom + OVERLAP).coerceAtMost(screenH)
+            )
+            if (!r.isEmpty) drawAreaScreenCoordinates(r)
+        }
     }
 
 
