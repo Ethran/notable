@@ -12,10 +12,7 @@ import kotlin.math.roundToInt
 
 fun RectF.expandBy(amount: Float): RectF {
     return RectF(
-        left - amount,
-        top - amount,
-        right + amount,
-        bottom + amount
+        left - amount, top - amount, right + amount, bottom + amount
     )
 }
 
@@ -60,8 +57,7 @@ operator fun Rect.times(arg: Float): Rect = scaleRect(this, 1 / arg)
 
 
 fun <T> calculateBoundingBox(
-    touchPoints: List<T>,
-    getCoordinates: (T) -> Pair<Float, Float>
+    touchPoints: List<T>, getCoordinates: (T) -> Pair<Float, Float>
 ): RectF {
     require(touchPoints.isNotEmpty()) { "touchPoints cannot be empty" }
 
@@ -80,13 +76,7 @@ fun <T> calculateBoundingBox(
 fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
     return stroke.points.map {
         TouchPoint(
-            it.x,
-            it.y,
-            it.pressure,
-            stroke.size,
-            it.tiltX,
-            it.tiltY,
-            it.timestamp
+            it.x, it.y, it.pressure, stroke.size, it.tiltX, it.tiltY, it.timestamp
         )
     }
 }
