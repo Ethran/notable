@@ -16,8 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
-import androidx.core.graphics.minus
-import androidx.core.graphics.plus
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.classes.PageDataManager.collectAndPersistBitmapsBatch
@@ -752,18 +750,8 @@ class PageView(
         scaledCanvas.drawBitmap(oldBitmap, matrix, null)
 
 
-        // Convert to ints with conservative rounding to avoid gaps
-        val contentLeft = floor(dstRect.left).toInt()
-        val contentTop = floor(dstRect.top).toInt()
-        val contentRight = ceil(dstRect.right).toInt()
-        val contentBottom = ceil(dstRect.bottom).toInt()
 
-        // Convert that screen offset to page coords using the NEW zoom.
-// This matches the pivot-in-place math: deltaScroll = -left/newZoom, -top/newZoom
-        val deltaScrollPage = IntOffset(
-            (-contentLeft / newZoom).toInt(),
-            (-contentTop / newZoom).toInt()
-        )
+        val deltaScrollPage = Offset(-dstRect.left / newZoom, -dstRect.top / newZoom)
 
 
         val newScrollX = (scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
@@ -775,42 +763,42 @@ class PageView(
 
         if (scaleFactor < 1f) {
             // Uncovered top band
-            if (contentTop > 0) {
+            if (dstRect.top > 0) {
                 val r = Rect(
                     0,
                     0,
                     screenW,
-                    (contentTop + overlap).coerceAtMost(screenH)
+                    (dstRect.top.toInt() + overlap).coerceAtMost(screenH)
                 )
                 if (!r.isEmpty) drawAreaScreenCoordinates(r)
             }
             // Uncovered bottom band
-            if (contentBottom < screenH) {
+            if (dstRect.bottom < screenH) {
                 val r = Rect(
                     0,
-                    (contentBottom - overlap).coerceAtLeast(0),
+                    (dstRect.bottom.toInt() - overlap).coerceAtLeast(0),
                     screenW,
                     screenH
                 )
                 if (!r.isEmpty) drawAreaScreenCoordinates(r)
             }
             // Uncovered left band
-            if (contentLeft > 0) {
+            if (dstRect.left > 0) {
                 val r = Rect(
                     0,
-                    (contentTop - overlap).coerceAtLeast(0),
-                    (contentLeft + overlap).coerceAtMost(screenW),
-                    (contentBottom + overlap).coerceAtMost(screenH)
+                    (dstRect.top.toInt() - overlap).coerceAtLeast(0),
+                    (dstRect.left.toInt() + overlap).coerceAtMost(screenW),
+                    (dstRect.bottom.toInt() + overlap).coerceAtMost(screenH)
                 )
                 if (!r.isEmpty) drawAreaScreenCoordinates(r)
             }
             // Uncovered right band
-            if (contentRight < screenW) {
+            if (dstRect.right < screenW) {
                 val r = Rect(
-                    (contentRight - overlap).coerceAtLeast(0),
-                    (contentTop - overlap).coerceAtLeast(0),
+                    (dstRect.right.toInt() - overlap).coerceAtLeast(0),
+                    (dstRect.top.toInt() - overlap).coerceAtLeast(0),
                     screenW,
-                    (contentBottom + overlap).coerceAtMost(screenH)
+                    (dstRect.bottom.toInt() + overlap).coerceAtMost(screenH)
                 )
                 if (!r.isEmpty) drawAreaScreenCoordinates(r)
             }
@@ -823,7 +811,7 @@ class PageView(
             "Zoom updated using snapshot scaling. " +
                     "oldZoom=$oldZoom newZoom=$newZoom " +
                     "scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) " +
-                    "bounds=[$contentLeft,$contentTop,$contentRight,$contentBottom)] " +
+                    "bounds=$dstRect" +
                     "scrollDelta=$deltaScrollPage newScroll=$scroll"
         )
     }

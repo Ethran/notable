@@ -25,7 +25,6 @@ fun Rect.takeTopLeftCornel(): IntOffset {
 
 fun Offset.toIntOffset(): IntOffset = IntOffset(x.toInt(), y.toInt())
 
-/** Variants if you need specific behavior */
 fun Offset.floorToIntOffset(): IntOffset = IntOffset(floor(x).toInt(), floor(y).toInt())
 fun Offset.ceilToIntOffset(): IntOffset = IntOffset(ceil(x).toInt(), ceil(y).toInt())
 
