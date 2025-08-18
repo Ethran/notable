@@ -3,8 +3,6 @@ package com.ethran.notable.classes
 import android.content.Context
 import android.util.Log
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.toOffset
 import com.ethran.notable.TAG
 import com.ethran.notable.db.selectImagesAndStrokes
 import com.ethran.notable.modals.GlobalAppSettings
