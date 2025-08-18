@@ -117,7 +117,8 @@ class PageView(
      */
     fun getOrLoadBackground(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
         if (!currentBackground.matches(filePath, pageNumber, scale))
-            currentBackground = CachedBackground(filePath, pageNumber, scale)
+            // 0.1 to avoid constant rerender on zoom.
+            currentBackground = CachedBackground(filePath, pageNumber, scale+0.1f)
         return currentBackground.bitmap
     }
 
