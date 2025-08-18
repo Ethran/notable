@@ -155,7 +155,7 @@ fun handleErase(
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
-    if(deletedStrokes.isEmpty()) return null
+    if (deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 
     history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
@@ -208,6 +208,7 @@ fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
         timestamp = timestamp,
     )
 }
+
 fun copyInputToSimplePointF(
     touchPoints: List<TouchPoint>,
     scroll: Offset,
@@ -232,7 +233,7 @@ fun filterStrokesByIntersection(
     return candidateStrokes.filter { stroke ->
         val strokeRect = strokeBounds(stroke)
         val intersection = RectF()
-        
+
         if (intersection.setIntersect(strokeRect, boundingBox)) {
             val strokeArea = strokeRect.width() * strokeRect.height()
             val intersectionArea = intersection.width() * intersection.height()
@@ -278,6 +279,7 @@ fun calculateStrokeLength(points: List<StrokePoint>): Float {
 }
 
 const val MINIMUM_SCRIBBLE_POINTS = 15
+
 // Erases strokes if touchPoints are "scribble", returns true if erased.
 // returns null if not erased, dirty rectangle otherwise
 fun handleScribbleToErase(
@@ -406,8 +408,6 @@ fun transformToLine(
 }
 
 
-
-
 //fun pageAreaToCanvasArea(pageArea: Rect, scroll: Int, scale: Float = 1f): Rect {
 //    return scaleRect(
 //        Rect(
@@ -475,7 +475,6 @@ fun imageBoundsInt(images: List<Image>): Rect {
     }
     return rect
 }
-
 
 
 fun pathToRegion(path: Path): Region {

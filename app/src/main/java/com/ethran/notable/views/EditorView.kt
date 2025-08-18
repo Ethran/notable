@@ -166,10 +166,10 @@ fun EditorView(
                     .fillMaxHeight()
             ) {
                 Spacer(modifier = Modifier.weight(1f))
-                ScrollIndicator( state = editorState)
+                ScrollIndicator(state = editorState)
             }
             PositionedToolbar(navController, editorState, editorControlTower)
-            HorizontalScrollIndicator( state = editorState)
+            HorizontalScrollIndicator(state = editorState)
         }
     }
 }

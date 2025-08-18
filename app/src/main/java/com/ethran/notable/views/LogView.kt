@@ -102,7 +102,7 @@ class ReportData(
 
         val encodedBaseLength = URLEncoder.encode(baseReport, "UTF-8").length
 
-        val availableSpace = 8201 - (encodedBaseLength + logBoxLength + urlPrefixLength+50)
+        val availableSpace = 8201 - (encodedBaseLength + logBoxLength + urlPrefixLength + 50)
 
         val wholeLogsLength = URLEncoder.encode(formattedLogs, "UTF-8").length
         val trimmedLogs = if (wholeLogsLength > availableSpace) {
@@ -450,7 +450,11 @@ fun BugReportScreen(navController: NavController) {
         Spacer(Modifier.height(16.dp))
 
         // Report Preview Card
-        ReportPreviewCard(reportData, description.ifBlank { "_No description provided_" }, includeLogs)
+        ReportPreviewCard(
+            reportData,
+            description.ifBlank { "_No description provided_" },
+            includeLogs
+        )
 
         Spacer(Modifier.height(16.dp))
 
@@ -477,6 +481,7 @@ fun BugReportScreen(navController: NavController) {
         }
     }
 }
+
 @Composable
 private fun ReportPreviewCard(
     reportData: ReportData,

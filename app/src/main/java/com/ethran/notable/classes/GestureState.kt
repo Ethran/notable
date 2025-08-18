@@ -53,6 +53,7 @@ data class GestureState(
                         log.d("Entered ${value.name} gesture mode")
                         setAnimationMode(true)
                     }
+
                     GestureMode.Normal -> {
                         log.d("Entered ${value.name} gesture mode")
                         setAnimationMode(false)
@@ -288,7 +289,7 @@ data class GestureState(
     fun checkSmoothScrolling(): Boolean {
         return if (GlobalAppSettings.current.smoothScroll && gestureMode == GestureMode.Normal) {
             if (abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && getInputCount() == 1) {
-            gestureMode = GestureMode.Scroll
+                gestureMode = GestureMode.Scroll
                 true
             } else
                 false

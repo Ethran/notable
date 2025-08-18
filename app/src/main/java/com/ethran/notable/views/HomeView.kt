@@ -138,7 +138,7 @@ fun Library(navController: NavController, folderId: String? = null) {
     val lazyListStateQuickPages = rememberLazyListState()
     var isScrolling by remember { mutableStateOf(false) }
     var scrollJob by remember { mutableStateOf<Job?>(null) }
-    fun handleAnimations(scope: CoroutineScope, scrolling: Boolean){
+    fun handleAnimations(scope: CoroutineScope, scrolling: Boolean) {
         if (scrolling) {
             // User started scrolling
             isScrolling = true

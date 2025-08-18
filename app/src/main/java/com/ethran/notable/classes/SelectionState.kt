@@ -60,6 +60,7 @@ class SelectionState {
     fun isNonEmpty(): Boolean {
         return !selectedStrokes.isNullOrEmpty() || !selectedImages.isNullOrEmpty()
     }
+
     fun isResizable(): Boolean {
         return selectedImages?.count() == 1 && selectedStrokes.isNullOrEmpty()
     }

@@ -56,7 +56,7 @@ operator fun RectF.minus(offset: Offset): RectF =
     RectF(left - offset.x, top - offset.y, right - offset.x, bottom - offset.y)
 
 operator fun Rect.div(arg: Float): Rect = scaleRect(this, arg)
-operator fun Rect.times(arg: Float): Rect = scaleRect(this, 1/arg)
+operator fun Rect.times(arg: Float): Rect = scaleRect(this, 1 / arg)
 
 
 fun <T> calculateBoundingBox(

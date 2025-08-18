@@ -61,8 +61,7 @@ class EditorControlTower(
         return Offset.Zero // All handled
     }
 
-    fun switchPage(id:String)
-    {
+    fun switchPage(id: String) {
         state.changePage(id)
         history.cleanHistory()
         page.updatePageID(id)
@@ -84,17 +83,19 @@ class EditorControlTower(
 
     // TODO: add description
     private fun onOpenPageCut(offset: Offset) {
-        if (offset.x < 0 || offset.y <0) return
+        if (offset.x < 0 || offset.y < 0) return
         val cutLine = state.selectionState.firstPageCut!!
 
         val (_, previousStrokes) = divideStrokesFromCut(page.strokes, cutLine)
 
         // calculate new strokes to add to the page
         val nextStrokes = previousStrokes.map { stroke ->
-            stroke.copy(points = stroke.points.map { point ->
-                point.copy(x = point.x + offset.x, y = point.y + offset.y)
-            }, top = stroke.top + offset.y, bottom = stroke.bottom + offset.y,
-            left = stroke.left + offset.x, right = stroke.right + offset.x)
+            stroke.copy(
+                points = stroke.points.map { point ->
+                    point.copy(x = point.x + offset.x, y = point.y + offset.y)
+                }, top = stroke.top + offset.y, bottom = stroke.bottom + offset.y,
+                left = stroke.left + offset.x, right = stroke.right + offset.x
+            )
         }
 
         // remove and paste
@@ -120,7 +121,6 @@ class EditorControlTower(
         else
             page.updateScroll(dragDelta)
     }
-
 
 
     // when selection is moved, we need to redraw canvas

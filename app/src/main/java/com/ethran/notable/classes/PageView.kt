@@ -463,8 +463,6 @@ class PageView(
     }
 
 
-
-
     fun drawAreaPageCoordinates(
         pageArea: Rect, // in page coordinates
         ignoredStrokeIds: List<String> = listOf(),
@@ -547,7 +545,7 @@ class PageView(
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
         val movement = (deltaInPage * zoomLevel.value).toIntOffset()
-        if(movement == IntOffset.Zero) return
+        if (movement == IntOffset.Zero) return
 
         // Shift the existing bitmap content
         val shiftedBitmap =
@@ -563,7 +561,7 @@ class PageView(
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
         //add 1 of overlap, to eliminate rounding errors.
-        if(movement.y != 0) {
+        if (movement.y != 0) {
             val redrawRect =
                 if (movement.y > 0)
                     Rect(0, SCREEN_HEIGHT - movement.y - 1, SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -575,9 +573,9 @@ class PageView(
         if (movement.x != 0) {
             val redrawRect =
                 if (movement.x > 0)
-                    Rect(SCREEN_WIDTH - movement.x -1, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+                    Rect(SCREEN_WIDTH - movement.x - 1, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
                 else
-                    Rect(0, 0, -movement.x +1, SCREEN_HEIGHT)
+                    Rect(0, 0, -movement.x + 1, SCREEN_HEIGHT)
 
             log.d("Redrawing area: $redrawRect, movment: $movement")
             drawAreaScreenCoordinates(redrawRect)
@@ -739,14 +737,13 @@ class PageView(
 
 
         //make sure that we won't go outside canvas.
-        val dx = ( scroll.x-dstRect.left).coerceAtMost(0f)
-        val dy = (scroll.y- dstRect.top).coerceAtMost(0f)
+        val dx = (scroll.x - dstRect.left).coerceAtMost(0f)
+        val dy = (scroll.y - dstRect.top).coerceAtMost(0f)
         if (dx != 0f || dy != 0f) {
             matrix.postTranslate(dx, dy)
             matrix.mapRect(dstRect, srcRect)
         }
         scaledCanvas.drawBitmap(oldBitmap, matrix, null)
-
 
 
         val deltaScrollPage = Offset(-dstRect.left / newZoom, -dstRect.top / newZoom)
@@ -862,11 +859,11 @@ class PageView(
 
 
     fun applyZoom(point: IntOffset): IntOffset {
-        return point*zoomLevel.value
+        return point * zoomLevel.value
     }
 
     fun removeZoom(point: IntOffset): IntOffset {
-        return point/zoomLevel.value
+        return point / zoomLevel.value
     }
 
     private fun removeScroll(rect: Rect): Rect {
@@ -874,10 +871,10 @@ class PageView(
     }
 
     fun toScreenCoordinates(rect: Rect): Rect {
-        return (rect-scroll)*zoomLevel.value
+        return (rect - scroll) * zoomLevel.value
     }
 
     private fun toPageCoordinates(rect: Rect): Rect {
-        return rect/zoomLevel.value + scroll
+        return rect / zoomLevel.value + scroll
     }
 }

@@ -82,13 +82,13 @@ fun drawDottedBg(canvas: Canvas, scroll: Offset, scale: Float) {
         scroll.y.toInt() % lineHeight
     )
 
-    for (y in 0..height  step lineHeight) {
+    for (y in 0..height step lineHeight) {
         for (x in padding..width - padding step lineHeight) {
             canvas.drawOval(
-                x.toFloat()+offset.x  - dotSize / 2,
-                y.toFloat() + offset.y  - dotSize / 2,
-                x.toFloat()+offset.x + dotSize / 2,
-                y.toFloat() + offset.y+ dotSize / 2,
+                x.toFloat() + offset.x - dotSize / 2,
+                y.toFloat() + offset.y - dotSize / 2,
+                x.toFloat() + offset.x + dotSize / 2,
+                y.toFloat() + offset.y + dotSize / 2,
                 paint
             )
         }
@@ -114,15 +114,23 @@ fun drawSquaredBg(canvas: Canvas, scroll: Offset, scale: Float) {
         scroll.y.toInt() % lineHeight
     )
 
-    for (y in 0..height  step lineHeight) {
+    for (y in 0..height step lineHeight) {
         canvas.drawLine(
-            padding.toFloat(), y.toFloat()+offset.y, (width - padding).toFloat(), y.toFloat()+offset.y, paint
+            padding.toFloat(),
+            y.toFloat() + offset.y,
+            (width - padding).toFloat(),
+            y.toFloat() + offset.y,
+            paint
         )
     }
 
     for (x in padding..width - padding step lineHeight) {
         canvas.drawLine(
-            x.toFloat()+offset.x, padding.toFloat(), x.toFloat()+offset.x, height.toFloat(), paint
+            x.toFloat() + offset.x,
+            padding.toFloat(),
+            x.toFloat() + offset.x,
+            height.toFloat(),
+            paint
         )
     }
 }
@@ -142,12 +150,12 @@ fun drawHexedBg(canvas: Canvas, scroll: Offset, scale: Float) {
     }
 
     // https://www.redblobgames.com/grids/hexagons/#spacing
-    val r = max(width, height) / (hexVerticalCount * 1.5f)*scale
+    val r = max(width, height) / (hexVerticalCount * 1.5f) * scale
     val hexHeight = r * 2
     val hexWidth = r * sqrt(3f)
 
     val rows = (height / hexVerticalCount).toInt()
-    val cols = (width / hexWidth).toInt()+1
+    val cols = (width / hexWidth).toInt() + 1
 
     for (row in 0..rows) {
         val offsetX = if (row % 2 == 0) 0f else hexWidth / 2
@@ -299,7 +307,10 @@ fun drawBitmapToCanvas(
 
     // TODO: It's working, but its not nice -- do it in better style.
     // Draw the first image, considering the scroll offset
-    val srcTop = Offset((scroll.x / scaleFactor).coerceAtLeast(0f), ((scroll.y / scaleFactor) % imageHeight).coerceAtLeast(0f))
+    val srcTop = Offset(
+        (scroll.x / scaleFactor).coerceAtLeast(0f),
+        ((scroll.y / scaleFactor) % imageHeight).coerceAtLeast(0f)
+    )
     val rectOnImage =
         Rect(0, srcTop.y.toInt(), imageWidth, imageHeight)
     val rectOnCanvas = Rect(
@@ -323,7 +334,7 @@ fun drawBitmapToCanvas(
 
             val dstRect = Rect(
                 -scroll.x.toInt(),
-                currentTop ,
+                currentTop,
                 widthOnCanvas - scroll.x.toInt(),
                 currentTop + scaledHeight
             )
@@ -360,6 +371,7 @@ fun drawBg(
             drawBackgroundImages(context, canvas, background, Offset.Zero, page, scale)
             drawTitleBox(canvas)
         }
+
         is BackgroundType.AutoPdf -> {
             if (page == null)
                 return
@@ -369,6 +381,7 @@ fun drawBg(
             else
                 canvas.drawColor(Color.WHITE)
         }
+
         is BackgroundType.Pdf -> {
             drawPdfPage(canvas, background, backgroundType.page, scroll, page, scale)
         }
@@ -439,7 +452,7 @@ fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
     var yPos = (currentPage * pageHeight) - scroll.y
 
     var pageNum = currentPage
-    while (yPos < canvas.height/scale) {
+    while (yPos < canvas.height / scale) {
         if (yPos >= 0) { // Only draw visible lines
             val yPosScaled = yPos
             canvas.drawLine(

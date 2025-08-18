@@ -95,7 +95,7 @@ class DrawCanvas(
 ) : SurfaceView(context) {
     private val strokeHistoryBatch = mutableListOf<String>()
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
-    private val log =  ShipBook.getLogger("DrawCanvas")
+    private val log = ShipBook.getLogger("DrawCanvas")
     var lastStrokeEndTime: Long = 0
     //private val commitHistorySignal = MutableSharedFlow<Unit>()
 
@@ -112,6 +112,7 @@ class DrawCanvas(
         glRenderer.release()
         super.onDetachedFromWindow()
     }
+
     var isErasing: Boolean = false
 
     companion object {
@@ -144,7 +145,10 @@ class DrawCanvas(
                 while (drawingInProgress.isLocked) {
                     delay(5)
                 }
-            } ?: Log.e("DrawCanvas.waitForDrawing", "Timeout while waiting for drawing lock. Potential deadlock.")
+            } ?: Log.e(
+                "DrawCanvas.waitForDrawing",
+                "Timeout while waiting for drawing lock. Potential deadlock."
+            )
         }
 
         suspend fun waitForDrawingWithSnack() {
@@ -156,7 +160,7 @@ class DrawCanvas(
             }
         }
 
-        suspend fun waitForObservers(){
+        suspend fun waitForObservers() {
             delay(25)
             // TODO: Find proper solution
         }
@@ -338,7 +342,7 @@ class DrawCanvas(
                 points,
                 eraser = getActualState().eraser
             )
-           if (zoneEffected != null)
+            if (zoneEffected != null)
                 refreshUi(zoneEffected)
         }
 
@@ -361,7 +365,7 @@ class DrawCanvas(
     }
 
     fun init() {
-        log.i(  "Initializing Canvas")
+        log.i("Initializing Canvas")
         glRenderer.attachSurfaceView(this)
 
         // This does not work, as EditorGestureReceiver is stealing all the events.
@@ -369,7 +373,7 @@ class DrawCanvas(
 
         val surfaceCallback: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
-                log.i(  "surface created $holder")
+                log.i("surface created $holder")
                 // set up the drawing surface
                 updateActiveSurface()
             }
@@ -408,7 +412,7 @@ class DrawCanvas(
 
         coroutineScope.launch {
             onFocusChange.collect { hasFocus ->
-               logCanvasObserver.v("App has focus: $hasFocus")
+                logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
                     drawCanvasToView(null)
@@ -482,8 +486,7 @@ class DrawCanvas(
         }
         coroutineScope.launch {
             eraserTouchPoint.collect { p ->
-                if(!isErasing)
-                {
+                if (!isErasing) {
                     logCanvasObserver.v("Didn't draw point: $p -- eraser is not active")
                     return@collect
                 }
@@ -615,14 +618,14 @@ class DrawCanvas(
     }
 
     private fun refreshUi(dirtyRect: Rect?) {
-        log.d(  "refreshUi")
+        log.d("refreshUi")
         // Use only if you have confidence that there are no strokes being drawn at the moment
         if (!state.isDrawing) {
-            log.w(  "Not in drawing mode, skipping refreshUI")
+            log.w("Not in drawing mode, skipping refreshUI")
             return
         }
         if (drawingInProgress.isLocked)
-            log.w(  "Drawing is still in progress there might be a bug.")
+            log.w("Drawing is still in progress there might be a bug.")
 
         drawCanvasToView(dirtyRect)
 
@@ -640,20 +643,22 @@ class DrawCanvas(
         if (!state.isDrawing) {
             waitForDrawing()
             drawCanvasToView(null)
-            log.w(  "Not in drawing mode -- refreshUi ")
+            log.w("Not in drawing mode -- refreshUi ")
             return
         }
         if (Looper.getMainLooper().isCurrentThread) {
-            log.i(  "refreshUiSuspend() is called from the main thread."
+            log.i(
+                "refreshUiSuspend() is called from the main thread."
             )
         } else
-            log.i(  "refreshUiSuspend() is called from the non-main thread."
+            log.i(
+                "refreshUiSuspend() is called from the non-main thread."
             )
         waitForDrawing()
         drawCanvasToView(null)
         touchHelper.setRawDrawingEnabled(false)
         if (drawingInProgress.isLocked)
-            log.w(  "Lock was acquired during refreshing UI. It might cause errors.")
+            log.w("Lock was acquired during refreshing UI. It might cause errors.")
         touchHelper.setRawDrawingEnabled(true)
     }
 
@@ -721,7 +726,7 @@ class DrawCanvas(
     }
 
     private suspend fun updateIsDrawing() {
-        log.i(  "Update is drawing: ${state.isDrawing}")
+        log.i("Update is drawing: ${state.isDrawing}")
         if (state.isDrawing) {
             touchHelper.setRawDrawingEnabled(true)
         } else {
@@ -735,7 +740,7 @@ class DrawCanvas(
 
     fun updatePenAndStroke() {
         // it takes around 11 ms to run on Note 4c.
-        log.i(  "Update pen and stroke")
+        log.i("Update pen and stroke")
         when (state.mode) {
             // we need to change size according to zoom level before drawing on screen
             Mode.Draw -> touchHelper.setStrokeStyle(penToStroke(state.pen))
