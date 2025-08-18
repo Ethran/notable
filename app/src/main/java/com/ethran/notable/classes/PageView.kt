@@ -634,11 +634,7 @@ class PageView(
     }
 
     suspend fun simpleUpdateZoom(scaleDelta: Float) {
-        // TODO:
-        // - Update only effected area if possible
-        // - Find a better way to represent how much to zoom.
         log.d("Zoom: $scaleDelta")
-
         // Update the zoom factor
         val newZoomLevel = calculateZoomLevel(scaleDelta, zoomLevel.value)
 
@@ -648,11 +644,12 @@ class PageView(
             return
         }
         log.d("New zoom level: $newZoomLevel")
-        zoomLevel.value = newZoomLevel
+        applyZoomAndRedraw(newZoomLevel)
+    }
 
-
+    suspend fun applyZoomAndRedraw(newZoom: Float) {
+        zoomLevel.value = newZoom
         DrawCanvas.waitForDrawingWithSnack()
-
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -688,7 +685,6 @@ class PageView(
 
         drawAreaScreenCoordinates(redrawRect)
 
-        persistBitmapDebounced()
         saveToPersistLayer()
         PageDataManager.cacheBitmap(id, windowedBitmap)
         log.i("Zoom and redraw completed")

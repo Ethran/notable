@@ -288,7 +288,7 @@ fun EditorGestureReceiver(
                             // zoom gesture
                             val zoomDelta = gestureState.getPinchDrag()
                             if (!appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
-                                controlTower.onPinchToZoom(zoomDelta, gestureState.getPinchCenter())
+                                controlTower.onPinchToZoom(zoomDelta, Offset(0f,0f))
                                 log.d("Discrete zoom: $zoomDelta")
                             }
                         }

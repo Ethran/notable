@@ -20,6 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -49,6 +51,7 @@ import com.ethran.notable.utils.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
+import compose.icons.feathericons.RefreshCcw
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
 
@@ -92,6 +95,8 @@ fun Toolbar(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // Observe zoom level to decide button visibility
+    val zoomLevel by state.pageView.zoomLevel.collectAsState()
 
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
@@ -359,6 +364,22 @@ fun Toolbar(
                         onSelect = {
                             controlTower.pasteFromClipboard()
                         }
+                    )
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .width(0.5.dp)
+                            .background(Color.Black)
+                    )
+                }
+
+                // Show "Reset view" only when zoom != 1f or scroll != 0
+                val showResetView = state.pageView.scroll.x != 0f || zoomLevel != 1.0f
+                if (showResetView) {
+                    ToolbarButton(
+                        vectorIcon = FeatherIcons.RefreshCcw,
+                        contentDescription = "reset zoom and scroll",
+                        onSelect = { controlTower.resetZoomAndScroll() }
                     )
                     Box(
                         Modifier

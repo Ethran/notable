@@ -68,15 +68,22 @@ class EditorControlTower(
     }
 
     fun onPinchToZoom(delta: Float, center: Offset?) {
-        // TODO: use center for drawing in right place.
-        //      For it to work, it needs to know scroll y -- so we need to transform scroll into OffSet
         scope.launch {
             scrollInProgress.withLock {
-                if (GlobalAppSettings.current.simpleRendering)
+                if (GlobalAppSettings.current.simpleRendering || !GlobalAppSettings.current.continuousZoom)
                     page.simpleUpdateZoom(delta)
                 else
                     page.updateZoom(delta, center)
             }
+            DrawCanvas.refreshUi.emit(Unit)
+        }
+    }
+
+    fun resetZoomAndScroll() {
+        scope.launch {
+            page.scroll = Offset(0f, page.scroll.y)
+            page.applyZoomAndRedraw(1f)
+            // Request UI update
             DrawCanvas.refreshUi.emit(Unit)
         }
     }
