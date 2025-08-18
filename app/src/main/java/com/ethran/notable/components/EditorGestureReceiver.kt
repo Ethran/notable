@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -107,7 +108,7 @@ fun EditorGestureReceiver(
                         if (!view.hasWindowFocus()) return@awaitEachGesture
 
                         val gestureState = GestureState()
-                        var overdueScroll = IntOffset.Zero
+                        var overdueScroll = Offset.Zero
 
                         // Ignore non-touch input
                         if (down.type != PointerType.Touch) {
@@ -174,7 +175,7 @@ fun EditorGestureReceiver(
                             if (gestureState.gestureMode == GestureMode.Scroll) {
                                 val delta = gestureState.getVerticalDragDelta()
                                 overdueScroll = controlTower.processScroll(
-                                    delta = IntOffset(overdueScroll.x, overdueScroll.y + delta)
+                                    delta = Offset(overdueScroll.x, overdueScroll.y + delta)
                                 )
                             }
                             if (gestureState.gestureMode == GestureMode.Zoom) {
@@ -327,7 +328,7 @@ fun EditorGestureReceiver(
                             && abs(verticalDrag) > SWIPE_THRESHOLD
                         ) {
                             log.d("Discrete scrolling, verticalDrag: $verticalDrag")
-                            controlTower.processScroll(IntOffset(0, verticalDrag))
+                            controlTower.processScroll(Offset(0f, verticalDrag))
                         }
                     } catch (e: CancellationException) {
                         log.w("Gesture coroutine canceled", e)

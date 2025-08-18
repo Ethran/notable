@@ -9,14 +9,13 @@ import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.toOffset
+import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.classes.pressure
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.db.Stroke
 import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.Pen
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.offsetStroke
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.strokeToTouchPoints
@@ -149,7 +148,7 @@ fun drawFountainPenStroke(
     }
 }
 
-fun drawStroke(canvas: Canvas, stroke: Stroke, offset: IntOffset) {
+fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
     //canvas.save()
     //canvas.translate(offset.x.toFloat(), offset.y.toFloat())
 
@@ -158,7 +157,7 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: IntOffset) {
         this.strokeWidth = stroke.size
     }
 
-    val points = strokeToTouchPoints(offsetStroke(stroke, offset.toOffset()))
+    val points = strokeToTouchPoints(offsetStroke(stroke, offset))
 
     // Trying to find what throws error when drawing quickly
     try {

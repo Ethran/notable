@@ -37,7 +37,7 @@ fun ScrollIndicator(state: EditorState) {
         // Total scrollable height approximation:
         // page.height is the total content height (page coordinates)
         // page.scroll.y + viewportHeightPx ensures indicator still shows while near bottom
-        val virtualHeight = max(page.height, page.scroll.y + viewportHeightPx)
+        val virtualHeight = max(page.height, page.scroll.y.toInt() + viewportHeightPx)
         if (virtualHeight <= viewportHeightPx) return@BoxWithConstraints
 
         val indicatorSizeDp = (viewportHeightPx / virtualHeight.toFloat()) * this.maxHeight.value
@@ -76,7 +76,7 @@ fun HorizontalScrollIndicator(state: EditorState) {
             // Total scrollable width approximation:
             // page.width is the total content width (page coordinates)
             // page.scroll.x + viewportWidthPx ensures indicator still shows while near right edge
-            val virtualWidth = max(page.width, page.scroll.x + viewportWidthPx)
+            val virtualWidth = max(page.width, page.scroll.x.toInt() + viewportWidthPx)
             if (virtualWidth <= viewportWidthPx) return@BoxWithConstraints
 
             val indicatorSizeDp = (viewportWidthPx / virtualWidth.toFloat()) * this.maxWidth.value

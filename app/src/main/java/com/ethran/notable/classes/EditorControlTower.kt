@@ -37,9 +37,9 @@ class EditorControlTower(
 
     // returns delta if could not scroll, to be added to next request,
     // this ensures that smooth scroll works reliably even if rendering takes to long
-    fun processScroll(delta: IntOffset): IntOffset {
-        if (delta == IntOffset.Zero) return IntOffset.Zero
-        if (!page.scrollable) return IntOffset.Zero
+    fun processScroll(delta: Offset): Offset {
+        if (delta == Offset.Zero) return Offset.Zero
+        if (!page.scrollable) return Offset.Zero
         if (scrollInProgress.isLocked) {
             Log.w(TAG, "Scroll in progress -- skipping")
             return delta
@@ -60,7 +60,7 @@ class EditorControlTower(
             }
             DrawCanvas.refreshUi.emit(Unit)
         }
-        return IntOffset.Zero // All handled
+        return Offset.Zero // All handled
     }
 
     fun switchPage(id:String)
@@ -85,7 +85,7 @@ class EditorControlTower(
     }
 
     // TODO: add description
-    private fun onOpenPageCut(offset: IntOffset) {
+    private fun onOpenPageCut(offset: Offset) {
         if (offset.x < 0 || offset.y <0) return
         val cutLine = state.selectionState.firstPageCut!!
 
@@ -115,7 +115,7 @@ class EditorControlTower(
         page.drawAreaScreenCoordinates(strokeBounds(previousStrokes + nextStrokes))
     }
 
-    private suspend fun onPageScroll(dragDelta: IntOffset) {
+    private suspend fun onPageScroll(dragDelta: Offset) {
         // scroll is in Page coordinates
         if (GlobalAppSettings.current.simpleRendering)
             page.simpleUpdateScroll(dragDelta)
@@ -184,7 +184,7 @@ class EditorControlTower(
         val scrollPos = page.scroll
 
         val pastedStrokes = strokes.map {
-            offsetStroke(it, offset = scrollPos.toOffset()).copy(
+            offsetStroke(it, offset = scrollPos).copy(
                 // change the pasted strokes' ids - it's a copy
                 id = UUID
                     .randomUUID()
@@ -201,8 +201,8 @@ class EditorControlTower(
                 id = UUID
                     .randomUUID()
                     .toString(),
-                x = it.x + scrollPos.x,
-                y = it.y + scrollPos.y,
+                x = it.x + scrollPos.x.toInt(),
+                y = it.y + scrollPos.y.toInt(),
                 createdAt = now,
                 // set the pageId to the current page
                 pageId = this.page.id

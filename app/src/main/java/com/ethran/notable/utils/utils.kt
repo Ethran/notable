@@ -16,13 +16,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.toRect
 import androidx.core.graphics.toRegion
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.PageView
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
 import com.ethran.notable.db.StrokePoint
@@ -48,14 +48,7 @@ fun Modifier.noRippleClickable(
         onClick()
     }
 }
-fun RectF.expandBy(amount: Float): RectF {
-    return RectF(
-        left - amount,
-        top - amount,
-        right + amount,
-        bottom + amount
-    )
-}
+
 
 fun convertDpToPixel(dp: Dp, context: Context): Float {
 //    val resources = context.resources
@@ -188,23 +181,23 @@ fun scaleRect(rect: Rect, scale: Float): Rect {
     )
 }
 
-fun toPageCoordinates(rect: Rect, scale: Float, scroll: IntOffset): Rect {
+fun toPageCoordinates(rect: Rect, scale: Float, scroll: Offset): Rect {
     return Rect(
-        (rect.left.toFloat() / scale).toInt() + scroll.x,
-        (rect.top.toFloat() / scale).toInt() + scroll.y,
-        (rect.right.toFloat() / scale).toInt() + scroll.x,
-        (rect.bottom.toFloat() / scale).toInt() + scroll.y
+        (rect.left.toFloat() / scale + scroll.x).toInt(),
+        (rect.top.toFloat() / scale + scroll.y).toInt(),
+        (rect.right.toFloat() / scale + scroll.x).toInt(),
+        (rect.bottom.toFloat() / scale + scroll.y).toInt()
     )
 }
 
-fun copyInput(touchPoints: List<TouchPoint>, scroll: IntOffset, scale: Float): List<StrokePoint> {
+fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List<StrokePoint> {
     val points = touchPoints.map {
         it.toStrokePoint(scroll, scale)
     }
     return points
 }
 
-fun TouchPoint.toStrokePoint(scroll: IntOffset, scale: Float): StrokePoint {
+fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
     return StrokePoint(
         x = x / scale + scroll.x,
         y = y / scale + scroll.y,
@@ -217,7 +210,7 @@ fun TouchPoint.toStrokePoint(scroll: IntOffset, scale: Float): StrokePoint {
 }
 fun copyInputToSimplePointF(
     touchPoints: List<TouchPoint>,
-    scroll: IntOffset,
+    scroll: Offset,
     scale: Float
 ): List<SimplePointF> {
     val points = touchPoints.map {
@@ -229,22 +222,6 @@ fun copyInputToSimplePointF(
     return points
 }
 
-fun <T> calculateBoundingBox(
-    touchPoints: List<T>,
-    getCoordinates: (T) -> Pair<Float, Float>
-): RectF {
-    require(touchPoints.isNotEmpty()) { "touchPoints cannot be empty" }
-
-    val (startX, startY) = getCoordinates(touchPoints[0])
-    val boundingBox = RectF(startX, startY, startX, startY)
-
-    for (point in touchPoints) {
-        val (x, y) = getCoordinates(point)
-        boundingBox.union(x, y)
-    }
-
-    return boundingBox
-}
 
 // Filters strokes that significantly intersect with a given bounding box
 fun filterStrokesByIntersection(
@@ -430,19 +407,6 @@ fun transformToLine(
 
 
 
-fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
-    return stroke.points.map {
-        TouchPoint(
-            it.x,
-            it.y,
-            it.pressure,
-            stroke.size,
-            it.tiltX,
-            it.tiltY,
-            it.timestamp
-        )
-    }
-}
 
 //fun pageAreaToCanvasArea(pageArea: Rect, scroll: Int, scale: Float = 1f): Rect {
 //    return scaleRect(
@@ -512,8 +476,7 @@ fun imageBoundsInt(images: List<Image>): Rect {
     return rect
 }
 
-//data class SimplePoint(val x: Int, val y: Int)
-data class SimplePointF(val x: Float, val y: Float)
+
 
 fun pathToRegion(path: Path): Region {
     val bounds = RectF()
@@ -651,7 +614,7 @@ fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
 
 fun getModifiedStrokeEndpoints(
     points: List<TouchPoint>,
-    scroll: IntOffset, // Replace with your actual type
+    scroll: Offset,
     zoomLevel: Float
 ): Pair<StrokePoint, StrokePoint> {
     if (points.isEmpty()) throw IllegalArgumentException("points list is empty")

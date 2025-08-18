@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.minus
+import androidx.core.graphics.plus
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.classes.PageDataManager.collectAndPersistBitmapsBatch
@@ -28,8 +30,13 @@ import com.ethran.notable.db.getBackgroundType
 import com.ethran.notable.drawing.drawBg
 import com.ethran.notable.drawing.drawOnCanvasFromPage
 import com.ethran.notable.modals.GlobalAppSettings
+import com.ethran.notable.utils.div
 import com.ethran.notable.utils.loadPersistBitmap
 import com.ethran.notable.utils.logCallStack
+import com.ethran.notable.utils.minus
+import com.ethran.notable.utils.plus
+import com.ethran.notable.utils.times
+import com.ethran.notable.utils.toIntOffset
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -82,7 +89,7 @@ class PageView(
         }
 
     // scroll is observed by ui, represents top left corner
-    var scroll by mutableStateOf(IntOffset.Zero)
+    var scroll by mutableStateOf(Offset.Zero)
 
     val scrollable: Boolean
         get() = when (pageFromDb?.backgroundType) {
@@ -264,7 +271,7 @@ class PageView(
             log.e("Page not found in database")
             return
         }
-        scroll = scroll.copy(x = 0, y = page.scroll)
+        scroll = scroll.copy(x = 0f, y = page.scroll.toFloat())
         val isInCache = PageDataManager.isPageLoaded(id)
         if (isInCache) {
             logCache.i("Page loaded from cache")
@@ -496,7 +503,7 @@ class PageView(
         )
     }
 
-    suspend fun simpleUpdateScroll(dragDelta: IntOffset) {
+    suspend fun simpleUpdateScroll(dragDelta: Offset) {
         // Just update scroll, for debugging.
         // It will redraw whole screen, instead of trying to redraw only needed area.
         log.d("Simple update scroll")
@@ -505,7 +512,7 @@ class PageView(
         DrawCanvas.waitForDrawingWithSnack()
 
         scroll =
-            IntOffset((scroll.x + delta.x).coerceAtLeast(0), (scroll.y + delta.y).coerceAtLeast(0))
+            Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
 
         val redrawRect = Rect(
             0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
@@ -522,14 +529,11 @@ class PageView(
         PageDataManager.cacheBitmap(id, windowedBitmap)
     }
 
-    suspend fun updateScroll(dragDelta: IntOffset) {
+    suspend fun updateScroll(dragDelta: Offset) {
 //        log.d("Update scroll, dragDelta: $dragDelta, scroll: $scroll, zoomLevel.value: $zoomLevel.value")
         // drag delta is in screen coordinates,
         // so we have to scale it back to page coordinates.
-        var deltaInPage = IntOffset(
-            (dragDelta.x / zoomLevel.value).toInt(),
-            (dragDelta.y / zoomLevel.value).toInt()
-        )
+        var deltaInPage = Offset(dragDelta.x / zoomLevel.value, dragDelta.y / zoomLevel.value)
 
         if (scroll.x + deltaInPage.x < 0) {
             deltaInPage = deltaInPage.copy(x = -scroll.x)
@@ -539,15 +543,15 @@ class PageView(
         }
 
         // There is nothing to do, return.
-        if (deltaInPage == IntOffset.Zero) return
+        if (deltaInPage == Offset.Zero) return
 
         // before scrolling, make sure that strokes are drawn.
         DrawCanvas.waitForDrawingWithSnack()
 
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
-        val movement = deltaInPage * zoomLevel.value
-        if(movement.x == 0 && movement.y == 0) return
+        val movement = (deltaInPage * zoomLevel.value).toIntOffset()
+        if(movement == IntOffset.Zero) return
 
         // Shift the existing bitmap content
         val shiftedBitmap =
@@ -762,9 +766,9 @@ class PageView(
         )
 
 
-        val newScrollX = (scroll.x + deltaScrollPage.x).coerceAtLeast(0)
-        val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0)
-        scroll = IntOffset(newScrollX, newScrollY)
+        val newScrollX = (scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
+        val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
+        scroll = Offset(newScrollX, newScrollY)
 
         // Overlap to hide rounding seams
         val overlap = 2
@@ -865,50 +869,29 @@ class PageView(
 
     private fun saveToPersistLayer() {
         coroutineScope.launch {
-            appRepository.pageRepository.updateScroll(id, scroll.y)
+            appRepository.pageRepository.updateScroll(id, scroll.y.toInt())
             pageFromDb = appRepository.pageRepository.getById(id)
         }
     }
 
 
     fun applyZoom(point: IntOffset): IntOffset {
-        return IntOffset(
-            (point.x * zoomLevel.value).toInt(),
-            (point.y * zoomLevel.value).toInt()
-        )
+        return point*zoomLevel.value
     }
 
     fun removeZoom(point: IntOffset): IntOffset {
-        return IntOffset(
-            (point.x / zoomLevel.value).toInt(),
-            (point.y / zoomLevel.value).toInt()
-        )
+        return point/zoomLevel.value
     }
 
     private fun removeScroll(rect: Rect): Rect {
-        return Rect(
-            rect.left - scroll.x,
-            rect.top - scroll.y,
-            rect.right - scroll.x,
-            rect.bottom - scroll.y
-        )
+        return rect - scroll
     }
 
     fun toScreenCoordinates(rect: Rect): Rect {
-        return Rect(
-            ((rect.left - scroll.x).toFloat() * zoomLevel.value).toInt(),
-            ((rect.top - scroll.y).toFloat() * zoomLevel.value).toInt(),
-            ((rect.right - scroll.x).toFloat() * zoomLevel.value).toInt(),
-            ((rect.bottom - scroll.y).toFloat() * zoomLevel.value).toInt()
-        )
+        return (rect-scroll)*zoomLevel.value
     }
 
     private fun toPageCoordinates(rect: Rect): Rect {
-        return Rect(
-            (rect.left.toFloat() / zoomLevel.value).toInt() + scroll.x,
-            (rect.top.toFloat() / zoomLevel.value).toInt() + scroll.y,
-            (rect.right.toFloat() / zoomLevel.value).toInt() + scroll.x,
-            (rect.bottom.toFloat() / zoomLevel.value).toInt() + scroll.y
-        )
+        return rect/zoomLevel.value + scroll
     }
 }

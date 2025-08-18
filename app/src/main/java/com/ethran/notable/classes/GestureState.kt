@@ -5,8 +5,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.unit.IntOffset
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.modals.GlobalAppSettings
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.setAnimationMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.abs
@@ -147,8 +147,8 @@ data class GestureState(
     }
 
     //return smallest vertical movement, or 0, if movement is not vertical
-    fun getVerticalDrag(): Int {
-        if (initialPositions.isEmpty() || lastPositions.isEmpty()) return 0
+    fun getVerticalDrag(): Float {
+        if (initialPositions.isEmpty() || lastPositions.isEmpty()) return 0f
 
         var minVerticalMovement: Float? = null
 
@@ -157,14 +157,14 @@ data class GestureState(
             val delta = last - initial
 
             // Check if the movement is more vertical than horizontal
-            if (abs(delta.y) <= abs(delta.x)) return 0
+            if (abs(delta.y) <= abs(delta.x)) return 0f
 
             // Track the smallest vertical movement
             if (minVerticalMovement == null || abs(delta.y) < abs(minVerticalMovement)) {
                 minVerticalMovement = delta.y
             }
         }
-        return minVerticalMovement?.toInt() ?: 0
+        return minVerticalMovement ?: 0f
     }
 
 
@@ -183,18 +183,18 @@ data class GestureState(
         return delta
     }
 
-    fun getTotalDragDelta(): IntOffset {
-        if (lastPositions.isEmpty()) return IntOffset.Zero
+    fun getTotalDragDelta(): Offset {
+        if (lastPositions.isEmpty()) return Offset.Zero
         val currentPosition = lastPositions.values.toList()
         if (lastCheckForMovementPosition.isNullOrEmpty()) {
             lastCheckForMovementPosition = currentPosition
-            return IntOffset.Zero
+            return Offset.Zero
         }
-        val initial = lastCheckForMovementPosition?.get(0) ?: return IntOffset.Zero
+        val initial = lastCheckForMovementPosition?.get(0) ?: return Offset.Zero
         val last = currentPosition[0]
         val delta = last - initial
         lastCheckForMovementPosition = currentPosition
-        return IntOffset(delta.x.toInt(), delta.y.toInt())
+        return Offset(delta.x, delta.y)
     }
 
     private fun calculateDistance(point1: Offset, point2: Offset): Float {

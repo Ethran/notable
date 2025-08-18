@@ -7,17 +7,18 @@ import android.graphics.Rect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
+import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.PlacementMode
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.copyBitmapToClipboard
-import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.utils.imageBoundsInt
 import com.ethran.notable.utils.offsetImage
 import com.ethran.notable.utils.offsetStroke
@@ -100,7 +101,7 @@ class SelectionState {
                 page.context,
                 selectedCanvas,
                 it,
-                IntOffset(-it.x, -it.y)
+                Offset(-it.x.toFloat(), -it.y.toFloat())
             )
         }
 
@@ -221,15 +222,14 @@ class SelectionState {
         return operationList
     }
 
-    fun selectionToClipboard(scrollPos: IntOffset, context: Context): ClipboardContent {
-        val removePageScroll = -scrollPos.toOffset()
+    fun selectionToClipboard(scrollPos: Offset, context: Context): ClipboardContent {
 
         val strokes = selectedStrokes?.map {
-            offsetStroke(it, offset = removePageScroll)
+            offsetStroke(it, offset = -scrollPos)
         }
 
         val images = selectedImages?.map {
-            it.copy(x = it.x - scrollPos.x,y = it.y - scrollPos.y)
+            it.copy(x = it.x - scrollPos.x.toInt(), y = it.y - scrollPos.y.toInt())
         }
 
         selectedBitmap?.let {

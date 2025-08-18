@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.db.handleSelect
@@ -34,7 +35,6 @@ import com.ethran.notable.utils.Mode
 import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.Pen
 import com.ethran.notable.utils.PlacementMode
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.calculateBoundingBox
 import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
@@ -672,8 +672,8 @@ class DrawCanvas(
             val imageHeight = softwareBitmap.height
 
             // Calculate the center position for the image relative to the page dimensions
-            val centerX = (page.viewWidth - imageWidth) / 2 + page.scroll.x
-            val centerY = (page.viewHeight - imageHeight) / 2 + page.scroll.y
+            val centerX = (page.viewWidth - imageWidth) / 2 + page.scroll.x.toInt()
+            val centerY = (page.viewHeight - imageHeight) / 2 + page.scroll.y.toInt()
             val imageToSave = Image(
                 x = centerX,
                 y = centerY,
