@@ -566,7 +566,11 @@ class PageView(
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
-        redrawOutsideRect(alreadyDrawnRectAfterShift(movement, SCREEN_WIDTH, SCREEN_HEIGHT), SCREEN_WIDTH, SCREEN_HEIGHT)
+        redrawOutsideRect(
+            alreadyDrawnRectAfterShift(movement, SCREEN_WIDTH, SCREEN_HEIGHT),
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT
+        )
 
         persistBitmapDebounced()
         saveToPersistLayer()
@@ -747,7 +751,7 @@ class PageView(
         )
     }
 
-    fun redrawOutsideRect(dstRect: Rect, screenW: Int, screenH: Int ){
+    fun redrawOutsideRect(dstRect: Rect, screenW: Int, screenH: Int) {
         // Uncovered top band
         if (dstRect.top > 0) {
             val r = Rect(
