@@ -554,9 +554,11 @@ class PageView(
         val movement = (deltaInPage * zoomLevel.value).toIntOffset()
         if (movement == IntOffset.Zero) return
 
+        val width = windowedBitmap.width
+        val height = windowedBitmap.height
         // Shift the existing bitmap content
         val shiftedBitmap =
-            createBitmap(windowedBitmap.width, windowedBitmap.height, windowedBitmap.config!!)
+            createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
         shiftedCanvas.drawColor(Color.RED) //for debugging.
         shiftedCanvas.drawBitmap(windowedBitmap, -movement.x.toFloat(), -movement.y.toFloat(), null)
@@ -567,9 +569,9 @@ class PageView(
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
         redrawOutsideRect(
-            alreadyDrawnRectAfterShift(movement, SCREEN_WIDTH, SCREEN_HEIGHT),
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT
+            alreadyDrawnRectAfterShift(movement, width, height),
+            width,
+            height
         )
 
         persistBitmapDebounced()
@@ -626,7 +628,9 @@ class PageView(
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
         log.d("Canvas dimensions: width=$scaledWidth, height=$scaledHeight")
+        log.d("Bitmap dimensions: width=${windowedBitmap.width}, height=${windowedBitmap.height}")
         log.d("Screen dimensions: width=$SCREEN_WIDTH, height=$SCREEN_HEIGHT")
+        log.d("Page View dimension: width=${viewWidth}, height=${viewHeight}")
 
 
         val zoomedBitmap = createBitmap(scaledWidth, scaledHeight, windowedBitmap.config!!)
@@ -685,16 +689,15 @@ class PageView(
         DrawCanvas.waitForDrawingWithSnack()
 
         val scaleFactor = newZoom / oldZoom
-        val oldBitmap = windowedBitmap
-        val screenW = oldBitmap.width
-        val screenH = oldBitmap.height
+        val screenW = windowedCanvas.width
+        val screenH = windowedCanvas.height
 
         // Default pivot to screen center if none passed
         val pivotX = center?.x ?: (screenW / 2f)
         val pivotY = center?.y ?: (screenH / 2f)
 
         // Draw scaled snapshot into a fresh screen-sized bitmap
-        val scaledBitmap = createBitmap(screenW, screenH, oldBitmap.config!!)
+        val scaledBitmap = createBitmap(screenW, screenH, windowedBitmap.config!!)
         val scaledCanvas = Canvas(scaledBitmap)
         scaledCanvas.drawColor(Color.BLACK) // clear
 
@@ -723,7 +726,7 @@ class PageView(
             matrix.postTranslate(dx, dy)
             matrix.mapRect(dstRect, srcRect)
         }
-        scaledCanvas.drawBitmap(oldBitmap, matrix, null)
+        scaledCanvas.drawBitmap(windowedBitmap, matrix, null)
 
 
         val deltaScrollPage = Offset(-dstRect.left / newZoom, -dstRect.top / newZoom)
