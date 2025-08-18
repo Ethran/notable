@@ -11,15 +11,15 @@ plugins {
 }
 
 android {
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.ethran.notable"
         minSdk 29
         targetSdk 35
 
-        versionCode 19
-        versionName '0.0.19'
+        versionCode 20
+        versionName '0.0.20'
         if (project.hasProperty('IS_NEXT') && project.IS_NEXT.toBoolean()) {
             def timestamp = new Date().format('dd.MM.YYYY-HH:mm')
             versionName = "${versionName}-next-${timestamp}"
@@ -125,16 +125,16 @@ android {
 
 dependencies {
 
-    implementation 'androidx.core:core-ktx:1.16.0'
+    implementation 'androidx.core:core-ktx:1.17.0'
     implementation "androidx.compose.ui:ui:$compose_version"
     implementation "androidx.compose.material:material:$compose_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_version"
     implementation "androidx.compose.material:material-icons-extended:$compose_version"
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.9.2'
     implementation 'androidx.activity:activity-compose:1.10.1'
-    implementation 'androidx.fragment:fragment-ktx:1.8.8'
+    implementation 'androidx.fragment:fragment-ktx:1.8.9'
     implementation 'androidx.graphics:graphics-core:1.0.3'
-    implementation"androidx.input:input-motionprediction:1.0.0-beta05"
+    implementation"androidx.input:input-motionprediction:1.0.0-beta06"
 
     //implementation fileTree(dir: 'libs', include: ['*.aar'])
     implementation('com.onyx.android.sdk:onyxsdk-device:1.3.1.2') {
