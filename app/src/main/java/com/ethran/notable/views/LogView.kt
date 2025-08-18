@@ -195,7 +195,10 @@ class ReportData(
             "lib_touch_reader",           // Touch input driver logs
             "RawInputReader\$a",          // Raw input reader internal threads
             "AdrenoGLES-0",                // GPU driver and Adreno graphics logs
-            "CompatibilityChangeReporter", ".ethran.notable"
+            "CompatibilityChangeReporter",
+            ".ethran.notable",
+            // OpenGl rendering:
+            "GLThread", "GLFrontBufferedRenderer", "Gralloc4"
         )
         if (match != null) {
             val tag = match.groupValues[5].trim()
