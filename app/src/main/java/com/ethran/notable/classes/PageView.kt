@@ -705,13 +705,6 @@ class PageView(
             postScale(scaleFactor, scaleFactor, pivotX, pivotY)
         }
 
-        // Swap in the new bitmap and update zoom on the windowed canvas
-        windowedBitmap = scaledBitmap
-        windowedCanvas.setBitmap(windowedBitmap)
-
-        zoomLevel.value = newZoom
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
-
         // Calculate where the scaled snapshot ended up on screen.
         // Map the original screen rect through the same matrix to get content bounds.
         val srcRect = RectF(0f, 0f, screenW.toFloat(), screenH.toFloat())
@@ -736,7 +729,12 @@ class PageView(
         val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
         scroll = Offset(newScrollX, newScrollY)
 
+        // Swap in the new bitmap and update zoom on the windowed canvas
+        windowedBitmap = scaledBitmap
+        windowedCanvas.setBitmap(windowedBitmap)
 
+        zoomLevel.value = newZoom
+        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
         if (scaleFactor < 1f)
             redrawOutsideRect(dstRect.toRect(), screenW, screenH)
