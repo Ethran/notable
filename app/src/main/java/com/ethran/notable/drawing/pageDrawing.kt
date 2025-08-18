@@ -7,9 +7,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import androidx.core.net.toUri
@@ -21,6 +21,7 @@ import com.ethran.notable.db.Image
 import com.ethran.notable.db.getBackgroundType
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.imageBounds
+import com.ethran.notable.utils.plus
 import com.ethran.notable.utils.strokeBounds
 import com.ethran.notable.utils.uriToBitmap
 import io.shipbook.shipbooksdk.ShipBook
@@ -48,7 +49,7 @@ private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
  * @param image The `Image` object containing details about the image (URI, position, and size).
  * @param offset The `IntOffset` used to adjust the drawing position relative to the Canvas.
  */
-fun drawImage(context: Context, canvas: Canvas, image: Image, offset: IntOffset) {
+fun drawImage(context: Context, canvas: Canvas, image: Image, offset: Offset) {
     if (image.uri.isNullOrEmpty())
         return
     val imageBitmap = uriToBitmap(context, image.uri.toUri())?.asImageBitmap()
@@ -60,12 +61,8 @@ fun drawImage(context: Context, canvas: Canvas, image: Image, offset: IntOffset)
         DrawCanvas.addImageByUri.value = null
 
         val rectOnImage = Rect(0, 0, imageBitmap.width, imageBitmap.height)
-        val rectOnCanvas = Rect(
-            image.x + offset.x,
-            image.y + offset.y,
-            image.x + image.width + offset.x,
-            image.y + image.height + offset.y
-        )
+        val rectOnCanvas =
+            Rect(image.x, image.y, image.x + image.width, image.y + image.height) + offset
         // Draw the bitmap on the canvas at the center of the page
         canvas.drawBitmap(softwareBitmap, rectOnImage, rectOnCanvas, null)
 
@@ -157,7 +154,7 @@ fun drawOnCanvasFromPage(
                     val bounds = imageBounds(image)
                     // if stroke is not inside page section
                     if (!bounds.toRect().intersect(pageArea)) return@forEach
-                    drawImage(page.context, this, image, IntOffset(0, -page.scroll))
+                    drawImage(page.context, this, image, -page.scroll)
 
                 }
             } catch (e: Exception) {
@@ -178,9 +175,7 @@ fun drawOnCanvasFromPage(
                     // if stroke is not inside page section
                     if (!bounds.toRect().intersect(pageArea)) return@forEach
 
-                    drawStroke(
-                        this, stroke, IntOffset(0, -page.scroll)
-                    )
+                    drawStroke(this, stroke, -page.scroll)
                 }
             } catch (e: Exception) {
                 pageDrawingLog.e("PageView.kt: Drawing strokes failed: ${e.message}", e)

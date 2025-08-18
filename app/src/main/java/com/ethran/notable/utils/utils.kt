@@ -22,6 +22,7 @@ import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.PageView
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.Stroke
 import com.ethran.notable.db.StrokePoint
@@ -47,14 +48,7 @@ fun Modifier.noRippleClickable(
         onClick()
     }
 }
-fun RectF.expandBy(amount: Float): RectF {
-    return RectF(
-        left - amount,
-        top - amount,
-        right + amount,
-        bottom + amount
-    )
-}
+
 
 fun convertDpToPixel(dp: Dp, context: Context): Float {
 //    val resources = context.resources
@@ -161,7 +155,7 @@ fun handleErase(
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
-    if(deletedStrokes.isEmpty()) return null
+    if (deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 
     history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
@@ -187,26 +181,26 @@ fun scaleRect(rect: Rect, scale: Float): Rect {
     )
 }
 
-fun toPageCoordinates(rect: Rect, scale: Float, scroll: Int): Rect {
+fun toPageCoordinates(rect: Rect, scale: Float, scroll: Offset): Rect {
     return Rect(
-        (rect.left.toFloat() / scale).toInt(),
-        ((rect.top.toFloat() / scale) + scroll).toInt(),
-        (rect.right.toFloat() / scale).toInt(),
-        ((rect.bottom.toFloat() / scale) + scroll).toInt()
+        (rect.left.toFloat() / scale + scroll.x).toInt(),
+        (rect.top.toFloat() / scale + scroll.y).toInt(),
+        (rect.right.toFloat() / scale + scroll.x).toInt(),
+        (rect.bottom.toFloat() / scale + scroll.y).toInt()
     )
 }
 
-fun copyInput(touchPoints: List<TouchPoint>, scroll: Int, scale: Float): List<StrokePoint> {
+fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List<StrokePoint> {
     val points = touchPoints.map {
         it.toStrokePoint(scroll, scale)
     }
     return points
 }
 
-fun TouchPoint.toStrokePoint(scroll: Int, scale: Float): StrokePoint {
+fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
     return StrokePoint(
-        x = x / scale,
-        y = (y / scale + scroll),
+        x = x / scale + scroll.x,
+        y = y / scale + scroll.y,
         pressure = pressure,
         size = size,
         tiltX = tiltX,
@@ -214,36 +208,21 @@ fun TouchPoint.toStrokePoint(scroll: Int, scale: Float): StrokePoint {
         timestamp = timestamp,
     )
 }
+
 fun copyInputToSimplePointF(
     touchPoints: List<TouchPoint>,
-    scroll: Int,
+    scroll: Offset,
     scale: Float
 ): List<SimplePointF> {
     val points = touchPoints.map {
         SimplePointF(
-            x = it.x / scale,
-            y = (it.y / scale + scroll),
+            x = it.x / scale + scroll.x,
+            y = (it.y / scale + scroll.y),
         )
     }
     return points
 }
 
-fun <T> calculateBoundingBox(
-    touchPoints: List<T>,
-    getCoordinates: (T) -> Pair<Float, Float>
-): RectF {
-    require(touchPoints.isNotEmpty()) { "touchPoints cannot be empty" }
-
-    val (startX, startY) = getCoordinates(touchPoints[0])
-    val boundingBox = RectF(startX, startY, startX, startY)
-
-    for (point in touchPoints) {
-        val (x, y) = getCoordinates(point)
-        boundingBox.union(x, y)
-    }
-
-    return boundingBox
-}
 
 // Filters strokes that significantly intersect with a given bounding box
 fun filterStrokesByIntersection(
@@ -254,7 +233,7 @@ fun filterStrokesByIntersection(
     return candidateStrokes.filter { stroke ->
         val strokeRect = strokeBounds(stroke)
         val intersection = RectF()
-        
+
         if (intersection.setIntersect(strokeRect, boundingBox)) {
             val strokeArea = strokeRect.width() * strokeRect.height()
             val intersectionArea = intersection.width() * intersection.height()
@@ -300,6 +279,7 @@ fun calculateStrokeLength(points: List<StrokePoint>): Float {
 }
 
 const val MINIMUM_SCRIBBLE_POINTS = 15
+
 // Erases strokes if touchPoints are "scribble", returns true if erased.
 // returns null if not erased, dirty rectangle otherwise
 fun handleScribbleToErase(
@@ -428,21 +408,6 @@ fun transformToLine(
 }
 
 
-
-fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
-    return stroke.points.map {
-        TouchPoint(
-            it.x,
-            it.y,
-            it.pressure,
-            stroke.size,
-            it.tiltX,
-            it.tiltY,
-            it.timestamp
-        )
-    }
-}
-
 //fun pageAreaToCanvasArea(pageArea: Rect, scroll: Int, scale: Float = 1f): Rect {
 //    return scaleRect(
 //        Rect(
@@ -511,8 +476,6 @@ fun imageBoundsInt(images: List<Image>): Rect {
     return rect
 }
 
-//data class SimplePoint(val x: Int, val y: Int)
-data class SimplePointF(val x: Float, val y: Float)
 
 fun pathToRegion(path: Path): Region {
     val bounds = RectF()
@@ -650,7 +613,7 @@ fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
 
 fun getModifiedStrokeEndpoints(
     points: List<TouchPoint>,
-    scroll: Int, // Replace with your actual type
+    scroll: Offset,
     zoomLevel: Float
 ): Pair<StrokePoint, StrokePoint> {
     if (points.isEmpty()) throw IllegalArgumentException("points list is empty")

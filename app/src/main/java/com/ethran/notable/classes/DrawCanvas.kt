@@ -15,9 +15,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.db.Image
 import com.ethran.notable.db.StrokePoint
 import com.ethran.notable.db.handleSelect
@@ -35,7 +35,6 @@ import com.ethran.notable.utils.Mode
 import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.Pen
 import com.ethran.notable.utils.PlacementMode
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.calculateBoundingBox
 import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
@@ -96,7 +95,7 @@ class DrawCanvas(
 ) : SurfaceView(context) {
     private val strokeHistoryBatch = mutableListOf<String>()
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
-    private val log =  ShipBook.getLogger("DrawCanvas")
+    private val log = ShipBook.getLogger("DrawCanvas")
     var lastStrokeEndTime: Long = 0
     //private val commitHistorySignal = MutableSharedFlow<Unit>()
 
@@ -113,6 +112,7 @@ class DrawCanvas(
         glRenderer.release()
         super.onDetachedFromWindow()
     }
+
     var isErasing: Boolean = false
 
     companion object {
@@ -145,7 +145,10 @@ class DrawCanvas(
                 while (drawingInProgress.isLocked) {
                     delay(5)
                 }
-            } ?: Log.e("DrawCanvas.waitForDrawing", "Timeout while waiting for drawing lock. Potential deadlock.")
+            } ?: Log.e(
+                "DrawCanvas.waitForDrawing",
+                "Timeout while waiting for drawing lock. Potential deadlock."
+            )
         }
 
         suspend fun waitForDrawingWithSnack() {
@@ -157,7 +160,7 @@ class DrawCanvas(
             }
         }
 
-        suspend fun waitForObservers(){
+        suspend fun waitForObservers() {
             delay(25)
             // TODO: Find proper solution
         }
@@ -339,7 +342,7 @@ class DrawCanvas(
                 points,
                 eraser = getActualState().eraser
             )
-           if (zoneEffected != null)
+            if (zoneEffected != null)
                 refreshUi(zoneEffected)
         }
 
@@ -362,7 +365,7 @@ class DrawCanvas(
     }
 
     fun init() {
-        log.i(  "Initializing Canvas")
+        log.i("Initializing Canvas")
         glRenderer.attachSurfaceView(this)
 
         // This does not work, as EditorGestureReceiver is stealing all the events.
@@ -370,7 +373,7 @@ class DrawCanvas(
 
         val surfaceCallback: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
-                log.i(  "surface created $holder")
+                log.i("surface created $holder")
                 // set up the drawing surface
                 updateActiveSurface()
             }
@@ -409,7 +412,7 @@ class DrawCanvas(
 
         coroutineScope.launch {
             onFocusChange.collect { hasFocus ->
-               logCanvasObserver.v("App has focus: $hasFocus")
+                logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
                     drawCanvasToView(null)
@@ -483,8 +486,7 @@ class DrawCanvas(
         }
         coroutineScope.launch {
             eraserTouchPoint.collect { p ->
-                if(!isErasing)
-                {
+                if (!isErasing) {
                     logCanvasObserver.v("Didn't draw point: $p -- eraser is not active")
                     return@collect
                 }
@@ -616,14 +618,14 @@ class DrawCanvas(
     }
 
     private fun refreshUi(dirtyRect: Rect?) {
-        log.d(  "refreshUi")
+        log.d("refreshUi")
         // Use only if you have confidence that there are no strokes being drawn at the moment
         if (!state.isDrawing) {
-            log.w(  "Not in drawing mode, skipping refreshUI")
+            log.w("Not in drawing mode, skipping refreshUI")
             return
         }
         if (drawingInProgress.isLocked)
-            log.w(  "Drawing is still in progress there might be a bug.")
+            log.w("Drawing is still in progress there might be a bug.")
 
         drawCanvasToView(dirtyRect)
 
@@ -641,20 +643,22 @@ class DrawCanvas(
         if (!state.isDrawing) {
             waitForDrawing()
             drawCanvasToView(null)
-            log.w(  "Not in drawing mode -- refreshUi ")
+            log.w("Not in drawing mode -- refreshUi ")
             return
         }
         if (Looper.getMainLooper().isCurrentThread) {
-            log.i(  "refreshUiSuspend() is called from the main thread."
+            log.i(
+                "refreshUiSuspend() is called from the main thread."
             )
         } else
-            log.i(  "refreshUiSuspend() is called from the non-main thread."
+            log.i(
+                "refreshUiSuspend() is called from the non-main thread."
             )
         waitForDrawing()
         drawCanvasToView(null)
         touchHelper.setRawDrawingEnabled(false)
         if (drawingInProgress.isLocked)
-            log.w(  "Lock was acquired during refreshing UI. It might cause errors.")
+            log.w("Lock was acquired during refreshing UI. It might cause errors.")
         touchHelper.setRawDrawingEnabled(true)
     }
 
@@ -673,8 +677,8 @@ class DrawCanvas(
             val imageHeight = softwareBitmap.height
 
             // Calculate the center position for the image relative to the page dimensions
-            val centerX = (page.viewWidth - imageWidth) / 2
-            val centerY = (page.viewHeight - imageHeight) / 2 + page.scroll
+            val centerX = (page.viewWidth - imageWidth) / 2 + page.scroll.x.toInt()
+            val centerY = (page.viewHeight - imageHeight) / 2 + page.scroll.y.toInt()
             val imageToSave = Image(
                 x = centerX,
                 y = centerY,
@@ -684,7 +688,7 @@ class DrawCanvas(
                 pageId = page.id
             )
             drawImage(
-                context, page.windowedCanvas, imageToSave, IntOffset(0, -page.scroll)
+                context, page.windowedCanvas, imageToSave, -page.scroll
             )
             selectImage(coroutineScope, page, state, imageToSave)
             // image will be added to database when released, the same as with paste element.
@@ -711,7 +715,7 @@ class DrawCanvas(
                 log.i("render cut")
                 val path = pointsToPath(cutPoints.map {
                     SimplePointF(
-                        it.x, it.y - page.scroll
+                        it.x - page.scroll.x, it.y - page.scroll.y
                     )
                 })
                 canvas.drawPath(path, selectPaint)
@@ -722,7 +726,7 @@ class DrawCanvas(
     }
 
     private suspend fun updateIsDrawing() {
-        log.i(  "Update is drawing: ${state.isDrawing}")
+        log.i("Update is drawing: ${state.isDrawing}")
         if (state.isDrawing) {
             touchHelper.setRawDrawingEnabled(true)
         } else {
@@ -736,7 +740,7 @@ class DrawCanvas(
 
     fun updatePenAndStroke() {
         // it takes around 11 ms to run on Note 4c.
-        log.i(  "Update pen and stroke")
+        log.i("Update pen and stroke")
         when (state.mode) {
             // we need to change size according to zoom level before drawing on screen
             Mode.Draw -> touchHelper.setStrokeStyle(penToStroke(state.pen))

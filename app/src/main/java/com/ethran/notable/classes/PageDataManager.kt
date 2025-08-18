@@ -423,7 +423,8 @@ object PageDataManager {
     }
 
     private fun ensureMemoryCapacity(requiredMb: Int): Boolean {
-        val availableMem = ((Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory())/(1024*1024)).toInt()
+        val availableMem = ((Runtime.getRuntime().maxMemory() - Runtime.getRuntime()
+            .totalMemory()) / (1024 * 1024)).toInt()
         if (availableMem > requiredMb)
             return true
         val toFree = requiredMb - availableMem

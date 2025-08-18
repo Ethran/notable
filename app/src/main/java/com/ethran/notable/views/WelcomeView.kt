@@ -345,7 +345,7 @@ fun ShowInstructions() {
                                 "• Tap the page number to quickly jump between pages.\n" +
                                 "• Try enabling 'Scribble to Erase' in Settings for natural erasing.\n" +
                                 "• Double tap to undo, or on a selection to copy it.\n" +
-                                "• You can use Notable as a live PDF viewer for LaTeX—see README.\n"+
+                                "• You can use Notable as a live PDF viewer for LaTeX—see README.\n" +
                                 "• You can customize gesture actions in Settings.",
                         style = MaterialTheme.typography.body2,
                         color = MaterialTheme.colors.onSurface,
@@ -434,7 +434,6 @@ fun hasFilePermission(context: Context): Boolean {
         ) == PackageManager.PERMISSION_GRANTED
     }
 }
-
 
 
 private fun requestPermissions(context: Context) {

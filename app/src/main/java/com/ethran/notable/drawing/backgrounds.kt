@@ -9,9 +9,11 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -22,6 +24,7 @@ import com.ethran.notable.utils.getPdfPageCount
 import com.ethran.notable.utils.loadBackgroundBitmap
 import com.ethran.notable.utils.logCallStack
 import com.ethran.notable.utils.scaleRect
+import com.onyx.android.sdk.extension.copy
 import com.onyx.android.sdk.extension.isNotNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.cos
@@ -38,124 +41,135 @@ const val lineHeight = 80
 const val dotSize = 6f
 const val hexVerticalCount = 26
 
-fun drawLinedBg(canvas: Canvas, scroll: Int, scale: Float) {
-    val height = (canvas.height / scale).toInt()
-    val width = (canvas.width / scale).toInt()
 
-    // white bg
-    canvas.drawColor(Color.WHITE)
-
-    // paint
-    val paint = Paint().apply {
-        this.color = Color.GRAY
-        this.strokeWidth = 1f
-    }
-
-    // lines
-    for (y in 0..height) {
-        val line = scroll + y
-        if (line % lineHeight == 0) {
-            canvas.drawLine(
-                padding.toFloat(), y.toFloat(), (width - padding).toFloat(), y.toFloat(), paint
-            )
-        }
-    }
+// Default paint for lines, dots, etc
+private val defaultPaint = Paint().apply {
+    this.color = Color.GRAY
+    this.strokeWidth = 1f
 }
 
-fun drawDottedBg(canvas: Canvas, scroll: Int, scale: Float) {
-    val height = (canvas.height / scale).toInt()
-    val width = (canvas.width / scale).toInt()
-    // white bg
-    canvas.drawColor(Color.WHITE)
-
-    // paint
-    val paint = Paint().apply {
-        this.color = Color.GRAY
-        this.strokeWidth = 1f
-    }
-
-    // dots
-    for (y in 0..height) {
-        val line = scroll + y
-        if (line % lineHeight == 0 && line >= padding) {
-            for (x in padding..width - padding step lineHeight) {
-                canvas.drawOval(
-                    x.toFloat() - dotSize / 2,
-                    y.toFloat() - dotSize / 2,
-                    x.toFloat() + dotSize / 2,
-                    y.toFloat() + dotSize / 2,
-                    paint
-                )
-            }
-        }
-    }
-
+// For drawing Hexagons
+private val defaultPaintStroke = defaultPaint.copy().apply { this.style = Paint.Style.STROKE }
+private val marginPaint = Paint().apply {
+    this.color = Color.MAGENTA
+    this.strokeWidth = 2f
+}
+private val paginationLinePaint = Paint().apply {
+    color = Color.RED
+    strokeWidth = 4f
+    pathEffect = DashPathEffect(floatArrayOf(10f, 5f), 0f)
 }
 
-fun drawSquaredBg(canvas: Canvas, scroll: Int, scale: Float) {
+fun drawLinedBg(canvas: Canvas, scroll: Offset, scale: Float) {
     val height = (canvas.height / scale).toInt()
     val width = (canvas.width / scale).toInt()
 
     // white bg
     canvas.drawColor(Color.WHITE)
 
-    // paint
-    val paint = Paint().apply {
-        this.color = Color.GRAY
-        this.strokeWidth = 1f
-    }
 
-    // lines
-    for (y in 0..height) {
-        val line = scroll + y
-        if (line % lineHeight == 0) {
-            canvas.drawLine(
-                padding.toFloat(), y.toFloat(), (width - padding).toFloat(), y.toFloat(), paint
-            )
-        }
-    }
+    val offset = IntOffset(lineHeight, lineHeight) - IntOffset(
+        scroll.x.toInt() % lineHeight, scroll.y.toInt() % lineHeight
+    )
 
-    for (x in padding..width - padding step lineHeight) {
+    for (y in 0..height step lineHeight) {
         canvas.drawLine(
-            x.toFloat(), padding.toFloat(), x.toFloat(), height.toFloat(), paint
+            padding.toFloat(),
+            y.toFloat() + offset.y,
+            (width - padding).toFloat(),
+            y.toFloat() + offset.y,
+            defaultPaint
         )
     }
 }
 
-fun drawHexedBg(canvas: Canvas, scroll: Int, scale: Float) {
+fun drawDottedBg(canvas: Canvas, scroll: Offset, scale: Float) {
+    val height = (canvas.height / scale).toInt()
+    val width = (canvas.width / scale).toInt()
+    // white bg
+    canvas.drawColor(Color.WHITE)
+
+
+    // dots
+    val offset = IntOffset(lineHeight, lineHeight) - IntOffset(
+        scroll.x.toInt() % lineHeight, scroll.y.toInt() % lineHeight
+    )
+
+    for (y in 0..height step lineHeight) {
+        for (x in padding..width - padding step lineHeight) {
+            canvas.drawOval(
+                x.toFloat() + offset.x - dotSize / 2,
+                y.toFloat() + offset.y - dotSize / 2,
+                x.toFloat() + offset.x + dotSize / 2,
+                y.toFloat() + offset.y + dotSize / 2,
+                defaultPaint
+            )
+        }
+    }
+
+}
+
+fun drawSquaredBg(canvas: Canvas, scroll: Offset, scale: Float) {
+    val height = (canvas.height / scale).toInt()
+    val width = (canvas.width / scale).toInt()
+
+    // white bg
+    canvas.drawColor(Color.WHITE)
+
+    // paint
+
+    val offset = IntOffset(lineHeight, lineHeight) - IntOffset(
+        scroll.x.toInt() % lineHeight, scroll.y.toInt() % lineHeight
+    )
+
+    for (y in 0..height step lineHeight) {
+        canvas.drawLine(
+            padding.toFloat(),
+            y.toFloat() + offset.y,
+            (width - padding).toFloat(),
+            y.toFloat() + offset.y,
+            defaultPaint
+        )
+    }
+
+    for (x in padding..width - padding step lineHeight) {
+        canvas.drawLine(
+            x.toFloat() + offset.x,
+            padding.toFloat(),
+            x.toFloat() + offset.x,
+            height.toFloat(),
+            defaultPaint
+        )
+    }
+}
+
+fun drawHexedBg(canvas: Canvas, scroll: Offset, scale: Float) {
     val height = (canvas.height / scale)
     val width = (canvas.width / scale)
 
     // background
     canvas.drawColor(Color.WHITE)
 
-    // stroke
-    val paint = Paint().apply {
-        this.color = Color.GRAY
-        this.strokeWidth = 1f
-        this.style = Paint.Style.STROKE
-    }
 
     // https://www.redblobgames.com/grids/hexagons/#spacing
-    val r = max(width, height) / (hexVerticalCount * 1.5f)
+    val r = max(width, height) / (hexVerticalCount * 1.5f) * scale
     val hexHeight = r * 2
     val hexWidth = r * sqrt(3f)
 
     val rows = (height / hexVerticalCount).toInt()
-    val cols = (width / hexWidth).toInt()
+    val cols = (width / hexWidth).toInt() + 1
 
     for (row in 0..rows) {
         val offsetX = if (row % 2 == 0) 0f else hexWidth / 2
-
         for (col in 0..cols) {
-            val x = col * hexWidth + offsetX
-            val y = row * hexHeight * 0.75f - scroll.toFloat().mod(hexHeight * 1.5f)
-            drawHexagon(canvas, x, y, r, paint)
+            val x = col * hexWidth + offsetX - scroll.x.mod(hexWidth) - hexWidth
+            val y = row * hexHeight * 0.75f - scroll.y.mod(hexHeight * 1.5f)
+            drawHexagon(canvas, x, y, r)
         }
     }
 }
 
-fun drawHexagon(canvas: Canvas, centerX: Float, centerY: Float, r: Float, paint: Paint) {
+fun drawHexagon(canvas: Canvas, centerX: Float, centerY: Float, r: Float) {
     val path = Path()
     for (i in 0..5) {
         val angle = Math.toRadians((30 + 60 * i).toDouble())
@@ -168,14 +182,14 @@ fun drawHexagon(canvas: Canvas, centerX: Float, centerY: Float, r: Float, paint:
         }
     }
     path.close()
-    canvas.drawPath(path, paint)
+    canvas.drawPath(path, defaultPaintStroke)
 }
 
 fun drawBackgroundImages(
     context: Context,
     canvas: Canvas,
     backgroundImage: String,
-    scroll: Int,
+    scroll: Offset,
     page: PageView? = null,
     scale: Float = 1.0F,
     repeat: Boolean = false,
@@ -247,7 +261,7 @@ fun drawPdfPage(
     canvas: Canvas,
     pdfUriString: String,
     pageNumber: Int,
-    scroll: Int,
+    scroll: Offset,
     page: PageView? = null,
     scale: Float = 1.0f
 ) {
@@ -275,11 +289,7 @@ fun drawPdfPage(
 }
 
 fun drawBitmapToCanvas(
-    canvas: Canvas,
-    imageBitmap: Bitmap,
-    scroll: Int,
-    scale: Float,
-    repeat: Boolean
+    canvas: Canvas, imageBitmap: Bitmap, scroll: Offset, scale: Float, repeat: Boolean
 ) {
     canvas.drawColor(Color.WHITE)
     val imageWidth = imageBitmap.width
@@ -293,62 +303,41 @@ fun drawBitmapToCanvas(
     val scaleFactor = widthOnCanvas.toFloat() / imageWidth
     val scaledHeight = (imageHeight * scaleFactor).toInt()
 
-
+    // TODO: It's working, but its not nice -- do it in better style.
     // Draw the first image, considering the scroll offset
-    val srcTop = (scroll / scaleFactor).toInt() % imageHeight
-    val rectOnImage = Rect(0, srcTop.coerceAtLeast(0), imageWidth, imageHeight)
+    val srcTop = Offset(
+        (scroll.x / scaleFactor).coerceAtLeast(0f),
+        ((scroll.y / scaleFactor) % imageHeight).coerceAtLeast(0f)
+    )
+    val rectOnImage = Rect(0, srcTop.y.toInt(), imageWidth, imageHeight)
     val rectOnCanvas = Rect(
+        -scroll.x.toInt(),
         0,
-        0,
-        widthOnCanvas,
-        ((imageHeight - srcTop) * scaleFactor).toInt()
+        widthOnCanvas - scroll.x.toInt(),
+        ((imageHeight - srcTop.y) * scaleFactor).toInt()
     )
 
     var filledHeight = 0
-    if (repeat || scroll < canvasHeight) {
+    if (repeat || scroll.y < canvasHeight) {
         canvas.drawBitmap(imageBitmap, rectOnImage, rectOnCanvas, null)
         filledHeight = rectOnCanvas.bottom
     }
-
-//    if (widthOnCanvas < canvasWidth / scale) {
-//        Log.e(
-//            TAG,
-//            "left: $filledHeight, top: 0, right: $canvasWidth, bottom: $canvasHeight"
-//        )
-//        canvas.drawRect(
-//            widthOnCanvas.toFloat(),
-//            0f,
-//            canvasWidth.toFloat(),
-//            canvasHeight.toFloat(),
-//            paint
-//        )
-//    }
+    // TODO: Should we also repeat horizontally?
 
     if (repeat) {
         var currentTop = filledHeight
         val srcRect = Rect(0, 0, imageWidth, imageHeight)
         while (currentTop < canvasHeight / scale) {
 
-            val dstRect = RectF(
-                0f,
-                currentTop / scale,
-                widthOnCanvas / scale,
-                (currentTop + scaledHeight) / scale
+            val dstRect = Rect(
+                -scroll.x.toInt(),
+                currentTop,
+                widthOnCanvas - scroll.x.toInt(),
+                currentTop + scaledHeight
             )
             canvas.drawBitmap(imageBitmap, srcRect, dstRect, null)
             currentTop += scaledHeight
         }
-    } else {
-//        // Fill the remaining area with white if necessary
-//        if (filledHeight < canvasHeight / scale) {
-//            canvas.drawRect(
-//                0f,
-//                filledHeight / scale,
-//                canvasWidth / scale,
-//                canvasHeight / scale,
-//                paint
-//            )
-//        }
     }
 }
 
@@ -357,7 +346,7 @@ fun drawBg(
     canvas: Canvas,
     backgroundType: BackgroundType,
     background: String,
-    scroll: Int = 0,
+    scroll: Offset = Offset.Zero,
     scale: Float = 1f, // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
     page: PageView? = null,
     clipRect: Rect? = null // before the scaling
@@ -376,18 +365,19 @@ fun drawBg(
         }
 
         is BackgroundType.CoverImage -> {
-            drawBackgroundImages(context, canvas, background, 0, page, scale)
+            drawBackgroundImages(context, canvas, background, Offset.Zero, page, scale)
             drawTitleBox(canvas)
         }
+
         is BackgroundType.AutoPdf -> {
-            if (page == null)
-                return
+            if (page == null) return
             val pageNumber = page.currentPageNumber
-            if (pageNumber < getPdfPageCount(background))
-                drawPdfPage(canvas, background, pageNumber, scroll, page, scale)
-            else
-                canvas.drawColor(Color.WHITE)
+            if (pageNumber < getPdfPageCount(background)) drawPdfPage(
+                canvas, background, pageNumber, scroll, page, scale
+            )
+            else canvas.drawColor(Color.WHITE)
         }
+
         is BackgroundType.Pdf -> {
             drawPdfPage(canvas, background, backgroundType.page, scroll, page, scale)
         }
@@ -402,7 +392,7 @@ fun drawBg(
             }
         }
     }
-    drawMargin(canvas, scale)
+    drawMargin(canvas, scroll, scale)
 
     if (GlobalAppSettings.current.visualizePdfPagination) {
         drawPaginationLine(canvas, scroll, scale)
@@ -412,32 +402,19 @@ fun drawBg(
     }
 }
 
-fun drawMargin(canvas: Canvas, scale: Float) {
+// TODO: make sure it respects horizontal scroll
+fun drawMargin(canvas: Canvas, scroll: Offset, scale: Float) {
     // in landscape orientation add margin to indicate what will be visible in vertical orientation.
-    if (SCREEN_WIDTH > SCREEN_HEIGHT || scale < 1.0f) {
-        val paint = Paint().apply {
-            this.color = Color.MAGENTA
-            this.strokeWidth = 2f
-        }
-        val margin = min(SCREEN_HEIGHT, SCREEN_WIDTH)
+    if (SCREEN_WIDTH > SCREEN_HEIGHT || scale < 1.0f || scroll.x > 1) {
+        val margin = min(SCREEN_HEIGHT, SCREEN_WIDTH) - scroll.x
         // Draw vertical line with x= SCREEN_HEIGHT
         canvas.drawLine(
-            margin.toFloat(),
-            padding.toFloat(),
-            margin.toFloat(),
-            (SCREEN_HEIGHT / scale - padding),
-            paint
+            margin, padding.toFloat(), margin, (SCREEN_HEIGHT / scale - padding), marginPaint
         )
     }
 }
 
-fun drawPaginationLine(canvas: Canvas, scroll: Int, scale: Float) {
-    val paint = Paint().apply {
-        color = Color.RED
-        strokeWidth = 4f
-        pathEffect = DashPathEffect(floatArrayOf(10f, 5f), 0f)
-    }
-
+fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
     val textPaint = Paint().apply {
         color = Color.BLACK
         textSize = 24f
@@ -451,29 +428,22 @@ fun drawPaginationLine(canvas: Canvas, scroll: Int, scale: Float) {
 
     // Convert scroll position to canvas coordinates
     // Calculate current page number (1-based)
-    val currentPage = floor(scroll / pageHeight).toInt() + 1
+    val currentPage = floor(scroll.y / pageHeight).toInt() + 1
 
     // Calculate position of first page break
-    var yPos = (currentPage * pageHeight) - scroll
+    var yPos = (currentPage * pageHeight) - scroll.y
 
     var pageNum = currentPage
-    while (yPos < canvas.height/scale) {
+    while (yPos < canvas.height / scale) {
         if (yPos >= 0) { // Only draw visible lines
             val yPosScaled = yPos
             canvas.drawLine(
-                0f,
-                yPosScaled,
-                screenWidth.toFloat(),
-                yPosScaled,
-                paint
+                0f, yPosScaled, screenWidth.toFloat(), yPosScaled, paginationLinePaint
             )
 
             // Draw page number label (offset slightly below the line)
             canvas.drawText(
-                "Subpage ${pageNum + 1}",
-                20f,
-                yPosScaled + 30f,
-                textPaint
+                "Subpage ${pageNum + 1}", 20f - scroll.x, yPosScaled + 30f, textPaint
             )
         } else {
             backgroundsLog.d("Skipping line at $yPos (above visible area)")

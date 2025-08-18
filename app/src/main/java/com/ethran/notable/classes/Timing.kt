@@ -19,7 +19,13 @@ class Timing(
 
         if (showLogs) {
             val stepLabel = name ?: "Step $stepCount"
-            log.d("$label - $stepLabel: Δ ${"%.3f".format(deltaMs)} ms | Total ${"%.3f".format(totalMs)} ms")
+            log.d(
+                "$label - $stepLabel: Δ ${"%.3f".format(deltaMs)} ms | Total ${
+                    "%.3f".format(
+                        totalMs
+                    )
+                } ms"
+            )
         }
 
         lastCheckpoint = now

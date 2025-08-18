@@ -25,6 +25,7 @@ import com.ethran.notable.classes.EditorControlTower
 import com.ethran.notable.classes.PageView
 import com.ethran.notable.components.EditorGestureReceiver
 import com.ethran.notable.components.EditorSurface
+import com.ethran.notable.components.HorizontalScrollIndicator
 import com.ethran.notable.components.ScrollIndicator
 import com.ethran.notable.components.SelectedBitmap
 import com.ethran.notable.components.Toolbar
@@ -165,9 +166,10 @@ fun EditorView(
                     .fillMaxHeight()
             ) {
                 Spacer(modifier = Modifier.weight(1f))
-                ScrollIndicator(context = context, state = editorState)
+                ScrollIndicator(state = editorState)
             }
             PositionedToolbar(navController, editorState, editorControlTower)
+            HorizontalScrollIndicator(state = editorState)
         }
     }
 }

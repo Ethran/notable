@@ -52,7 +52,7 @@ fun PagesView(navController: NavController, bookId: String) {
         Modifier
             .fillMaxSize()
     ) {
-        Topbar{
+        Topbar {
             Row(
                 Modifier
                     .padding(10.dp)

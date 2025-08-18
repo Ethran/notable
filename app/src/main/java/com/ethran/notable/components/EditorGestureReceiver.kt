@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -84,7 +85,8 @@ fun EditorGestureReceiver(
                             // Track all moves until the stylus is lifted
                             do {
                                 val event = awaitPointerEvent()
-                                val stylus = event.changes.firstOrNull { it.type == PointerType.Stylus }
+                                val stylus =
+                                    event.changes.firstOrNull { it.type == PointerType.Stylus }
                                 stylus?.let {
                                     coroutineScope.launch {
                                         DrawCanvas.eraserTouchPoint.emit(it.position)
@@ -106,7 +108,7 @@ fun EditorGestureReceiver(
                         if (!view.hasWindowFocus()) return@awaitEachGesture
 
                         val gestureState = GestureState()
-                        var overdueScroll = 0
+                        var overdueScroll = Offset.Zero
 
                         // Ignore non-touch input
                         if (down.type != PointerType.Touch) {
@@ -157,7 +159,7 @@ fun EditorGestureReceiver(
                                 rectangleBounds = gestureState.calculateRectangleBounds()
                             } else {
                                 // set selection mode
-                                if (gestureState.isHolding()) {
+                                if (gestureState.isHoldingOneFinger()) {
                                     gestureState.gestureMode = GestureMode.Selection
                                     state.isDrawing = false // unfreeze the screen
                                     crossPosition = gestureState.getLastPositionIO()
@@ -166,44 +168,68 @@ fun EditorGestureReceiver(
                                 }
                                 gestureState.checkSmoothScrolling()
                                 gestureState.checkContinuousZoom()
+                                if(gestureState.checkHoldingTwoFingers())
+                                    showHint("Drag mode!", coroutineScope, 1500)
 
                             }
                             if (gestureState.gestureMode == GestureMode.Scroll) {
                                 val delta = gestureState.getVerticalDragDelta()
-                                overdueScroll = controlTower.onSingleFingerVerticalSwipe(
-                                    delta = delta + overdueScroll
+                                overdueScroll = controlTower.processScroll(
+                                    delta = Offset(overdueScroll.x, overdueScroll.y + delta)
                                 )
                             }
                             if (gestureState.gestureMode == GestureMode.Zoom) {
                                 val delta = gestureState.getPinchDelta()
-                                controlTower.onPinchToZoom(delta)
+                                controlTower.onPinchToZoom(delta, gestureState.getPinchCenter())
                             }
 
+                            if (gestureState.gestureMode == GestureMode.Drag) {
+                                val delta = gestureState.getTotalDragDelta()
+                                overdueScroll =
+                                    controlTower.processScroll(delta = overdueScroll + delta)
+                            }
 
                         } while (true)
 
-                        if (gestureState.gestureMode == GestureMode.Selection) {
-                            resolveGesture(
-                                settings = appSettings,
-                                default = AppSettings.defaultHoldAction,
-                                override = AppSettings::holdAction,
-                                state = state,
-                                scope = coroutineScope,
-                                previousPage = goToPreviousPage,
-                                nextPage = goToNextPage,
-                                rectangle = rectangleBounds!!,
-                                controlTower = controlTower
-                            )
-                            crossPosition = null
-                            rectangleBounds = null
-                            gestureState.gestureMode = GestureMode.Normal
-                            if (!state.isDrawing)
-                                state.isDrawing = true
-                            return@awaitEachGesture
-                        } else if (gestureState.gestureMode == GestureMode.Scroll || gestureState.gestureMode == GestureMode.Zoom) {
-                            // return screen updates to normal.
-                            gestureState.gestureMode = GestureMode.Normal
-                            return@awaitEachGesture
+                        when (gestureState.gestureMode) {
+                            GestureMode.Selection -> {
+                                resolveGesture(
+                                    settings = appSettings,
+                                    default = AppSettings.defaultHoldAction,
+                                    override = AppSettings::holdAction,
+                                    state = state,
+                                    scope = coroutineScope,
+                                    previousPage = goToPreviousPage,
+                                    nextPage = goToNextPage,
+                                    rectangle = rectangleBounds!!,
+                                    controlTower = controlTower
+                                )
+                                crossPosition = null
+                                rectangleBounds = null
+                                gestureState.gestureMode = GestureMode.Normal
+                                if (!state.isDrawing)
+                                    state.isDrawing = true
+                                return@awaitEachGesture
+                            }
+
+                            GestureMode.Scroll -> {
+                                gestureState.gestureMode =
+                                    GestureMode.Normal // return screen updates to normal.
+                                return@awaitEachGesture
+                            }
+
+                            GestureMode.Zoom, GestureMode.Drag -> {
+                                log.d("Zoom or drag -- final redraw")
+                                coroutineScope.launch {
+                                    // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
+                                    DrawCanvas.forceUpdate.emit(null)
+                                }
+                                gestureState.gestureMode =
+                                    GestureMode.Normal // return screen updates to normal.
+                                return@awaitEachGesture
+                            }
+
+                            GestureMode.Normal -> {}
                         }
 
                         if (!coroutineScope.isActive) return@awaitEachGesture
@@ -262,7 +288,7 @@ fun EditorGestureReceiver(
                             // zoom gesture
                             val zoomDelta = gestureState.getPinchDrag()
                             if (!appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
-                                controlTower.onPinchToZoom(zoomDelta)
+                                controlTower.onPinchToZoom(zoomDelta, Offset(0f,0f))
                                 log.d("Discrete zoom: $zoomDelta")
                             }
                         }
@@ -301,7 +327,7 @@ fun EditorGestureReceiver(
                             && abs(verticalDrag) > SWIPE_THRESHOLD
                         ) {
                             log.d("Discrete scrolling, verticalDrag: $verticalDrag")
-                            controlTower.onSingleFingerVerticalSwipe(verticalDrag)
+                            controlTower.processScroll(Offset(0f, verticalDrag))
                         }
                     } catch (e: CancellationException) {
                         log.w("Gesture coroutine canceled", e)

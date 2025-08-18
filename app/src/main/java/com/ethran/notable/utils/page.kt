@@ -9,7 +9,7 @@ import android.graphics.ImageDecoder
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Looper
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.geometry.Offset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -50,10 +50,10 @@ fun drawCanvas(context: Context, pageId: String): Bitmap {
 
     // Draw strokes
     for (stroke in strokes) {
-        drawStroke(canvas, stroke, IntOffset(0, 0))
+        drawStroke(canvas, stroke, Offset.Zero)
     }
     for (image in images) {
-        drawImage(context, canvas, image, IntOffset(0, 0))
+        drawImage(context, canvas, image, Offset.Zero)
     }
     return bitmap
 }
@@ -87,7 +87,7 @@ fun PdfDocument.writePage(context: Context, number: Int, repo: PageRepository, i
                 page,
                 strokes,
                 images,
-                currentTop,
+                Offset(0f, currentTop.toFloat()),
                 scaleFactor
             )
             finishPage(documentPage)
@@ -96,7 +96,15 @@ fun PdfDocument.writePage(context: Context, number: Int, repo: PageRepository, i
     } else {
         val documentPage =
             startPage(PdfDocument.PageInfo.Builder(A4_WIDTH, pageHeight, number).create())
-        drawPageContent(context, documentPage.canvas, page, strokes, images, 0, scaleFactor)
+        drawPageContent(
+            context,
+            documentPage.canvas,
+            page,
+            strokes,
+            images,
+            Offset.Zero,
+            scaleFactor
+        )
         finishPage(documentPage)
     }
 }
@@ -107,11 +115,11 @@ private fun drawPageContent(
     page: Page,
     strokes: List<Stroke>,
     images: List<Image>,
-    scroll: Int,
+    scroll: Offset,
     scaleFactor: Float
 ) {
     canvas.scale(scaleFactor, scaleFactor)
-    val scaledScroll = (scroll / scaleFactor).toInt()
+    val scaledScroll = scroll / scaleFactor
     drawBg(
         context,
         canvas,
@@ -122,11 +130,11 @@ private fun drawPageContent(
     )
 
     for (image in images) {
-        drawImage(context, canvas, image, IntOffset(0, -scaledScroll))
+        drawImage(context, canvas, image, -scaledScroll)
     }
 
     for (stroke in strokes) {
-        drawStroke(canvas, stroke, IntOffset(0, -scaledScroll))
+        drawStroke(canvas, stroke, -scaledScroll)
     }
 }
 

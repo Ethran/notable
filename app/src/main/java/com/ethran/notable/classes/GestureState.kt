@@ -5,8 +5,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.unit.IntOffset
+import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.modals.GlobalAppSettings
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.setAnimationMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.abs
@@ -32,7 +32,8 @@ enum class GestureMode {
     Selection,
     Scroll,
     Zoom,
-    Normal
+    Normal,
+    Drag
 }
 
 
@@ -48,10 +49,11 @@ data class GestureState(
         set(value) {
             if (field != value) {
                 when (value) {
-                    GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection -> {
+                    GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection, GestureMode.Drag -> {
                         log.d("Entered ${value.name} gesture mode")
                         setAnimationMode(true)
                     }
+
                     GestureMode.Normal -> {
                         log.d("Entered ${value.name} gesture mode")
                         setAnimationMode(false)
@@ -146,8 +148,8 @@ data class GestureState(
     }
 
     //return smallest vertical movement, or 0, if movement is not vertical
-    fun getVerticalDrag(): Int {
-        if (initialPositions.isEmpty() || lastPositions.isEmpty()) return 0
+    fun getVerticalDrag(): Float {
+        if (initialPositions.isEmpty() || lastPositions.isEmpty()) return 0f
 
         var minVerticalMovement: Float? = null
 
@@ -156,14 +158,14 @@ data class GestureState(
             val delta = last - initial
 
             // Check if the movement is more vertical than horizontal
-            if (abs(delta.y) <= abs(delta.x)) return 0
+            if (abs(delta.y) <= abs(delta.x)) return 0f
 
             // Track the smallest vertical movement
             if (minVerticalMovement == null || abs(delta.y) < abs(minVerticalMovement)) {
                 minVerticalMovement = delta.y
             }
         }
-        return minVerticalMovement?.toInt() ?: 0
+        return minVerticalMovement ?: 0f
     }
 
 
@@ -180,6 +182,20 @@ data class GestureState(
         val delta = (last - initial).toInt()
         lastCheckForMovementPosition = currentPosition
         return delta
+    }
+
+    fun getTotalDragDelta(): Offset {
+        if (lastPositions.isEmpty()) return Offset.Zero
+        val currentPosition = lastPositions.values.toList()
+        if (lastCheckForMovementPosition.isNullOrEmpty()) {
+            lastCheckForMovementPosition = currentPosition
+            return Offset.Zero
+        }
+        val initial = lastCheckForMovementPosition?.get(0) ?: return Offset.Zero
+        val last = currentPosition[0]
+        val delta = last - initial
+        lastCheckForMovementPosition = currentPosition
+        return Offset(delta.x, delta.y)
     }
 
     private fun calculateDistance(point1: Offset, point2: Offset): Float {
@@ -228,8 +244,28 @@ data class GestureState(
         return currentDistance / lastDistance - 1f
     }
 
+    /**
+     * Returns the current focal point (center) of the pinch gesture in screen coordinates.
+     */
+    fun getPinchCenter(): Offset? {
+        val src: Collection<Offset> = when {
+            lastPositions.size >= 2 -> lastPositions.values
+            initialPositions.size >= 2 -> initialPositions.values
+            else -> return null
+        }
+        var sumX = 0f
+        var sumY = 0f
+        var count = 0
+        for (p in src) {
+            sumX += p.x
+            sumY += p.y
+            count++
+        }
+        if (count < 2) return null
+        return Offset(sumX / count, sumY / count)
+    }
 
-    fun isHolding(): Boolean {
+    fun isHoldingOneFinger(): Boolean {
         return if (getElapsedTime() >= HOLD_THRESHOLD_MS && getInputCount() == 1)
             if (calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE)
                 true
@@ -239,18 +275,35 @@ data class GestureState(
             false
     }
 
+    fun checkHoldingTwoFingers(): Boolean {
+        return if (getElapsedTime() >= HOLD_THRESHOLD_MS && gestureMode == GestureMode.Normal)
+            if (calculateTotalDelta() < 2 * TAP_MOVEMENT_TOLERANCE && getInputCount() == 2) {
+                gestureMode = GestureMode.Drag
+                true
+            } else
+                false
+        else
+            false
+    }
+
     fun checkSmoothScrolling(): Boolean {
-        return if (GlobalAppSettings.current.smoothScroll && abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && getInputCount() == 1) {
-            gestureMode = GestureMode.Scroll
-            true
+        return if (GlobalAppSettings.current.smoothScroll && gestureMode == GestureMode.Normal) {
+            if (abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && getInputCount() == 1) {
+                gestureMode = GestureMode.Scroll
+                true
+            } else
+                false
         } else
             false
     }
 
     fun checkContinuousZoom(): Boolean {
-        return if (GlobalAppSettings.current.continuousZoom && abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS && getInputCount() == 2) {
-            gestureMode = GestureMode.Zoom
-            true
+        return if (GlobalAppSettings.current.continuousZoom && gestureMode == GestureMode.Normal) {
+            if (abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS && getInputCount() == 2) {
+                gestureMode = GestureMode.Zoom
+                true
+            } else
+                false
         } else
             false
     }

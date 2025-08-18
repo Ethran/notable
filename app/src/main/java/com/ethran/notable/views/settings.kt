@@ -202,7 +202,7 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             })
 
         SettingToggleRow(
-            label = "Continuous Zoom (Work in progress)",
+            label = "Continuous Zoom",
             value = settings.continuousZoom,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(continuousZoom = isChecked))
@@ -453,12 +453,36 @@ fun EditGestures(kv: KvProxy, settings: AppSettings?) {
             .padding(vertical = 8.dp)
     ) {
         val gestures = listOf(
-            Triple("Double Tap Action", AppSettings.defaultDoubleTapAction, AppSettings::doubleTapAction),
-            Triple("Two Finger Tap Action", AppSettings.defaultTwoFingerTapAction, AppSettings::twoFingerTapAction),
-            Triple("Swipe Left Action", AppSettings.defaultSwipeLeftAction, AppSettings::swipeLeftAction),
-            Triple("Swipe Right Action", AppSettings.defaultSwipeRightAction, AppSettings::swipeRightAction),
-            Triple("Two Finger Swipe Left Action", AppSettings.defaultTwoFingerSwipeLeftAction, AppSettings::twoFingerSwipeLeftAction),
-            Triple("Two Finger Swipe Right Action", AppSettings.defaultTwoFingerSwipeRightAction, AppSettings::twoFingerSwipeRightAction),
+            Triple(
+                "Double Tap Action",
+                AppSettings.defaultDoubleTapAction,
+                AppSettings::doubleTapAction
+            ),
+            Triple(
+                "Two Finger Tap Action",
+                AppSettings.defaultTwoFingerTapAction,
+                AppSettings::twoFingerTapAction
+            ),
+            Triple(
+                "Swipe Left Action",
+                AppSettings.defaultSwipeLeftAction,
+                AppSettings::swipeLeftAction
+            ),
+            Triple(
+                "Swipe Right Action",
+                AppSettings.defaultSwipeRightAction,
+                AppSettings::swipeRightAction
+            ),
+            Triple(
+                "Two Finger Swipe Left Action",
+                AppSettings.defaultTwoFingerSwipeLeftAction,
+                AppSettings::twoFingerSwipeLeftAction
+            ),
+            Triple(
+                "Two Finger Swipe Right Action",
+                AppSettings.defaultTwoFingerSwipeRightAction,
+                AppSettings::twoFingerSwipeRightAction
+            ),
         )
 
         gestures.forEachIndexed { index, (title, default, override) ->

@@ -3,23 +3,26 @@ package com.ethran.notable.db
 import android.graphics.Canvas
 import android.graphics.Rect
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.PageView
+import com.ethran.notable.datastore.SimplePointF
+import com.ethran.notable.drawing.drawImage
+import com.ethran.notable.drawing.drawStroke
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.PlacementMode
 import com.ethran.notable.utils.SelectPointPosition
-import com.ethran.notable.utils.SimplePointF
 import com.ethran.notable.utils.divideStrokesFromCut
-import com.ethran.notable.drawing.drawImage
-import com.ethran.notable.drawing.drawStroke
 import com.ethran.notable.utils.imageBoundsInt
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.selectImagesFromPath
 import com.ethran.notable.utils.selectStrokesFromPath
 import com.ethran.notable.utils.setAnimationMode
 import com.ethran.notable.utils.strokeBounds
+import com.ethran.notable.utils.takeTopLeftCornel
+import com.ethran.notable.utils.toIntOffset
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -61,17 +64,17 @@ fun selectImagesAndStrokes(
             page.context,
             selectedCanvas,
             it,
-            IntOffset(-pageBounds.left, -pageBounds.top)
+            -pageBounds.takeTopLeftCornel().toOffset()
         )
     }
     strokesToSelect.forEach {
         drawStroke(
             selectedCanvas,
             it,
-            IntOffset(-pageBounds.left, -pageBounds.top)
+            -pageBounds.takeTopLeftCornel().toOffset()
         )
     }
-    val startOffset = IntOffset(pageBounds.left, pageBounds.top - page.scroll)
+    val startOffset = IntOffset(pageBounds.left, pageBounds.top) - page.scroll.toIntOffset()
 
     // set state
     editorState.selectionState.selectedImages = imagesToSelect
