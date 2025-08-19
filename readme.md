@@ -246,7 +246,7 @@ Feel free to open issues or submit pull requests. I appreciate your help!
 [sponsor-url]: https://github.com/sponsors/rethran
 
 [docs-url]: https://github.com/Ethran/notable
-[bug-url]: https://github.com/Ethran/notable/issues/new?labels=bug&template=bug-report---.md
+[bug-url]: https://github.com/Ethran/notable/issues/new?template=bug_report.md
 [feature-url]: https://github.com/Ethran/notable/issues/new?labels=enhancement&template=feature-request---.md
 [bug-shield]: https://img.shields.io/badge/🐛%20Report%20Bug-red?style=for-the-badge
 [feature-shield]: https://img.shields.io/badge/💡%20Request%20Feature-blueviolet?style=for-the-badge
