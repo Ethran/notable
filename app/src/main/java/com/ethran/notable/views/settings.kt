@@ -208,6 +208,12 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
                 kv.setAppSettings(settings.copy(continuousZoom = isChecked))
             })
         SettingToggleRow(
+            label = "Continuous Stroke Slider",
+            value = settings.continuousStrokeSlider,
+            onToggle = { isChecked ->
+                kv.setAppSettings(settings.copy(continuousStrokeSlider = isChecked))
+            })
+        SettingToggleRow(
             label = "Monochrome mode (Work in progress)",
             value = settings.monochromeMode,
             onToggle = { isChecked ->

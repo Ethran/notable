@@ -31,7 +31,6 @@ import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.PenSetting
 import com.ethran.notable.utils.convertDpToPixel
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 
@@ -45,6 +44,11 @@ fun StrokeMenu(
 ) {
     val context = LocalContext.current
 
+    val columnModifier =
+        if (GlobalAppSettings.current.continuousStrokeSlider) Modifier
+            .background(Color.White)
+            .border(1.dp, Color.Black)
+        else Modifier
     Popup(
         offset = IntOffset(0, convertDpToPixel(43.dp, context).toInt()),
         onDismissRequest = { onClose() },
@@ -53,23 +57,18 @@ fun StrokeMenu(
     ) {
 
         Column(
-            modifier = Modifier
+            modifier = columnModifier
                 .width(IntrinsicSize.Min) // match the widest child (ColorPicker Row)
                 .padding(horizontal = 10.dp, vertical = 8.dp)
-                .background(Color.White)
-                .border(1.dp, Color.Black)
         ) {
-            val sizes = sizeOptions.map { it.second }
-            val minSize = sizes.minOrNull() ?: 1f
-            val maxSize = sizes.maxOrNull() ?: 20f
 
-//           ThicknessPicker(value, onChange, sizeOptions,  modifier = Modifier.align(Alignment.CenterHorizontally))
-
-            val listOfColors =
-                if (GlobalAppSettings.current.monochromeMode)
-                    listOf(Color.Black, Color.DarkGray, Color.Gray, Color.LightGray)
-                else
-                    colorOptions
+            val listOfColors = if (GlobalAppSettings.current.monochromeMode) listOf(
+                Color.Black,
+                Color.DarkGray,
+                Color.Gray,
+                Color.LightGray
+            )
+            else colorOptions
 
 
             ColorPicker(
@@ -81,26 +80,35 @@ fun StrokeMenu(
 
             Spacer(Modifier.height(6.dp))
 
-            val widthOfPicker = (35 * listOfColors.size.coerceAtLeast(5)).dp
-            val heightOfPicker = 40.dp
-            DiscreteThicknessSlider(
-                value = value.strokeSize,
-                onValueChange = { newSize ->
-                    onChange(
-                        PenSetting(
-                            strokeSize = newSize, color = value.color
-                        )
-                    )
-                },
-                min = minSize,
-                max = maxSize,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .width(widthOfPicker)   // shorter than full width
-                    .height(heightOfPicker)   // compact height
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-            )
+            if (!GlobalAppSettings.current.continuousStrokeSlider) {
+                ThicknessPicker(
+                    value,
+                    onChange,
+                    sizeOptions,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            } else {
+                val sizes = sizeOptions.map { it.second }
 
+                val widthOfPicker = (35 * listOfColors.size.coerceAtLeast(5)).dp
+                val heightOfPicker = 40.dp
+                DiscreteThicknessSlider(
+                    value = value.strokeSize,
+                    onValueChange = { newSize ->
+                        onChange(
+                            PenSetting(
+                                strokeSize = newSize, color = value.color
+                            )
+                        )
+                    },
+                    values = sizes,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .width(widthOfPicker)   // shorter than full width
+                        .height(heightOfPicker)   // compact height
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                )
+            }
         }
 
 
@@ -131,14 +139,12 @@ private fun ColorPicker(
                     .size(40.dp)
                     .background(color)
                     .border(
-                        3.dp,
-                        if (color == Color(value.color)) Color.Black else Color.Transparent
+                        3.dp, if (color == Color(value.color)) Color.Black else Color.Transparent
                     )
                     .clickable {
                         onChange(
                             PenSetting(
-                                strokeSize = value.strokeSize,
-                                color = android.graphics.Color.argb(
+                                strokeSize = value.strokeSize, color = android.graphics.Color.argb(
                                     (color.alpha * 255).toInt(),
                                     (color.red * 255).toInt(),
                                     (color.green * 255).toInt(),
@@ -190,42 +196,59 @@ private fun ThicknessPicker(
 /**
  * Discrete slider:
  * - Track is a wedge: thin on the left, gradually thicker to the right.
- * - ~10 evenly spaced discrete stops (count configurable), with tick marks following the track's top edge.
- * - Tap or drag to change; snapping to nearest discrete value.
+ * - Tap or drag to change; snapping to nearest integer value between min and max.
  * - Single down arrow/rect thumb for clarity (high contrast).
+ * - Takes a List<Float> of suggested values; indicators are shown above these.
+ * - All integer values between min and max are selectable by dragging/tapping.
  */
 @Composable
 private fun DiscreteThicknessSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
-    min: Float,
-    max: Float,
+    values: List<Float>,
     modifier: Modifier = Modifier,
-    count: Int = 10,
 ) {
-    val points = max(2, count)
-    val stepSize = (max - min) / (points - 1)
+    if (values.size < 2) return // Require at least two values to define a range
 
-    fun snapToNearest(xFraction: Float): Float {
-        val clamped = xFraction.coerceIn(0f, 1f)
-        val idx = (clamped * (points - 1)).roundToInt()
-        return min + idx * stepSize
+    // Use only sorted, distinct values
+    val displayValues = values.distinct().sorted()
+    val minVal = displayValues.first().toInt()
+    val maxVal = displayValues.last().toInt()
+
+
+    // Map each integer to a normalized position [0,1] along the slider
+    fun fractionForInt(v: Int): Float = (v - minVal).toFloat() / (maxVal - minVal).toFloat()
+
+    // For the indicators only: map the suggested values to fractions
+    val indicatorFractions = displayValues.map { v ->
+        val intV = v.toInt().coerceIn(minVal, maxVal)
+        fractionForInt(intV)
     }
 
-    Box(
-        modifier = modifier
-            .pointerInput(min, max, points) {
-                detectTapGestures { offset ->
-                    val w = size.width.coerceAtLeast(1)
-                    onValueChange(snapToNearest(offset.x / w))
-                }
+    // Clamp and snap to nearest integer on user interaction
+    fun snapToNearestInt(xFraction: Float): Float {
+        val clamped = xFraction.coerceIn(0f, 1f)
+        val rawValue = minVal + ((maxVal - minVal) * clamped)
+        return rawValue.roundToInt().coerceIn(minVal, maxVal).toFloat()
+    }
+
+    // Thumb's proportional position
+    val thumbInt = value.roundToInt().coerceIn(minVal, maxVal)
+    val thumbFraction = fractionForInt(thumbInt)
+
+    Box(modifier = modifier
+        .pointerInput(displayValues) {
+            detectTapGestures { offset ->
+                val w = size.width.coerceAtLeast(1)
+                onValueChange(snapToNearestInt(offset.x / w))
             }
-            .pointerInput(min, max, points) {
-                detectDragGestures(onDrag = { change, _ ->
-                    val w = size.width.coerceAtLeast(1)
-                    onValueChange(snapToNearest(change.position.x / w))
-                })
-            }) {
+        }
+        .pointerInput(displayValues) {
+            detectDragGestures(onDrag = { change, _ ->
+                val w = size.width.coerceAtLeast(1)
+                onValueChange(snapToNearestInt(change.position.x / w))
+            })
+        }) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val w = size.width
             val h = size.height
@@ -280,11 +303,10 @@ private fun DiscreteThicknessSlider(
             drawCircle(Color.Black, radius = leftR, center = Offset(2f, centerY))
             drawCircle(Color.Black, radius = rightR, center = Offset(w - 3f, centerY - rightR))
 
-            // Ticks along the top of the wedge with rounded caps (discrete stops)
+            // Ticks (indicators) along the top for the suggested values only
             val tickGap = 6f
             val tickHeight = 12f
-            for (i in 0 until points) {
-                val frac = if (points == 1) 0f else i.toFloat() / (points - 1)
+            for (frac in indicatorFractions) {
                 val x = frac * w
                 val t = thicknessAtX(x)
                 val topY = (centerY - t / 2f)
@@ -300,8 +322,7 @@ private fun DiscreteThicknessSlider(
             }
 
             // Thumb position and prominence
-            val fraction = if (max > min) ((value - min) / (max - min)).coerceIn(0f, 1f) else 0f
-            val thumbX = fraction * w
+            val thumbX = thumbFraction * w
             val currentThickness = thicknessAtX(thumbX)
 
             // Highly visible vertical rounded thumb (white border + black body)
