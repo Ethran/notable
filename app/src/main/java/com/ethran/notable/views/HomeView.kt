@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.classes.LocalSnackContext
@@ -307,7 +308,10 @@ fun Library(navController: NavController, folderId: String? = null) {
                     Row(
                         Modifier
                             .noRippleClickable {
-                                val folder = Folder(parentFolderId = folderId)
+                                val folder = Folder(
+                                    parentFolderId = folderId,
+                                    title = context.getString(R.string.home__new_folder)
+                                )
                                 appRepository.folderRepository.create(folder)
                             }
                             .border(0.5.dp, Color.Black)
@@ -319,7 +323,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                             Modifier.height(20.dp)
                         )
                         Spacer(Modifier.width(10.dp))
-                        Text(text = "Add new folder")
+                        Text(text = context.getString(R.string.home__add_new_folder))
                     }
                 }
                 if (folders?.isNotEmpty() == true) {
@@ -356,7 +360,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Text(text = "Quick pages")
+            Text(text = context.getString(R.string.home__quick_pages))
             Spacer(Modifier.height(10.dp))
 
             LazyRow(
@@ -421,7 +425,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Text(text = "Notebooks")
+            Text(text = context.getString(R.string.home__notebooks))
             Spacer(Modifier.height(10.dp))
 
             LazyVerticalGrid(
