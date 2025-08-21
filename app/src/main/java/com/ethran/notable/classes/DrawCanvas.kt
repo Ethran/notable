@@ -743,7 +743,7 @@ class DrawCanvas(
         log.i("Update pen and stroke")
         when (state.mode) {
             // we need to change size according to zoom level before drawing on screen
-            Mode.Draw -> touchHelper.setStrokeStyle(penToStroke(state.pen))
+            Mode.Draw, Mode.Line -> touchHelper.setStrokeStyle(penToStroke(state.pen))
                 ?.setStrokeWidth(state.penSettings[state.pen.penName]!!.strokeSize * page.zoomLevel.value)
                 ?.setStrokeColor(state.penSettings[state.pen.penName]!!.color)
 
@@ -761,9 +761,6 @@ class DrawCanvas(
 
             Mode.Select -> touchHelper.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
                 ?.setStrokeColor(Color.GRAY)
-
-            Mode.Line -> {
-            }
         }
     }
 

@@ -18,10 +18,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -86,6 +86,11 @@ fun isSelected(state: EditorState, penType: Pen): Boolean {
         false
     }
 }
+
+
+private val SIZES_STROKES_DEFAULT =  listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
+private val SIZES_MARKER_DEFAULT =  listOf("M" to 25f, "L" to 40f, "XL" to 60f, "XXL" to 80f)
+
 
 @Composable
 @ExperimentalComposeUiApi
@@ -213,7 +218,7 @@ fun Toolbar(
                     icon = R.drawable.ballpen,
                     isSelected = isSelected(state, Pen.BALLPEN),
                     onSelect = { handleChangePen(Pen.BALLPEN) },
-                    sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                    sizes = SIZES_STROKES_DEFAULT,
                     penSetting = state.penSettings[Pen.BALLPEN.penName] ?: return,
                     onChangeSetting = { onChangeStrokeSetting(Pen.BALLPEN.penName, it) })
 
@@ -224,7 +229,7 @@ fun Toolbar(
                         icon = R.drawable.ballpenred,
                         isSelected = isSelected(state, Pen.REDBALLPEN),
                         onSelect = { handleChangePen(Pen.REDBALLPEN) },
-                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        sizes = SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.REDBALLPEN.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.REDBALLPEN.penName, it) },
                     )
@@ -235,7 +240,7 @@ fun Toolbar(
                         icon = R.drawable.ballpenblue,
                         isSelected = isSelected(state, Pen.BLUEBALLPEN),
                         onSelect = { handleChangePen(Pen.BLUEBALLPEN) },
-                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        sizes = SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.BLUEBALLPEN.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.BLUEBALLPEN.penName, it) },
                     )
@@ -246,7 +251,7 @@ fun Toolbar(
                         icon = R.drawable.ballpengreen,
                         isSelected = isSelected(state, Pen.GREENBALLPEN),
                         onSelect = { handleChangePen(Pen.GREENBALLPEN) },
-                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        sizes =  SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.GREENBALLPEN.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.GREENBALLPEN.penName, it) },
                     )
@@ -258,7 +263,7 @@ fun Toolbar(
                         icon = R.drawable.pencil,
                         isSelected = isSelected(state, Pen.PENCIL),
                         onSelect = { handleChangePen(Pen.PENCIL) }, // Neo-tool! Usage not recommended
-                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        sizes =  SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.PENCIL.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.PENCIL.penName, it) },
                     )
@@ -269,7 +274,7 @@ fun Toolbar(
                         icon = R.drawable.brush,
                         isSelected = isSelected(state, Pen.BRUSH),
                         onSelect = { handleChangePen(Pen.BRUSH) }, // Neo-tool! Usage not recommended
-                        sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                        sizes =  SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.BRUSH.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.BRUSH.penName, it) },
                     )
@@ -280,7 +285,7 @@ fun Toolbar(
                     icon = R.drawable.fountain,
                     isSelected = isSelected(state, Pen.FOUNTAIN),
                     onSelect = { handleChangePen(Pen.FOUNTAIN) },// Neo-tool! Usage not recommended
-                    sizes = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f),
+                    sizes = SIZES_STROKES_DEFAULT,
                     penSetting = state.penSettings[Pen.FOUNTAIN.penName] ?: return,
                     onChangeSetting = { onChangeStrokeSetting(Pen.FOUNTAIN.penName, it) },
                 )
@@ -305,7 +310,7 @@ fun Toolbar(
                     icon = R.drawable.marker,
                     isSelected = isSelected(state, Pen.MARKER),
                     onSelect = { handleChangePen(Pen.MARKER) },
-                    sizes = listOf("L" to 40f, "XL" to 60f),
+                    sizes = SIZES_MARKER_DEFAULT,
                     penSetting = state.penSettings[Pen.MARKER.penName] ?: return,
                     onChangeSetting = { onChangeStrokeSetting(Pen.MARKER.penName, it) })
                 Box(

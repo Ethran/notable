@@ -46,6 +46,7 @@ data class AppSettings(
     val twoFingerSwipeLeftAction: GestureAction? = defaultTwoFingerSwipeLeftAction,
     val twoFingerSwipeRightAction: GestureAction? = defaultTwoFingerSwipeRightAction,
     val holdAction: GestureAction? = defaultHoldAction,
+    val continuousStrokeSlider: Boolean = false,
 
     ) {
     companion object {
