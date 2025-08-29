@@ -26,8 +26,6 @@ import com.ethran.notable.db.selectImagesAndStrokes
 import com.ethran.notable.drawing.OpenGLRenderer
 import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.drawing.selectPaint
-import com.ethran.notable.modals.AppSettings
-import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.Eraser
 import com.ethran.notable.utils.History
@@ -36,6 +34,7 @@ import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.Pen
 import com.ethran.notable.utils.PlacementMode
 import com.ethran.notable.utils.calculateBoundingBox
+import com.ethran.notable.utils.setupSurface
 import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
 import com.ethran.notable.utils.copyInputToSimplePointF
@@ -43,12 +42,15 @@ import com.ethran.notable.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.utils.handleDraw
 import com.ethran.notable.utils.handleErase
 import com.ethran.notable.utils.handleScribbleToErase
+import com.ethran.notable.utils.onSurfaceChanged
+import com.ethran.notable.utils.onSurfaceDestroy
 import com.ethran.notable.utils.onSurfaceInit
 import com.ethran.notable.utils.partialRefreshRegionOnce
 import com.ethran.notable.utils.penToStroke
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.prepareForPartialUpdate
 import com.ethran.notable.utils.refreshScreenRegion
+import com.ethran.notable.utils.resetScreenFreeze
 import com.ethran.notable.utils.restoreDefaults
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
@@ -58,6 +60,7 @@ import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.extension.isNotNull
 import com.onyx.android.sdk.extension.isNull
+import com.onyx.android.sdk.extension.isNullOrEmpty
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.data.TouchPointList
@@ -66,6 +69,7 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -280,7 +284,8 @@ class DrawCanvas(
                                 getActualState().pen,
                                 currentLastStrokeEndTime
                             )
-                            if (erasedByScribbleDirtyRect.isNull()) {
+                            if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
+                                log.d("Drawing...")
                                 // draw the stroke
                                 handleDraw(
                                     this@DrawCanvas.page,
@@ -290,10 +295,18 @@ class DrawCanvas(
                                     getActualState().pen,
                                     scaledPoints
                                 )
-                            }
-                            if (erasedByScribbleDirtyRect.isNotNull()) {
+                            } else {
+                                log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                                 drawCanvasToView(erasedByScribbleDirtyRect)
-                                partialRefreshRegionOnce(this@DrawCanvas, erasedByScribbleDirtyRect)
+                                // we need to wait before refreshing, as onyx library has its own buffer that needs to be updated. Otherwise we will refresh to correct, then  incorrect and then correct state.
+                                awaitFrame()
+                                awaitFrame()
+                                partialRefreshRegionOnce(
+                                    this@DrawCanvas,
+                                    erasedByScribbleDirtyRect,
+                                    touchHelper
+                                )
+
                             }
 
                         }
@@ -307,7 +320,7 @@ class DrawCanvas(
 
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
-            prepareForPartialUpdate(this@DrawCanvas)
+            prepareForPartialUpdate(this@DrawCanvas, touchHelper)
             log.d("Eraser Mode")
             isErasing = true
         }
@@ -389,6 +402,7 @@ class DrawCanvas(
                 // Update page dimensions, redraw and refresh
                 page.updateDimensions(width, height)
                 updateActiveSurface()
+                onSurfaceChanged(this@DrawCanvas)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -401,6 +415,7 @@ class DrawCanvas(
                 if (referencedSurfaceView == this@DrawCanvas.hashCode().toString()) {
                     touchHelper.closeRawDrawing()
                 }
+                onSurfaceDestroy(this@DrawCanvas, touchHelper)
             }
         }
 
@@ -439,7 +454,7 @@ class DrawCanvas(
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 if (dirtyRectangle.isNull()) refreshUiSuspend()
                 else {
-                    partialRefreshRegionOnce(this@DrawCanvas, zoneToRedraw)
+                    partialRefreshRegionOnce(this@DrawCanvas, zoneToRedraw, touchHelper)
                 }
             }
         }
@@ -630,11 +645,7 @@ class DrawCanvas(
         drawCanvasToView(dirtyRect)
 
         // reset screen freeze
-        // if in scribble mode, the screen want refresh
-        // So to update interface we need to disable, and re-enable
-        touchHelper.setRawDrawingEnabled(false)
-        touchHelper.setRawDrawingEnabled(true)
-        // screen won't freeze until you actually stoke
+        resetScreenFreeze(touchHelper)
     }
 
     private suspend fun refreshUiSuspend() {
@@ -770,36 +781,9 @@ class DrawCanvas(
         log.i("Update editable surface")
         coroutineScope.launch {
             onSurfaceInit(this@DrawCanvas)
-
             val toolbarHeight =
                 if (state.isToolbarOpen) convertDpToPixel(40.dp, context).toInt() else 0
-
-            touchHelper.setRawDrawingEnabled(false)
-            touchHelper.closeRawDrawing()
-
-            // Store view dimensions locally before using in Rect
-            val viewWidth = this@DrawCanvas.width
-            val viewHeight = this@DrawCanvas.height
-
-            // Determine the exclusion area based on toolbar position
-            val excludeRect: Rect =
-                if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
-                    Rect(0, 0, viewWidth, toolbarHeight)
-                } else {
-                    Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
-                }
-
-            val limitRect =
-                if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
-                    Rect(0, toolbarHeight, viewWidth, viewHeight)
-                else
-                    Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
-
-            touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
-                .openRawDrawing()
-
-            touchHelper.setRawDrawingEnabled(true)
-            log.i("Update editable surface completed")
+            setupSurface(this@DrawCanvas, touchHelper, toolbarHeight)
         }
     }
 
