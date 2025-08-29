@@ -34,7 +34,6 @@ import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.Pen
 import com.ethran.notable.utils.PlacementMode
 import com.ethran.notable.utils.calculateBoundingBox
-import com.ethran.notable.utils.setupSurface
 import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
 import com.ethran.notable.utils.copyInputToSimplePointF
@@ -42,6 +41,7 @@ import com.ethran.notable.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.utils.handleDraw
 import com.ethran.notable.utils.handleErase
 import com.ethran.notable.utils.handleScribbleToErase
+import com.ethran.notable.utils.logCallStack
 import com.ethran.notable.utils.onSurfaceChanged
 import com.ethran.notable.utils.onSurfaceDestroy
 import com.ethran.notable.utils.onSurfaceInit
@@ -52,6 +52,7 @@ import com.ethran.notable.utils.prepareForPartialUpdate
 import com.ethran.notable.utils.refreshScreenRegion
 import com.ethran.notable.utils.resetScreenFreeze
 import com.ethran.notable.utils.restoreDefaults
+import com.ethran.notable.utils.setupSurface
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
 import com.ethran.notable.utils.uriToBitmap
@@ -446,21 +447,23 @@ class DrawCanvas(
         // observe forceUpdate, takes rect in screen coordinates
         // given null it will redraw whole page
         // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.Main.immediate) {
             forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
                 logCanvasObserver.v("Force update, zone: $dirtyRectangle")
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
                 page.drawAreaScreenCoordinates(zoneToRedraw)
-                if (dirtyRectangle.isNull()) refreshUiSuspend()
-                else {
-                    partialRefreshRegionOnce(this@DrawCanvas, zoneToRedraw, touchHelper)
+                launch(Dispatchers.Default) {
+                    if (dirtyRectangle.isNull()) refreshUiSuspend()
+                    else {
+                        partialRefreshRegionOnce(this@DrawCanvas, zoneToRedraw, touchHelper)
+                    }
                 }
             }
         }
 
         // observe refreshUi
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.Default) {
             refreshUi.collect {
                 logCanvasObserver.v("Refreshing UI!")
                 refreshUiSuspend()
@@ -658,11 +661,12 @@ class DrawCanvas(
             return
         }
         if (Looper.getMainLooper().isCurrentThread) {
-            log.i(
+            log.w(
                 "refreshUiSuspend() is called from the main thread."
             )
+            logCallStack("refreshUiSuspend_main_thread")
         } else
-            log.i(
+            log.v(
                 "refreshUiSuspend() is called from the non-main thread."
             )
         waitForDrawing()
