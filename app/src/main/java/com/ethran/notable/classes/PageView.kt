@@ -48,7 +48,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.measureTimeMillis
 
-const val OVERLAP = 2
+const val OVERLAP = 5
 
 class PageView(
     val context: Context,
