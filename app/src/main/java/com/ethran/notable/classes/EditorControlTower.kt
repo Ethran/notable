@@ -56,7 +56,7 @@ class EditorControlTower(
                     onPageScroll(-delta)
                 }
             }
-            DrawCanvas.refreshUi.emit(Unit)
+            DrawCanvas.refreshUiImmediately.emit(Unit)
         }
         return Offset.Zero // All handled
     }
@@ -75,7 +75,7 @@ class EditorControlTower(
                 else
                     page.updateZoom(delta, center)
             }
-            DrawCanvas.refreshUi.emit(Unit)
+            DrawCanvas.refreshUiImmediately.emit(Unit)
         }
     }
 
@@ -84,7 +84,7 @@ class EditorControlTower(
             page.scroll = Offset(0f, page.scroll.y)
             page.applyZoomAndRedraw(1f)
             // Request UI update
-            DrawCanvas.refreshUi.emit(Unit)
+            DrawCanvas.refreshUiImmediately.emit(Unit)
         }
     }
 

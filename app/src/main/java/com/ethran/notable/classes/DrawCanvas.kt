@@ -83,6 +83,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.system.measureTimeMillis
 
 
 val pressure = EpdController.getMaxTouchPressure()
@@ -123,6 +124,7 @@ class DrawCanvas(
     companion object {
         var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
         var refreshUi = MutableSharedFlow<Unit>()
+        var refreshUiImmediately = MutableSharedFlow<Unit>()
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
         var eraserTouchPoint = MutableSharedFlow<Offset?>() //TODO: replace with proper solution
@@ -142,18 +144,34 @@ class DrawCanvas(
         var addImageByUri = MutableStateFlow<Uri?>(null)
         var rectangleToSelect = MutableStateFlow<Rect?>(null)
         var drawingInProgress = Mutex()
+
         private suspend fun waitForDrawing() {
-            withTimeoutOrNull(3000) {
-                // Just to make sure wait 1ms before checking lock.
-                delay(1)
-                // Wait until drawingInProgress is unlocked before proceeding
-                while (drawingInProgress.isLocked) {
-                    delay(5)
-                }
-            } ?: Log.e(
-                "DrawCanvas.waitForDrawing",
-                "Timeout while waiting for drawing lock. Potential deadlock."
+            Log.d(
+                "DrawCanvas.waitForDrawing", "waiting"
             )
+            val elapsed = measureTimeMillis {
+                withTimeoutOrNull(3000) {
+                    // Just to make sure wait 1ms before checking lock.
+                    delay(1)
+                    // Wait until drawingInProgress is unlocked before proceeding
+                    while (drawingInProgress.isLocked) {
+                        delay(5)
+                    }
+                } ?: Log.e(
+                    "DrawCanvas.waitForDrawing",
+                    "Timeout while waiting for drawing lock. Potential deadlock."
+                )
+
+            }
+            when {
+                elapsed > 3000 -> Log.e(
+                    "DrawCanvas.waitForDrawing", "Exceeded timeout ($elapsed ms)"
+                )
+
+                elapsed > 100 -> Log.w("DrawCanvas.waitForDrawing", "Took too long: $elapsed ms")
+                else -> Log.d("DrawCanvas.waitForDrawing", "Finished waiting in $elapsed ms")
+            }
+
         }
 
         suspend fun waitForDrawingWithSnack() {
@@ -469,6 +487,14 @@ class DrawCanvas(
                 refreshUiSuspend()
             }
         }
+
+        coroutineScope.launch {
+            refreshUiImmediately.collect {
+                logCanvasObserver.v("Refreshing UI!")
+                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
+                refreshUi(zoneToRedraw)
+            }
+        }
         coroutineScope.launch {
             isDrawing.collect {
                 logCanvasObserver.v("drawing state changed to $it!")
@@ -637,16 +663,16 @@ class DrawCanvas(
 
     private fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi")
+
+        // post what page drawn to visible surface
+        drawCanvasToView(dirtyRect)
+        if (drawingInProgress.isLocked) log.w("Drawing is still in progress there might be a bug.")
+
         // Use only if you have confidence that there are no strokes being drawn at the moment
         if (!state.isDrawing) {
-            log.w("Not in drawing mode, skipping refreshUI")
+            log.w("Not in drawing mode, skipping unfreezing")
             return
         }
-        if (drawingInProgress.isLocked)
-            log.w("Drawing is still in progress there might be a bug.")
-
-        drawCanvasToView(dirtyRect)
-
         // reset screen freeze
         resetScreenFreeze(touchHelper)
     }
@@ -671,10 +697,7 @@ class DrawCanvas(
             )
         waitForDrawing()
         drawCanvasToView(null)
-        touchHelper.setRawDrawingEnabled(false)
-        if (drawingInProgress.isLocked)
-            log.w("Lock was acquired during refreshing UI. It might cause errors.")
-        touchHelper.setRawDrawingEnabled(true)
+        resetScreenFreeze(touchHelper)
     }
 
     private fun handleImage(imageUri: Uri) {
