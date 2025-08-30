@@ -156,25 +156,25 @@ class PageView(
         }
     }
 
-    fun updatePageID(newId: String) {
+    fun changePage(newPageId: String) {
         val oldId = id
-        id = newId
+        id = newPageId
         coroutineScope.launch {
             updateOnExit(oldId)
         }
         pageFromDb = AppRepository(context).pageRepository.getById(id)
         zoomLevel.value = 1.0f
-        PageDataManager.setPage(newId)
+        PageDataManager.setPage(newPageId)
 
 
-        PageDataManager.getCachedBitmap(newId)?.let { cached ->
+        PageDataManager.getCachedBitmap(newPageId)?.let { cached ->
             log.i("PageView: using cached bitmap")
             windowedBitmap = cached
             windowedCanvas = Canvas(windowedBitmap)
         } ?: run {
             log.i("PageView: creating new bitmap")
             recreateCanvas()
-            PageDataManager.cacheBitmap(newId, windowedBitmap)
+            PageDataManager.cacheBitmap(newPageId, windowedBitmap)
         }
 
         log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $id")

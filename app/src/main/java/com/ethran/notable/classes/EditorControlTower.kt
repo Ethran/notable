@@ -64,7 +64,7 @@ class EditorControlTower(
     fun switchPage(id: String) {
         state.changePage(id)
         history.cleanHistory()
-        page.updatePageID(id)
+        page.changePage(id)
     }
 
     fun onPinchToZoom(delta: Float, center: Offset?) {
