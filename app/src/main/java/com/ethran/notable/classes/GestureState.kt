@@ -9,6 +9,10 @@ import com.ethran.notable.datastore.SimplePointF
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.setAnimationMode
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -38,6 +42,7 @@ enum class GestureMode {
 
 
 data class GestureState(
+    val scope: CoroutineScope,
     val initialPositions: MutableMap<PointerId, Offset> = mutableMapOf(),
     val lastPositions: MutableMap<PointerId, Offset> = mutableMapOf(),
     var initialTimestamp: Long = System.currentTimeMillis(),
@@ -56,7 +61,14 @@ data class GestureState(
 
                     GestureMode.Normal -> {
                         log.d("Entered ${value.name} gesture mode")
-                        setAnimationMode(false)
+                        scope.launch(Dispatchers.Default) {
+                            // Just to reduce flicker
+                            awaitFrame()
+                            awaitFrame()
+                            // TODO: We should instead wait till full refresh is ready to be posted,
+                            //  instead of hardcoding delay.
+                            setAnimationMode(false)
+                        }
                     }
                 }
                 field = value

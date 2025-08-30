@@ -107,7 +107,7 @@ fun EditorGestureReceiver(
                         // if window lost focus, ignore input
                         if (!view.hasWindowFocus()) return@awaitEachGesture
 
-                        val gestureState = GestureState()
+                        val gestureState = GestureState(scope = coroutineScope)
                         var overdueScroll = Offset.Zero
 
                         // Ignore non-touch input
