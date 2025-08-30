@@ -429,7 +429,7 @@ object PageDataManager {
 
 
             // 3. Calculate background memory
-            backgroundCache[pageId]?.let { background ->
+            backgroundCache[pageToBackgroundKey[pageId]]?.let { background ->
                 background.bitmap?.let { bitmap ->
                     totalBytes += bitmap.allocationByteCount.toLong()
                 }

@@ -76,7 +76,7 @@ fun shareBitmap(context: Context, bitmap: Bitmap) {
 }
 
 fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
-    // TODO: its very slow, need to be change for better tool
+    // TODO: it's very slow, needs to be changed for better tool
     if (filePath.isEmpty()) return null
 //    logCallStack("loadBackgroundBitmap", 14)
     if (Looper.getMainLooper().isCurrentThread) {
