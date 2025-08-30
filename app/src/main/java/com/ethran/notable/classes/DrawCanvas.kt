@@ -71,6 +71,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -124,7 +125,11 @@ class DrawCanvas(
     companion object {
         var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
         var refreshUi = MutableSharedFlow<Unit>()
-        var refreshUiImmediately = MutableSharedFlow<Unit>()
+        var refreshUiImmediately = MutableSharedFlow<Unit>(
+            replay = 1,
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
         var eraserTouchPoint = MutableSharedFlow<Offset?>() //TODO: replace with proper solution
@@ -181,11 +186,6 @@ class DrawCanvas(
                 waitForDrawing()
                 SnackState.cancelGlobalSnack.emit(snack.id)
             }
-        }
-
-        suspend fun waitForObservers() {
-            delay(25)
-            // TODO: Find proper solution
         }
     }
 
@@ -445,20 +445,10 @@ class DrawCanvas(
     fun registerObservers() {
 
         coroutineScope.launch {
-            onFocusChange.collect { hasFocus ->
-                logCanvasObserver.v("App has focus: $hasFocus")
-                if (hasFocus) {
-                    state.checkForSelectionsAndMenus()
-                    drawCanvasToView(null)
-                } else {
-                    isDrawing.emit(false)
-                }
-            }
-        }
-        coroutineScope.launch {
-            page.zoomLevel.drop(1).collect {
-                logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
-                updatePenAndStroke()
+            refreshUiImmediately.collect {
+                logCanvasObserver.v("Refreshing UI!")
+                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
+                refreshUi(zoneToRedraw)
             }
         }
 
@@ -489,12 +479,23 @@ class DrawCanvas(
         }
 
         coroutineScope.launch {
-            refreshUiImmediately.collect {
-                logCanvasObserver.v("Refreshing UI!")
-                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                refreshUi(zoneToRedraw)
+            onFocusChange.collect { hasFocus ->
+                logCanvasObserver.v("App has focus: $hasFocus")
+                if (hasFocus) {
+                    state.checkForSelectionsAndMenus()
+                    drawCanvasToView(null)
+                } else {
+                    isDrawing.emit(false)
+                }
             }
         }
+        coroutineScope.launch {
+            page.zoomLevel.drop(1).collect {
+                logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
+                updatePenAndStroke()
+            }
+        }
+
         coroutineScope.launch {
             isDrawing.collect {
                 logCanvasObserver.v("drawing state changed to $it!")
@@ -535,18 +536,16 @@ class DrawCanvas(
                     return@collect
                 }
                 logCanvasObserver.v("collected: $p")
-                if (p == null)
-                    return@collect
-                val strokePoint =
-                    StrokePoint(
-                        x = p.x,
-                        y = p.y,
-                        pressure = 1f,
-                        size = 10f,
-                        tiltX = 0,
-                        tiltY = 0,
-                        timestamp = 0,
-                    )
+                if (p == null) return@collect
+                val strokePoint = StrokePoint(
+                    x = p.x,
+                    y = p.y,
+                    pressure = 1f,
+                    size = 10f,
+                    tiltX = 0,
+                    tiltY = 0,
+                    timestamp = 0,
+                )
                 glRenderer.frontBufferRenderer?.renderFrontBufferedLayer(strokePoint)
             }
         }

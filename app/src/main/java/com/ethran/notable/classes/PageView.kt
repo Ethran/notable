@@ -49,7 +49,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.measureTimeMillis
 
-const val OVERLAP = 5
+const val OVERLAP = 2
 
 class PageView(
     val context: Context,
@@ -145,11 +145,8 @@ class PageView(
             PageDataManager.cacheBitmap(id, windowedBitmap)
         }
 
-        coroutineScope.launch(Dispatchers.Default) {
-            DrawCanvas.waitForObservers()
-            DrawCanvas.refreshUiImmediately.emit(Unit)
-        }
         coroutineScope.launch {
+            DrawCanvas.refreshUiImmediately.emit(Unit)
             loadPage()
             log.d("Page loaded (Init with id: $id)")
             collectAndPersistBitmapsBatch(context, coroutineScope)
@@ -585,7 +582,7 @@ class PageView(
             createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
         shiftedCanvas.drawColor(Color.RED) //for debugging.
-        shiftedCanvas.drawBitmap(windowedBitmap, -movement.x.toFloat(), -movement.y.toFloat(), null)
+        shiftedCanvas.drawBitmap(windowedBitmap, -dragDelta.x, -dragDelta.y, null)
 
         // Swap in the shifted bitmap
         windowedBitmap = shiftedBitmap
@@ -777,13 +774,15 @@ class PageView(
     }
 
     fun redrawOutsideRect(dstRect: Rect, screenW: Int, screenH: Int) {
+        val scaledOverlap = kotlin.math.ceil(OVERLAP * zoomLevel.value.coerceAtLeast(1f)).toInt()
+
         // Uncovered top band
         if (dstRect.top > 0) {
             val r = Rect(
                 0,
                 0,
                 screenW,
-                (dstRect.top + OVERLAP).coerceAtMost(screenH)
+                (dstRect.top + scaledOverlap).coerceAtMost(screenH)
             )
             if (!r.isEmpty) drawAreaScreenCoordinates(r)
         }
@@ -791,7 +790,7 @@ class PageView(
         if (dstRect.bottom < screenH) {
             val r = Rect(
                 0,
-                (dstRect.bottom - OVERLAP).coerceAtLeast(0),
+                (dstRect.bottom - scaledOverlap).coerceAtLeast(0),
                 screenW,
                 screenH
             )
@@ -801,19 +800,19 @@ class PageView(
         if (dstRect.left > 0) {
             val r = Rect(
                 0,
-                (dstRect.top - OVERLAP).coerceAtLeast(0),
-                (dstRect.left + OVERLAP).coerceAtMost(screenW),
-                (dstRect.bottom + OVERLAP).coerceAtMost(screenH)
+                (dstRect.top - scaledOverlap).coerceAtLeast(0),
+                (dstRect.left + scaledOverlap).coerceAtMost(screenW),
+                (dstRect.bottom + scaledOverlap).coerceAtMost(screenH)
             )
             if (!r.isEmpty) drawAreaScreenCoordinates(r)
         }
         // Uncovered right band
         if (dstRect.right < screenW) {
             val r = Rect(
-                (dstRect.right - OVERLAP).coerceAtLeast(0),
-                (dstRect.top - OVERLAP).coerceAtLeast(0),
+                (dstRect.right - scaledOverlap).coerceAtLeast(0),
+                (dstRect.top - scaledOverlap).coerceAtLeast(0),
                 screenW,
-                (dstRect.bottom + OVERLAP).coerceAtMost(screenH)
+                (dstRect.bottom + scaledOverlap).coerceAtMost(screenH)
             )
             if (!r.isEmpty) drawAreaScreenCoordinates(r)
         }
