@@ -199,7 +199,7 @@ fun setupSurface(view: View, touchHelper: TouchHelper, toolbarHeight: Int) {
     // Takes at least 50ms on Note 4c,
     // and I don't think that we need it immediately
     einkLogger.i("Setup editable surface")
-    touchHelper.debugLog(true)
+    touchHelper.debugLog(false)
     touchHelper.setRawDrawingEnabled(false)
     touchHelper.closeRawDrawing()
 
