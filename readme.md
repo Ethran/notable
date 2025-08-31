@@ -210,6 +210,9 @@ in real time on your tablet.
 
 Notable is an open-source project, and contributions are welcome. If you'd like to get started, please refer to [GitHub's contributing guide](https://docs.github.com/en/get-started/quickstart/contributing-to-projects).
 
+### Project structure
+Project structure can be found [here](./docs/file-structure.md).
+
 ### Development Notes
 
 - Edit the `DEBUG_STORE_FILE` in `/app/gradle.properties` to point to your local keystore file. This is typically located in the `.android` directory.
