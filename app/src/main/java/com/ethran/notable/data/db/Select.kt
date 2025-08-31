@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
-import com.ethran.notable.data.datastore.SimplePointF
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.drawImage

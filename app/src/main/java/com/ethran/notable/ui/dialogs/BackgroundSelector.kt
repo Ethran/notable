@@ -1,4 +1,4 @@
-package com.ethran.notable.ui.modals
+package com.ethran.notable.ui.dialogs
 
 
 import android.content.Intent
@@ -77,7 +77,7 @@ import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.data.copyBackgroundToDatabase
-import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.drawing.drawDottedBg

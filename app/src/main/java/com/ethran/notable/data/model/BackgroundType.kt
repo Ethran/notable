@@ -1,8 +1,7 @@
-package com.ethran.notable.data.db
+package com.ethran.notable.data.model
 
 import com.ethran.notable.TAG
 import io.shipbook.shipbooksdk.Log
-
 
 sealed class BackgroundType(val key: String, val folderName: String) {
     data object Image : BackgroundType("image", "images")
@@ -31,7 +30,7 @@ sealed class BackgroundType(val key: String, val folderName: String) {
             }
 
             else -> {
-                Log.e(TAG, "BackgroundType.fromKey: Unknown key: $key")
+                Log.Companion.e(TAG, "BackgroundType.fromKey: Unknown key: $key")
                 Native
             } // fallback
         }

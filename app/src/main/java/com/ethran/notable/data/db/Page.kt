@@ -13,6 +13,7 @@ import androidx.room.Query
 import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ethran.notable.data.model.BackgroundType
 import java.util.Date
 import java.util.UUID
 

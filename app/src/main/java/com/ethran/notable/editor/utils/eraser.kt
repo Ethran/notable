@@ -5,7 +5,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.datastore.SimplePointF
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.PageView

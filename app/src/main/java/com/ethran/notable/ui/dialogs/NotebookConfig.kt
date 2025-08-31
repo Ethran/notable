@@ -1,4 +1,4 @@
-package com.ethran.notable.ui.modals
+package com.ethran.notable.ui.dialogs
 
 
 import android.text.format.DateFormat
@@ -56,10 +56,7 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
-import com.ethran.notable.ui.components.ShowExportDialog
-import com.ethran.notable.ui.components.ShowFolderSelectionDialog
-import com.ethran.notable.ui.components.ShowSimpleConfirmationDialog
-import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.BookRepository
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch

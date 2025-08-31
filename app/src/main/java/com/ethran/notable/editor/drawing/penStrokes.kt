@@ -11,7 +11,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.datastore.SimplePointF
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.pressure

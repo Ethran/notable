@@ -14,7 +14,7 @@ import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import androidx.core.net.toUri
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.editor.DrawCanvas

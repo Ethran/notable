@@ -1,4 +1,4 @@
-package com.ethran.notable.ui.components
+package com.ethran.notable.ui.dialogs
 
 import android.content.Context
 import androidx.compose.foundation.background
@@ -21,7 +21,6 @@ import androidx.compose.ui.window.Dialog
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.io.XoppFile
-import com.ethran.notable.ui.modals.ActionButton
 import com.ethran.notable.io.exportBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

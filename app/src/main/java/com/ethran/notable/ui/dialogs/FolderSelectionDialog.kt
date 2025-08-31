@@ -1,4 +1,4 @@
-package com.ethran.notable.ui.components
+package com.ethran.notable.ui.dialogs
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
-import com.ethran.notable.ui.modals.ActionButton
+import com.ethran.notable.ui.components.BreadCrumb
 
 
 @Composable

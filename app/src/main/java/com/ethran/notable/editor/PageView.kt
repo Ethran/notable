@@ -27,7 +27,7 @@ import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.PageDataManager.collectAndPersistBitmapsBatch
 import com.ethran.notable.data.db.AppDatabase
-import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke

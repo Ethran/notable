@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
 import com.ethran.notable.TAG
+import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.Log
 import java.util.Date
 import java.util.UUID

@@ -1,7 +1,6 @@
 package com.ethran.notable.data
 
 import android.content.Context
-import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.data.db.ImageRepository
@@ -10,6 +9,7 @@ import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.db.newPage
+import com.ethran.notable.data.model.BackgroundType
 import com.onyx.android.sdk.extension.isNotNull
 import java.util.Date
 import java.util.UUID

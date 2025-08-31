@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.datastore.SimplePointF
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.db.handleSelect

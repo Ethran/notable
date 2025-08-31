@@ -39,7 +39,7 @@ import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
-import com.ethran.notable.ui.modals.BackgroundSelector
+import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
