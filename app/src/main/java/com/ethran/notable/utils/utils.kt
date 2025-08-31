@@ -18,31 +18,25 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.core.graphics.toRect
 import androidx.core.graphics.toRegion
-import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.TAG
-import com.ethran.notable.data.AppRepository
-import com.ethran.notable.editor.PageView
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.datastore.SimplePointF
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.History
 import com.ethran.notable.editor.utils.Operation
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.expandBy
-import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.onyx.android.sdk.data.note.TouchPoint
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.produceIn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import java.io.File
 
 const val SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS = 150L
 const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
@@ -66,47 +60,6 @@ fun convertDpToPixel(dp: Dp, context: Context): Float {
     )
 }
 
-// TODO move this to repository
-fun deletePage(context: Context, pageId: String) {
-    val appRepository = AppRepository(context)
-    val page = appRepository.pageRepository.getById(pageId) ?: return
-    val proxy = appRepository.kvProxy
-    val settings = proxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
-
-
-    runBlocking {
-        // remove from book
-        if (page.notebookId != null) {
-            appRepository.bookRepository.removePage(page.notebookId, pageId)
-        }
-
-        // remove from quick nav
-        if (settings != null && settings.quickNavPages.contains(pageId)) {
-            proxy.setKv(
-                APP_SETTINGS_KEY,
-                settings.copy(quickNavPages = settings.quickNavPages - pageId),
-                AppSettings.serializer()
-            )
-        }
-
-        launch {
-            appRepository.pageRepository.delete(pageId)
-        }
-        launch {
-            val imgFile = File(context.filesDir, "pages/previews/thumbs/$pageId")
-            if (imgFile.exists()) {
-                imgFile.delete()
-            }
-        }
-        launch {
-            val imgFile = File(context.filesDir, "pages/previews/full/$pageId")
-            if (imgFile.exists()) {
-                imgFile.delete()
-            }
-        }
-
-    }
-}
 
 fun <T : Any> Flow<T>.withPrevious(): Flow<Pair<T?, T>> = flow {
     var prev: T? = null
