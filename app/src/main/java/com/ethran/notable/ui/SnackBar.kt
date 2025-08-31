@@ -160,7 +160,7 @@ fun SnackBar(state: SnackState) {
                                     Text(
                                         text = it.first,
                                         color = Color.White,
-                                        modifier = Modifier.Companion.noRippleClickable { it.second() })
+                                        modifier = Modifier.noRippleClickable { it.second() })
                                 }
                             }
                         }

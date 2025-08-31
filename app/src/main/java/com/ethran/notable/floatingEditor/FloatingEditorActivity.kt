@@ -67,7 +67,7 @@ class FloatingEditorActivity : ComponentActivity() {
         setContent {
             InkaTheme {
                 Surface(
-                    modifier = Modifier.Companion.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
                     val navController = rememberNavController()
