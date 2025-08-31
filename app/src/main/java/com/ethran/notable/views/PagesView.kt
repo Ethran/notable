@@ -31,7 +31,7 @@ import com.ethran.notable.classes.AppRepository
 import com.ethran.notable.components.BreadCrumb
 import com.ethran.notable.components.PageMenu
 import com.ethran.notable.components.PagePreview
-import com.ethran.notable.components.Topbar
+import com.ethran.notable.components.toolbar.Topbar
 
 @ExperimentalFoundationApi
 @Composable

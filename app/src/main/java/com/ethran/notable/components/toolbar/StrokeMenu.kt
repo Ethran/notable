@@ -1,4 +1,4 @@
-package com.ethran.notable.components
+package com.ethran.notable.components.toolbar
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,9 +19,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -276,24 +282,24 @@ private fun DiscreteThicknessSlider(
             drawPath(
                 path = trackPath,
                 color = Color.White,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                style = Stroke(
                     width = 6f,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Butt,
-                    join = androidx.compose.ui.graphics.StrokeJoin.Round
+                    cap = StrokeCap.Butt,
+                    join = StrokeJoin.Round
                 )
             )
             drawPath(
                 path = trackPath,
                 color = Color.Black,
-                style = androidx.compose.ui.graphics.drawscope.Fill
+                style = Fill
             )
             drawPath(
                 path = trackPath,
                 color = Color.Black,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                style = Stroke(
                     width = 2f,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Butt,
-                    join = androidx.compose.ui.graphics.StrokeJoin.Round
+                    cap = StrokeCap.Butt,
+                    join = StrokeJoin.Round
                 )
             )
 
@@ -317,7 +323,7 @@ private fun DiscreteThicknessSlider(
                     start = Offset(x, startY),
                     end = Offset(x, endY),
                     strokeWidth = 3f,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    cap = StrokeCap.Round
                 )
             }
 
@@ -336,16 +342,16 @@ private fun DiscreteThicknessSlider(
                 topLeft = Offset(
                     thumbX - thumbW / 2f - thumbOuterPadding, centerY - thumbH - thumbOuterPadding
                 ),
-                size = androidx.compose.ui.geometry.Size(
+                size = Size(
                     thumbW + thumbOuterPadding * 2f, thumbH + thumbOuterPadding * 2f
                 ),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(thumbRadius, thumbRadius)
+                cornerRadius = CornerRadius(thumbRadius, thumbRadius)
             )
             drawRoundRect(
                 color = Color.Black,
                 topLeft = Offset(thumbX - thumbW / 2f, centerY - thumbH),
-                size = androidx.compose.ui.geometry.Size(thumbW, thumbH),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(thumbRadius, thumbRadius)
+                size = Size(thumbW, thumbH),
+                cornerRadius = CornerRadius(thumbRadius, thumbRadius)
             )
 
             // Down arrow pointing to current position for visibility

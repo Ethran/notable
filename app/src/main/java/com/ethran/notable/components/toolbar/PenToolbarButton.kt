@@ -1,4 +1,4 @@
-package com.ethran.notable.components
+package com.ethran.notable.components.toolbar
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -50,7 +50,7 @@ fun PenToolbarButton(
                 onChange = { onChangeSetting(it) },
                 onClose = { isStrokeMenuOpen = false },
                 sizeOptions = sizes,
-                colorOptions =  listOf(
+                colorOptions = listOf(
                     Color.Red,
                     Color.Green,
                     Color.Blue,

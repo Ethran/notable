@@ -68,7 +68,7 @@ import com.ethran.notable.components.PageMenu
 import com.ethran.notable.components.PagePreview
 import com.ethran.notable.components.ShowConfirmationDialog
 import com.ethran.notable.components.ShowSimpleConfirmationDialog
-import com.ethran.notable.components.Topbar
+import com.ethran.notable.components.toolbar.Topbar
 import com.ethran.notable.db.BackgroundType
 import com.ethran.notable.db.BookRepository
 import com.ethran.notable.db.Folder

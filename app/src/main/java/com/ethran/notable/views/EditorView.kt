@@ -28,7 +28,7 @@ import com.ethran.notable.components.EditorSurface
 import com.ethran.notable.components.HorizontalScrollIndicator
 import com.ethran.notable.components.ScrollIndicator
 import com.ethran.notable.components.SelectedBitmap
-import com.ethran.notable.components.Toolbar
+import com.ethran.notable.components.toolbar.Toolbar
 import com.ethran.notable.datastore.EditorSettingCacheManager
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings

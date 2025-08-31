@@ -1,4 +1,4 @@
-package com.ethran.notable.components
+package com.ethran.notable.components.toolbar
 
 
 import android.content.Intent
@@ -251,7 +251,7 @@ fun Toolbar(
                         icon = R.drawable.ballpengreen,
                         isSelected = isSelected(state, Pen.GREENBALLPEN),
                         onSelect = { handleChangePen(Pen.GREENBALLPEN) },
-                        sizes =  SIZES_STROKES_DEFAULT,
+                        sizes = SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.GREENBALLPEN.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.GREENBALLPEN.penName, it) },
                     )
@@ -263,7 +263,7 @@ fun Toolbar(
                         icon = R.drawable.pencil,
                         isSelected = isSelected(state, Pen.PENCIL),
                         onSelect = { handleChangePen(Pen.PENCIL) }, // Neo-tool! Usage not recommended
-                        sizes =  SIZES_STROKES_DEFAULT,
+                        sizes = SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.PENCIL.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.PENCIL.penName, it) },
                     )
@@ -274,7 +274,7 @@ fun Toolbar(
                         icon = R.drawable.brush,
                         isSelected = isSelected(state, Pen.BRUSH),
                         onSelect = { handleChangePen(Pen.BRUSH) }, // Neo-tool! Usage not recommended
-                        sizes =  SIZES_STROKES_DEFAULT,
+                        sizes = SIZES_STROKES_DEFAULT,
                         penSetting = state.penSettings[Pen.BRUSH.penName] ?: return,
                         onChangeSetting = { onChangeStrokeSetting(Pen.BRUSH.penName, it) },
                     )

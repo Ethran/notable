@@ -1,7 +1,6 @@
 package com.ethran.notable.components
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,8 +27,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import com.ethran.notable.R
-import com.ethran.notable.TAG
 import com.ethran.notable.classes.EditorControlTower
+import com.ethran.notable.components.toolbar.ToolbarButton
 import com.ethran.notable.modals.BUTTON_SIZE
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.noRippleClickable
