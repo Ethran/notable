@@ -17,13 +17,12 @@ import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.drawImage
-import com.ethran.notable.editor.utils.Operation
+import com.ethran.notable.editor.utils.imageBoundsInt
+import com.ethran.notable.editor.utils.offsetImage
+import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.io.copyBitmapToClipboard
 import com.ethran.notable.ui.showHint
-import com.ethran.notable.utils.imageBoundsInt
-import com.ethran.notable.utils.offsetImage
-import com.ethran.notable.utils.offsetStroke
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import java.util.Date

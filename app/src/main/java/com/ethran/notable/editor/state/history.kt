@@ -1,4 +1,4 @@
-package com.ethran.notable.editor.utils
+package com.ethran.notable.editor.state
 
 import android.graphics.Rect
 import com.ethran.notable.editor.DrawCanvas
@@ -7,8 +7,8 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.utils.imageBoundsInt
-import com.ethran.notable.utils.strokeBounds
+import com.ethran.notable.editor.utils.imageBoundsInt
+import com.ethran.notable.editor.utils.strokeBounds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow

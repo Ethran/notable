@@ -37,7 +37,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.FolderRepository
-import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.ui.noRippleClickable
+import com.ethran.notable.ui.noRippleClickable
 import io.shipbook.shipbooksdk.Log
 
 

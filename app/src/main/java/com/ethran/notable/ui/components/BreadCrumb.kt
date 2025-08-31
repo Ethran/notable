@@ -9,7 +9,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.FolderRepository
-import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.ui.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight
 

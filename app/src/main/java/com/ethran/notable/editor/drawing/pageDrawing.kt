@@ -13,17 +13,17 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import androidx.core.net.toUri
-import com.ethran.notable.editor.DrawCanvas
-import com.ethran.notable.editor.PageView
-import com.ethran.notable.ui.showHint
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.getBackgroundType
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.utils.imageBounds
+import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.utils.imageBounds
 import com.ethran.notable.editor.utils.plus
-import com.ethran.notable.utils.strokeBounds
+import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.io.uriToBitmap
+import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.system.measureTimeMillis
 

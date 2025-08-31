@@ -4,10 +4,6 @@ import android.graphics.Path
 import android.graphics.RectF
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.utils.imageBounds
-import com.ethran.notable.utils.imagePoints
-import com.ethran.notable.utils.pathToRegion
-import com.ethran.notable.utils.strokeBounds
 
 enum class SelectPointPosition {
     LEFT,

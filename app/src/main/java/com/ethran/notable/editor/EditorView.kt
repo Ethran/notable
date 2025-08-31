@@ -21,19 +21,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.EditorSettingCacheManager
+import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.ui.EditorGestureReceiver
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
-import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.editor.state.EditorState
-import com.ethran.notable.editor.utils.History
-import com.ethran.notable.utils.convertDpToPixel
 import io.shipbook.shipbooksdk.Log
 
 

@@ -36,7 +36,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.utils.PenSetting
-import com.ethran.notable.utils.convertDpToPixel
+import com.ethran.notable.ui.convertDpToPixel
 import kotlin.math.roundToInt
 
 

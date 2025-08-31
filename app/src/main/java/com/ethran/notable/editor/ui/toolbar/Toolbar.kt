@@ -42,12 +42,12 @@ import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.ui.modals.BackgroundSelector
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
-import com.ethran.notable.editor.utils.History
+import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
-import com.ethran.notable.editor.utils.UndoRedoType
-import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.editor.state.UndoRedoType
+import com.ethran.notable.ui.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff

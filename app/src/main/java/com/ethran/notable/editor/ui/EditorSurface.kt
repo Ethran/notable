@@ -12,7 +12,7 @@ import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.TAG
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.utils.History
+import com.ethran.notable.editor.state.History
 import io.shipbook.shipbooksdk.Log
 
 @Composable

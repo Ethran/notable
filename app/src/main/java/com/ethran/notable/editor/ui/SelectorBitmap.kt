@@ -33,7 +33,7 @@ import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.io.shareBitmap
-import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.ui.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.Copy

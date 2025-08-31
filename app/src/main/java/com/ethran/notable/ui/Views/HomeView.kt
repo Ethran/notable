@@ -83,7 +83,7 @@ import com.ethran.notable.ui.modals.NotebookConfigDialog
 import com.ethran.notable.io.getFilePathFromUri
 import com.ethran.notable.io.getPdfPageCount
 import com.ethran.notable.utils.isLatestVersion
-import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.editor.utils.setAnimationMode
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus

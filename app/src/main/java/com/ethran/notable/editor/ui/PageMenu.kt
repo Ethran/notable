@@ -20,7 +20,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.deletePage
-import com.ethran.notable.utils.noRippleClickable
+import com.ethran.notable.ui.noRippleClickable
 
 
 @Composable

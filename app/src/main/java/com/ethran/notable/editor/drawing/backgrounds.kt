@@ -17,13 +17,13 @@ import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.editor.PageView
-import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.utils.scaleRect
 import com.ethran.notable.io.getPdfPageCount
 import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.utils.logCallStack
-import com.ethran.notable.utils.scaleRect
 import com.onyx.android.sdk.extension.copy
 import com.onyx.android.sdk.extension.isNotNull
 import io.shipbook.shipbooksdk.ShipBook

@@ -40,9 +40,9 @@ import com.ethran.notable.ui.showHint
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
-import com.ethran.notable.editor.utils.History
+import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
-import com.ethran.notable.editor.utils.UndoRedoType
+import com.ethran.notable.editor.state.UndoRedoType
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive

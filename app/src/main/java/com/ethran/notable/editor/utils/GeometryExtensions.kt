@@ -5,7 +5,7 @@ import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.utils.scaleRect
+import com.ethran.notable.data.db.StrokePoint
 import com.onyx.android.sdk.data.note.TouchPoint
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -80,4 +80,17 @@ fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
             it.x, it.y, it.pressure, stroke.size, it.tiltX, it.tiltY, it.timestamp
         )
     }
+}
+
+
+fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
+    return StrokePoint(
+        x = x / scale + scroll.x,
+        y = y / scale + scroll.y,
+        pressure = pressure,
+        size = size,
+        tiltX = tiltX,
+        tiltY = tiltY,
+        timestamp = timestamp,
+    )
 }

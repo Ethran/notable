@@ -1,65 +1,19 @@
-package com.ethran.notable.utils
+package com.ethran.notable.editor.utils
 
-import android.content.Context
 import android.graphics.Path
 import android.graphics.Point
 import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Region
-import android.util.TypedValue
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.Dp
-import androidx.core.graphics.toRect
 import androidx.core.graphics.toRegion
-import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.SimplePointF
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
-import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.utils.Pen
-import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.onyx.android.sdk.data.note.TouchPoint
-import io.shipbook.shipbooksdk.Log
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.produceIn
 
-
-fun Modifier.noRippleClickable(
-    onClick: () -> Unit
-): Modifier = composed {
-    clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
-        onClick()
-    }
-}
-
-
-fun convertDpToPixel(dp: Dp, context: Context): Float {
-//    val resources = context.resources
-//    val metrics: DisplayMetrics = resources.displayMetrics
-    return TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP,
-        dp.value,
-        context.resources.displayMetrics
-    )
-}
-
-
-fun <T : Any> Flow<T>.withPrevious(): Flow<Pair<T?, T>> = flow {
-    var prev: T? = null
-    this@withPrevious.collect {
-        emit(prev to it)
-        prev = it
-    }
-}
 
 fun pointsToPath(points: List<SimplePointF>): Path {
     val path = Path()
@@ -95,38 +49,6 @@ fun toPageCoordinates(rect: Rect, scale: Float, scroll: Offset): Rect {
     )
 }
 
-fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List<StrokePoint> {
-    val points = touchPoints.map {
-        it.toStrokePoint(scroll, scale)
-    }
-    return points
-}
-
-fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
-    return StrokePoint(
-        x = x / scale + scroll.x,
-        y = y / scale + scroll.y,
-        pressure = pressure,
-        size = size,
-        tiltX = tiltX,
-        tiltY = tiltY,
-        timestamp = timestamp,
-    )
-}
-
-fun copyInputToSimplePointF(
-    touchPoints: List<TouchPoint>,
-    scroll: Offset,
-    scale: Float
-): List<SimplePointF> {
-    val points = touchPoints.map {
-        SimplePointF(
-            x = it.x / scale + scroll.x,
-            y = (it.y / scale + scroll.y),
-        )
-    }
-    return points
-}
 
 //fun pageAreaToCanvasArea(pageArea: Rect, scroll: Int, scale: Float = 1f): Rect {
 //    return scaleRect(
@@ -295,35 +217,4 @@ fun getModifiedStrokeEndpoints(
     )
 
     return Pair(startPoint, endPoint)
-}
-
-
-fun logCallStack(reason: String, n: Int = 8) {
-    val stackTrace = Thread.currentThread().stackTrace
-        .drop(3) // Skip internal calls
-        .take(n) // Limit depth
-        .joinToString("\n") {
-            "${it.className.removePrefix("com.ethran.notable.")}.${it.methodName} (${it.fileName}:${it.lineNumber})"
-        }
-    Log.w(TAG, "$reason Call stack:\n$stackTrace")
-}
-
-// Helper function to achieve time-based chunking
-fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
-    val buffer = mutableListOf<T>()
-    coroutineScope {
-        val channel = produceIn(this)
-        while (true) {
-            val start = System.currentTimeMillis()
-            val received = channel.receiveCatching().getOrNull() ?: break
-            buffer.add(received)
-
-            while (System.currentTimeMillis() - start < timeoutMillisSelector) {
-                val next = channel.tryReceive().getOrNull() ?: continue
-                buffer.add(next)
-            }
-            emit(buffer.toList())
-            buffer.clear()
-        }
-    }
 }
