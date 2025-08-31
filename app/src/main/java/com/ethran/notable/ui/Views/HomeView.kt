@@ -60,6 +60,7 @@ import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.io.XoppFile
 import com.ethran.notable.ui.showHint
@@ -79,7 +80,6 @@ import com.ethran.notable.floatingEditor.FloatingEditorView
 import com.ethran.notable.ui.modals.FolderConfigDialog
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.ui.modals.NotebookConfigDialog
-import com.ethran.notable.io.copyBackgroundToDatabase
 import com.ethran.notable.io.getFilePathFromUri
 import com.ethran.notable.io.getPdfPageCount
 import com.ethran.notable.utils.isLatestVersion

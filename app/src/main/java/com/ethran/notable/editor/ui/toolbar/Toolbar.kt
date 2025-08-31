@@ -34,6 +34,7 @@ import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.data.datastore.AppSettings
@@ -46,7 +47,6 @@ import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.editor.utils.UndoRedoType
-import com.ethran.notable.io.copyImageToDatabase
 import com.ethran.notable.utils.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard

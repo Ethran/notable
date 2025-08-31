@@ -76,14 +76,14 @@ import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.TAG
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.db.BackgroundType
-import com.ethran.notable.io.copyBackgroundToDatabase
+import com.ethran.notable.data.ensureBackgroundsFolder
+import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.drawing.drawDottedBg
 import com.ethran.notable.editor.drawing.drawHexedBg
 import com.ethran.notable.editor.drawing.drawLinedBg
 import com.ethran.notable.editor.drawing.drawSquaredBg
-import com.ethran.notable.io.ensureBackgroundsFolder
 import com.ethran.notable.io.getPdfPageCount
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Loader

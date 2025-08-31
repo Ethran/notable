@@ -19,27 +19,10 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import kotlin.use
 
-fun copyBackgroundToDatabase(context: Context, fileUri: Uri, subfolder: String): File {
-    var outputDir = ensureBackgroundsFolder()
-    outputDir = File(outputDir, subfolder)
-    if (!outputDir.exists())
-        outputDir.mkdirs()
-    return createFileFromContentUri(context, fileUri, outputDir)
-}
-
-fun copyImageToDatabase(context: Context, fileUri: Uri, subfolder: String? = null): File {
-    var outputDir = ensureImagesFolder()
-    if (subfolder != null) {
-        outputDir = File(outputDir, subfolder)
-        if (!outputDir.exists())
-            outputDir.mkdirs()
-    }
-    return createFileFromContentUri(context, fileUri, outputDir)
-}
 
 // adapted from:
 // https://stackoverflow.com/questions/71241337/copy-image-from-uri-in-another-folder-with-another-name-in-kotlin-android
-private fun createFileFromContentUri(context: Context, fileUri: Uri, outputDir: File): File {
+fun createFileFromContentUri(context: Context, fileUri: Uri, outputDir: File): File {
     var fileName = ""
 
     // Get the display name of the file
@@ -81,35 +64,6 @@ fun copyStreamToFile(inputStream: InputStream, outputFile: File) {
         }
     }
 }
-
-fun getDbDir(): File {
-    val documentsDir =
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-    val dbDir = File(documentsDir, "notabledb")
-    if (!dbDir.exists()) {
-        dbDir.mkdirs()
-    }
-    return dbDir
-}
-
-fun ensureImagesFolder(): File {
-    val dbDir = getDbDir()
-    val imagesDir = File(dbDir, "images")
-    if (!imagesDir.exists()) {
-        imagesDir.mkdirs()
-    }
-    return imagesDir
-}
-
-fun ensureBackgroundsFolder(): File {
-    val dbDir = getDbDir()
-    val backgroundsDir = File(dbDir, "backgrounds")
-    if (!backgroundsDir.exists()) {
-        backgroundsDir.mkdirs()
-    }
-    return backgroundsDir
-}
-
 
 fun getPdfPageCount(uri: String): Int {
     if (uri.isEmpty())
