@@ -1,4 +1,4 @@
-package com.ethran.notable.db
+package com.ethran.notable.data.db
 
 import com.ethran.notable.TAG
 import io.shipbook.shipbooksdk.Log

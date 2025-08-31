@@ -17,8 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import com.ethran.notable.classes.AppRepository
-import com.ethran.notable.db.newPage
+import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.db.newPage
 import com.ethran.notable.utils.deletePage
 import com.ethran.notable.utils.noRippleClickable
 

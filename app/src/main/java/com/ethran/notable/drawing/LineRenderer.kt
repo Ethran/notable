@@ -6,7 +6,7 @@ import android.opengl.GLES20
 import android.util.Log
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
-import com.ethran.notable.db.StrokePoint
+import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.utils.refreshScreenRegion
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

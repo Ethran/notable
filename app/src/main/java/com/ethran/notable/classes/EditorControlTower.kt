@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.TAG
-import com.ethran.notable.db.selectImagesAndStrokes
+import com.ethran.notable.data.db.selectImagesAndStrokes
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.History

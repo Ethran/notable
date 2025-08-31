@@ -20,12 +20,12 @@ import androidx.core.graphics.toRect
 import androidx.core.graphics.toRegion
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.TAG
-import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.classes.PageView
-import com.ethran.notable.datastore.SimplePointF
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Stroke
-import com.ethran.notable.db.StrokePoint
+import com.ethran.notable.data.datastore.SimplePointF
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
 import com.onyx.android.sdk.data.note.TouchPoint

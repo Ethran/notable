@@ -18,9 +18,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
-import com.ethran.notable.classes.AppRepository
-import com.ethran.notable.db.BackgroundType
-import com.ethran.notable.db.Page
+import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.db.Page
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 

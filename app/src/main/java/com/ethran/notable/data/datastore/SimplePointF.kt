@@ -1,3 +1,3 @@
-package com.ethran.notable.datastore
+package com.ethran.notable.data.datastore
 
 data class SimplePointF(val x: Float, val y: Float)

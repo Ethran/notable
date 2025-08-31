@@ -28,7 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.components.toolbar.ToolbarButton
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.noRippleClickable

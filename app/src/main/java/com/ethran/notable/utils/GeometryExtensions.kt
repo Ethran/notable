@@ -4,7 +4,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
-import com.ethran.notable.db.Stroke
+import com.ethran.notable.data.db.Stroke
 import com.onyx.android.sdk.data.note.TouchPoint
 import kotlin.math.ceil
 import kotlin.math.floor

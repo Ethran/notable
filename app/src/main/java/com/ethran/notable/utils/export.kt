@@ -9,8 +9,8 @@ import android.graphics.pdf.PdfDocument
 import android.os.Environment
 import android.provider.MediaStore
 import com.ethran.notable.TAG
-import com.ethran.notable.db.BookRepository
-import com.ethran.notable.db.PageRepository
+import com.ethran.notable.data.db.BookRepository
+import com.ethran.notable.data.db.PageRepository
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

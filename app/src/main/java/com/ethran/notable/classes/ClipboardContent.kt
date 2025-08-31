@@ -1,7 +1,7 @@
 package com.ethran.notable.classes
 
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Stroke
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Stroke
 
 data class ClipboardContent(
     val strokes: List<Stroke> = emptyList(),

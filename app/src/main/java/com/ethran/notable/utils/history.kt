@@ -5,8 +5,8 @@ import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.PageView
 import com.ethran.notable.classes.SnackConf
 import com.ethran.notable.classes.SnackState
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Stroke
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Stroke
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow

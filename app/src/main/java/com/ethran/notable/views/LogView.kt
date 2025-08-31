@@ -52,7 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.BuildConfig
-import com.ethran.notable.classes.PageDataManager
+import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.utils.getDbDir
 import com.onyx.android.sdk.utils.ClipboardUtils.copyToClipboard
 import java.io.BufferedReader

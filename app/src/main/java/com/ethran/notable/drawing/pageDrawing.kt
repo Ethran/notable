@@ -16,9 +16,9 @@ import androidx.core.net.toUri
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.PageView
 import com.ethran.notable.classes.showHint
-import com.ethran.notable.db.BackgroundType
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.getBackgroundType
+import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.imageBounds
 import com.ethran.notable.utils.plus

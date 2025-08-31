@@ -19,13 +19,16 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toRect
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.classes.PageDataManager.collectAndPersistBitmapsBatch
-import com.ethran.notable.db.AppDatabase
-import com.ethran.notable.db.BackgroundType
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Page
-import com.ethran.notable.db.Stroke
-import com.ethran.notable.db.getBackgroundType
+import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.CachedBackground
+import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageDataManager.collectAndPersistBitmapsBatch
+import com.ethran.notable.data.db.AppDatabase
+import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.drawing.drawBg
 import com.ethran.notable.drawing.drawOnCanvasFromPage
 import com.ethran.notable.modals.GlobalAppSettings
@@ -122,7 +125,7 @@ class PageView(
     fun getOrLoadBackground(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
         if (!currentBackground.matches(filePath, pageNumber, scale))
             // 0.1 to avoid constant rerender on zoom.
-            currentBackground = CachedBackground(filePath, pageNumber, scale+0.1f)
+            currentBackground = CachedBackground(filePath, pageNumber, scale + 0.1f)
         return currentBackground.bitmap
     }
 

@@ -12,9 +12,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
-import com.ethran.notable.datastore.SimplePointF
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Stroke
+import com.ethran.notable.data.datastore.SimplePointF
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.utils.Operation
 import com.ethran.notable.utils.PlacementMode

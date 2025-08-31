@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.R
-import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.EditorControlTower
 import com.ethran.notable.modals.AppSettings

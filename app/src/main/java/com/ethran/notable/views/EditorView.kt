@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.ethran.notable.TAG
-import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.classes.EditorControlTower
 import com.ethran.notable.classes.PageView
 import com.ethran.notable.components.EditorGestureReceiver
@@ -29,7 +29,7 @@ import com.ethran.notable.components.HorizontalScrollIndicator
 import com.ethran.notable.components.ScrollIndicator
 import com.ethran.notable.components.SelectedBitmap
 import com.ethran.notable.components.toolbar.Toolbar
-import com.ethran.notable.datastore.EditorSettingCacheManager
+import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme

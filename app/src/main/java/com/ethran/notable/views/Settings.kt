@@ -57,7 +57,7 @@ import androidx.navigation.NavController
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.classes.showHint
 import com.ethran.notable.components.SelectMenu
-import com.ethran.notable.db.KvProxy
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.isLatestVersion

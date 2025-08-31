@@ -7,8 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
-import com.ethran.notable.db.Folder
-import com.ethran.notable.db.FolderRepository
+import com.ethran.notable.data.db.Folder
+import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.utils.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight

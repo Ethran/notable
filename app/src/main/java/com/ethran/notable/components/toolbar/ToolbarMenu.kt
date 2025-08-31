@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.navigation.NavController
-import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.classes.LocalSnackContext
 import com.ethran.notable.classes.SnackConf
 import com.ethran.notable.classes.XoppFile

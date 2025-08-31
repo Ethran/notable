@@ -1,4 +1,4 @@
-package com.ethran.notable.classes
+package com.ethran.notable.data
 
 import android.content.ComponentCallbacks2
 import android.content.Context
@@ -6,8 +6,9 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.FileObserver
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Stroke
+import com.ethran.notable.classes.DrawCanvas
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.utils.chunked
 import com.ethran.notable.utils.loadBackgroundBitmap
 import com.ethran.notable.utils.persistBitmapFull
@@ -26,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.lang.ref.SoftReference
 import java.security.MessageDigest
+import kotlin.collections.get
 
 
 // Save bitmap, to avoid loading from disk every time.
@@ -296,7 +298,7 @@ object PageDataManager {
                         fileToPages[filePath]?.forEach { pid ->
                             invalidateBackground(pid)
                             if (pid == currentPage) {
-                                DrawCanvas.forceUpdate.emit(null)
+                                DrawCanvas.Companion.forceUpdate.emit(null)
                             }
                         }
                         onChange()

@@ -1,19 +1,20 @@
-package com.ethran.notable.datastore
+package com.ethran.notable.data.datastore
 
 import android.content.Context
 import com.ethran.notable.utils.Eraser
 import com.ethran.notable.utils.Mode
 import com.ethran.notable.utils.NamedSettings
 import com.ethran.notable.utils.Pen
-import com.ethran.notable.classes.AppRepository
-import com.ethran.notable.db.Kv
+import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.db.Kv
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 const val persistVersion = 2
 
 object EditorSettingCacheManager {
 
-    @kotlinx.serialization.Serializable
+    @Serializable
     data class EditorSettings(
         val version: Int = persistVersion,
         val isToolbarOpen: Boolean,

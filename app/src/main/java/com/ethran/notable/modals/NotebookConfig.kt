@@ -59,8 +59,8 @@ import com.ethran.notable.components.PagePreview
 import com.ethran.notable.components.ShowExportDialog
 import com.ethran.notable.components.ShowFolderSelectionDialog
 import com.ethran.notable.components.ShowSimpleConfirmationDialog
-import com.ethran.notable.db.BackgroundType
-import com.ethran.notable.db.BookRepository
+import com.ethran.notable.data.db.BackgroundType
+import com.ethran.notable.data.db.BookRepository
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
 

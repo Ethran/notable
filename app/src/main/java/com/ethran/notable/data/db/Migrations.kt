@@ -1,4 +1,4 @@
-package com.ethran.notable.db
+package com.ethran.notable.data.db
 
 import androidx.room.RenameColumn
 import androidx.room.migration.AutoMigrationSpec

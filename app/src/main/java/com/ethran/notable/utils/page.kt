@@ -14,11 +14,11 @@ import androidx.core.graphics.createBitmap
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
-import com.ethran.notable.db.Image
-import com.ethran.notable.db.Page
-import com.ethran.notable.db.PageRepository
-import com.ethran.notable.db.Stroke
-import com.ethran.notable.db.getBackgroundType
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.drawing.drawBg
 import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.drawing.drawStroke

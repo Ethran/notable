@@ -8,7 +8,7 @@ import androidx.compose.runtime.setValue
 import com.ethran.notable.classes.ClipboardContent
 import com.ethran.notable.classes.PageView
 import com.ethran.notable.classes.SelectionState
-import com.ethran.notable.datastore.EditorSettingCacheManager
+import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import io.shipbook.shipbooksdk.ShipBook
 
 enum class Mode {

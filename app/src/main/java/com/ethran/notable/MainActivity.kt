@@ -33,11 +33,11 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.LocalSnackContext
-import com.ethran.notable.classes.PageDataManager
+import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.classes.SnackBar
 import com.ethran.notable.classes.SnackState
-import com.ethran.notable.datastore.EditorSettingCacheManager
-import com.ethran.notable.db.KvProxy
+import com.ethran.notable.data.datastore.EditorSettingCacheManager
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.modals.AppSettings
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme

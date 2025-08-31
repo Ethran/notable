@@ -1,4 +1,4 @@
-package com.ethran.notable.db
+package com.ethran.notable.data.db
 
 import android.graphics.Canvas
 import android.graphics.Rect
@@ -8,7 +8,7 @@ import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
 import com.ethran.notable.classes.PageView
-import com.ethran.notable.datastore.SimplePointF
+import com.ethran.notable.data.datastore.SimplePointF
 import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.drawing.drawStroke
 import com.ethran.notable.utils.EditorState

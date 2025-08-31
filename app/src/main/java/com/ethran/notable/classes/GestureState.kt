@@ -5,7 +5,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.unit.IntOffset
-import com.ethran.notable.datastore.SimplePointF
+import com.ethran.notable.data.datastore.SimplePointF
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.setAnimationMode
 import io.shipbook.shipbooksdk.ShipBook

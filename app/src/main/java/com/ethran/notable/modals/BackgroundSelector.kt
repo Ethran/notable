@@ -69,7 +69,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -78,7 +77,7 @@ import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.classes.DrawCanvas
-import com.ethran.notable.db.BackgroundType
+import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.utils.copyBackgroundToDatabase
 import com.ethran.notable.drawing.drawDottedBg
 import com.ethran.notable.drawing.drawHexedBg

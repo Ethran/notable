@@ -50,7 +50,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.ethran.notable.PACKAGE_NAME
-import com.ethran.notable.db.KvProxy
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.getCurRefreshModeString
 import com.ethran.notable.utils.isRecommendedRefreshMode

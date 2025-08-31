@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
-import com.ethran.notable.db.KvProxy
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.modals.BUTTON_SIZE
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.Eraser

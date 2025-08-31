@@ -18,7 +18,7 @@ import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.classes.PageView
-import com.ethran.notable.db.BackgroundType
+import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.getPdfPageCount
 import com.ethran.notable.utils.loadBackgroundBitmap

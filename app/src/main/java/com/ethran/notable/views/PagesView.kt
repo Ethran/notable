@@ -27,7 +27,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.ethran.notable.classes.AppRepository
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.components.BreadCrumb
 import com.ethran.notable.components.PageMenu
 import com.ethran.notable.components.PagePreview
