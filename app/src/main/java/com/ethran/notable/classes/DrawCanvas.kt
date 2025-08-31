@@ -26,8 +26,6 @@ import com.ethran.notable.db.selectImagesAndStrokes
 import com.ethran.notable.drawing.OpenGLRenderer
 import com.ethran.notable.drawing.drawImage
 import com.ethran.notable.drawing.selectPaint
-import com.ethran.notable.modals.AppSettings
-import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.utils.EditorState
 import com.ethran.notable.utils.Eraser
 import com.ethran.notable.utils.History
@@ -43,13 +41,18 @@ import com.ethran.notable.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.utils.handleDraw
 import com.ethran.notable.utils.handleErase
 import com.ethran.notable.utils.handleScribbleToErase
+import com.ethran.notable.utils.logCallStack
+import com.ethran.notable.utils.onSurfaceChanged
+import com.ethran.notable.utils.onSurfaceDestroy
 import com.ethran.notable.utils.onSurfaceInit
 import com.ethran.notable.utils.partialRefreshRegionOnce
 import com.ethran.notable.utils.penToStroke
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.prepareForPartialUpdate
 import com.ethran.notable.utils.refreshScreenRegion
+import com.ethran.notable.utils.resetScreenFreeze
 import com.ethran.notable.utils.restoreDefaults
+import com.ethran.notable.utils.setupSurface
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
 import com.ethran.notable.utils.uriToBitmap
@@ -58,6 +61,7 @@ import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.extension.isNotNull
 import com.onyx.android.sdk.extension.isNull
+import com.onyx.android.sdk.extension.isNullOrEmpty
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.data.TouchPointList
@@ -66,6 +70,8 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,6 +84,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.system.measureTimeMillis
 
 
 val pressure = EpdController.getMaxTouchPressure()
@@ -118,6 +125,11 @@ class DrawCanvas(
     companion object {
         var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
         var refreshUi = MutableSharedFlow<Unit>()
+        var refreshUiImmediately = MutableSharedFlow<Unit>(
+            replay = 1,
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
         var eraserTouchPoint = MutableSharedFlow<Offset?>() //TODO: replace with proper solution
@@ -137,18 +149,34 @@ class DrawCanvas(
         var addImageByUri = MutableStateFlow<Uri?>(null)
         var rectangleToSelect = MutableStateFlow<Rect?>(null)
         var drawingInProgress = Mutex()
+
         private suspend fun waitForDrawing() {
-            withTimeoutOrNull(3000) {
-                // Just to make sure wait 1ms before checking lock.
-                delay(1)
-                // Wait until drawingInProgress is unlocked before proceeding
-                while (drawingInProgress.isLocked) {
-                    delay(5)
-                }
-            } ?: Log.e(
-                "DrawCanvas.waitForDrawing",
-                "Timeout while waiting for drawing lock. Potential deadlock."
+            Log.d(
+                "DrawCanvas.waitForDrawing", "waiting"
             )
+            val elapsed = measureTimeMillis {
+                withTimeoutOrNull(3000) {
+                    // Just to make sure wait 1ms before checking lock.
+                    delay(1)
+                    // Wait until drawingInProgress is unlocked before proceeding
+                    while (drawingInProgress.isLocked) {
+                        delay(5)
+                    }
+                } ?: Log.e(
+                    "DrawCanvas.waitForDrawing",
+                    "Timeout while waiting for drawing lock. Potential deadlock."
+                )
+
+            }
+            when {
+                elapsed > 3000 -> Log.e(
+                    "DrawCanvas.waitForDrawing", "Exceeded timeout ($elapsed ms)"
+                )
+
+                elapsed > 100 -> Log.w("DrawCanvas.waitForDrawing", "Took too long: $elapsed ms")
+                else -> Log.d("DrawCanvas.waitForDrawing", "Finished waiting in $elapsed ms")
+            }
+
         }
 
         suspend fun waitForDrawingWithSnack() {
@@ -158,11 +186,6 @@ class DrawCanvas(
                 waitForDrawing()
                 SnackState.cancelGlobalSnack.emit(snack.id)
             }
-        }
-
-        suspend fun waitForObservers() {
-            delay(25)
-            // TODO: Find proper solution
         }
     }
 
@@ -280,7 +303,8 @@ class DrawCanvas(
                                 getActualState().pen,
                                 currentLastStrokeEndTime
                             )
-                            if (erasedByScribbleDirtyRect.isNull()) {
+                            if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
+                                log.d("Drawing...")
                                 // draw the stroke
                                 handleDraw(
                                     this@DrawCanvas.page,
@@ -290,10 +314,18 @@ class DrawCanvas(
                                     getActualState().pen,
                                     scaledPoints
                                 )
-                            }
-                            if (erasedByScribbleDirtyRect.isNotNull()) {
+                            } else {
+                                log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                                 drawCanvasToView(erasedByScribbleDirtyRect)
-                                partialRefreshRegionOnce(this@DrawCanvas, erasedByScribbleDirtyRect)
+                                // we need to wait before refreshing, as onyx library has its own buffer that needs to be updated. Otherwise we will refresh to correct, then  incorrect and then correct state.
+                                awaitFrame()
+                                awaitFrame()
+                                partialRefreshRegionOnce(
+                                    this@DrawCanvas,
+                                    erasedByScribbleDirtyRect,
+                                    touchHelper
+                                )
+
                             }
 
                         }
@@ -307,7 +339,7 @@ class DrawCanvas(
 
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
-            prepareForPartialUpdate(this@DrawCanvas)
+            prepareForPartialUpdate(this@DrawCanvas, touchHelper)
             log.d("Eraser Mode")
             isErasing = true
         }
@@ -389,6 +421,7 @@ class DrawCanvas(
                 // Update page dimensions, redraw and refresh
                 page.updateDimensions(width, height)
                 updateActiveSurface()
+                onSurfaceChanged(this@DrawCanvas)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -401,6 +434,7 @@ class DrawCanvas(
                 if (referencedSurfaceView == this@DrawCanvas.hashCode().toString()) {
                     touchHelper.closeRawDrawing()
                 }
+                onSurfaceDestroy(this@DrawCanvas, touchHelper)
             }
         }
 
@@ -409,6 +443,40 @@ class DrawCanvas(
     }
 
     fun registerObservers() {
+
+        coroutineScope.launch {
+            refreshUiImmediately.collect {
+                logCanvasObserver.v("Refreshing UI!")
+                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
+                refreshUi(zoneToRedraw)
+            }
+        }
+
+        // observe forceUpdate, takes rect in screen coordinates
+        // given null it will redraw whole page
+        // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
+        coroutineScope.launch(Dispatchers.Main.immediate) {
+            forceUpdate.collect { dirtyRectangle ->
+                // On loading, make sure that the loaded strokes are visible to it.
+                logCanvasObserver.v("Force update, zone: $dirtyRectangle")
+                val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+                page.drawAreaScreenCoordinates(zoneToRedraw)
+                launch(Dispatchers.Default) {
+                    if (dirtyRectangle.isNull()) refreshUiSuspend()
+                    else {
+                        partialRefreshRegionOnce(this@DrawCanvas, zoneToRedraw, touchHelper)
+                    }
+                }
+            }
+        }
+
+        // observe refreshUi
+        coroutineScope.launch(Dispatchers.Default) {
+            refreshUi.collect {
+                logCanvasObserver.v("Refreshing UI!")
+                refreshUiSuspend()
+            }
+        }
 
         coroutineScope.launch {
             onFocusChange.collect { hasFocus ->
@@ -428,29 +496,6 @@ class DrawCanvas(
             }
         }
 
-        // observe forceUpdate, takes rect in screen coordinates
-        // given null it will redraw whole page
-        // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
-        coroutineScope.launch {
-            forceUpdate.collect { dirtyRectangle ->
-                // On loading, make sure that the loaded strokes are visible to it.
-                logCanvasObserver.v("Force update, zone: $dirtyRectangle")
-                val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
-                page.drawAreaScreenCoordinates(zoneToRedraw)
-                if (dirtyRectangle.isNull()) refreshUiSuspend()
-                else {
-                    partialRefreshRegionOnce(this@DrawCanvas, zoneToRedraw)
-                }
-            }
-        }
-
-        // observe refreshUi
-        coroutineScope.launch {
-            refreshUi.collect {
-                logCanvasObserver.v("Refreshing UI!")
-                refreshUiSuspend()
-            }
-        }
         coroutineScope.launch {
             isDrawing.collect {
                 logCanvasObserver.v("drawing state changed to $it!")
@@ -491,18 +536,16 @@ class DrawCanvas(
                     return@collect
                 }
                 logCanvasObserver.v("collected: $p")
-                if (p == null)
-                    return@collect
-                val strokePoint =
-                    StrokePoint(
-                        x = p.x,
-                        y = p.y,
-                        pressure = 1f,
-                        size = 10f,
-                        tiltX = 0,
-                        tiltY = 0,
-                        timestamp = 0,
-                    )
+                if (p == null) return@collect
+                val strokePoint = StrokePoint(
+                    x = p.x,
+                    y = p.y,
+                    pressure = 1f,
+                    size = 10f,
+                    tiltX = 0,
+                    tiltY = 0,
+                    timestamp = 0,
+                )
                 glRenderer.frontBufferRenderer?.renderFrontBufferedLayer(strokePoint)
             }
         }
@@ -619,22 +662,18 @@ class DrawCanvas(
 
     private fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi")
+
+        // post what page drawn to visible surface
+        drawCanvasToView(dirtyRect)
+        if (drawingInProgress.isLocked) log.w("Drawing is still in progress there might be a bug.")
+
         // Use only if you have confidence that there are no strokes being drawn at the moment
         if (!state.isDrawing) {
-            log.w("Not in drawing mode, skipping refreshUI")
+            log.w("Not in drawing mode, skipping unfreezing")
             return
         }
-        if (drawingInProgress.isLocked)
-            log.w("Drawing is still in progress there might be a bug.")
-
-        drawCanvasToView(dirtyRect)
-
         // reset screen freeze
-        // if in scribble mode, the screen want refresh
-        // So to update interface we need to disable, and re-enable
-        touchHelper.setRawDrawingEnabled(false)
-        touchHelper.setRawDrawingEnabled(true)
-        // screen won't freeze until you actually stoke
+        resetScreenFreeze(touchHelper)
     }
 
     private suspend fun refreshUiSuspend() {
@@ -647,19 +686,17 @@ class DrawCanvas(
             return
         }
         if (Looper.getMainLooper().isCurrentThread) {
-            log.i(
+            log.w(
                 "refreshUiSuspend() is called from the main thread."
             )
+            logCallStack("refreshUiSuspend_main_thread")
         } else
-            log.i(
+            log.v(
                 "refreshUiSuspend() is called from the non-main thread."
             )
         waitForDrawing()
         drawCanvasToView(null)
-        touchHelper.setRawDrawingEnabled(false)
-        if (drawingInProgress.isLocked)
-            log.w("Lock was acquired during refreshing UI. It might cause errors.")
-        touchHelper.setRawDrawingEnabled(true)
+        resetScreenFreeze(touchHelper)
     }
 
     private fun handleImage(imageUri: Uri) {
@@ -770,36 +807,9 @@ class DrawCanvas(
         log.i("Update editable surface")
         coroutineScope.launch {
             onSurfaceInit(this@DrawCanvas)
-
             val toolbarHeight =
                 if (state.isToolbarOpen) convertDpToPixel(40.dp, context).toInt() else 0
-
-            touchHelper.setRawDrawingEnabled(false)
-            touchHelper.closeRawDrawing()
-
-            // Store view dimensions locally before using in Rect
-            val viewWidth = this@DrawCanvas.width
-            val viewHeight = this@DrawCanvas.height
-
-            // Determine the exclusion area based on toolbar position
-            val excludeRect: Rect =
-                if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
-                    Rect(0, 0, viewWidth, toolbarHeight)
-                } else {
-                    Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
-                }
-
-            val limitRect =
-                if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
-                    Rect(0, toolbarHeight, viewWidth, viewHeight)
-                else
-                    Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
-
-            touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
-                .openRawDrawing()
-
-            touchHelper.setRawDrawingEnabled(true)
-            log.i("Update editable surface completed")
+            setupSurface(this@DrawCanvas, touchHelper, toolbarHeight)
         }
     }
 

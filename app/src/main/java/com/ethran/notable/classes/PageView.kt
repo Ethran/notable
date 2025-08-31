@@ -40,6 +40,7 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -67,8 +68,11 @@ class PageView(
 
     private val appRepository = AppRepository(context)
 
+    @Volatile
     var windowedBitmap = createBitmap(viewWidth, viewHeight)
         private set
+
+    @Volatile
     var windowedCanvas = Canvas(windowedBitmap)
         private set
 
@@ -137,52 +141,56 @@ class PageView(
             windowedCanvas = Canvas(windowedBitmap)
         } ?: run {
             log.i("PageView: creating new bitmap")
-            windowedBitmap = createBitmap(viewWidth, viewHeight)
-            windowedCanvas = Canvas(windowedBitmap)
-            loadInitialBitmap()
+            recreateCanvas()
             PageDataManager.cacheBitmap(id, windowedBitmap)
         }
 
         coroutineScope.launch {
-            DrawCanvas.waitForObservers()
-            DrawCanvas.refreshUi.emit(Unit)
-        }
-        coroutineScope.launch {
+            DrawCanvas.refreshUiImmediately.emit(Unit)
             loadPage()
+            log.d("Page loaded (Init with id: $id)")
             collectAndPersistBitmapsBatch(context, coroutineScope)
         }
     }
 
-    fun updatePageID(newId: String) {
+    fun changePage(newPageId: String) {
         val oldId = id
-        id = newId
+        id = newPageId
         coroutineScope.launch {
             updateOnExit(oldId)
         }
         pageFromDb = AppRepository(context).pageRepository.getById(id)
         zoomLevel.value = 1.0f
-        PageDataManager.setPage(newId)
+        PageDataManager.setPage(newPageId)
 
-        PageDataManager.getCachedBitmap(newId)?.let { cached ->
+
+        PageDataManager.getCachedBitmap(newPageId)?.let { cached ->
             log.i("PageView: using cached bitmap")
             windowedBitmap = cached
             windowedCanvas = Canvas(windowedBitmap)
         } ?: run {
             log.i("PageView: creating new bitmap")
-            windowedBitmap = createBitmap(viewWidth, viewHeight)
-            windowedCanvas = Canvas(windowedBitmap)
-            loadInitialBitmap()
-            PageDataManager.cacheBitmap(newId, windowedBitmap)
+            recreateCanvas()
+            PageDataManager.cacheBitmap(newPageId, windowedBitmap)
         }
 
         log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $id")
 
         coroutineScope.launch {
-            DrawCanvas.refreshUi.emit(Unit)
-            log.d("loaded, waiting, ID: $id")
+            // Refresh UI without waiting for drawing.
+            // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
+            //  using function that does not wait for drawing mostly solved the problem.
+            //  but there might be still bugs with it.
+            DrawCanvas.refreshUiImmediately.emit(Unit)
             loadPage()
-            DrawCanvas.forceUpdate.emit(null)
+            log.d("Page loaded (updatePageID($id))")
         }
+    }
+
+    private fun recreateCanvas() {
+        windowedBitmap = createBitmap(viewWidth, viewHeight)
+        windowedCanvas = Canvas(windowedBitmap)
+        loadInitialBitmap()
     }
 
     /*
@@ -211,6 +219,8 @@ class PageView(
                 logCache.d("All strokes loaded in $timeToLoad ms")
             } finally {
                 snack?.let { SnackState.cancelGlobalSnack.emit(it.id) }
+                // TODO: If we put it in loadPage(…) sometimes it will try to refresh
+                //  without seeing strokes, I have no idea why.
                 coroutineScope.launch(Dispatchers.Main.immediate) {
                     DrawCanvas.forceUpdate.emit(null)
                 }
@@ -286,8 +296,11 @@ class PageView(
             PageDataManager.ensureMemoryAvailable(15)
             loadFromPersistLayer()
         }
-        PageDataManager.reduceCache(20)
-        cacheNeighbors()
+        coroutineScope.launch(Dispatchers.Default) {
+            delay(10)
+            PageDataManager.reduceCache(20)
+            cacheNeighbors()
+        }
     }
 
     private fun cacheNeighbors() {
@@ -426,6 +439,7 @@ class PageView(
         appRepository.imageRepository.deleteAll(imageIds)
     }
 
+    // load background, fast. Might not be accurate.
     private fun loadInitialBitmap(): Boolean {
         val bitmapFromDisc = loadPersistBitmap(context, id)
         if (bitmapFromDisc != null) {
@@ -437,11 +451,17 @@ class PageView(
             } else
                 log.i("Image preview does not fit canvas area - redrawing")
         }
+
+        log.d("Drawing initial background.")
         // draw just background.
-        drawBg(
-            context, windowedCanvas, pageFromDb?.getBackgroundType() ?: BackgroundType.Native,
-            pageFromDb?.background ?: "blank", scroll, 1f, this
-        )
+        val backgroundType = pageFromDb?.getBackgroundType()
+        if (backgroundType == BackgroundType.Native)
+            drawBg(
+                context, windowedCanvas, backgroundType,
+                pageFromDb?.background ?: "blank", scroll, 1f, this
+            )
+        else
+            windowedCanvas.drawColor(Color.WHITE)
         return false
     }
 
@@ -562,7 +582,7 @@ class PageView(
             createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
         shiftedCanvas.drawColor(Color.RED) //for debugging.
-        shiftedCanvas.drawBitmap(windowedBitmap, -movement.x.toFloat(), -movement.y.toFloat(), null)
+        shiftedCanvas.drawBitmap(windowedBitmap, -dragDelta.x, -dragDelta.y, null)
 
         // Swap in the shifted bitmap
         windowedBitmap = shiftedBitmap
@@ -700,7 +720,7 @@ class PageView(
         // Draw scaled snapshot into a fresh screen-sized bitmap
         val scaledBitmap = createBitmap(screenW, screenH, windowedBitmap.config!!)
         val scaledCanvas = Canvas(scaledBitmap)
-        scaledCanvas.drawColor(Color.BLACK) // clear
+        scaledCanvas.drawColor(Color.RED) // clear
 
         val matrix = Matrix().apply {
             postScale(scaleFactor, scaleFactor, pivotX, pivotY)
@@ -754,13 +774,15 @@ class PageView(
     }
 
     fun redrawOutsideRect(dstRect: Rect, screenW: Int, screenH: Int) {
+        val scaledOverlap = kotlin.math.ceil(OVERLAP * zoomLevel.value.coerceAtLeast(1f)).toInt()
+
         // Uncovered top band
         if (dstRect.top > 0) {
             val r = Rect(
                 0,
                 0,
                 screenW,
-                (dstRect.top + OVERLAP).coerceAtMost(screenH)
+                (dstRect.top + scaledOverlap).coerceAtMost(screenH)
             )
             if (!r.isEmpty) drawAreaScreenCoordinates(r)
         }
@@ -768,7 +790,7 @@ class PageView(
         if (dstRect.bottom < screenH) {
             val r = Rect(
                 0,
-                (dstRect.bottom - OVERLAP).coerceAtLeast(0),
+                (dstRect.bottom - scaledOverlap).coerceAtLeast(0),
                 screenW,
                 screenH
             )
@@ -778,19 +800,19 @@ class PageView(
         if (dstRect.left > 0) {
             val r = Rect(
                 0,
-                (dstRect.top - OVERLAP).coerceAtLeast(0),
-                (dstRect.left + OVERLAP).coerceAtMost(screenW),
-                (dstRect.bottom + OVERLAP).coerceAtMost(screenH)
+                (dstRect.top - scaledOverlap).coerceAtLeast(0),
+                (dstRect.left + scaledOverlap).coerceAtMost(screenW),
+                (dstRect.bottom + scaledOverlap).coerceAtMost(screenH)
             )
             if (!r.isEmpty) drawAreaScreenCoordinates(r)
         }
         // Uncovered right band
         if (dstRect.right < screenW) {
             val r = Rect(
-                (dstRect.right - OVERLAP).coerceAtLeast(0),
-                (dstRect.top - OVERLAP).coerceAtLeast(0),
+                (dstRect.right - scaledOverlap).coerceAtLeast(0),
+                (dstRect.top - scaledOverlap).coerceAtLeast(0),
                 screenW,
-                (dstRect.bottom + OVERLAP).coerceAtMost(screenH)
+                (dstRect.bottom + scaledOverlap).coerceAtMost(screenH)
             )
             if (!r.isEmpty) drawAreaScreenCoordinates(r)
         }
@@ -814,8 +836,7 @@ class PageView(
             viewHeight = newHeight
 
             // Recreate bitmap and canvas with new dimensions
-            windowedBitmap = createBitmap(viewWidth, viewHeight)
-            windowedCanvas = Canvas(windowedBitmap)
+            recreateCanvas()
             //Reset zoom level.
             zoomLevel.value = 1.0f
             coroutineScope.launch {

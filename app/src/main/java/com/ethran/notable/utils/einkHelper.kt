@@ -3,11 +3,15 @@ package com.ethran.notable.utils
 import android.graphics.Rect
 import android.view.View
 import com.ethran.notable.TAG
+import com.ethran.notable.modals.AppSettings
+import com.ethran.notable.modals.GlobalAppSettings
 import com.onyx.android.sdk.api.device.epd.EpdController
+import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_NORMAL
 import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_SCRIBBLE
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.Device
+import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.delay
@@ -170,18 +174,70 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
 
 
 fun onSurfaceInit(view: View) {
+    einkLogger.v("onSurfaceInit, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
     EpdController.setViewDefaultUpdateMode(
         view,
         UpdateMode.HAND_WRITING_REPAINT_MODE
     )
+//    EpdController.enablePost(view, 1)
+    EpdController.enablePost(1)
 }
 
-fun prepareForPartialUpdate(view: View) {
+fun onSurfaceChanged(view: View) {
+    EpdController.enablePost(view, 1)
+
+}
+
+
+fun onSurfaceDestroy(view: View, touchHelper: TouchHelper) {
+    einkLogger.v("onSurfaceDestroy, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
+    touchHelper.setRawDrawingEnabled(false)
+}
+
+
+fun setupSurface(view: View, touchHelper: TouchHelper, toolbarHeight: Int) {
+    // Takes at least 50ms on Note 4c,
+    // and I don't think that we need it immediately
+    einkLogger.i("Setup editable surface")
+    touchHelper.debugLog(false)
+    touchHelper.setRawDrawingEnabled(false)
+    touchHelper.closeRawDrawing()
+
+    // Store view dimensions locally before using in Rect
+    val viewWidth = view.width
+    val viewHeight = view.height
+
+    // Determine the exclusion area based on toolbar position
+    val excludeRect: Rect =
+        if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
+            Rect(0, 0, viewWidth, toolbarHeight)
+        } else {
+            Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
+        }
+
+    val limitRect =
+        if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
+            Rect(0, toolbarHeight, viewWidth, viewHeight)
+        else
+            Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
+
+    touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
+        .openRawDrawing()
+
+    touchHelper.setRawDrawingEnabled(true)
+    einkLogger.i("Setup editable surface completed")
+
+}
+
+fun prepareForPartialUpdate(view: View,  touchHelper: TouchHelper) {
     EpdController.setDisplayScheme(SCHEME_SCRIBBLE)
 //    EpdController.useFastScheme() // the same as above
     EpdController.enableA2ForSpecificView(view)
-    EpdController.enablePost(view, 1)
+//    EpdController.enablePost(view, 1)
     EpdController.setEpdTurbo(100)
+    //exit of drawing mode
+    touchHelper.isRawDrawingRenderEnabled = false
+    touchHelper.isRawDrawingRenderEnabled = true
 }
 
 fun refreshScreenRegion(view: View, dirtyRect: Rect) {
@@ -202,14 +258,28 @@ fun refreshScreenRegion(view: View, dirtyRect: Rect) {
 }
 
 fun restoreDefaults(view: View){
-    EpdController.resetViewUpdateMode(view)
-//    EpdController.setDisplayScheme(SCHEME_NORMAL)
+//    EpdController.resetViewUpdateMode(view)
+    EpdController.setDisplayScheme(SCHEME_NORMAL)
 
 }
 
 
-fun partialRefreshRegionOnce(view: View, dirtyRect: Rect) {
-    EpdController.enablePost(view, 1)
+fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelper) {
     refreshScreenRegion(view, dirtyRect)
-    EpdController.enablePost(view, 0)
+    resetScreenFreeze(touchHelper)
 }
+
+fun resetScreenFreeze(touchHelper: TouchHelper, view: View? = null) {
+    touchHelper.isRawDrawingRenderEnabled = false
+    touchHelper.isRawDrawingRenderEnabled = true
+//    setRawDrawingEnabled(false)
+//    setRawDrawingEnabled(true)
+}
+
+//    Device.currentDevice().invalidate(this@DrawCanvas, UpdateMode.ANIMATION_MONO);
+//    EpdController.refreshScreen(view, UpdateMode.ANIMATION_MONO)
+//    EpdController.setEpdTurbo(100)
+//    EpdController.clearTransientUpdate(true)
+//    EpdController.repaintEveryThing()
+//    EpdController.setScreenHandWritingPenState(view, EpdPenManager.PEN_PAUSE)
+//    EpdController.setScreenHandWritingPenState(view, EpdPenManager.PEN_DRAWING)

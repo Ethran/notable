@@ -25,10 +25,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.lang.ref.SoftReference
+import java.security.MessageDigest
 
 
 // Save bitmap, to avoid loading from disk every time.
 data class CachedBackground(val path: String, val pageNumber: Int, val scale: Float) {
+    val id: String = keyOf(path, pageNumber)
+
     var bitmap: Bitmap? = loadBackgroundBitmap(path, pageNumber, scale)
     fun matches(filePath: String, pageNum: Int, targetScale: Float): Boolean {
         return path == filePath &&
@@ -36,6 +39,13 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
                 scale >= targetScale // Consider valid if our scale is larger
     }
 
+    companion object {
+        fun keyOf(path: String, pageNumber: Int): String {
+            val md = MessageDigest.getInstance("SHA-1")
+            val bytes = md.digest("$path#$pageNumber".toByteArray(Charsets.UTF_8))
+            return bytes.take(8).joinToString("") { "%02x".format(it) }
+        }
+    }
 }
 
 // Cache manager companion object
@@ -48,7 +58,8 @@ object PageDataManager {
     private val images = LinkedHashMap<String, MutableList<Image>>()
     private var imagesById = LinkedHashMap<String, HashMap<String, Image>>()
 
-    private val cachedBackgrounds = LinkedHashMap<String, CachedBackground>()
+    private val backgroundCache = LinkedHashMap<String, CachedBackground>()
+    private val pageToBackgroundKey = HashMap<String, String>()
     private val bitmapCache = LinkedHashMap<String, SoftReference<Bitmap>>()
 
     // observe background file changes
@@ -236,14 +247,29 @@ object PageDataManager {
 
     fun setBackground(pageId: String, background: CachedBackground, observe: Boolean) {
         synchronized(accessLock) {
-            cachedBackgrounds[pageId] = background
+
+            // Merge/upgrade cache: if we already have an entry for this background,
+            // keep the one with higher scale (higher quality).
+            val existing = backgroundCache[background.id]
+            if (existing == null || background.scale > existing.scale) {
+                backgroundCache[background.id] = background
+                log.d("Cached background set: id=${background.id} scale=${background.scale}")
+            } else {
+                log.d("Cached background exists with equal/higher scale; reusing id=${existing.id} scale=${existing.scale}")
+            }
+
+            // Link this page to the background key
+            pageToBackgroundKey[pageId] = background.id
+
             if (observe) observeBackgroundFile(pageId, background.path)
         }
     }
 
     fun getBackground(pageId: String): CachedBackground {
         return synchronized(accessLock) {
-            cachedBackgrounds[pageId] ?: CachedBackground("", 0, 1.0f)
+            val key = pageToBackgroundKey[pageId]
+            val bg = if (key != null) backgroundCache[key] else null
+            bg ?: CachedBackground("", 0, 1.0f)
         }
     }
 
@@ -296,8 +322,18 @@ object PageDataManager {
 
     private fun invalidateBackground(pageId: String) {
         synchronized(accessLock) {
-            cachedBackgrounds.remove(pageId)
-            bitmapCache.remove(pageId)
+            // Remove page->bg mapping and drop bg if no other page references it
+            val key = pageToBackgroundKey.remove(pageId)
+            if (key != null) {
+                val stillUsed = pageToBackgroundKey.values.any { it == key }
+                if (!stillUsed) {
+                    backgroundCache.remove(key)
+                    log.d("Invalidated background cache key=$key (no remaining pages)")
+                } else {
+                    log.d("Unlinked page $pageId from background key=$key (still used elsewhere)")
+                }
+            }
+            bitmapCache.remove(pageId) // existing windowed bitmap cache per page stays per-page
             log.d("Invalidated background cache for page: $pageId")
         }
     }
@@ -321,7 +357,12 @@ object PageDataManager {
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
-            cachedBackgrounds.remove(pageId)
+
+            // Unlink and possibly remove background
+            val key = pageToBackgroundKey.remove(pageId)
+            if (key != null && !pageToBackgroundKey.values.any { it == key }) {
+                backgroundCache.remove(key)
+            }
             stopObservingBackground(pageId)
             pageHigh.remove(pageId)
             bitmapCache.remove(pageId)
@@ -340,7 +381,8 @@ object PageDataManager {
         synchronized(accessLock) {
             strokes.clear()
             images.clear()
-            cachedBackgrounds.clear()
+            backgroundCache.clear()
+            pageToBackgroundKey.clear()
         }
     }
 
@@ -387,7 +429,7 @@ object PageDataManager {
 
 
             // 3. Calculate background memory
-            cachedBackgrounds[pageId]?.let { background ->
+            backgroundCache[pageToBackgroundKey[pageId]]?.let { background ->
                 background.bitmap?.let { bitmap ->
                     totalBytes += bitmap.allocationByteCount.toLong()
                 }

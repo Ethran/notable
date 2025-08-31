@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -22,6 +23,7 @@ import androidx.core.graphics.scale
 import com.ethran.notable.R
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
+import com.ethran.notable.classes.Timing
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
@@ -74,17 +76,22 @@ fun shareBitmap(context: Context, bitmap: Bitmap) {
 }
 
 fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
-    if (filePath.isEmpty())
-        return null
+    // TODO: it's very slow, needs to be changed for better tool
+    if (filePath.isEmpty()) return null
+//    logCallStack("loadBackgroundBitmap", 14)
+    if (Looper.getMainLooper().isCurrentThread) {
+        log.w("loadBackgroundBitmap called from main thread")
+    }
     Log.v(TAG, "Reloading background, path: $filePath, scale: $scale")
     val file = File(filePath)
     if (!file.exists()) {
         Log.e(TAG, "getOrLoadBackground: File does not exist at path: $filePath")
         return null
     }
-
+    val timer = Timing("loadBackgroundBitmap")
     val newBitmap: ImageBitmap? = try {
         if (filePath.endsWith(".pdf", ignoreCase = true)) {
+            timer.step("preparing for rendering pdf")
             // PDF rendering
             val fileDescriptor =
                 ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -98,18 +105,22 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
                 }
 
                 renderer.openPage(pageNumber).use { pdfPage ->
+                    // Render in bigger resolution, as there are nasty artifacts
+                    // when rendering in exact resolution (with colors, highlights and math formulas )
                     val targetWidth = SCREEN_WIDTH * (scale.coerceAtMost(2f))
-                    val scaleFactor = (targetWidth / pdfPage.width) *3f
+                    val scaleFactor = (targetWidth / pdfPage.width) * 3f
 
                     val width = (pdfPage.width * scaleFactor).toInt()
                     val height = (pdfPage.height * scaleFactor).toInt()
 
                     val bitmap = createBitmap(width, height)
+                    timer.step("prepared for recreation for render")
                     pdfPage.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                     bitmap.asImageBitmap()
                 }
             }
         } else {
+            timer.step("loading image")
             // Image file
             BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
         }
@@ -117,6 +128,7 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
         Log.e(TAG, "getOrLoadBackground: Error loading background - ${e.message}", e)
         null
     }
+    timer.end("loaded background")
     return newBitmap?.asAndroidBitmap()
 }
 

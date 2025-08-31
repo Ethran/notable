@@ -56,7 +56,7 @@ class EditorControlTower(
                     onPageScroll(-delta)
                 }
             }
-            DrawCanvas.refreshUi.emit(Unit)
+            DrawCanvas.refreshUiImmediately.emit(Unit)
         }
         return Offset.Zero // All handled
     }
@@ -64,7 +64,7 @@ class EditorControlTower(
     fun switchPage(id: String) {
         state.changePage(id)
         history.cleanHistory()
-        page.updatePageID(id)
+        page.changePage(id)
     }
 
     fun onPinchToZoom(delta: Float, center: Offset?) {
@@ -75,7 +75,7 @@ class EditorControlTower(
                 else
                     page.updateZoom(delta, center)
             }
-            DrawCanvas.refreshUi.emit(Unit)
+            DrawCanvas.refreshUiImmediately.emit(Unit)
         }
     }
 
@@ -84,7 +84,7 @@ class EditorControlTower(
             page.scroll = Offset(0f, page.scroll.y)
             page.applyZoomAndRedraw(1f)
             // Request UI update
-            DrawCanvas.refreshUi.emit(Unit)
+            DrawCanvas.refreshUiImmediately.emit(Unit)
         }
     }
 

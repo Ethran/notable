@@ -581,10 +581,10 @@ fun offsetImage(image: Image, offset: Offset): Image {
 }
 
 
-fun logCallStack(reason: String) {
+fun logCallStack(reason: String, n: Int = 8) {
     val stackTrace = Thread.currentThread().stackTrace
         .drop(3) // Skip internal calls
-        .take(8) // Limit depth
+        .take(n) // Limit depth
         .joinToString("\n") {
             "${it.className.removePrefix("com.ethran.notable.")}.${it.methodName} (${it.fileName}:${it.lineNumber})"
         }
