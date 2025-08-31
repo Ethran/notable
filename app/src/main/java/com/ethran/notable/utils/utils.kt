@@ -1,7 +1,6 @@
 package com.ethran.notable.utils
 
 import android.content.Context
-import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Point
 import android.graphics.PointF
@@ -19,18 +18,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.core.graphics.toRect
 import androidx.core.graphics.toRegion
 import com.ethran.notable.TAG
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.datastore.SimplePointF
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.utils.Eraser
-import com.ethran.notable.editor.utils.History
-import com.ethran.notable.editor.utils.Operation
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
-import com.ethran.notable.editor.utils.expandBy
 import com.onyx.android.sdk.data.note.TouchPoint
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.coroutineScope
@@ -38,8 +32,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.produceIn
 
-const val SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS = 150L
-const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
 
 fun Modifier.noRippleClickable(
     onClick: () -> Unit
@@ -82,52 +74,6 @@ fun pointsToPath(points: List<SimplePointF>): Path {
         prePoint.y = point.y
     }
     return path
-}
-
-// points is in page coordinates, returns effected area.
-fun handleErase(
-    page: PageView,
-    history: History,
-    points: List<SimplePointF>,
-    eraser: Eraser
-): Rect? {
-    val paint = Paint().apply {
-        this.strokeWidth = 30f
-        this.style = Paint.Style.STROKE
-        this.strokeCap = Paint.Cap.ROUND
-        this.strokeJoin = Paint.Join.ROUND
-        this.isAntiAlias = true
-    }
-    val path = pointsToPath(points)
-    var outPath = Path()
-
-    if (eraser == Eraser.SELECT) {
-        path.close()
-        outPath = path
-    }
-
-
-    if (eraser == Eraser.PEN) {
-        paint.getFillPath(path, outPath)
-    }
-
-    val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
-
-    val deletedStrokeIds = deletedStrokes.map { it.id }
-    if (deletedStrokes.isEmpty()) return null
-    page.removeStrokes(deletedStrokeIds)
-
-    history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
-
-    val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
-    page.drawAreaScreenCoordinates(screenArea = effectedArea)
-    return effectedArea
-}
-
-enum class SelectPointPosition {
-    LEFT,
-    RIGHT,
-    CENTER
 }
 
 
@@ -183,27 +129,7 @@ fun copyInputToSimplePointF(
 }
 
 
-// Filters strokes that significantly intersect with a given bounding box
-fun filterStrokesByIntersection(
-    candidateStrokes: List<Stroke>,
-    boundingBox: RectF,
-    threshold: Float = SCRIBBLE_INTERSECTION_THRESHOLD
-): List<Stroke> {
-    return candidateStrokes.filter { stroke ->
-        val strokeRect = strokeBounds(stroke)
-        val intersection = RectF()
 
-        if (intersection.setIntersect(strokeRect, boundingBox)) {
-            val strokeArea = strokeRect.width() * strokeRect.height()
-            val intersectionArea = intersection.width() * intersection.height()
-            val intersectionRatio = if (strokeArea > 0) intersectionArea / strokeArea else 0f
-
-            intersectionRatio >= threshold
-        } else {
-            false
-        }
-    }
-}
 
 // Counts the number of direction changes (sharp reversals) in a stroke
 fun calculateNumReversals(
@@ -237,72 +163,6 @@ fun calculateStrokeLength(points: List<StrokePoint>): Float {
     return totalDistance
 }
 
-const val MINIMUM_SCRIBBLE_POINTS = 15
-
-// Erases strokes if touchPoints are "scribble", returns true if erased.
-// returns null if not erased, dirty rectangle otherwise
-fun handleScribbleToErase(
-    page: PageView,
-    touchPoints: List<StrokePoint>,
-    history: History,
-    pen: Pen,
-    currentLastStrokeEndTime: Long
-): Rect? {
-    if (pen == Pen.MARKER)
-        return null // do not erase with highlighter
-    if (!GlobalAppSettings.current.scribbleToEraseEnabled)
-        return null // scribble to erase is disabled
-    if (touchPoints.size < MINIMUM_SCRIBBLE_POINTS)
-        return null
-    if (touchPoints.first().timestamp < currentLastStrokeEndTime + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS)
-        return null // not enough time has passed since last stroke
-    if (calculateNumReversals(touchPoints) < 2)
-        return null
-
-    val strokeLength = calculateStrokeLength(touchPoints)
-    val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
-    val width = boundingBox.width()
-    val height = boundingBox.height()
-    if (width == 0f || height == 0f) return null
-
-    // Require scribble to be long enough relative to bounding box
-    val minLengthForScribble = (width + height) * 3
-    if (strokeLength < minLengthForScribble) {
-        Log.d("ScribbleToErase", "Stroke is too short, $strokeLength < $minLengthForScribble")
-        return null
-    }
-
-    // calculate stroke width based on bounding box
-    // bigger swinging in scribble = bigger bounding box => larger stroke size
-    val minDim = kotlin.math.min(boundingBox.width(), boundingBox.height())
-    val maxDim = kotlin.math.max(boundingBox.width(), boundingBox.height())
-    val aspectRatio = if (minDim > 0) maxDim / minDim else 1f
-    val scaleFactor = kotlin.math.min(1f + (aspectRatio - 1f) / 2f, 2f)
-    val strokeSizeForDetection = minDim * 0.15f * scaleFactor
-
-
-    // Get strokes that might intersect with the scribble path
-    val path = pointsToPath(touchPoints.map { SimplePointF(it.x, it.y) })
-    val outPath = Path()
-    Paint().apply { this.strokeWidth = strokeSizeForDetection }.getFillPath(path, outPath)
-    val candidateStrokes = selectStrokesFromPath(page.strokes, outPath)
-
-
-    // Filter intersecting strokes based on intersection ratio
-    val expandedBoundingBox = boundingBox.expandBy(strokeSizeForDetection / 2)
-    val deletedStrokes = filterStrokesByIntersection(candidateStrokes, expandedBoundingBox)
-
-    // If strokes were found, remove them and update history
-    if (deletedStrokes.isNotEmpty()) {
-        val deletedStrokeIds = deletedStrokes.map { it.id }
-        page.removeStrokes(deletedStrokeIds)
-        history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
-        val dirtyRect = strokeBounds(deletedStrokes)
-        page.drawAreaPageCoordinates(dirtyRect)
-        return dirtyRect
-    }
-    return null
-}
 
 // touchpoints are in page coordinates
 fun handleDraw(
@@ -485,37 +345,6 @@ fun divideStrokesFromCut(
     }
 
     return strokesOver to strokesUnder
-}
-
-fun selectStrokesFromPath(strokes: List<Stroke>, path: Path): List<Stroke> {
-    val bounds = RectF()
-    path.computeBounds(bounds, true)
-
-    //region is only 16 bit, so we need to move our region
-    val translatedPath = Path(path)
-    translatedPath.offset(0f, -bounds.top)
-    val region = pathToRegion(translatedPath)
-
-    return strokes.filter {
-        strokeBounds(it).intersect(bounds)
-    }.filter { it.points.any { region.contains(it.x.toInt(), (it.y - bounds.top).toInt()) } }
-}
-
-fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
-    val bounds = RectF()
-    path.computeBounds(bounds, true)
-
-    //region is only 16 bit, so we need to move our region
-    val translatedPath = Path(path)
-    translatedPath.offset(0f, -bounds.top)
-    val region = pathToRegion(translatedPath)
-
-    return images.filter {
-        imageBounds(it).intersect(bounds)
-    }.filter {
-        // include image if all its corners are within region
-        imagePoints(it).all { region.contains(it.x, (it.y - bounds.top).toInt()) }
-    }
 }
 
 fun offsetStroke(stroke: Stroke, offset: Offset): Stroke {
