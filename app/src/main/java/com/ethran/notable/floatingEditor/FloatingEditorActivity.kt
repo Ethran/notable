@@ -1,7 +1,6 @@
-package com.ethran.notable
+package com.ethran.notable.floatingEditor
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -16,7 +15,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.BackgroundType
@@ -25,7 +26,6 @@ import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.utils.exportBook
 import com.ethran.notable.utils.exportPageToPng
-import com.ethran.notable.views.FloatingEditorView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -67,7 +67,7 @@ class FloatingEditorActivity : ComponentActivity() {
         setContent {
             InkaTheme {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.Companion.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
                     val navController = rememberNavController()
@@ -76,7 +76,7 @@ class FloatingEditorActivity : ComponentActivity() {
                         if (!Settings.canDrawOverlays(this@FloatingEditorActivity)) {
                             val intent = Intent(
                                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:$packageName")
+                                "package:$packageName".toUri()
                             )
                             overlayPermissionLauncher.launch(intent)
                         } else {
@@ -94,7 +94,7 @@ class FloatingEditorActivity : ComponentActivity() {
 
     @Composable
     private fun FloatingEditorContent(
-        navController: androidx.navigation.NavController,
+        navController: NavController,
         pageId: String? = null,
         bookId: String? = null
     ) {
@@ -105,7 +105,7 @@ class FloatingEditorActivity : ComponentActivity() {
                     id = pageId,
                     notebookId = null,
                     parentFolderId = null,
-                    background =  GlobalAppSettings.current.defaultNativeTemplate,
+                    background = GlobalAppSettings.current.defaultNativeTemplate,
                     backgroundType = BackgroundType.Native.key
                 )
                 appRepository.pageRepository.create(page)

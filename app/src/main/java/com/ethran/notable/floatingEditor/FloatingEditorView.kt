@@ -1,4 +1,4 @@
-package com.ethran.notable.views
+package com.ethran.notable.floatingEditor
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -23,6 +23,7 @@ import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.views.EditorView
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

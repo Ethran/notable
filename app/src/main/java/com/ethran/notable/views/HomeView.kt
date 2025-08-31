@@ -75,6 +75,7 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.floatingEditor.FloatingEditorView
 import com.ethran.notable.modals.FolderConfigDialog
 import com.ethran.notable.modals.GlobalAppSettings
 import com.ethran.notable.modals.NotebookConfigDialog
