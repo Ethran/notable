@@ -21,9 +21,9 @@ import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.modals.GlobalAppSettings
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.views.EditorView
+import com.ethran.notable.editor.EditorView
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

@@ -6,13 +6,13 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.FileObserver
-import com.ethran.notable.classes.DrawCanvas
+import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.utils.chunked
-import com.ethran.notable.utils.loadBackgroundBitmap
-import com.ethran.notable.utils.persistBitmapFull
-import com.ethran.notable.utils.persistBitmapThumbnail
+import com.ethran.notable.editor.utils.loadBackgroundBitmap
+import com.ethran.notable.editor.utils.persistBitmapFull
+import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

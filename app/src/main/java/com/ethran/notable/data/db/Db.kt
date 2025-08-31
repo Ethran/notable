@@ -7,7 +7,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import com.ethran.notable.utils.getDbDir
+import com.ethran.notable.io.getDbDir
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.Date
