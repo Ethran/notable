@@ -565,6 +565,7 @@ class PageView(
         // so we have to scale it back to page coordinates.
         var deltaInPage = Offset(dragDelta.x / zoomLevel.value, dragDelta.y / zoomLevel.value)
 
+        // Cut, so we won't shift outside the screen.
         if (scroll.x + deltaInPage.x < 0) {
             deltaInPage = deltaInPage.copy(x = -scroll.x)
         }
@@ -580,8 +581,8 @@ class PageView(
 
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
-        val movement = (deltaInPage * zoomLevel.value).toIntOffset()
-        if (movement == IntOffset.Zero) return
+        val movement = (deltaInPage * zoomLevel.value)
+        if (movement.toIntOffset() == IntOffset.Zero) return
 
         val width = windowedBitmap.width
         val height = windowedBitmap.height
@@ -590,7 +591,7 @@ class PageView(
             createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
         shiftedCanvas.drawColor(Color.RED) //for debugging.
-        shiftedCanvas.drawBitmap(windowedBitmap, -dragDelta.x, -dragDelta.y, null)
+        shiftedCanvas.drawBitmap(windowedBitmap, -movement.x, -movement.y, null)
 
         // Swap in the shifted bitmap
         windowedBitmap = shiftedBitmap
@@ -598,7 +599,7 @@ class PageView(
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
         redrawOutsideRect(
-            alreadyDrawnRectAfterShift(movement, width, height),
+            alreadyDrawnRectAfterShift(movement.toIntOffset(), width, height),
             width,
             height
         )
@@ -637,7 +638,7 @@ class PageView(
     }
 
     suspend fun simpleUpdateZoom(scaleDelta: Float) {
-        log.d("Zoom: $scaleDelta")
+        log.d("Simple Zoom updated, $scaleDelta")
         // Update the zoom factor
         val newZoomLevel = calculateZoomLevel(scaleDelta, zoomLevel.value)
 
