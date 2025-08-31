@@ -35,6 +35,7 @@ import com.ethran.notable.editor.utils.History
 import com.ethran.notable.editor.utils.Operation
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
+import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.onSurfaceChanged
@@ -47,6 +48,7 @@ import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.editor.utils.restoreDefaults
 import com.ethran.notable.editor.utils.setupSurface
+import com.ethran.notable.editor.utils.transformToLine
 import com.ethran.notable.editor.utils.waitForEpdRefresh
 import com.ethran.notable.io.uriToBitmap
 import com.ethran.notable.ui.SnackConf
@@ -56,11 +58,9 @@ import com.ethran.notable.utils.convertDpToPixel
 import com.ethran.notable.utils.copyInput
 import com.ethran.notable.utils.copyInputToSimplePointF
 import com.ethran.notable.utils.getModifiedStrokeEndpoints
-import com.ethran.notable.utils.handleDraw
 import com.ethran.notable.utils.logCallStack
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.toPageCoordinates
-import com.ethran.notable.utils.transformToLine
 import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.extension.isNotNull

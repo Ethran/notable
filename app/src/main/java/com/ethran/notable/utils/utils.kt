@@ -128,105 +128,6 @@ fun copyInputToSimplePointF(
     return points
 }
 
-
-
-
-// Counts the number of direction changes (sharp reversals) in a stroke
-fun calculateNumReversals(
-    points: List<StrokePoint>,
-    stepSize: Int = 10
-): Int {
-    var numReversals = 0
-    for (i in 0 until points.size - 2 * stepSize step stepSize) {
-        val p1 = points[i]
-        val p2 = points[i + stepSize]
-        val p3 = points[i + 2 * stepSize]
-        val segment1 = SimplePointF(p2.x - p1.x, p2.y - p1.y)
-        val segment2 = SimplePointF(p3.x - p2.x, p3.y - p2.y)
-        val dotProduct = segment1.x * segment2.x + segment1.y * segment2.y
-        // Reversal is detected when angle between segments > 90 degrees
-        if (dotProduct < 0) {
-            numReversals++
-        }
-    }
-    return numReversals
-}
-
-// Calculates total stroke length using Manhattan distance
-fun calculateStrokeLength(points: List<StrokePoint>): Float {
-    var totalDistance = 0.0f
-    for (i in 1 until points.size) {
-        val dx = points[i].x - points[i - 1].x
-        val dy = points[i].y - points[i - 1].y
-        totalDistance += kotlin.math.abs(dx) + kotlin.math.abs(dy)
-    }
-    return totalDistance
-}
-
-
-// touchpoints are in page coordinates
-fun handleDraw(
-    page: PageView,
-    historyBucket: MutableList<String>,
-    strokeSize: Float,
-    color: Int,
-    pen: Pen,
-    touchPoints: List<StrokePoint>
-) {
-    try {
-        val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
-
-        //move rectangle
-        boundingBox.inset(-strokeSize, -strokeSize)
-
-        val stroke = Stroke(
-            size = strokeSize,
-            pen = pen,
-            pageId = page.id,
-            top = boundingBox.top,
-            bottom = boundingBox.bottom,
-            left = boundingBox.left,
-            right = boundingBox.right,
-            points = touchPoints,
-            color = color
-        )
-        page.addStrokes(listOf(stroke))
-        // this is causing lagging and crushing, neo pens are not good
-        page.drawAreaPageCoordinates(strokeBounds(stroke).toRect())
-        historyBucket.add(stroke.id)
-    } catch (e: Exception) {
-        Log.e(TAG, "Handle Draw: An error occurred while handling the drawing: ${e.message}")
-    }
-}
-
-/*
-* Gets list of points, and return line from first point to last.
-* The line consist of 100 points, I do not know how it works (for 20 it want draw correctly)
- */
-fun transformToLine(
-    startPoint: StrokePoint,
-    endPoint: StrokePoint,
-): List<StrokePoint> {
-    // Helper function to interpolate between two values
-    fun lerp(start: Float, end: Float, fraction: Float) = start + (end - start) * fraction
-
-    val numberOfPoints = 100 // Define how many points should line have
-    val points2 = List(numberOfPoints) { i ->
-        val fraction = i.toFloat() / (numberOfPoints - 1)
-        val x = lerp(startPoint.x, endPoint.x, fraction)
-        val y = lerp(startPoint.y, endPoint.y, fraction)
-        val pressure = lerp(startPoint.pressure, endPoint.pressure, fraction)
-        val size = lerp(startPoint.size, endPoint.size, fraction)
-        val tiltX = (lerp(startPoint.tiltX.toFloat(), endPoint.tiltX.toFloat(), fraction)).toInt()
-        val tiltY = (lerp(startPoint.tiltY.toFloat(), endPoint.tiltY.toFloat(), fraction)).toInt()
-        val timestamp = System.currentTimeMillis()
-
-        StrokePoint(x, y, pressure, size, tiltX, tiltY, timestamp)
-    }
-    return (points2)
-}
-
-
 //fun pageAreaToCanvasArea(pageArea: Rect, scroll: Int, scale: Float = 1f): Rect {
 //    return scaleRect(
 //        Rect(
@@ -368,6 +269,34 @@ fun offsetImage(image: Image, offset: Offset): Image {
     )
 }
 
+fun getModifiedStrokeEndpoints(
+    points: List<TouchPoint>,
+    scroll: Offset,
+    zoomLevel: Float
+): Pair<StrokePoint, StrokePoint> {
+    if (points.isEmpty()) throw IllegalArgumentException("points list is empty")
+
+    val startIdx = points.size / 10
+    val endIdx = (9 * points.size) / 10
+
+    val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel)
+    val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel)
+
+    val startPoint = baseStartPoint.copy(
+        tiltX = points[startIdx].tiltX,
+        tiltY = points[startIdx].tiltY,
+        pressure = points[startIdx].pressure
+    )
+
+    val endPoint = baseEndPoint.copy(
+        tiltX = points[endIdx].tiltX,
+        tiltY = points[endIdx].tiltY,
+        pressure = points[endIdx].pressure
+    )
+
+    return Pair(startPoint, endPoint)
+}
+
 
 fun logCallStack(reason: String, n: Int = 8) {
     val stackTrace = Thread.currentThread().stackTrace
@@ -397,32 +326,4 @@ fun <T> Flow<T>.chunked(timeoutMillisSelector: Long): Flow<List<T>> = flow {
             buffer.clear()
         }
     }
-}
-
-fun getModifiedStrokeEndpoints(
-    points: List<TouchPoint>,
-    scroll: Offset,
-    zoomLevel: Float
-): Pair<StrokePoint, StrokePoint> {
-    if (points.isEmpty()) throw IllegalArgumentException("points list is empty")
-
-    val startIdx = points.size / 10
-    val endIdx = (9 * points.size) / 10
-
-    val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel)
-    val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel)
-
-    val startPoint = baseStartPoint.copy(
-        tiltX = points[startIdx].tiltX,
-        tiltY = points[startIdx].tiltY,
-        pressure = points[startIdx].pressure
-    )
-
-    val endPoint = baseEndPoint.copy(
-        tiltX = points[endIdx].tiltX,
-        tiltY = points[endIdx].tiltY,
-        pressure = points[endIdx].pressure
-    )
-
-    return Pair(startPoint, endPoint)
 }

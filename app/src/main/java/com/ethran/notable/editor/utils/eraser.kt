@@ -9,8 +9,6 @@ import com.ethran.notable.data.datastore.SimplePointF
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.utils.calculateNumReversals
-import com.ethran.notable.utils.calculateStrokeLength
 import com.ethran.notable.utils.pointsToPath
 import com.ethran.notable.utils.strokeBounds
 import io.shipbook.shipbooksdk.Log
@@ -90,9 +88,41 @@ fun handleScribbleToErase(
     return null
 }
 
+// Calculates total stroke length using Manhattan distance
+private fun calculateStrokeLength(points: List<StrokePoint>): Float {
+    var totalDistance = 0.0f
+    for (i in 1 until points.size) {
+        val dx = points[i].x - points[i - 1].x
+        val dy = points[i].y - points[i - 1].y
+        totalDistance += kotlin.math.abs(dx) + kotlin.math.abs(dy)
+    }
+    return totalDistance
+}
+
+// Counts the number of direction changes (sharp reversals) in a stroke
+private fun calculateNumReversals(
+    points: List<StrokePoint>,
+    stepSize: Int = 10
+): Int {
+    var numReversals = 0
+    for (i in 0 until points.size - 2 * stepSize step stepSize) {
+        val p1 = points[i]
+        val p2 = points[i + stepSize]
+        val p3 = points[i + 2 * stepSize]
+        val segment1 = SimplePointF(p2.x - p1.x, p2.y - p1.y)
+        val segment2 = SimplePointF(p3.x - p2.x, p3.y - p2.y)
+        val dotProduct = segment1.x * segment2.x + segment1.y * segment2.y
+        // Reversal is detected when angle between segments > 90 degrees
+        if (dotProduct < 0) {
+            numReversals++
+        }
+    }
+    return numReversals
+}
+
 
 // Filters strokes that significantly intersect with a given bounding box
-fun filterStrokesByIntersection(
+private fun filterStrokesByIntersection(
     candidateStrokes: List<Stroke>,
     boundingBox: RectF,
     threshold: Float = SCRIBBLE_INTERSECTION_THRESHOLD
