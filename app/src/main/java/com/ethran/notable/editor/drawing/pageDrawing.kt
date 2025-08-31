@@ -23,7 +23,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.imageBounds
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.utils.strokeBounds
-import com.ethran.notable.editor.utils.uriToBitmap
+import com.ethran.notable.io.uriToBitmap
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.system.measureTimeMillis
 

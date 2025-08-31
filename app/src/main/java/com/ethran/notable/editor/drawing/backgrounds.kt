@@ -21,7 +21,7 @@ import com.ethran.notable.editor.PageView
 import com.ethran.notable.data.db.BackgroundType
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.io.getPdfPageCount
-import com.ethran.notable.editor.utils.loadBackgroundBitmap
+import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.utils.logCallStack
 import com.ethran.notable.utils.scaleRect
 import com.onyx.android.sdk.extension.copy

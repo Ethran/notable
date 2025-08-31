@@ -10,9 +10,9 @@ import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.utils.chunked
-import com.ethran.notable.editor.utils.loadBackgroundBitmap
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
+import com.ethran.notable.io.loadBackgroundBitmap
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

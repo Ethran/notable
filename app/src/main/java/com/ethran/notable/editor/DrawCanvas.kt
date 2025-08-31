@@ -59,8 +59,8 @@ import com.ethran.notable.editor.utils.restoreDefaults
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.utils.toPageCoordinates
 import com.ethran.notable.utils.transformToLine
-import com.ethran.notable.editor.utils.uriToBitmap
 import com.ethran.notable.editor.utils.waitForEpdRefresh
+import com.ethran.notable.io.uriToBitmap
 import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.extension.isNotNull

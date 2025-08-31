@@ -11,8 +11,7 @@ import android.provider.MediaStore
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.editor.utils.drawCanvas
-import com.ethran.notable.editor.utils.writePage
+
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
