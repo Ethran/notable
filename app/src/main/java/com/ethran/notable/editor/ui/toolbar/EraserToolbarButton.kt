@@ -80,9 +80,11 @@ fun EraserToolbarButton(
                         .border(1.dp, Color.Black)
                         .height(IntrinsicSize.Max)
                 ) {
-                    Row(Modifier
-                        .height(IntrinsicSize.Max)
-                        .border(1.dp, Color.Black)) {
+                    Row(
+                        Modifier
+                            .height(IntrinsicSize.Max)
+                            .border(1.dp, Color.Black)
+                    ) {
                         ToolbarButton(
                             iconId = R.drawable.eraser,
                             isSelected = value == Eraser.PEN,
