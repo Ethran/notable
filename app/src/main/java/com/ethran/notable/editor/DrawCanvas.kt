@@ -646,7 +646,7 @@ class DrawCanvas(
             }
         } else SnackState.Companion.globalSnackFlow.emit(
             SnackConf(
-                text = "Page isn't loaded!",
+                text = "Page is empty!",
                 duration = 3000,
             )
         )

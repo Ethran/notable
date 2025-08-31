@@ -355,6 +355,8 @@ object PageDataManager {
 
     fun removePage(pageId: String) {
         log.d("Removing page $pageId")
+        if (pageId ==currentPage)
+            log.w("Removing current page!")
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
