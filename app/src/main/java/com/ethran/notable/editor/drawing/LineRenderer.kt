@@ -5,8 +5,8 @@ import android.graphics.Rect
 import android.opengl.GLES20
 import android.util.Log
 import com.ethran.notable.TAG
-import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -106,7 +106,7 @@ class LineRenderer {
 
             val lineCoords = floatArrayOf(
                 p1.x, p1.y, 0f,
-                p2.x , p2.y, 0f
+                p2.x, p2.y, 0f
             )
             buffer.put(lineCoords)
             buffer.position(0)
@@ -132,12 +132,13 @@ class LineRenderer {
 //   Creating a new thread for each refresh operation could lead to thread creation overhead and
 //   potential race conditions. Consider using a shared thread pool or coroutine dispatcher instead.
             thread {
-                refreshScreenRegion(viewModel, dirtyRect) }
+                refreshScreenRegion(viewModel, dirtyRect)
+            }
         }
         GLES20.glDisableVertexAttribArray(positionHandle)
         val error = GLES20.glGetError()
         if (error != GLES20.GL_NO_ERROR) {
-            Log.e(TAG,"GL error: $error")
+            Log.e(TAG, "GL error: $error")
         }
     }
 

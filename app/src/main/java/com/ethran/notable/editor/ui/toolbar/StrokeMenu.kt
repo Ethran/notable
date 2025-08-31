@@ -242,19 +242,20 @@ private fun DiscreteThicknessSlider(
     val thumbInt = value.roundToInt().coerceIn(minVal, maxVal)
     val thumbFraction = fractionForInt(thumbInt)
 
-    Box(modifier = modifier
-        .pointerInput(displayValues) {
-            detectTapGestures { offset ->
-                val w = size.width.coerceAtLeast(1)
-                onValueChange(snapToNearestInt(offset.x / w))
+    Box(
+        modifier = modifier
+            .pointerInput(displayValues) {
+                detectTapGestures { offset ->
+                    val w = size.width.coerceAtLeast(1)
+                    onValueChange(snapToNearestInt(offset.x / w))
+                }
             }
-        }
-        .pointerInput(displayValues) {
-            detectDragGestures(onDrag = { change, _ ->
-                val w = size.width.coerceAtLeast(1)
-                onValueChange(snapToNearestInt(change.position.x / w))
-            })
-        }) {
+            .pointerInput(displayValues) {
+                detectDragGestures(onDrag = { change, _ ->
+                    val w = size.width.coerceAtLeast(1)
+                    onValueChange(snapToNearestInt(change.position.x / w))
+                })
+            }) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val w = size.width
             val h = size.height

@@ -1,19 +1,18 @@
 package com.ethran.notable.editor.state
 
 import android.graphics.Rect
-import com.ethran.notable.editor.DrawCanvas
-import com.ethran.notable.editor.PageView
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.strokeBounds
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
-import java.lang.Error
 
 
 sealed class Operation {
@@ -63,7 +62,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
                 when (it) {
                     is HistoryBusActions.MoveHistory -> {
                         // Wait for commit to history to complete
-                        if(it.type == UndoRedoType.Undo){
+                        if (it.type == UndoRedoType.Undo) {
                             DrawCanvas.commitCompletion = CompletableDeferred()
                             DrawCanvas.commitHistorySignalImmediately.emit(Unit)
                             DrawCanvas.commitCompletion.await()
@@ -112,12 +111,14 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
                 pageModel.removeStrokes(operation.strokeIds)
                 return Operation.AddStroke(strokes = strokes) to strokeBounds(strokes)
             }
+
             is Operation.AddImage -> {
                 pageModel.addImage(operation.images)
                 return Operation.DeleteImage(imageIds = operation.images.map { it.id }) to imageBoundsInt(
                     operation.images
                 )
             }
+
             is Operation.DeleteImage -> {
                 val images = pageModel.getImages(operation.imageIds).filterNotNull()
                 pageModel.removeImages(operation.imageIds)

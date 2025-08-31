@@ -29,15 +29,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ethran.notable.TAG
-import com.ethran.notable.editor.DrawCanvas
-import com.ethran.notable.ui.components.QuickNav
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.EditorView
 import com.ethran.notable.ui.Views.BugReportScreen
 import com.ethran.notable.ui.Views.Library
 import com.ethran.notable.ui.Views.PagesView
 import com.ethran.notable.ui.Views.SettingsView
 import com.ethran.notable.ui.Views.WelcomeView
-import com.ethran.notable.editor.EditorView
+import com.ethran.notable.ui.components.QuickNav
 
 @ExperimentalAnimationApi
 @ExperimentalFoundationApi

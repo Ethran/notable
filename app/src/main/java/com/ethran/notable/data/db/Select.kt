@@ -53,7 +53,7 @@ fun selectImagesAndStrokes(
     pageBounds.inset(-padding, -padding)
 
     // create bitmap and draw images and strokes
-    val selectedBitmap= page.toScreenCoordinates(pageBounds).let { boundsScreen->
+    val selectedBitmap = page.toScreenCoordinates(pageBounds).let { boundsScreen ->
         createBitmap(boundsScreen.width(), boundsScreen.height())
     }
     val selectedCanvas = Canvas(selectedBitmap)

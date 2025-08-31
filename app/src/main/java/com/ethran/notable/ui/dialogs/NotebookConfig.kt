@@ -52,12 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.ethran.notable.TAG
+import com.ethran.notable.data.db.BookRepository
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
-import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.data.db.BookRepository
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
 
@@ -86,7 +86,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
     var showBackgroundSelector by remember { mutableStateOf(false) }
 
 
-    var bookFolder by remember {  mutableStateOf(book?.parentFolderId)}
+    var bookFolder by remember { mutableStateOf(book?.parentFolderId) }
 
 
     if (showBackgroundSelector) {
@@ -97,9 +97,10 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
             notebookId = book!!.id,
             onChange = { backgroundType, background ->
                 if (background == null) {
-                    if (book!!.defaultBackgroundType != backgroundType){
+                    if (book!!.defaultBackgroundType != backgroundType) {
                         val updatedBook = book!!.copy(
-                            defaultBackgroundType = backgroundType)
+                            defaultBackgroundType = backgroundType
+                        )
                         bookRepository.update(updatedBook)
                     }
                 } else if (book!!.defaultBackgroundType != backgroundType || book!!.defaultBackground != background) {
@@ -111,7 +112,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                 }
             }
         ) {
-            showBackgroundSelector =false
+            showBackgroundSelector = false
         }
     }
     // Confirmation Dialog for Deletion
@@ -261,14 +262,15 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                             shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(1.dp, Color.Black)
                         ) {
-                            val typeName= when (BackgroundType.fromKey(book?.defaultBackgroundType ?:"" ) ){
-                                BackgroundType.AutoPdf -> "Observe Pdf"
-                                BackgroundType.CoverImage -> "Cover Image"
-                                BackgroundType.Image -> "Image"
-                                BackgroundType.ImageRepeating -> "Repeating Image"
-                                BackgroundType.Native -> "Native"
-                                is BackgroundType.Pdf -> "Static pdf Page"
-                            }
+                            val typeName =
+                                when (BackgroundType.fromKey(book?.defaultBackgroundType ?: "")) {
+                                    BackgroundType.AutoPdf -> "Observe Pdf"
+                                    BackgroundType.CoverImage -> "Cover Image"
+                                    BackgroundType.Image -> "Image"
+                                    BackgroundType.ImageRepeating -> "Repeating Image"
+                                    BackgroundType.Native -> "Native"
+                                    is BackgroundType.Pdf -> "Static pdf Page"
+                                }
                             Text(
                                 text = typeName,
                                 fontWeight = FontWeight.SemiBold
@@ -307,7 +309,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     showMoveDialog = true
                 }
                 ActionButton("Export") {
-                    showExportDialog=true
+                    showExportDialog = true
                 }
                 ActionButton("Copy") {
                     scope.launch {

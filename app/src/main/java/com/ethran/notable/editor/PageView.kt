@@ -19,30 +19,30 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toRect
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.showHint
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.PageDataManager.collectAndPersistBitmapsBatch
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.AppDatabase
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.state.ZOOM_SNAP_THRESHOLD
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.utils.div
 import com.ethran.notable.editor.utils.loadPersistBitmap
-import com.ethran.notable.utils.logCallStack
 import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.showHint
+import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -129,7 +129,7 @@ class PageView(
      */
     fun getOrLoadBackground(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
         if (!currentBackground.matches(filePath, pageNumber, scale))
-            // 0.1 to avoid constant rerender on zoom.
+        // 0.1 to avoid constant rerender on zoom.
             currentBackground = CachedBackground(filePath, pageNumber, scale + 0.1f)
         return currentBackground.bitmap
     }

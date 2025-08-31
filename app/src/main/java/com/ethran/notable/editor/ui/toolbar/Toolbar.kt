@@ -35,18 +35,18 @@ import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.copyImageToDatabase
-import com.ethran.notable.editor.DrawCanvas
-import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
-import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.UndoRedoType
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
-import com.ethran.notable.editor.state.UndoRedoType
+import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.ui.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
@@ -88,8 +88,8 @@ fun isSelected(state: EditorState, penType: Pen): Boolean {
 }
 
 
-private val SIZES_STROKES_DEFAULT =  listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
-private val SIZES_MARKER_DEFAULT =  listOf("M" to 25f, "L" to 40f, "XL" to 60f, "XXL" to 80f)
+private val SIZES_STROKES_DEFAULT = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
+private val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "XXL" to 80f)
 
 
 @Composable
@@ -436,7 +436,8 @@ fun Toolbar(
                     val book = AppRepository(context).bookRepository.getById(state.bookId)
 
                     // TODO maybe have generic utils for this ?
-                    val pageNumber = remember (state.pageId) {   book!!.pageIds.indexOf(state.pageId) + 1}
+                    val pageNumber =
+                        remember(state.pageId) { book!!.pageIds.indexOf(state.pageId) + 1 }
                     val totalPageNumber = book!!.pageIds.size
 
                     Box(

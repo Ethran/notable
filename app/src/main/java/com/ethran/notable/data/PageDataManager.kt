@@ -6,13 +6,13 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.FileObserver
-import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.utils.chunked
+import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
+import com.ethran.notable.utils.chunked
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +27,6 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.lang.ref.SoftReference
 import java.security.MessageDigest
-import kotlin.collections.get
 
 
 // Save bitmap, to avoid loading from disk every time.

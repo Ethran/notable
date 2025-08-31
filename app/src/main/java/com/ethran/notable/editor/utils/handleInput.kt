@@ -1,8 +1,8 @@
 package com.ethran.notable.editor.utils
 
 import androidx.compose.ui.geometry.Offset
-import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.data.model.SimplePointF
 import com.onyx.android.sdk.data.note.TouchPoint
 
 

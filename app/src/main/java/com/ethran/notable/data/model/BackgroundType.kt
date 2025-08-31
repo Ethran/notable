@@ -11,7 +11,7 @@ sealed class BackgroundType(val key: String, val folderName: String) {
 
     // If notebook is of type AutoPdf, its consider Observable.
     // If page is of type AutoPdf, it will follow the page number in notebook.
-    data object AutoPdf: BackgroundType("autoPdf", "pdfs")
+    data object AutoPdf : BackgroundType("autoPdf", "pdfs")
 
     // Static page of pdf
     data class Pdf(val page: Int) : BackgroundType("pdf$page", "pdfs")

@@ -1,12 +1,12 @@
 package com.ethran.notable.data.datastore
 
 import android.content.Context
-import com.ethran.notable.editor.utils.Eraser
-import com.ethran.notable.editor.state.Mode
-import com.ethran.notable.editor.utils.NamedSettings
-import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Kv
+import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.utils.Eraser
+import com.ethran.notable.editor.utils.NamedSettings
+import com.ethran.notable.editor.utils.Pen
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 

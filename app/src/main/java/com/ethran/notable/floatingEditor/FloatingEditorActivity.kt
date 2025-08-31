@@ -20,12 +20,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.exportBook
 import com.ethran.notable.io.exportPageToPng
+import com.ethran.notable.ui.theme.InkaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 

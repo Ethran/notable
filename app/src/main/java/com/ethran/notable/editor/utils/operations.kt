@@ -8,10 +8,10 @@ import android.graphics.RectF
 import android.graphics.Region
 import androidx.compose.ui.geometry.Offset
 import androidx.core.graphics.toRegion
-import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.data.model.SimplePointF
 import com.onyx.android.sdk.data.note.TouchPoint
 
 

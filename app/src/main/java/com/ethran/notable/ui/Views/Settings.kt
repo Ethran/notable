@@ -55,11 +55,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.BuildConfig
-import com.ethran.notable.ui.showHint
-import com.ethran.notable.editor.ui.SelectMenu
-import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.editor.ui.SelectMenu
+import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.isNext
 import kotlin.concurrent.thread

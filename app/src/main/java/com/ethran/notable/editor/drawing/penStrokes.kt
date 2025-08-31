@@ -11,9 +11,9 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.pressure
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.offsetStroke
@@ -210,7 +210,6 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
     }
     //canvas.restore()
 }
-
 
 
 val selectPaint = Paint().apply {

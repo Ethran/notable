@@ -31,17 +31,17 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.EditorSettingCacheManager
+import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.ui.LocalSnackContext
-import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.ui.Router
 import com.ethran.notable.ui.SnackBar
 import com.ethran.notable.ui.SnackState
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
-import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.ui.Router
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
@@ -171,6 +171,7 @@ class MainActivity : ComponentActivity() {
             return false
         return true
     }
+
     private fun requestPermissions() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             if (ContextCompat.checkSelfPermission(

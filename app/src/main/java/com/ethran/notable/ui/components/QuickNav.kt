@@ -29,8 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Home

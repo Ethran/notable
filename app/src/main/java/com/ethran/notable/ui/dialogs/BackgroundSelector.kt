@@ -77,8 +77,8 @@ import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.data.copyBackgroundToDatabase
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.ensureBackgroundsFolder
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.drawing.drawDottedBg
 import com.ethran.notable.editor.drawing.drawHexedBg
@@ -289,6 +289,7 @@ fun BackgroundSelector(
                         val currentBackgroundType =
                             if (pageBackgroundType == BackgroundType.AutoPdf || pageBackgroundType is BackgroundType.Pdf)
                                 pageBackgroundType else BackgroundType.Pdf(1)
+
                         fun onBackgroundChange(type: BackgroundType, background: String) {
                             onChange(type.key, background)
                             pageBackground = background

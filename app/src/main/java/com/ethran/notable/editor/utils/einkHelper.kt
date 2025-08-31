@@ -131,6 +131,7 @@ fun isRecommendedRefreshMode(): Boolean {
     val updateOption: UpdateOption = Device.currentDevice().appScopeRefreshMode
     return updateOption == UpdateOption.NORMAL || updateOption == UpdateOption.REGAL
 }
+
 fun getCurRefreshModeString(): String {
     return (Device.currentDevice().appScopeRefreshMode).toString()
 }
@@ -147,24 +148,29 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
     when (updateOption) {
         UpdateOption.NORMAL -> {
             // HD mode
-            delay(190 ) // On my device ~160 is the minimal delay
+            delay(190) // On my device ~160 is the minimal delay
         }
+
         UpdateOption.REGAL -> {
             // regal mode
             delay(180) // On my device ~150 is the minimal delay
         }
+
         UpdateOption.FAST -> {
             //ultra fast, fast, balanced
             delay(20) // 5ms is problematic sometimes on balanced mode.
         }
+
         UpdateOption.FAST_X -> {
             // no idea what it is
             delay(4) // Minimal delay
         }
+
         UpdateOption.FAST_QUALITY -> {
             // no idea what it is
             delay(15)
         }
+
         else -> {
             // Default fallback
             Log.e(TAG, "Unknown refresh mode: $updateOption")
@@ -230,7 +236,7 @@ fun setupSurface(view: View, touchHelper: TouchHelper, toolbarHeight: Int) {
 
 }
 
-fun prepareForPartialUpdate(view: View,  touchHelper: TouchHelper) {
+fun prepareForPartialUpdate(view: View, touchHelper: TouchHelper) {
     EpdController.setDisplayScheme(SCHEME_SCRIBBLE)
 //    EpdController.useFastScheme() // the same as above
     EpdController.enableA2ForSpecificView(view)
@@ -242,8 +248,7 @@ fun prepareForPartialUpdate(view: View,  touchHelper: TouchHelper) {
 }
 
 fun refreshScreenRegion(view: View, dirtyRect: Rect) {
-    if(!view.isAttachedToWindow)
-    {
+    if (!view.isAttachedToWindow) {
         einkLogger.e("View is not attached to window")
         logCallStack("refreshScreenRegion")
     }
@@ -258,7 +263,7 @@ fun refreshScreenRegion(view: View, dirtyRect: Rect) {
 //    EpdController.handwritingRepaint(view, dirtyRect)
 }
 
-fun restoreDefaults(view: View){
+fun restoreDefaults(view: View) {
 //    EpdController.resetViewUpdateMode(view)
     EpdController.setDisplayScheme(SCHEME_NORMAL)
 

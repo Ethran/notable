@@ -19,11 +19,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.EditorView
+import com.ethran.notable.ui.theme.InkaTheme
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

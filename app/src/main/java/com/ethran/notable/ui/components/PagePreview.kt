@@ -16,7 +16,7 @@ import java.io.File
 @Composable
 fun PagePreview(modifier: Modifier, pageId: String) {
     val context = LocalContext.current
-    val imgFile = remember (pageId){
+    val imgFile = remember(pageId) {
         File(context.filesDir, "pages/previews/thumbs/$pageId")
     }
 

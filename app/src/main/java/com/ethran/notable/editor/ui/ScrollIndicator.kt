@@ -18,7 +18,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.ui.convertDpToPixel
-import com.ethran.notable.ui.convertDpToPixel
 import kotlin.math.max
 
 /**

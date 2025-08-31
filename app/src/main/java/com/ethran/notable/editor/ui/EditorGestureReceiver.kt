@@ -27,22 +27,22 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.ethran.notable.editor.state.DOUBLE_TAP_MIN_MS
-import com.ethran.notable.editor.state.DOUBLE_TAP_TIMEOUT_MS
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
+import com.ethran.notable.editor.state.DOUBLE_TAP_MIN_MS
+import com.ethran.notable.editor.state.DOUBLE_TAP_TIMEOUT_MS
+import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.GestureMode
 import com.ethran.notable.editor.state.GestureState
 import com.ethran.notable.editor.state.HOLD_THRESHOLD_MS
-import com.ethran.notable.editor.state.PINCH_ZOOM_THRESHOLD
-import com.ethran.notable.editor.state.SWIPE_THRESHOLD
-import com.ethran.notable.ui.showHint
-import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.PINCH_ZOOM_THRESHOLD
+import com.ethran.notable.editor.state.SWIPE_THRESHOLD
 import com.ethran.notable.editor.state.UndoRedoType
+import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
@@ -168,7 +168,7 @@ fun EditorGestureReceiver(
                                 }
                                 gestureState.checkSmoothScrolling()
                                 gestureState.checkContinuousZoom()
-                                if(gestureState.checkHoldingTwoFingers())
+                                if (gestureState.checkHoldingTwoFingers())
                                     showHint("Drag mode!", coroutineScope, 1500)
 
                             }
@@ -288,7 +288,7 @@ fun EditorGestureReceiver(
                             // zoom gesture
                             val zoomDelta = gestureState.getPinchDrag()
                             if (!appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
-                                controlTower.onPinchToZoom(zoomDelta, Offset(0f,0f))
+                                controlTower.onPinchToZoom(zoomDelta, Offset(0f, 0f))
                                 log.d("Discrete zoom: $zoomDelta")
                             }
                         }
@@ -417,10 +417,10 @@ private fun resolveGesture(
                 controlTower.switchPage(previous)
             }
         }
-        AppSettings.GestureAction.NextPage ->
-        {
+
+        AppSettings.GestureAction.NextPage -> {
             val next = nextPage()
-            if (next!= null) {
+            if (next != null) {
                 controlTower.switchPage(next)
             }
         }

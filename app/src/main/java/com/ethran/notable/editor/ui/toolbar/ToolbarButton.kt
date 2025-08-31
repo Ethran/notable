@@ -22,7 +22,7 @@ fun ToolbarButton(
     isSelected: Boolean = false,
     onSelect: () -> Unit = {},
     iconId: Int? = null,
-    vectorIcon: ImageVector ? =null,
+    vectorIcon: ImageVector? = null,
     imageVector: ImageVector? = null,
     text: String? = null,
     penColor: Color? = null,
@@ -50,7 +50,7 @@ fun ToolbarButton(
                 if (penColor == Color.Black || penColor == Color.DarkGray) Color.White else if (isSelected) Color.White else Color.Black
             )
         }
-        if (vectorIcon!=null){
+        if (vectorIcon != null) {
             Icon(
                 imageVector = vectorIcon,
                 contentDescription,

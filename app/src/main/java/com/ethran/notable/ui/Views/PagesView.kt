@@ -28,10 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.editor.ui.PageMenu
-import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.editor.ui.toolbar.Topbar
+import com.ethran.notable.ui.components.BreadCrumb
+import com.ethran.notable.ui.components.PagePreview
 
 @ExperimentalFoundationApi
 @Composable

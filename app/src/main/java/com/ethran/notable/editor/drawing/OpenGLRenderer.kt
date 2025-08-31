@@ -15,9 +15,9 @@ import androidx.graphics.lowlatency.BufferInfo
 import androidx.graphics.lowlatency.GLFrontBufferedRenderer
 import androidx.graphics.opengl.egl.EGLManager
 import androidx.input.motionprediction.MotionEventPredictor
+import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.utils.Timing
-import com.ethran.notable.data.db.StrokePoint
 import io.shipbook.shipbooksdk.Log
 
 
@@ -157,6 +157,7 @@ class OpenGLRenderer(
         frontBufferRenderer = GLFrontBufferedRenderer(surfaceView, this)
         motionEventPredictor = MotionEventPredictor.newInstance(surfaceView)
     }
+
     val isAttached: Boolean
         get() = frontBufferRenderer != null
 

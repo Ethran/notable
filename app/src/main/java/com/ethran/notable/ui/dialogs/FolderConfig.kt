@@ -131,7 +131,8 @@ fun FolderConfigDialog(folderId: String, onClose: () -> Unit) {
             Column(
                 Modifier.padding(20.dp, 10.dp)
             ) {
-                Text(text = "Delete Folder",
+                Text(
+                    text = "Delete Folder",
                     textAlign = TextAlign.Center,
                     modifier = Modifier.noRippleClickable {
                         folderRepository.delete(folderId)

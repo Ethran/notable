@@ -315,7 +315,10 @@ object XoppFile {
 
             bookRepo.addPage(book.id, page.id)
         }
-        Log.Companion.i(TAG, "Successfully imported book '${book.title}' with ${pages.length} pages.")
+        Log.Companion.i(
+            TAG,
+            "Successfully imported book '${book.title}' with ${pages.length} pages."
+        )
     }
 
     /**
