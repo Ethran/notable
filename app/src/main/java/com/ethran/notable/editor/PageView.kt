@@ -63,10 +63,12 @@ class PageView(
     val context: Context,
     val coroutineScope: CoroutineScope,
     var id: String,
-    val width: Int,
+    val width: Int, // What is the difference between width and view width?
     var viewWidth: Int,
     var viewHeight: Int
 ) {
+    // TODO: unify width height variable
+
     val log = ShipBook.getLogger("PageView")
     private val logCache = ShipBook.getLogger("PageViewCache")
 
@@ -176,6 +178,9 @@ class PageView(
             log.i("PageView: using cached bitmap")
             windowedBitmap = cached
             windowedCanvas = Canvas(windowedBitmap)
+            // Check if we have correct size of canvas
+            if(windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
+                updateCanvasDimensions()
         } ?: run {
             log.i("PageView: creating new bitmap")
             recreateCanvas()
@@ -843,17 +848,22 @@ class PageView(
             log.d("Updating dimensions: $newWidth x $newHeight")
             viewWidth = newWidth
             viewHeight = newHeight
-
-            // Recreate bitmap and canvas with new dimensions
-            recreateCanvas()
-            //Reset zoom level.
-            zoomLevel.value = 1.0f
-            coroutineScope.launch {
-                DrawCanvas.forceUpdate.emit(null)
-            }
-            persistBitmapDebounced()
-            PageDataManager.cacheBitmap(id, windowedBitmap)
+            updateCanvasDimensions()
         }
+    }
+
+    private fun updateCanvasDimensions(){
+        // Recreate bitmap and canvas with new dimensions
+        recreateCanvas()
+        //Reset zoom level.
+        zoomLevel.value = 1.0f
+        // TODO: it might be worth to do it
+        //  by redrawing only part of the screen, like in scroll and zoom.
+        coroutineScope.launch {
+            DrawCanvas.forceUpdate.emit(null)
+        }
+        persistBitmapDebounced()
+        PageDataManager.cacheBitmap(id, windowedBitmap)
     }
 
     // should be run after every modification of widowedBitmap.
