@@ -487,6 +487,7 @@ class DrawCanvas(
                 logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
+                    updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvasToView(null)
                 } else {
                     isDrawing.emit(false)
