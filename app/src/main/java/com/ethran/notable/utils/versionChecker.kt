@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.TAG
-import com.ethran.notable.classes.showHint
+import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.Log
 import kotlinx.serialization.json.Json
 import java.net.URL
