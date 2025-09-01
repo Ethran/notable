@@ -42,7 +42,6 @@ import com.ethran.notable.editor.utils.toIntOffset
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.showHint
-import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -222,10 +221,9 @@ class PageView(
                 // Set duration as safety guard: in 60 s all strokes should be loaded
                 snack = SnackConf(text = "Loading strokes...", duration = 60000)
                 SnackState.Companion.globalSnackFlow.emit(snack!!)
-                PageDataManager.awaitPageIfLoading(id)
                 val timeToLoad = measureTimeMillis {
-                    getPageData(id)
-                    PageDataManager.dataLoadingJob?.join()
+                    PageDataManager.getPageData(appRepository, id, ::computeHeight)
+                    PageDataManager.awaitPageIfLoading(id)
                     logCache.d("got page data. id $id")
                     height = computeHeight()
                 }
@@ -242,44 +240,6 @@ class PageView(
         }
     }
 
-
-    private fun isPageCached(pageId: String): Boolean {
-        return PageDataManager.isPageLoaded(pageId)
-    }
-
-    private fun getPageData(pageId: String) {
-        if (isPageCached(pageId)) {
-            logCache.d("getPageData: Page already in memory")
-            return
-        }
-        PageDataManager.dataLoadingJob = PageDataManager.dataLoadingScope.launch {
-            if (PageDataManager.isPageLoading(pageId)) {
-                logCallStack("Double loading of the same page")
-                return@launch
-            }
-            try {
-                PageDataManager.markPageLoading(pageId)
-                logCache.d("Loading page $pageId")
-//        sleep(5000)
-                val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
-                PageDataManager.cacheStrokes(pageId, pageWithStrokes.strokes)
-                val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
-                PageDataManager.cacheImages(pageId, pageWithImages.images)
-                PageDataManager.setPageHeight(pageId, computeHeight())
-                PageDataManager.indexImages(coroutineScope, pageId)
-                PageDataManager.indexStrokes(coroutineScope, pageId)
-                PageDataManager.calculateMemoryUsage(pageId, 1)
-            } catch (e: CancellationException) {
-                logCache.w("Loading of page $pageId was cancelled.")
-                if (!PageDataManager.isPageLoaded(pageId))
-                    PageDataManager.removePage(pageId)
-                throw e  // rethrow cancellation
-            } finally {
-                PageDataManager.markPageLoaded(pageId)
-                logCache.d("Loaded page $pageId")
-            }
-        }
-    }
 
     // To be removed.
     private fun redrawAll(scope: CoroutineScope) {
@@ -329,7 +289,7 @@ class PageView(
             logCache.d("Caching next page $nextPageId")
 
             nextPageId?.let { nextPage ->
-                getPageData(nextPage)
+                PageDataManager.getPageData(appRepository, nextPage, ::computeHeight)
             }
             if (PageDataManager.hasEnoughMemory(15)) {
                 // Cache previous page if not already cached
@@ -341,7 +301,7 @@ class PageView(
                 logCache.d("Caching prev page $prevPageId")
 
                 prevPageId?.let { prevPage ->
-                    getPageData(prevPage)
+                    PageDataManager.getPageData(appRepository, prevPage, ::computeHeight)
                 }
             }
         } catch (e: CancellationException) {
@@ -492,7 +452,7 @@ class PageView(
         //ensure that snack is canceled, even on dispose of the page.
         CoroutineScope(Dispatchers.IO).launch {
             snack?.let { SnackState.Companion.cancelGlobalSnack.emit(it.id) }
-            PageDataManager.removeMarkPageLoaded(id)
+            PageDataManager.cancelLoadingPages()
         }
         loadingJob?.cancel()
         if (loadingJob?.isActive == true) {

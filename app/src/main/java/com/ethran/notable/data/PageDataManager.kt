@@ -14,7 +14,6 @@ import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.utils.chunked
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +26,7 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.lang.ref.SoftReference
 import java.security.MessageDigest
+import kotlin.coroutines.cancellation.CancellationException
 
 
 // Save bitmap, to avoid loading from disk every time.
@@ -73,55 +73,87 @@ object PageDataManager {
 
     @Volatile
     private var currentPage = ""
-    private val loadingPages = mutableMapOf<String, CompletableDeferred<Unit>>()
-    private val lockLoadingPages = Mutex()
 
     private val accessLock = Any() // Lock for accessing Images, Strokes, Backgrounds & derived
     private var entrySizeMB = LinkedHashMap<String, Int>()
-    var dataLoadingJob: Job? = null
+
+    private val jobLock = Mutex()
+    private val dataLoadingJobs = mutableMapOf<String, Job>()
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
 
-    suspend fun markPageLoading(pageId: String) {
-        lockLoadingPages.withLock {
-            if (!loadingPages.containsKey(pageId)) {
-                log.d("Marking page $pageId as loading")
-                loadingPages[pageId] = CompletableDeferred()
-            } else {
-                log.e("Page $pageId is already loading")
+    suspend fun awaitPageIfLoading(pageId: String) {
+        val job = jobLock.withLock { dataLoadingJobs[pageId] }
+        if (job == null || job.isCancelled) {
+            log.e("THERE IS HUGE PROBLEM")
+            throw IllegalStateException("Job missing or cancelled for $pageId")
+        }
+        if (job.isCompleted) return
+        if (job.isActive) {
+            job.join()
+        }
+    }
+
+    suspend fun cancelLoadingPages() {
+        val toCancel: List<String>
+        jobLock.withLock {
+            // Collect all pageIds with jobs that are not finished
+            toCancel = dataLoadingJobs.filter { (_, job) ->
+                job.isActive
+            }.map { (pageId, _) -> pageId }
+        }
+        // Cancel and remove pages outside the lock
+        for (pageId in toCancel) {
+            removePage(pageId)
+        }
+    }
+
+    fun getPageData(
+        appRepository: AppRepository, pageId: String, computeHeight: () -> Int
+    ) {
+        dataLoadingScope.launch {
+            jobLock.withLock {
+                val job = dataLoadingJobs[pageId]
+                when {
+                    job?.isCompleted == true -> log.d("already in memory, stroke number ${strokes[pageId]?.size}")
+                    job?.isActive == true -> log.d("page is already loading")
+                    job == null || job.isCancelled -> {
+                        log.d("starting loading of the page")
+                        dataLoadingJobs[pageId] = dataLoadingScope.launch {
+                            loadPageFromDb(appRepository, this, pageId, computeHeight)
+                        }
+                    }
+                }
             }
         }
     }
 
-    suspend fun markPageLoaded(pageId: String) {
-        return lockLoadingPages.withLock {
-            loadingPages[pageId]?.complete(Unit)
-            log.d("marking done. Page $pageId, ${loadingPages[pageId].toString()}")
+    private suspend fun loadPageFromDb(
+        appRepository: AppRepository,
+        coroutineScope: CoroutineScope,
+        pageId: String,
+        computeHeight: () -> Int
+    ) {
+        try {
+            log.d("Loading page $pageId")
+//        sleep(5000)
+            val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
+            cacheStrokes(pageId, pageWithStrokes.strokes)
+            val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
+            cacheImages(pageId, pageWithImages.images)
+            setPageHeight(pageId, computeHeight())
+            indexImages(coroutineScope, pageId)
+            indexStrokes(coroutineScope, pageId)
+            calculateMemoryUsage(pageId, 1)
+        } catch (e: CancellationException) {
+            log.w("Loading of page $pageId was cancelled.")
+            if (!isPageLoaded(pageId)) removePage(pageId)
+            throw e  // rethrow cancellation
+        } finally {
+            log.d("Loaded page $pageId")
+            jobLock.withLock { dataLoadingJobs.remove(pageId) }
         }
-    }
 
-    suspend fun removeMarkPageLoaded(pageId: String) {
-        lockLoadingPages.withLock {
-            log.d("Removing mark for page $pageId")
-            loadingPages.remove(pageId)?.cancel()
-        }
-    }
-
-    suspend fun awaitPageIfLoading(pageId: String) {
-        if (isPageLoading(pageId)) {
-            log.d("Awaiting page $pageId")
-            loadingPages[pageId]?.await()
-            log.d("waiting done. Page $pageId")
-        } else {
-            log.d("Page $pageId is not loading, canceling unnecessary caching")
-            dataLoadingJob?.cancel()
-        }
-    }
-
-    suspend fun isPageLoading(pageId: String): Boolean {
-        lockLoadingPages.withLock {
-            return loadingPages.containsKey(pageId)
-        }
     }
 
     val saveTopic = MutableSharedFlow<String>()
@@ -371,9 +403,7 @@ object PageDataManager {
             bitmapCache.remove(pageId)
             strokesById.remove(pageId)
             imagesById.remove(pageId)
-            dataLoadingScope.launch {
-                removeMarkPageLoaded(pageId)
-            }
+            dataLoadingJobs[pageId]?.cancel()
             currentCacheSizeMB -= entrySizeMB[pageId] ?: 0
             entrySizeMB[pageId] = 0
         }

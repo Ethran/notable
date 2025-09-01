@@ -462,7 +462,7 @@ class DrawCanvas(
         coroutineScope.launch(Dispatchers.Main.immediate) {
             forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
-                logCanvasObserver.v("Force update, zone: $dirtyRectangle")
+                logCanvasObserver.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 launch(Dispatchers.Default) {
