@@ -9,10 +9,6 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
@@ -102,7 +98,11 @@ class PageView(
         }
 
     // scroll is observed by ui, represents top left corner
-    var scroll by mutableStateOf(Offset.Zero)
+    var scroll: Offset
+        get() = PageDataManager.getPageScroll(id) ?: Offset.Zero
+        set(value) {
+            PageDataManager.setPageScroll(id, value)
+        }
 
     val scrollable: Boolean
         get() = when (pageFromDb?.backgroundType) {
@@ -112,10 +112,15 @@ class PageView(
         }
 
     // we need to observe zoom level, to adjust strokes size.
-    var zoomLevel = MutableStateFlow(1.0f)
+//    var zoomLevel = MutableStateFlow(1.0f)
+    val zoomLevel: MutableStateFlow<Float> = MutableStateFlow(PageDataManager.getPageZoom(id))
 
+    var height: Int
+        get() = PageDataManager.getPageHeight(id) ?: viewHeight
+        set(value) {
+            PageDataManager.setPageHeight(id, value)
+        }
 
-    var height by mutableIntStateOf(viewHeight) // is observed by ui
 
     var pageFromDb = appRepository.pageRepository.getById(id)
 
@@ -165,6 +170,7 @@ class PageView(
     fun changePage(newPageId: String) {
         val oldId = id
         id = newPageId
+        zoomLevel.value = PageDataManager.getPageZoom(id)
         coroutineScope.launch {
             updateOnExit(oldId)
         }
@@ -213,8 +219,17 @@ class PageView(
         cleanJob()
     }
 
-    // Loads all the strokes on page
-    private fun loadFromPersistLayer() {
+
+
+    // To be removed.
+    private fun redrawAll(scope: CoroutineScope) {
+        scope.launch(Dispatchers.Main.immediate) {
+            val viewRectangle = Rect(0, 0, windowedCanvas.width, windowedCanvas.height)
+            drawAreaScreenCoordinates(viewRectangle)
+        }
+    }
+
+    private fun loadPage() {
         logCache.i("Init from persist layer, pageId: $id")
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
             try {
@@ -222,9 +237,8 @@ class PageView(
                 snack = SnackConf(text = "Loading strokes...", duration = 60000)
                 SnackState.Companion.globalSnackFlow.emit(snack!!)
                 val timeToLoad = measureTimeMillis {
-                    PageDataManager.loadPageAndWait(appRepository, id, ::computeHeight)
+                    PageDataManager.requestPageLoadJoin(appRepository, id, ::computeHeight)
                     logCache.d("got page data. id $id")
-                    height = computeHeight()
                 }
                 logCache.d("All strokes loaded in $timeToLoad ms")
             } finally {
@@ -237,37 +251,7 @@ class PageView(
                 logCache.d("Loaded page from persistent layer $id")
             }
         }
-    }
 
-
-    // To be removed.
-    private fun redrawAll(scope: CoroutineScope) {
-        scope.launch(Dispatchers.Main.immediate) {
-            val viewRectangle = Rect(0, 0, windowedCanvas.width, windowedCanvas.height)
-            drawAreaScreenCoordinates(viewRectangle)
-        }
-    }
-
-    private fun loadPage() {
-        val page = appRepository.pageRepository.getById(id)
-        if (page == null) {
-            log.e("Page not found in database")
-            return
-        }
-        scroll = scroll.copy(x = 0f, y = page.scroll.toFloat())
-        val isInCache = PageDataManager.isPageLoaded(id)
-        if (isInCache) {
-            logCache.i("Page loaded from cache")
-            height = PageDataManager.getPageHeight(id) ?: viewHeight //TODO: correct
-            coroutineScope.launch(Dispatchers.Main.immediate) {
-                DrawCanvas.forceUpdate.emit(null)
-            }
-        } else {
-            logCache.i("Page not found in cache")
-            // If cache is incomplete, load from persistent storage
-            PageDataManager.ensureMemoryAvailable(15)
-            loadFromPersistLayer()
-        }
         coroutineScope.launch(Dispatchers.Default) {
             delay(10)
             PageDataManager.reduceCache(20)

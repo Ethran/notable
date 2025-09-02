@@ -6,6 +6,8 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.FileObserver
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.DrawCanvas
@@ -67,7 +69,11 @@ object PageDataManager {
     private val fileObservers = mutableMapOf<String, FileObserver>()
     private val fileToPages = mutableMapOf<String, MutableSet<String>>()
 
-    private var pageHigh = LinkedHashMap<String, Int>()
+    // needs to be observable by UI, for scroll bars
+    private var pageHigh = mutableStateMapOf<String, Int>()
+    private var pageScroll = mutableStateMapOf<String, Offset>()
+    // On change, we need to adjust stroke size.
+    private var pageZoom = LinkedHashMap<String, Float>()
 
     @Volatile
     private var currentPage = ""
@@ -98,6 +104,7 @@ object PageDataManager {
      * Cancels and removes all currently loading pages.
      */
     suspend fun cancelAllLoadingPages() {
+        log.e("Cancelling all loading pages")
         val toCancel: List<String>
         jobLock.withLock {
             // Collect all pageIds with jobs that are not finished
@@ -119,21 +126,22 @@ object PageDataManager {
     private suspend fun getOrStartLoadingJob(
         appRepository: AppRepository, pageId: String, computeHeight: () -> Int
     ): Job {
+        //             PageDataManager.ensureMemoryAvailable(15)
         return jobLock.withLock {
             val existing = dataLoadingJobs[pageId]
             when {
                 existing?.isActive == true -> {
-                    log.d("page is already loading")
+                    log.d("Page($pageId) is already loading")
                     existing
                 }
 
                 existing?.isCompleted == true -> {
-                    log.d("already in memory, stroke number ${strokes[pageId]?.size}")
+                    log.d("Page($pageId) already in memory, stroke number ${strokes[pageId]?.size}")
                     existing
                 }
 
                 existing == null || existing.isCancelled -> {
-                    log.d("starting loading of the page")
+                    log.d("starting loading of the Page($pageId)")
                     val newJob = dataLoadingScope.launch {
                         loadPageFromDb(appRepository, this, pageId, computeHeight)
                     }
@@ -141,7 +149,7 @@ object PageDataManager {
                     newJob
                 }
 
-                else -> error("Unexpected job state")
+                else -> error("Unexpected job state, for Page($pageId)")
             }
         }
     }
@@ -149,7 +157,7 @@ object PageDataManager {
     /**
      * Ensures that the page is loaded; suspends until load is finished.
      */
-    suspend fun loadPageAndWait(
+    suspend fun requestPageLoadJoin(
         appRepository: AppRepository, pageId: String, computeHeight: () -> Int
     ) {
         getOrStartLoadingJob(appRepository, pageId, computeHeight).join()
@@ -177,10 +185,12 @@ object PageDataManager {
             log.d("Loading page $pageId")
 //            sleep(5000)
             val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
+            // What will happened if page isn't in repository?
             cacheStrokes(pageId, pageWithStrokes.strokes)
             val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
             cacheImages(pageId, pageWithImages.images)
             setPageHeight(pageId, computeHeight())
+            setPageScroll(pageId, Offset(0f, pageWithStrokes.page.scroll.toFloat()))
             indexImages(coroutineScope, pageId)
             indexStrokes(coroutineScope, pageId)
             calculateMemoryUsage(pageId, 1)
@@ -193,6 +203,14 @@ object PageDataManager {
             jobLock.withLock { dataLoadingJobs.remove(pageId) }
         }
 
+    }
+
+    fun isPageLoaded(pageId: String): Boolean {
+        return synchronized(accessLock) {
+            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(
+                pageId
+            )
+        }
     }
 
     val saveTopic = MutableSharedFlow<String>()
@@ -246,14 +264,21 @@ object PageDataManager {
         bitmapCache[pageId] = SoftReference(bitmap)
     }
 
-
-    fun getPageHeight(pageId: String): Int? {
-        return pageHigh[pageId]
-    }
-
+    fun getPageHeight(pageId: String): Int? = pageHigh[pageId]
     fun setPageHeight(pageId: String, height: Int) {
         pageHigh[pageId] = height
     }
+
+    fun getPageScroll(pageId: String): Offset? = pageScroll[pageId]
+    fun setPageScroll(pageId: String, scroll: Offset) {
+        pageScroll[pageId] = scroll
+    }
+
+    fun getPageZoom(pageId: String): Float = pageZoom.getOrPut(pageId) { 1f }
+    fun setPageZoom(pageId: String, zoom: Float) {
+        pageZoom[pageId] = zoom
+    }
+
 
     fun getStrokes(pageId: String): List<Stroke> = strokes[pageId] ?: emptyList()
 
@@ -410,22 +435,13 @@ object PageDataManager {
         }
     }
 
-
-    fun isPageLoaded(pageId: String): Boolean {
-        return synchronized(accessLock) {
-            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(
-                pageId
-            )
-        }
-    }
-
     /* cleaning and memory management */
 
     @Volatile
     private var currentCacheSizeMB = 0
 
     fun removePage(pageId: String) {
-        log.d("Removing page $pageId")
+        log.e("Removing page $pageId")
         if (pageId ==currentPage)
             log.w("Removing current page!")
         synchronized(accessLock) {
@@ -439,6 +455,8 @@ object PageDataManager {
             }
             stopObservingBackground(pageId)
             pageHigh.remove(pageId)
+            pageZoom.remove(pageId)
+            pageScroll.remove(pageId)
             bitmapCache.remove(pageId)
             strokesById.remove(pageId)
             imagesById.remove(pageId)
