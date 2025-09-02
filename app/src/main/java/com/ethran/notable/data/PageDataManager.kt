@@ -35,9 +35,7 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
 
     var bitmap: Bitmap? = loadBackgroundBitmap(path, pageNumber, scale)
     fun matches(filePath: String, pageNum: Int, targetScale: Float): Boolean {
-        return path == filePath &&
-                pageNumber == pageNum &&
-                scale >= targetScale // Consider valid if our scale is larger
+        return path == filePath && pageNumber == pageNum && scale >= targetScale // Consider valid if our scale is larger
     }
 
     companion object {
@@ -81,20 +79,25 @@ object PageDataManager {
     private val dataLoadingJobs = mutableMapOf<String, Job>()
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-
-    suspend fun awaitPageIfLoading(pageId: String) {
+    /**
+     * Suspends until the page is done loading (if it is being loaded).
+     * Logs an error and returns if no job is present or job is cancelled.
+     * Throws if no job is present or job is cancelled.
+     */
+    private suspend fun waitForPageLoad(pageId: String) {
         val job = jobLock.withLock { dataLoadingJobs[pageId] }
         if (job == null || job.isCancelled) {
-            log.e("THERE IS HUGE PROBLEM")
-            throw IllegalStateException("Job missing or cancelled for $pageId")
+            log.e("THERE IS HUGE PROBLEM. Job missing or cancelled for $pageId.")
+//            throw IllegalStateException("Job missing or cancelled for $pageId")
+            return
         }
-        if (job.isCompleted) return
-        if (job.isActive) {
-            job.join()
-        }
+        job.join()
     }
 
-    suspend fun cancelLoadingPages() {
+    /**
+     * Cancels and removes all currently loading pages.
+     */
+    suspend fun cancelAllLoadingPages() {
         val toCancel: List<String>
         jobLock.withLock {
             // Collect all pageIds with jobs that are not finished
@@ -108,23 +111,59 @@ object PageDataManager {
         }
     }
 
-    fun getPageData(
+
+    /**
+     * Returns the existing loading Job for the page, or starts and returns a new one.
+     * Locking is handled internally.
+     */
+    private suspend fun getOrStartLoadingJob(
+        appRepository: AppRepository, pageId: String, computeHeight: () -> Int
+    ): Job {
+        return jobLock.withLock {
+            val existing = dataLoadingJobs[pageId]
+            when {
+                existing?.isActive == true -> {
+                    log.d("page is already loading")
+                    existing
+                }
+
+                existing?.isCompleted == true -> {
+                    log.d("already in memory, stroke number ${strokes[pageId]?.size}")
+                    existing
+                }
+
+                existing == null || existing.isCancelled -> {
+                    log.d("starting loading of the page")
+                    val newJob = dataLoadingScope.launch {
+                        loadPageFromDb(appRepository, this, pageId, computeHeight)
+                    }
+                    dataLoadingJobs[pageId] = newJob
+                    newJob
+                }
+
+                else -> error("Unexpected job state")
+            }
+        }
+    }
+
+    /**
+     * Ensures that the page is loaded; suspends until load is finished.
+     */
+    suspend fun loadPageAndWait(
+        appRepository: AppRepository, pageId: String, computeHeight: () -> Int
+    ) {
+        getOrStartLoadingJob(appRepository, pageId, computeHeight).join()
+    }
+
+    /**
+     * Requests that the given page is loaded, but doesn't wait.
+     * If already loading, is a no-op.
+     */
+    fun requestPageLoad(
         appRepository: AppRepository, pageId: String, computeHeight: () -> Int
     ) {
         dataLoadingScope.launch {
-            jobLock.withLock {
-                val job = dataLoadingJobs[pageId]
-                when {
-                    job?.isCompleted == true -> log.d("already in memory, stroke number ${strokes[pageId]?.size}")
-                    job?.isActive == true -> log.d("page is already loading")
-                    job == null || job.isCancelled -> {
-                        log.d("starting loading of the page")
-                        dataLoadingJobs[pageId] = dataLoadingScope.launch {
-                            loadPageFromDb(appRepository, this, pageId, computeHeight)
-                        }
-                    }
-                }
-            }
+            getOrStartLoadingJob(appRepository, pageId, computeHeight)
         }
     }
 
@@ -136,7 +175,7 @@ object PageDataManager {
     ) {
         try {
             log.d("Loading page $pageId")
-//        sleep(5000)
+//            sleep(5000)
             val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
             cacheStrokes(pageId, pageWithStrokes.strokes)
             val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)

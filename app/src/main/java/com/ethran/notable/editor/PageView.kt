@@ -222,8 +222,7 @@ class PageView(
                 snack = SnackConf(text = "Loading strokes...", duration = 60000)
                 SnackState.Companion.globalSnackFlow.emit(snack!!)
                 val timeToLoad = measureTimeMillis {
-                    PageDataManager.getPageData(appRepository, id, ::computeHeight)
-                    PageDataManager.awaitPageIfLoading(id)
+                    PageDataManager.loadPageAndWait(appRepository, id, ::computeHeight)
                     logCache.d("got page data. id $id")
                     height = computeHeight()
                 }
@@ -289,7 +288,7 @@ class PageView(
             logCache.d("Caching next page $nextPageId")
 
             nextPageId?.let { nextPage ->
-                PageDataManager.getPageData(appRepository, nextPage, ::computeHeight)
+                PageDataManager.requestPageLoad(appRepository, nextPage, ::computeHeight)
             }
             if (PageDataManager.hasEnoughMemory(15)) {
                 // Cache previous page if not already cached
@@ -301,7 +300,7 @@ class PageView(
                 logCache.d("Caching prev page $prevPageId")
 
                 prevPageId?.let { prevPage ->
-                    PageDataManager.getPageData(appRepository, prevPage, ::computeHeight)
+                    PageDataManager.requestPageLoad(appRepository, prevPage, ::computeHeight)
                 }
             }
         } catch (e: CancellationException) {
@@ -452,7 +451,7 @@ class PageView(
         //ensure that snack is canceled, even on dispose of the page.
         CoroutineScope(Dispatchers.IO).launch {
             snack?.let { SnackState.Companion.cancelGlobalSnack.emit(it.id) }
-            PageDataManager.cancelLoadingPages()
+            PageDataManager.cancelAllLoadingPages()
         }
         loadingJob?.cancel()
         if (loadingJob?.isActive == true) {
