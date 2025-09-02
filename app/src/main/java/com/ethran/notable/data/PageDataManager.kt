@@ -200,7 +200,6 @@ object PageDataManager {
             throw e  // rethrow cancellation
         } finally {
             log.d("Loaded page $pageId")
-            jobLock.withLock { dataLoadingJobs.remove(pageId) }
         }
 
     }

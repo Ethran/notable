@@ -170,12 +170,10 @@ class PageView(
     fun changePage(newPageId: String) {
         val oldId = id
         id = newPageId
-        zoomLevel.value = PageDataManager.getPageZoom(id)
         coroutineScope.launch {
             updateOnExit(oldId)
         }
         pageFromDb = AppRepository(context).pageRepository.getById(id)
-        zoomLevel.value = 1.0f
         PageDataManager.setPage(newPageId)
 
 
@@ -231,6 +229,8 @@ class PageView(
 
     private fun loadPage() {
         logCache.i("Init from persist layer, pageId: $id")
+        zoomLevel.value = PageDataManager.getPageZoom(id)
+        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
             try {
                 // Set duration as safety guard: in 60 s all strokes should be loaded

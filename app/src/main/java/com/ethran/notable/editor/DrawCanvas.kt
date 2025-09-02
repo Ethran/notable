@@ -497,6 +497,7 @@ class DrawCanvas(
         coroutineScope.launch {
             page.zoomLevel.drop(1).collect {
                 logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
+                PageDataManager.setPageZoom(page.id, page.zoomLevel.value)
                 updatePenAndStroke()
             }
         }
