@@ -585,7 +585,6 @@ object PageDataManager {
     private var currentCacheSizeMB = 0
 
     fun removePage(pageId: String) {
-        // TODO: here is the error!!
         log.e("Removing page $pageId")
         if (pageId == currentPage) log.w("Removing current page!")
         synchronized(accessLock) {

@@ -183,7 +183,7 @@ class PageView(
             windowedBitmap = cached
             windowedCanvas = Canvas(windowedBitmap)
             // Check if we have correct size of canvas
-            if(windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
+            if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
                 updateCanvasDimensions()
         } ?: run {
             log.i("PageView: creating new bitmap")
@@ -218,7 +218,6 @@ class PageView(
         persistBitmapDebounced(id)
         cleanJob()
     }
-
 
 
     // To be removed.
@@ -734,7 +733,7 @@ class PageView(
         }
     }
 
-    private fun updateCanvasDimensions(){
+    private fun updateCanvasDimensions() {
         // Recreate bitmap and canvas with new dimensions
         recreateCanvas()
         //Reset zoom level.
