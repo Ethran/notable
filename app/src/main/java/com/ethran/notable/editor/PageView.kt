@@ -37,7 +37,6 @@ import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.onyx.android.sdk.extension.isNotNull
 import io.shipbook.shipbooksdk.ShipBook
@@ -61,7 +60,8 @@ class PageView(
     var id: String,
     val width: Int, // What is the difference between width and view width?
     var viewWidth: Int,
-    var viewHeight: Int
+    var viewHeight: Int,
+    val snackManager: SnackState
 ) {
     // TODO: unify width height variable
 
@@ -70,7 +70,6 @@ class PageView(
 
     private var loadingJob: Job? = null
 
-    private var snack: SnackConf? = null
 
     private val appRepository = AppRepository(context)
 
@@ -238,15 +237,14 @@ class PageView(
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
             try {
                 // Set duration as safety guard: in 60 s all strokes should be loaded
-                snack = SnackConf(text = "Loading strokes...", duration = 60000)
-                SnackState.Companion.globalSnackFlow.emit(snack!!)
-                val timeToLoad = measureTimeMillis {
-                    PageDataManager.requestPageLoadJoin(appRepository, id, bookId)
-                    logCache.d("got page data. id $id")
+                snackManager.showSnackDuring(text = "Loading strokes...") {
+                    val timeToLoad = measureTimeMillis {
+                        PageDataManager.requestPageLoadJoin(appRepository, id, bookId)
+                        logCache.d("got page data. id $id")
+                    }
+                    logCache.d("All strokes loaded in $timeToLoad ms")
                 }
-                logCache.d("All strokes loaded in $timeToLoad ms")
             } finally {
-                snack?.let { SnackState.Companion.cancelGlobalSnack.emit(it.id) }
                 // TODO: If we put it in loadPage(…) sometimes it will try to refresh
                 //  without seeing strokes, I have no idea why.
                 coroutineScope.launch(Dispatchers.Main.immediate) {
@@ -376,7 +374,6 @@ class PageView(
     private fun cleanJob() {
         //ensure that snack is canceled, even on dispose of the page.
         CoroutineScope(Dispatchers.IO).launch {
-            snack?.let { SnackState.Companion.cancelGlobalSnack.emit(it.id) }
             PageDataManager.cancelLoadingPages()
         }
         loadingJob?.cancel()
