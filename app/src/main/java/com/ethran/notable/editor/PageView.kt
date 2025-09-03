@@ -18,6 +18,7 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageDataManager.cacheNeighbors
 import com.ethran.notable.data.PageDataManager.collectAndPersistBitmapsBatch
 import com.ethran.notable.data.PageDataManager.updateOnExit
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -38,7 +39,7 @@ import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.showHint
+import com.onyx.android.sdk.extension.isNotNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
@@ -234,13 +234,14 @@ class PageView(
         logCache.i("Init from persist layer, pageId: $id")
         zoomLevel.value = PageDataManager.getPageZoom(id)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        val bookId = pageFromDb?.notebookId
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
             try {
                 // Set duration as safety guard: in 60 s all strokes should be loaded
                 snack = SnackConf(text = "Loading strokes...", duration = 60000)
                 SnackState.Companion.globalSnackFlow.emit(snack!!)
                 val timeToLoad = measureTimeMillis {
-                    PageDataManager.requestPageLoadJoin(appRepository, id)
+                    PageDataManager.requestPageLoadJoin(appRepository, id, bookId)
                     logCache.d("got page data. id $id")
                 }
                 logCache.d("All strokes loaded in $timeToLoad ms")
@@ -259,48 +260,11 @@ class PageView(
         coroutineScope.launch(Dispatchers.Default) {
             delay(10)
             PageDataManager.reduceCache(20)
-            cacheNeighbors()
+            if (bookId.isNotNull())
+                cacheNeighbors(appRepository, id, bookId)
         }
     }
 
-    private fun cacheNeighbors() {
-
-        // Only attempt to cache neighbors if we have memory to spare.
-        if (!PageDataManager.hasEnoughMemory(15)) return
-        val appRepository = AppRepository(context)
-        val bookId = pageFromDb?.notebookId ?: return
-        try {
-            // Cache next page if not already cached
-            val nextPageId =
-                appRepository.getNextPageIdFromBookAndPage(pageId = id, notebookId = bookId)
-            logCache.d("Caching next page $nextPageId")
-
-            nextPageId?.let { nextPage ->
-                PageDataManager.requestPageLoad(appRepository, nextPage)
-            }
-            if (PageDataManager.hasEnoughMemory(15)) {
-                // Cache previous page if not already cached
-                val prevPageId =
-                    appRepository.getPreviousPageIdFromBookAndPage(
-                        pageId = id,
-                        notebookId = bookId
-                    )
-                logCache.d("Caching prev page $prevPageId")
-
-                prevPageId?.let { prevPage ->
-                    PageDataManager.requestPageLoad(appRepository, prevPage)
-                }
-            }
-        } catch (e: CancellationException) {
-            logCache.i("Caching was cancelled: ${e.message}")
-        } catch (e: Exception) {
-            // All other unexpected exceptions
-            logCache.e("Error caching neighbor pages", e)
-            showHint("Error encountered while caching neighbors", duration = 5000)
-
-        }
-
-    }
 
     fun addStrokes(strokesToAdd: List<Stroke>) {
         strokes += strokesToAdd
@@ -413,7 +377,7 @@ class PageView(
         //ensure that snack is canceled, even on dispose of the page.
         CoroutineScope(Dispatchers.IO).launch {
             snack?.let { SnackState.Companion.cancelGlobalSnack.emit(it.id) }
-            PageDataManager.cancelAllLoadingPages()
+            PageDataManager.cancelLoadingPages()
         }
         loadingJob?.cancel()
         if (loadingJob?.isActive == true) {

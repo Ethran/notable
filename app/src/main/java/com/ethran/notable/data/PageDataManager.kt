@@ -113,7 +113,7 @@ object PageDataManager {
      * Locking is handled internally.
      */
     private suspend fun getOrStartLoadingJob(
-        appRepository: AppRepository, pageId: String
+        appRepository: AppRepository, pageId: String, bookId: String?
     ): Job {
         //             PageDataManager.ensureMemoryAvailable(15)
         return jobLock.withLock {
@@ -130,6 +130,9 @@ object PageDataManager {
                 }
 
                 existing == null || existing.isCancelled -> {
+                    // Cancel any previous job, without current, next and previous page
+                    if (bookId.isNotNull())
+                        cancelUnnecessaryLoading(appRepository, pageId, bookId)
                     log.d("starting loading of the Page($pageId)")
                     if (existing.isNull() && areListInitialized(pageId)) log.e("Illegal state: Page($pageId) already in memory, but job is null.")
                     val newJob = dataLoadingScope.launch {
@@ -148,9 +151,62 @@ object PageDataManager {
      * Ensures that the page is loaded; suspends until load is finished.
      */
     suspend fun requestPageLoadJoin(
-        appRepository: AppRepository, pageId: String
+        appRepository: AppRepository, pageId: String, bookId: String?
     ) {
-        getOrStartLoadingJob(appRepository, pageId).join()
+        getOrStartLoadingJob(appRepository, pageId, bookId).join()
+    }
+
+    private fun cancelUnnecessaryLoading(
+        appRepository: AppRepository,
+        pageId: String,
+        bookId: String
+    ) {
+        val nextPageId =
+            appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
+        val prevPageId =
+            appRepository.getPreviousPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
+
+        cancelLoadingPages(
+            ignoredPageIds =
+                listOfNotNull(nextPageId, prevPageId, pageId).distinct()
+        )
+    }
+
+    fun cacheNeighbors(appRepository: AppRepository, pageId: String, bookId: String) {
+
+        // Only attempt to cache neighbors if we have memory to spare.
+        if (!hasEnoughMemory(15)) return
+        try {
+            // Cache next page if not already cached
+            val nextPageId =
+                appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
+            log.d("Caching next page $nextPageId")
+
+            nextPageId?.let { nextPage ->
+                requestPageLoad(appRepository, nextPage)
+            }
+            if (hasEnoughMemory(15)) {
+                // Cache previous page if not already cached
+                val prevPageId =
+                    appRepository.getPreviousPageIdFromBookAndPage(
+                        pageId = pageId,
+                        notebookId = bookId
+                    )
+                log.d("Caching prev page $prevPageId")
+
+                prevPageId?.let { prevPage ->
+                    requestPageLoad(appRepository, prevPage)
+                }
+            }
+        } catch (e: CancellationException) {
+            log.i("Caching was cancelled: ${e.message}")
+        } catch (e: Exception) {
+            // All other unexpected exceptions
+            log.e("Error caching neighbor pages", e)
+            showHint("Error encountered while caching neighbors", duration = 5000)
+
+        }
+
     }
 
     /**
@@ -161,7 +217,7 @@ object PageDataManager {
         appRepository: AppRepository, pageId: String
     ) {
         dataLoadingScope.launch {
-            getOrStartLoadingJob(appRepository, pageId)
+            getOrStartLoadingJob(appRepository, pageId, null)
         }
     }
 
@@ -558,7 +614,7 @@ object PageDataManager {
     /**
      * Cancels and removes all currently loading pages.
      */
-    fun cancelAllLoadingPages() {
+    fun cancelLoadingPages(ignoredPageIds: List<String> = listOf()) {
         dataLoadingScope.launch {
             log.e("Cancelling all loading pages")
             val toCancel: List<String>
@@ -569,6 +625,7 @@ object PageDataManager {
                 }.map { (pageId, _) -> pageId }
                 // Cancel and remove pages outside the lock
                 for (pageId in toCancel) {
+                    if (ignoredPageIds.contains(pageId)) continue
                     removePage(pageId)
                 }
             }
