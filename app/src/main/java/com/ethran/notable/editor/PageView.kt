@@ -19,6 +19,7 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.PageDataManager.collectAndPersistBitmapsBatch
+import com.ethran.notable.data.PageDataManager.updateOnExit
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.Image
@@ -172,6 +173,7 @@ class PageView(
         id = newPageId
         coroutineScope.launch {
             updateOnExit(oldId)
+            persistBitmapDebounced(oldId)
         }
         pageFromDb = AppRepository(context).pageRepository.getById(id)
         PageDataManager.setPage(newPageId)
@@ -214,6 +216,7 @@ class PageView(
     */
     fun disposeOldPage() {
         updateOnExit(id)
+        persistBitmapDebounced(id)
         cleanJob()
     }
 
@@ -237,7 +240,7 @@ class PageView(
                 snack = SnackConf(text = "Loading strokes...", duration = 60000)
                 SnackState.Companion.globalSnackFlow.emit(snack!!)
                 val timeToLoad = measureTimeMillis {
-                    PageDataManager.requestPageLoadJoin(appRepository, id, ::computeHeight)
+                    PageDataManager.requestPageLoadJoin(appRepository, id)
                     logCache.d("got page data. id $id")
                 }
                 logCache.d("All strokes loaded in $timeToLoad ms")
@@ -273,7 +276,7 @@ class PageView(
             logCache.d("Caching next page $nextPageId")
 
             nextPageId?.let { nextPage ->
-                PageDataManager.requestPageLoad(appRepository, nextPage, ::computeHeight)
+                PageDataManager.requestPageLoad(appRepository, nextPage)
             }
             if (PageDataManager.hasEnoughMemory(15)) {
                 // Cache previous page if not already cached
@@ -285,7 +288,7 @@ class PageView(
                 logCache.d("Caching prev page $prevPageId")
 
                 prevPageId?.let { prevPage ->
-                    PageDataManager.requestPageLoad(appRepository, prevPage, ::computeHeight)
+                    PageDataManager.requestPageLoad(appRepository, prevPage)
                 }
             }
         } catch (e: CancellationException) {
@@ -316,7 +319,7 @@ class PageView(
         strokes = strokes.filter { s -> !strokeIds.contains(s.id) }
         removeStrokesFromPersistLayer(strokeIds)
         PageDataManager.indexStrokes(coroutineScope, id)
-        height = computeHeight()
+        PageDataManager.recomputeHeight(id)
 
         persistBitmapDebounced()
     }
@@ -361,8 +364,7 @@ class PageView(
         images = images.filter { s -> !imageIds.contains(s.id) }
         removeImagesFromPersistLayer(imageIds)
         PageDataManager.indexImages(coroutineScope, id)
-        height = computeHeight()
-
+        PageDataManager.recomputeHeight(id)
         persistBitmapDebounced()
     }
 
@@ -371,22 +373,6 @@ class PageView(
 
     fun getImages(imageIds: List<String>): List<Image?> = PageDataManager.getImages(imageIds, id)
 
-
-    private fun computeHeight(): Int {
-        if (strokes.isEmpty()) {
-            return viewHeight
-        }
-        val maxStrokeBottom = strokes.maxOf { it.bottom }.plus(50)
-        return max(maxStrokeBottom.toInt(), viewHeight)
-    }
-
-    fun computeWidth(): Int {
-        if (strokes.isEmpty()) {
-            return viewWidth
-        }
-        val maxStrokeRight = strokes.maxOf { it.right }.plus(50)
-        return max(maxStrokeRight.toInt(), viewWidth)
-    }
 
     private fun removeStrokesFromPersistLayer(strokeIds: List<String>) {
         appRepository.strokeRepository.deleteAll(strokeIds)
@@ -422,15 +408,6 @@ class PageView(
         return false
     }
 
-    fun updateOnExit(targetPageId: String) {
-        logCache.i("Page exit, is page loaded: ${PageDataManager.isPageLoaded(targetPageId)}")
-        if (PageDataManager.isPageLoaded(targetPageId)) {
-            PageDataManager.setPageHeight(targetPageId, computeHeight())
-            PageDataManager.calculateMemoryUsage(targetPageId, 0)
-            persistBitmapDebounced(targetPageId)
-            // TODO: if we exited the book, we should clear the cache.
-        }
-    }
 
     private fun cleanJob() {
         //ensure that snack is canceled, even on dispose of the page.

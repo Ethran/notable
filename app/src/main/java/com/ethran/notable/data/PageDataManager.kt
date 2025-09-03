@@ -8,6 +8,8 @@ import android.graphics.Rect
 import android.os.FileObserver
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.geometry.Offset
+import com.ethran.notable.SCREEN_HEIGHT
+import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.DrawCanvas
@@ -32,6 +34,7 @@ import java.io.File
 import java.lang.ref.SoftReference
 import java.security.MessageDigest
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.max
 
 
 // Save bitmap, to avoid loading from disk every time.
@@ -75,6 +78,7 @@ object PageDataManager {
     // needs to be observable by UI, for scroll bars
     private var pageHigh = mutableStateMapOf<String, Int>()
     private var pageScroll = mutableStateMapOf<String, Offset>()
+
     // On change, we need to adjust stroke size.
     private var pageZoom = LinkedHashMap<String, Float>()
 
@@ -109,7 +113,7 @@ object PageDataManager {
      * Locking is handled internally.
      */
     private suspend fun getOrStartLoadingJob(
-        appRepository: AppRepository, pageId: String, computeHeight: () -> Int
+        appRepository: AppRepository, pageId: String
     ): Job {
         //             PageDataManager.ensureMemoryAvailable(15)
         return jobLock.withLock {
@@ -129,7 +133,7 @@ object PageDataManager {
                     log.d("starting loading of the Page($pageId)")
                     if (existing.isNull() && areListInitialized(pageId)) log.e("Illegal state: Page($pageId) already in memory, but job is null.")
                     val newJob = dataLoadingScope.launch {
-                        loadPageFromDb(appRepository, this, pageId, computeHeight)
+                        loadPageFromDb(appRepository, this, pageId)
                     }
                     dataLoadingJobs[pageId] = newJob
                     newJob
@@ -144,9 +148,9 @@ object PageDataManager {
      * Ensures that the page is loaded; suspends until load is finished.
      */
     suspend fun requestPageLoadJoin(
-        appRepository: AppRepository, pageId: String, computeHeight: () -> Int
+        appRepository: AppRepository, pageId: String
     ) {
-        getOrStartLoadingJob(appRepository, pageId, computeHeight).join()
+        getOrStartLoadingJob(appRepository, pageId).join()
     }
 
     /**
@@ -154,18 +158,15 @@ object PageDataManager {
      * If already loading, is a no-op.
      */
     fun requestPageLoad(
-        appRepository: AppRepository, pageId: String, computeHeight: () -> Int
+        appRepository: AppRepository, pageId: String
     ) {
         dataLoadingScope.launch {
-            getOrStartLoadingJob(appRepository, pageId, computeHeight)
+            getOrStartLoadingJob(appRepository, pageId)
         }
     }
 
     private suspend fun loadPageFromDb(
-        appRepository: AppRepository,
-        coroutineScope: CoroutineScope,
-        pageId: String,
-        computeHeight: () -> Int
+        appRepository: AppRepository, coroutineScope: CoroutineScope, pageId: String
     ) {
         try {
             log.d("Loading page $pageId")
@@ -175,7 +176,7 @@ object PageDataManager {
             cacheStrokes(pageId, pageWithStrokes.strokes)
             val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
             cacheImages(pageId, pageWithImages.images)
-            setPageHeight(pageId, computeHeight())
+            recomputeHeight(pageId)
             setPageScroll(pageId, Offset(0f, pageWithStrokes.page.scroll.toFloat()))
             indexImages(coroutineScope, pageId)
             indexStrokes(coroutineScope, pageId)
@@ -256,14 +257,10 @@ object PageDataManager {
 
     val saveTopic = MutableSharedFlow<String>()
     fun collectAndPersistBitmapsBatch(
-        context: Context,
-        scope: CoroutineScope
+        context: Context, scope: CoroutineScope
     ) {
         scope.launch(Dispatchers.IO) {
-            saveTopic
-                .buffer(100)
-                .chunked(1000)
-                .collect { pageIdBatch ->
+            saveTopic.buffer(100).chunked(1000).collect { pageIdBatch ->
                     // 3. Take only the unique page IDs from the batch.
                     val uniquePageIds = pageIdBatch.distinct()
 
@@ -308,6 +305,27 @@ object PageDataManager {
     fun getPageHeight(pageId: String): Int? = pageHigh[pageId]
     fun setPageHeight(pageId: String, height: Int) {
         pageHigh[pageId] = height
+    }
+
+    fun recomputeHeight(pageId: String): Int {
+        synchronized(accessLock) {
+            if (strokes[pageId].isNullOrEmpty()) {
+                return SCREEN_HEIGHT
+            }
+            val maxStrokeBottom = strokes[pageId]!!.maxOf { it.bottom }.plus(50)
+            pageHigh[pageId] = max(maxStrokeBottom.toInt(), SCREEN_HEIGHT)
+            return pageHigh[pageId]!!
+        }
+    }
+
+    fun computeWidth(pageId: String): Int {
+        synchronized(accessLock) {
+            if (strokes[pageId].isNullOrEmpty()) {
+                return SCREEN_WIDTH
+            }
+            val maxStrokeRight = strokes[pageId]!!.maxOf { it.right }.plus(50)
+            return max(maxStrokeRight.toInt(), SCREEN_WIDTH)
+        }
     }
 
     fun getPageScroll(pageId: String): Offset? = pageScroll[pageId]
@@ -367,10 +385,7 @@ object PageDataManager {
             if (!isPageLoaded(id)) return null
             val imageList = images[id] ?: return emptyList()
             return imageList.filter { image ->
-                image.x < inPageCoordinates.right &&
-                        (image.x + image.width) > inPageCoordinates.left &&
-                        image.y < inPageCoordinates.bottom &&
-                        (image.y + image.height) > inPageCoordinates.top
+                image.x < inPageCoordinates.right && (image.x + image.width) > inPageCoordinates.left && image.y < inPageCoordinates.bottom && (image.y + image.height) > inPageCoordinates.top
             }
         }
     }
@@ -380,10 +395,7 @@ object PageDataManager {
             if (!isPageLoaded(id)) return null
             val strokeList = strokes[id] ?: return emptyList()
             return strokeList.filter { stroke ->
-                stroke.right > inPageCoordinates.left &&
-                        stroke.left < inPageCoordinates.right &&
-                        stroke.bottom > inPageCoordinates.top &&
-                        stroke.top < inPageCoordinates.bottom
+                stroke.right > inPageCoordinates.left && stroke.left < inPageCoordinates.right && stroke.bottom > inPageCoordinates.top && stroke.top < inPageCoordinates.bottom
             }
         }
     }
@@ -410,7 +422,6 @@ object PageDataManager {
             }
         }
     }
-
 
     fun setBackground(pageId: String, background: CachedBackground, observe: Boolean) {
         synchronized(accessLock) {
@@ -441,9 +452,7 @@ object PageDataManager {
     }
 
     private fun observeBackgroundFile(
-        pageId: String,
-        filePath: String,
-        onChange: suspend () -> Unit = {}
+        pageId: String, filePath: String, onChange: suspend () -> Unit = {}
     ) {
         synchronized(fileObservers) {
             fileToPages.getOrPut(filePath) { mutableSetOf() }.add(pageId)
@@ -505,7 +514,16 @@ object PageDataManager {
         }
     }
 
-    /* cleaning and memory management */
+    fun updateOnExit(targetPageId: String) {
+        log.i("Page exit, is page loaded: ${isPageLoaded(targetPageId)}")
+        if (isPageLoaded(targetPageId)) {
+            recomputeHeight(targetPageId)
+            calculateMemoryUsage(targetPageId, 0)
+            // TODO: if we exited the book, we should clear the cache.
+        }
+    }
+
+    /** --- cleaning and memory management ---- **/
 
     @Volatile
     private var currentCacheSizeMB = 0
@@ -513,8 +531,7 @@ object PageDataManager {
     fun removePage(pageId: String) {
         // TODO: here is the error!!
         log.e("Removing page $pageId")
-        if (pageId ==currentPage)
-            log.w("Removing current page!")
+        if (pageId == currentPage) log.w("Removing current page!")
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
@@ -561,7 +578,6 @@ object PageDataManager {
     fun clearAllPages() {
         dataLoadingScope.launch {
             log.d("Clearing loaded pages")
-            val toCancel: List<String>
             jobLock.withLock {
                 // Collect all pageIds with jobs that are not finished
                 dataLoadingJobs.forEach { id, _ ->
@@ -592,7 +608,7 @@ object PageDataManager {
     }
 
     // sign: if 1, add, if -1, remove, if 0 don't modify
-    fun calculateMemoryUsage(pageId: String, sign: Int = 1): Int {
+    private fun calculateMemoryUsage(pageId: String, sign: Int = 1): Int {
         return synchronized(accessLock) {
             var totalBytes = 0L
 
@@ -640,7 +656,7 @@ object PageDataManager {
         }
     }
 
-    fun clearAllCache() {
+    private fun clearAllCache() {
         freeMemory(0)
     }
 
@@ -652,8 +668,7 @@ object PageDataManager {
     private fun ensureMemoryCapacity(requiredMb: Int): Boolean {
         val availableMem = ((Runtime.getRuntime().maxMemory() - Runtime.getRuntime()
             .totalMemory()) / (1024 * 1024)).toInt()
-        if (availableMem > requiredMb)
-            return true
+        if (availableMem > requiredMb) return true
         val toFree = requiredMb - availableMem
         freeMemory(toFree)
         return hasEnoughMemory(requiredMb)
