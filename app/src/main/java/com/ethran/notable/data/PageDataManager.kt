@@ -14,7 +14,10 @@ import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
+import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.chunked
+import com.onyx.android.sdk.extension.isNotNull
+import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,31 +96,13 @@ object PageDataManager {
     private suspend fun waitForPageLoad(pageId: String) {
         val job = jobLock.withLock { dataLoadingJobs[pageId] }
         if (job == null || job.isCancelled) {
-            log.e("THERE IS HUGE PROBLEM. Job missing or cancelled for $pageId.")
-//            throw IllegalStateException("Job missing or cancelled for $pageId")
+            log.e("Illegal state: Job missing or cancelled for $pageId.")
+            showHint("Illegal state: Job: ${job}.")
             return
         }
         job.join()
+        if (!isPageLoaded(pageId)) log.e("illegal state: after loading page, it is still not loaded correctly")
     }
-
-    /**
-     * Cancels and removes all currently loading pages.
-     */
-    suspend fun cancelAllLoadingPages() {
-        log.e("Cancelling all loading pages")
-        val toCancel: List<String>
-        jobLock.withLock {
-            // Collect all pageIds with jobs that are not finished
-            toCancel = dataLoadingJobs.filter { (_, job) ->
-                job.isActive
-            }.map { (pageId, _) -> pageId }
-        }
-        // Cancel and remove pages outside the lock
-        for (pageId in toCancel) {
-            removePage(pageId)
-        }
-    }
-
 
     /**
      * Returns the existing loading Job for the page, or starts and returns a new one.
@@ -142,6 +127,7 @@ object PageDataManager {
 
                 existing == null || existing.isCancelled -> {
                     log.d("starting loading of the Page($pageId)")
+                    if (existing.isNull() && areListInitialized(pageId)) log.e("Illegal state: Page($pageId) already in memory, but job is null.")
                     val newJob = dataLoadingScope.launch {
                         loadPageFromDb(appRepository, this, pageId, computeHeight)
                     }
@@ -204,8 +190,64 @@ object PageDataManager {
 
     }
 
+
+    /**
+     * - Verifies loaded data presence.
+     * - Tries to peek job state without suspending (tryLock).
+     * - If inconsistent, logs a warning, clears the page, and returns false.
+     *   (Call the overload below to also trigger reload.)
+     */
     fun isPageLoaded(pageId: String): Boolean {
+        // 1) Snapshot job state non-suspending
+        val jobSnapshot: Job? = if (jobLock.tryLock()) {
+            try {
+                dataLoadingJobs[pageId]
+            } finally {
+                jobLock.unlock()
+            }
+        } else {
+            // Could not acquire lock without suspending; treat as unknown
+            log.d("isPAgeLoaded: Couldn't obtain job status.")
+            null
+        }
+        if (jobSnapshot?.isActive == true) {
+            log.d("isPageLoaded: Still loading page($pageId).")
+            return false
+        }
+        // if its canceled or null, we consider that data are not loaded
+        val jobDone = jobSnapshot?.isCompleted ?: false
+
+        // 2) Snapshot data state
+        val dataLoaded = areListInitialized(pageId)
+
+        // 3) Reconcile: if they disagree, warn and clear
+        if (jobSnapshot.isNotNull() && dataLoaded != jobDone) {
+            log.e("Inconsistent state for page($pageId): dataLoaded=$dataLoaded, jobDone=$jobDone, job=$jobSnapshot")
+            showHint("Fixing inconsistent page state: $pageId")
+            dataLoadingScope.launch {
+                // Cancel/remove any job for this page
+                jobLock.withLock {
+                    dataLoadingJobs.remove(pageId)?.cancel()
+                }
+                // Drop partial data
+                removePage(pageId)
+            }
+            return false
+        }
+        return dataLoaded
+    }
+
+    private fun areListInitialized(pageId: String): Boolean {
         return synchronized(accessLock) {
+            log.d(
+                "page($pageId)areListInitialized, ${strokes.containsKey(pageId)}, ${
+                    images.containsKey(
+                        pageId
+                    )
+                }, ${
+                    entrySizeMB[pageId]
+                }"
+            )
             strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(
                 pageId
             )
@@ -318,7 +360,7 @@ object PageDataManager {
         return imageIds.map { i -> imagesById[pageId]?.get(i) }
     }
 
-    fun cacheStrokes(pageId: String, strokes: List<Stroke>) {
+    private fun cacheStrokes(pageId: String, strokes: List<Stroke>) {
         synchronized(accessLock) {
             if (!this.strokes.containsKey(pageId)) {
                 this.strokes[pageId] = strokes.toMutableList()
@@ -329,7 +371,7 @@ object PageDataManager {
         }
     }
 
-    fun cacheImages(pageId: String, images: List<Image>) {
+    private fun cacheImages(pageId: String, images: List<Image>) {
         synchronized(accessLock) {
             if (!this.images.containsKey(pageId)) {
                 this.images[pageId] = images.toMutableList()
@@ -440,12 +482,22 @@ object PageDataManager {
     private var currentCacheSizeMB = 0
 
     fun removePage(pageId: String) {
+        // TODO: here is the error!!
         log.e("Removing page $pageId")
         if (pageId ==currentPage)
             log.w("Removing current page!")
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
+            pageHigh.remove(pageId)
+            pageZoom.remove(pageId)
+            pageScroll.remove(pageId)
+            bitmapCache.remove(pageId)
+            strokesById.remove(pageId)
+            imagesById.remove(pageId)
+            dataLoadingJobs.remove(pageId)
+            currentCacheSizeMB -= entrySizeMB[pageId] ?: 0
+            entrySizeMB.remove(pageId)
 
             // Unlink and possibly remove background
             val key = pageToBackgroundKey.remove(pageId)
@@ -453,25 +505,40 @@ object PageDataManager {
                 backgroundCache.remove(key)
             }
             stopObservingBackground(pageId)
-            pageHigh.remove(pageId)
-            pageZoom.remove(pageId)
-            pageScroll.remove(pageId)
-            bitmapCache.remove(pageId)
-            strokesById.remove(pageId)
-            imagesById.remove(pageId)
-            dataLoadingJobs[pageId]?.cancel()
-            currentCacheSizeMB -= entrySizeMB[pageId] ?: 0
-            entrySizeMB[pageId] = 0
+        }
+    }
+
+
+    /**
+     * Cancels and removes all currently loading pages.
+     */
+    fun cancelAllLoadingPages() {
+        dataLoadingScope.launch {
+            log.e("Cancelling all loading pages")
+            val toCancel: List<String>
+            jobLock.withLock {
+                // Collect all pageIds with jobs that are not finished
+                toCancel = dataLoadingJobs.filter { (_, job) ->
+                    job.isActive
+                }.map { (pageId, _) -> pageId }
+                // Cancel and remove pages outside the lock
+                for (pageId in toCancel) {
+                    removePage(pageId)
+                }
+            }
         }
     }
 
     fun clearAllPages() {
-        log.i("Clearing cache")
-        synchronized(accessLock) {
-            strokes.clear()
-            images.clear()
-            backgroundCache.clear()
-            pageToBackgroundKey.clear()
+        dataLoadingScope.launch {
+            log.d("Clearing loaded pages")
+            val toCancel: List<String>
+            jobLock.withLock {
+                // Collect all pageIds with jobs that are not finished
+                dataLoadingJobs.forEach { id, _ ->
+                    removePage(id)
+                }
+            }
         }
     }
 
@@ -589,7 +656,6 @@ object PageDataManager {
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> freeMemory(64)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> freeMemory(128)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> freeMemory(256)
-
                     ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> freeMemory(32)
                     ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> freeMemory(10)
                 }

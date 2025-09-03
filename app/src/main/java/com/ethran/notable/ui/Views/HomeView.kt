@@ -104,7 +104,7 @@ import kotlin.concurrent.thread
 @ExperimentalComposeUiApi
 @Composable
 fun Library(navController: NavController, folderId: String? = null) {
-    PageDataManager.clearAllPages()
+    PageDataManager.cancelAllLoadingPages()
 
     val context = LocalContext.current
 

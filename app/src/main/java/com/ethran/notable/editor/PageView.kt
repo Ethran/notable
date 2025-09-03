@@ -249,6 +249,7 @@ class PageView(
                     DrawCanvas.forceUpdate.emit(null)
                 }
                 logCache.d("Loaded page from persistent layer $id")
+                PageDataManager.isPageLoaded(id)
             }
         }
 
