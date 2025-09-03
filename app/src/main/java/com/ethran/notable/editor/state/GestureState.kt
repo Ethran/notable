@@ -60,14 +60,18 @@ data class GestureState(
                     }
 
                     GestureMode.Normal -> {
-                        log.d("Entered ${value.name} gesture mode")
-                        scope.launch(Dispatchers.Default) {
-                            // Just to reduce flicker
-                            awaitFrame()
-                            awaitFrame()
-                            // TODO: We should instead wait till full refresh is ready to be posted,
-                            //  instead of hardcoding delay.
-                            setAnimationMode(false)
+                        // if there was a selection we might want to keep the animation mode
+                        // TODO: there should be better solution to this, but for now its enough.
+                        if (field != GestureMode.Selection) {
+                            log.d("Entered ${value.name} gesture mode")
+                            scope.launch(Dispatchers.Default) {
+                                // Just to reduce flicker
+                                awaitFrame()
+                                awaitFrame()
+                                // TODO: We should instead wait till full refresh is ready to be posted,
+                                //  instead of hardcoding delay.
+                                setAnimationMode(false)
+                            }
                         }
                     }
                 }

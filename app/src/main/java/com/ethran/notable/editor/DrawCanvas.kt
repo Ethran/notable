@@ -51,6 +51,7 @@ import com.ethran.notable.editor.utils.prepareForPartialUpdate
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.editor.utils.restoreDefaults
+import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.toPageCoordinates
 import com.ethran.notable.editor.utils.transformToLine
@@ -151,7 +152,7 @@ class DrawCanvas(
         // It might be bad idea, but plan is to insert graphic in this, and then take it from it
         // There is probably better way
         var addImageByUri = MutableStateFlow<Uri?>(null)
-        var rectangleToSelect = MutableStateFlow<Rect?>(null)
+        var rectangleToSelectByGesture = MutableStateFlow<Rect?>(null)
         var drawingInProgress = Mutex()
 
         private suspend fun waitForDrawing() {
@@ -520,7 +521,7 @@ class DrawCanvas(
             }
         }
         coroutineScope.launch {
-            rectangleToSelect.drop(1).collect {
+            rectangleToSelectByGesture.drop(1).collect {
                 if (it != null) {
                     logCanvasObserver.v("Area to Select (screen): $it")
                     selectRectangle(it)
@@ -629,16 +630,20 @@ class DrawCanvas(
 
     }
 
+    /**
+     * handles selection, and decide if we should exit the animation mode
+     */
     private suspend fun selectRectangle(rectToSelect: Rect) {
         val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
 
         val imagesToSelect = PageDataManager.getImagesInRectangle(inPageCoordinates, page.id)
         val strokesToSelect = PageDataManager.getStrokesInRectangle(inPageCoordinates, page.id)
         if (imagesToSelect.isNotNull() && strokesToSelect.isNotNull()) {
-            rectangleToSelect.value = null
+            rectangleToSelectByGesture.value = null
             if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
                 selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
             } else {
+                setAnimationMode(false)
                 SnackState.Companion.globalSnackFlow.emit(
                     SnackConf(
                         text = "There isn't anything.",
