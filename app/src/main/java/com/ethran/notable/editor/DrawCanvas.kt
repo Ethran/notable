@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.db.handleSelect
@@ -344,14 +345,18 @@ class DrawCanvas(
 
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
+            if (GlobalAppSettings.current.openGLRendering) {
             prepareForPartialUpdate(this@DrawCanvas, touchHelper)
-            log.d("Eraser Mode")
+                log.d("Eraser Mode")
+            }
             isErasing = true
         }
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
+            if (GlobalAppSettings.current.openGLRendering) {
             restoreDefaults(this@DrawCanvas)
-            glRenderer.clearPointBuffer()
+                glRenderer.clearPointBuffer()
+            }
             glRenderer.frontBufferRenderer?.cancel()
         }
 
@@ -538,8 +543,7 @@ class DrawCanvas(
         }
         coroutineScope.launch {
             eraserTouchPoint.collect { p ->
-                if (!isErasing) {
-                    logCanvasObserver.v("Didn't draw point: $p -- eraser is not active")
+                if (!isErasing || !GlobalAppSettings.current.openGLRendering) {
                     return@collect
                 }
                 logCanvasObserver.v("collected: $p")
