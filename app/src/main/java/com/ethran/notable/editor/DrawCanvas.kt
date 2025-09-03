@@ -418,6 +418,8 @@ class DrawCanvas(
                 log.i("surface created $holder")
                 // set up the drawing surface
                 updateActiveSurface()
+                // Restore the correct stroke size and style.
+                updatePenAndStroke()
             }
 
             override fun surfaceChanged(
