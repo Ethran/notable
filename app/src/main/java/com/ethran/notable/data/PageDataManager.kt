@@ -616,7 +616,7 @@ object PageDataManager {
      */
     fun cancelLoadingPages(ignoredPageIds: List<String> = listOf()) {
         dataLoadingScope.launch {
-            log.e("Cancelling all loading pages")
+            log.d("Cancelling loading pages")
             val toCancel: List<String>
             jobLock.withLock {
                 // Collect all pageIds with jobs that are not finished
