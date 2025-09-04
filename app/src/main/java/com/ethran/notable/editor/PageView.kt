@@ -58,7 +58,6 @@ class PageView(
     val context: Context,
     val coroutineScope: CoroutineScope,
     var id: String,
-    val width: Int, // What is the difference between width and view width?
     var viewWidth: Int,
     var viewHeight: Int,
     val snackManager: SnackState

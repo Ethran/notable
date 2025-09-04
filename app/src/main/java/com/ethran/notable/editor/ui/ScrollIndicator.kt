@@ -76,7 +76,7 @@ fun HorizontalScrollIndicator(state: EditorState) {
             // Total scrollable width approximation:
             // page.width is the total content width (page coordinates)
             // page.scroll.x + viewportWidthPx ensures indicator still shows while near right edge
-            val virtualWidth = max(page.width, page.scroll.x.toInt() + viewportWidthPx)
+            val virtualWidth = max(page.viewWidth, page.scroll.x.toInt() + viewportWidthPx)
             if (virtualWidth <= viewportWidthPx) return@BoxWithConstraints
 
             val indicatorSizeDp = (viewportWidthPx / virtualWidth.toFloat()) * this.maxWidth.value
