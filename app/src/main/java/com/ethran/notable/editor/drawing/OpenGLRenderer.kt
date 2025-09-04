@@ -145,7 +145,7 @@ class OpenGLRenderer(
         timer.step("obtainRenderer")
 
         // Render the entire scene (all lines)
-        obtainRenderer().drawSimpleLine(projection, pointsToDraw, Color.BLACK.toColor(), viewModel)
+        obtainRenderer().drawSimpleLine(projection, pointsToDraw, Color.RED.toColor(), viewModel)
         timer.end("drawLine")
 
 

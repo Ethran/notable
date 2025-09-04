@@ -6,15 +6,21 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.FileObserver
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.geometry.Offset
+import com.ethran.notable.SCREEN_HEIGHT
+import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
+import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.chunked
+import com.onyx.android.sdk.extension.isNotNull
+import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +33,8 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.lang.ref.SoftReference
 import java.security.MessageDigest
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.max
 
 
 // Save bitmap, to avoid loading from disk every time.
@@ -35,9 +43,7 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
 
     var bitmap: Bitmap? = loadBackgroundBitmap(path, pageNumber, scale)
     fun matches(filePath: String, pageNum: Int, targetScale: Float): Boolean {
-        return path == filePath &&
-                pageNumber == pageNum &&
-                scale >= targetScale // Consider valid if our scale is larger
+        return path == filePath && pageNumber == pageNum && scale >= targetScale // Consider valid if our scale is larger
     }
 
     companion object {
@@ -69,71 +75,248 @@ object PageDataManager {
     private val fileObservers = mutableMapOf<String, FileObserver>()
     private val fileToPages = mutableMapOf<String, MutableSet<String>>()
 
-    private var pageHigh = LinkedHashMap<String, Int>()
+    // needs to be observable by UI, for scroll bars
+    private var pageHigh = mutableStateMapOf<String, Int>()
+    private var pageScroll = mutableStateMapOf<String, Offset>()
+
+    // On change, we need to adjust stroke size.
+    private var pageZoom = LinkedHashMap<String, Float>()
 
     @Volatile
     private var currentPage = ""
-    private val loadingPages = mutableMapOf<String, CompletableDeferred<Unit>>()
-    private val lockLoadingPages = Mutex()
 
     private val accessLock = Any() // Lock for accessing Images, Strokes, Backgrounds & derived
     private var entrySizeMB = LinkedHashMap<String, Int>()
-    var dataLoadingJob: Job? = null
+
+    private val jobLock = Mutex()
+    private val dataLoadingJobs = mutableMapOf<String, Job>()
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /**
+     * Suspends until the page is done loading (if it is being loaded).
+     * Logs an error and returns if no job is present or job is cancelled.
+     * Throws if no job is present or job is cancelled.
+     */
+    private suspend fun waitForPageLoad(pageId: String) {
+        val job = jobLock.withLock { dataLoadingJobs[pageId] }
+        if (job == null || job.isCancelled) {
+            log.e("Illegal state: Job missing or cancelled for $pageId.")
+            showHint("Illegal state: Job: ${job}.")
+            return
+        }
+        job.join()
+        if (!isPageLoaded(pageId)) log.e("illegal state: after loading page, it is still not loaded correctly")
+    }
 
-    suspend fun markPageLoading(pageId: String) {
-        lockLoadingPages.withLock {
-            if (!loadingPages.containsKey(pageId)) {
-                log.d("Marking page $pageId as loading")
-                loadingPages[pageId] = CompletableDeferred()
-            } else {
-                log.e("Page $pageId is already loading")
+    /**
+     * Returns the existing loading Job for the page, or starts and returns a new one.
+     * Locking is handled internally.
+     */
+    private suspend fun getOrStartLoadingJob(
+        appRepository: AppRepository, pageId: String, bookId: String?
+    ): Job {
+        //             PageDataManager.ensureMemoryAvailable(15)
+        return jobLock.withLock {
+            val existing = dataLoadingJobs[pageId]
+            when {
+                existing?.isActive == true -> {
+                    log.d("Page($pageId) is already loading")
+                    existing
+                }
+
+                existing?.isCompleted == true -> {
+                    log.d("Page($pageId) already in memory, stroke number ${strokes[pageId]?.size}")
+                    existing
+                }
+
+                existing == null || existing.isCancelled -> {
+                    // Cancel any previous job, without current, next and previous page
+                    if (bookId.isNotNull())
+                        cancelUnnecessaryLoading(appRepository, pageId, bookId)
+                    log.d("starting loading of the Page($pageId)")
+                    if (existing.isNull() && areListInitialized(pageId)) log.e("Illegal state: Page($pageId) already in memory, but job is null.")
+                    val newJob = dataLoadingScope.launch {
+                        loadPageFromDb(appRepository, this, pageId)
+                    }
+                    dataLoadingJobs[pageId] = newJob
+                    newJob
+                }
+
+                else -> error("Unexpected job state, for Page($pageId)")
             }
         }
     }
 
-    suspend fun markPageLoaded(pageId: String) {
-        return lockLoadingPages.withLock {
-            loadingPages[pageId]?.complete(Unit)
-            log.d("marking done. Page $pageId, ${loadingPages[pageId].toString()}")
+    /**
+     * Ensures that the page is loaded; suspends until load is finished.
+     */
+    suspend fun requestPageLoadJoin(
+        appRepository: AppRepository, pageId: String, bookId: String?
+    ) {
+        getOrStartLoadingJob(appRepository, pageId, bookId).join()
+    }
+
+    private fun cancelUnnecessaryLoading(
+        appRepository: AppRepository,
+        pageId: String,
+        bookId: String
+    ) {
+        val nextPageId =
+            appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
+        val prevPageId =
+            appRepository.getPreviousPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
+
+        cancelLoadingPages(
+            ignoredPageIds =
+                listOfNotNull(nextPageId, prevPageId, pageId).distinct()
+        )
+    }
+
+    fun cacheNeighbors(appRepository: AppRepository, pageId: String, bookId: String) {
+
+        // Only attempt to cache neighbors if we have memory to spare.
+        if (!hasEnoughMemory(15)) return
+        try {
+            // Cache next page if not already cached
+            val nextPageId =
+                appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
+            log.d("Caching next page $nextPageId")
+
+            nextPageId?.let { nextPage ->
+                requestPageLoad(appRepository, nextPage)
+            }
+            if (hasEnoughMemory(15)) {
+                // Cache previous page if not already cached
+                val prevPageId =
+                    appRepository.getPreviousPageIdFromBookAndPage(
+                        pageId = pageId,
+                        notebookId = bookId
+                    )
+                log.d("Caching prev page $prevPageId")
+
+                prevPageId?.let { prevPage ->
+                    requestPageLoad(appRepository, prevPage)
+                }
+            }
+        } catch (e: CancellationException) {
+            log.i("Caching was cancelled: ${e.message}")
+        } catch (e: Exception) {
+            // All other unexpected exceptions
+            log.e("Error caching neighbor pages", e)
+            showHint("Error encountered while caching neighbors", duration = 5000)
+
+        }
+
+    }
+
+    /**
+     * Requests that the given page is loaded, but doesn't wait.
+     * If already loading, is a no-op.
+     */
+    fun requestPageLoad(
+        appRepository: AppRepository, pageId: String
+    ) {
+        dataLoadingScope.launch {
+            getOrStartLoadingJob(appRepository, pageId, null)
         }
     }
 
-    suspend fun removeMarkPageLoaded(pageId: String) {
-        lockLoadingPages.withLock {
-            log.d("Removing mark for page $pageId")
-            loadingPages.remove(pageId)?.cancel()
+    private suspend fun loadPageFromDb(
+        appRepository: AppRepository, coroutineScope: CoroutineScope, pageId: String
+    ) {
+        try {
+            log.d("Loading page $pageId")
+//            sleep(5000)
+            val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
+            // What will happened if page isn't in repository?
+            cacheStrokes(pageId, pageWithStrokes.strokes)
+            val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
+            cacheImages(pageId, pageWithImages.images)
+            recomputeHeight(pageId)
+            setPageScroll(pageId, Offset(0f, pageWithStrokes.page.scroll.toFloat()))
+            indexImages(coroutineScope, pageId)
+            indexStrokes(coroutineScope, pageId)
+            calculateMemoryUsage(pageId, 1)
+        } catch (e: CancellationException) {
+            log.w("Loading of page $pageId was cancelled.")
+            if (!isPageLoaded(pageId)) removePage(pageId)
+            throw e  // rethrow cancellation
+        } finally {
+            log.d("Loaded page $pageId")
         }
+
     }
 
-    suspend fun awaitPageIfLoading(pageId: String) {
-        if (isPageLoading(pageId)) {
-            log.d("Awaiting page $pageId")
-            loadingPages[pageId]?.await()
-            log.d("waiting done. Page $pageId")
+
+    /**
+     * - Verifies loaded data presence.
+     * - Tries to peek job state without suspending (tryLock).
+     * - If inconsistent, logs a warning, clears the page, and returns false.
+     *   (Call the overload below to also trigger reload.)
+     */
+    fun isPageLoaded(pageId: String): Boolean {
+        // 1) Snapshot job state non-suspending
+        val jobSnapshot: Job? = if (jobLock.tryLock()) {
+            try {
+                dataLoadingJobs[pageId]
+            } finally {
+                jobLock.unlock()
+            }
         } else {
-            log.d("Page $pageId is not loading, canceling unnecessary caching")
-            dataLoadingJob?.cancel()
+            // Could not acquire lock without suspending; treat as unknown
+            log.d("isPAgeLoaded: Couldn't obtain job status.")
+            null
         }
+        if (jobSnapshot?.isActive == true) {
+            log.d("isPageLoaded: Still loading page($pageId).")
+            return false
+        }
+        // if its canceled or null, we consider that data are not loaded
+        val jobDone = jobSnapshot?.isCompleted ?: false
+
+        // 2) Snapshot data state
+        val dataLoaded = areListInitialized(pageId)
+
+        // 3) Reconcile: if they disagree, warn and clear
+        if (jobSnapshot.isNotNull() && dataLoaded != jobDone) {
+            log.e("Inconsistent state for page($pageId): dataLoaded=$dataLoaded, jobDone=$jobDone, job=$jobSnapshot")
+            showHint("Fixing inconsistent page state: $pageId")
+            dataLoadingScope.launch {
+                // Cancel/remove any job for this page
+                jobLock.withLock {
+                    dataLoadingJobs.remove(pageId)?.cancel()
+                }
+                // Drop partial data
+                removePage(pageId)
+            }
+            return false
+        }
+        return dataLoaded
     }
 
-    suspend fun isPageLoading(pageId: String): Boolean {
-        lockLoadingPages.withLock {
-            return loadingPages.containsKey(pageId)
+    private fun areListInitialized(pageId: String): Boolean {
+        return synchronized(accessLock) {
+            log.d(
+                "page($pageId)areListInitialized, ${strokes.containsKey(pageId)}, ${
+                    images.containsKey(
+                        pageId
+                    )
+                }, ${
+                    entrySizeMB[pageId]
+                }"
+            )
+            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(
+                pageId
+            )
         }
     }
 
     val saveTopic = MutableSharedFlow<String>()
     fun collectAndPersistBitmapsBatch(
-        context: Context,
-        scope: CoroutineScope
+        context: Context, scope: CoroutineScope
     ) {
         scope.launch(Dispatchers.IO) {
-            saveTopic
-                .buffer(100)
-                .chunked(1000)
-                .collect { pageIdBatch ->
+            saveTopic.buffer(100).chunked(1000).collect { pageIdBatch ->
                     // 3. Take only the unique page IDs from the batch.
                     val uniquePageIds = pageIdBatch.distinct()
 
@@ -175,14 +358,42 @@ object PageDataManager {
         bitmapCache[pageId] = SoftReference(bitmap)
     }
 
-
-    fun getPageHeight(pageId: String): Int? {
-        return pageHigh[pageId]
-    }
-
+    fun getPageHeight(pageId: String): Int? = pageHigh[pageId]
     fun setPageHeight(pageId: String, height: Int) {
         pageHigh[pageId] = height
     }
+
+    fun recomputeHeight(pageId: String): Int {
+        synchronized(accessLock) {
+            if (strokes[pageId].isNullOrEmpty()) {
+                return SCREEN_HEIGHT
+            }
+            val maxStrokeBottom = strokes[pageId]!!.maxOf { it.bottom }.plus(50)
+            pageHigh[pageId] = max(maxStrokeBottom.toInt(), SCREEN_HEIGHT)
+            return pageHigh[pageId]!!
+        }
+    }
+
+    fun computeWidth(pageId: String): Int {
+        synchronized(accessLock) {
+            if (strokes[pageId].isNullOrEmpty()) {
+                return SCREEN_WIDTH
+            }
+            val maxStrokeRight = strokes[pageId]!!.maxOf { it.right }.plus(50)
+            return max(maxStrokeRight.toInt(), SCREEN_WIDTH)
+        }
+    }
+
+    fun getPageScroll(pageId: String): Offset? = pageScroll[pageId]
+    fun setPageScroll(pageId: String, scroll: Offset) {
+        pageScroll[pageId] = scroll
+    }
+
+    fun getPageZoom(pageId: String): Float = pageZoom.getOrPut(pageId) { 1f }
+    fun setPageZoom(pageId: String, zoom: Float) {
+        pageZoom[pageId] = zoom
+    }
+
 
     fun getStrokes(pageId: String): List<Stroke> = strokes[pageId] ?: emptyList()
 
@@ -223,7 +434,30 @@ object PageDataManager {
         return imageIds.map { i -> imagesById[pageId]?.get(i) }
     }
 
-    fun cacheStrokes(pageId: String, strokes: List<Stroke>) {
+
+    // Assuming Rect uses 'left', 'top', 'right', 'bottom'
+    fun getImagesInRectangle(inPageCoordinates: Rect, id: String): List<Image>? {
+        synchronized(accessLock) {
+            if (!isPageLoaded(id)) return null
+            val imageList = images[id] ?: return emptyList()
+            return imageList.filter { image ->
+                image.x < inPageCoordinates.right && (image.x + image.width) > inPageCoordinates.left && image.y < inPageCoordinates.bottom && (image.y + image.height) > inPageCoordinates.top
+            }
+        }
+    }
+
+    fun getStrokesInRectangle(inPageCoordinates: Rect, id: String): List<Stroke>? {
+        synchronized(accessLock) {
+            if (!isPageLoaded(id)) return null
+            val strokeList = strokes[id] ?: return emptyList()
+            return strokeList.filter { stroke ->
+                stroke.right > inPageCoordinates.left && stroke.left < inPageCoordinates.right && stroke.bottom > inPageCoordinates.top && stroke.top < inPageCoordinates.bottom
+            }
+        }
+    }
+
+
+    private fun cacheStrokes(pageId: String, strokes: List<Stroke>) {
         synchronized(accessLock) {
             if (!this.strokes.containsKey(pageId)) {
                 this.strokes[pageId] = strokes.toMutableList()
@@ -234,7 +468,7 @@ object PageDataManager {
         }
     }
 
-    fun cacheImages(pageId: String, images: List<Image>) {
+    private fun cacheImages(pageId: String, images: List<Image>) {
         synchronized(accessLock) {
             if (!this.images.containsKey(pageId)) {
                 this.images[pageId] = images.toMutableList()
@@ -244,7 +478,6 @@ object PageDataManager {
             }
         }
     }
-
 
     fun setBackground(pageId: String, background: CachedBackground, observe: Boolean) {
         synchronized(accessLock) {
@@ -275,9 +508,7 @@ object PageDataManager {
     }
 
     private fun observeBackgroundFile(
-        pageId: String,
-        filePath: String,
-        onChange: suspend () -> Unit = {}
+        pageId: String, filePath: String, onChange: suspend () -> Unit = {}
     ) {
         synchronized(fileObservers) {
             fileToPages.getOrPut(filePath) { mutableSetOf() }.add(pageId)
@@ -339,27 +570,35 @@ object PageDataManager {
         }
     }
 
-
-    fun isPageLoaded(pageId: String): Boolean {
-        return synchronized(accessLock) {
-            strokes.containsKey(pageId) && images.containsKey(pageId) && entrySizeMB.containsKey(
-                pageId
-            )
+    fun updateOnExit(targetPageId: String) {
+        log.i("Page exit, is page loaded: ${isPageLoaded(targetPageId)}")
+        if (isPageLoaded(targetPageId)) {
+            recomputeHeight(targetPageId)
+            calculateMemoryUsage(targetPageId, 0)
+            // TODO: if we exited the book, we should clear the cache.
         }
     }
 
-    /* cleaning and memory management */
+    /** --- cleaning and memory management ---- **/
 
     @Volatile
     private var currentCacheSizeMB = 0
 
     fun removePage(pageId: String) {
-        log.d("Removing page $pageId")
-        if (pageId ==currentPage)
-            log.w("Removing current page!")
+        log.e("Removing page $pageId")
+        if (pageId == currentPage) log.w("Removing current page!")
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
+            pageHigh.remove(pageId)
+            pageZoom.remove(pageId)
+            pageScroll.remove(pageId)
+            bitmapCache.remove(pageId)
+            strokesById.remove(pageId)
+            imagesById.remove(pageId)
+            dataLoadingJobs.remove(pageId)
+            currentCacheSizeMB -= entrySizeMB[pageId] ?: 0
+            entrySizeMB.remove(pageId)
 
             // Unlink and possibly remove background
             val key = pageToBackgroundKey.remove(pageId)
@@ -367,25 +606,40 @@ object PageDataManager {
                 backgroundCache.remove(key)
             }
             stopObservingBackground(pageId)
-            pageHigh.remove(pageId)
-            bitmapCache.remove(pageId)
-            strokesById.remove(pageId)
-            imagesById.remove(pageId)
-            dataLoadingScope.launch {
-                removeMarkPageLoaded(pageId)
+        }
+    }
+
+
+    /**
+     * Cancels and removes all currently loading pages.
+     */
+    fun cancelLoadingPages(ignoredPageIds: List<String> = listOf()) {
+        dataLoadingScope.launch {
+            log.d("Cancelling loading pages")
+            val toCancel: List<String>
+            jobLock.withLock {
+                // Collect all pageIds with jobs that are not finished
+                toCancel = dataLoadingJobs.filter { (_, job) ->
+                    job.isActive
+                }.map { (pageId, _) -> pageId }
+                // Cancel and remove pages outside the lock
+                for (pageId in toCancel) {
+                    if (ignoredPageIds.contains(pageId)) continue
+                    removePage(pageId)
+                }
             }
-            currentCacheSizeMB -= entrySizeMB[pageId] ?: 0
-            entrySizeMB[pageId] = 0
         }
     }
 
     fun clearAllPages() {
-        log.i("Clearing cache")
-        synchronized(accessLock) {
-            strokes.clear()
-            images.clear()
-            backgroundCache.clear()
-            pageToBackgroundKey.clear()
+        dataLoadingScope.launch {
+            log.d("Clearing loaded pages")
+            jobLock.withLock {
+                // Collect all pageIds with jobs that are not finished
+                dataLoadingJobs.forEach { id, _ ->
+                    removePage(id)
+                }
+            }
         }
     }
 
@@ -410,7 +664,7 @@ object PageDataManager {
     }
 
     // sign: if 1, add, if -1, remove, if 0 don't modify
-    fun calculateMemoryUsage(pageId: String, sign: Int = 1): Int {
+    private fun calculateMemoryUsage(pageId: String, sign: Int = 1): Int {
         return synchronized(accessLock) {
             var totalBytes = 0L
 
@@ -458,7 +712,7 @@ object PageDataManager {
         }
     }
 
-    fun clearAllCache() {
+    private fun clearAllCache() {
         freeMemory(0)
     }
 
@@ -470,8 +724,7 @@ object PageDataManager {
     private fun ensureMemoryCapacity(requiredMb: Int): Boolean {
         val availableMem = ((Runtime.getRuntime().maxMemory() - Runtime.getRuntime()
             .totalMemory()) / (1024 * 1024)).toInt()
-        if (availableMem > requiredMb)
-            return true
+        if (availableMem > requiredMb) return true
         val toFree = requiredMb - availableMem
         freeMemory(toFree)
         return hasEnoughMemory(requiredMb)
@@ -503,7 +756,6 @@ object PageDataManager {
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> freeMemory(64)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> freeMemory(128)
                     ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> freeMemory(256)
-
                     ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> freeMemory(32)
                     ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> freeMemory(10)
                 }
@@ -521,32 +773,4 @@ object PageDataManager {
             }
         })
     }
-
-    // Assuming Rect uses 'left', 'top', 'right', 'bottom'
-    fun getImagesInRectangle(inPageCoordinates: Rect, id: String): List<Image>? {
-        synchronized(accessLock) {
-            if (!isPageLoaded(id)) return null
-            val imageList = images[id] ?: return emptyList()
-            return imageList.filter { image ->
-                image.x < inPageCoordinates.right &&
-                        (image.x + image.width) > inPageCoordinates.left &&
-                        image.y < inPageCoordinates.bottom &&
-                        (image.y + image.height) > inPageCoordinates.top
-            }
-        }
-    }
-
-    fun getStrokesInRectangle(inPageCoordinates: Rect, id: String): List<Stroke>? {
-        synchronized(accessLock) {
-            if (!isPageLoaded(id)) return null
-            val strokeList = strokes[id] ?: return emptyList()
-            return strokeList.filter { stroke ->
-                stroke.right > inPageCoordinates.left &&
-                        stroke.left < inPageCoordinates.right &&
-                        stroke.bottom > inPageCoordinates.top &&
-                        stroke.top < inPageCoordinates.bottom
-            }
-        }
-    }
-
 }

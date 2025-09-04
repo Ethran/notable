@@ -32,6 +32,7 @@ import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
+import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.Log
@@ -44,6 +45,7 @@ fun EditorView(
     navController: NavController, bookId: String?, pageId: String
 ) {
     val context = LocalContext.current
+    val snackManager = LocalSnackContext.current
     val scope = rememberCoroutineScope()
     val appRepository = remember { AppRepository(context) }
 
@@ -69,9 +71,9 @@ fun EditorView(
                 context = context,
                 coroutineScope = scope,
                 id = currentPageId,
-                width = width,
                 viewWidth = width,
-                viewHeight = height
+                viewHeight = height,
+                snackManager = snackManager
             )
         }
 

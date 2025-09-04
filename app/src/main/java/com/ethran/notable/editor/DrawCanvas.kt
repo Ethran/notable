@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.db.handleSelect
@@ -51,6 +52,7 @@ import com.ethran.notable.editor.utils.prepareForPartialUpdate
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.editor.utils.restoreDefaults
+import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.toPageCoordinates
 import com.ethran.notable.editor.utils.transformToLine
@@ -151,7 +153,7 @@ class DrawCanvas(
         // It might be bad idea, but plan is to insert graphic in this, and then take it from it
         // There is probably better way
         var addImageByUri = MutableStateFlow<Uri?>(null)
-        var rectangleToSelect = MutableStateFlow<Rect?>(null)
+        var rectangleToSelectByGesture = MutableStateFlow<Rect?>(null)
         var drawingInProgress = Mutex()
 
         private suspend fun waitForDrawing() {
@@ -343,14 +345,18 @@ class DrawCanvas(
 
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
+            if (GlobalAppSettings.current.openGLRendering) {
             prepareForPartialUpdate(this@DrawCanvas, touchHelper)
-            log.d("Eraser Mode")
+                log.d("Eraser Mode")
+            }
             isErasing = true
         }
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
+            if (GlobalAppSettings.current.openGLRendering) {
             restoreDefaults(this@DrawCanvas)
-            glRenderer.clearPointBuffer()
+                glRenderer.clearPointBuffer()
+            }
             glRenderer.frontBufferRenderer?.cancel()
         }
 
@@ -412,6 +418,8 @@ class DrawCanvas(
                 log.i("surface created $holder")
                 // set up the drawing surface
                 updateActiveSurface()
+                // Restore the correct stroke size and style.
+                updatePenAndStroke()
             }
 
             override fun surfaceChanged(
@@ -462,7 +470,7 @@ class DrawCanvas(
         coroutineScope.launch(Dispatchers.Main.immediate) {
             forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
-                logCanvasObserver.v("Force update, zone: $dirtyRectangle")
+                logCanvasObserver.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 launch(Dispatchers.Default) {
@@ -487,6 +495,7 @@ class DrawCanvas(
                 logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
+                    updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvasToView(null)
                 } else {
                     isDrawing.emit(false)
@@ -496,6 +505,7 @@ class DrawCanvas(
         coroutineScope.launch {
             page.zoomLevel.drop(1).collect {
                 logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
+                PageDataManager.setPageZoom(page.id, page.zoomLevel.value)
                 updatePenAndStroke()
             }
         }
@@ -518,7 +528,7 @@ class DrawCanvas(
             }
         }
         coroutineScope.launch {
-            rectangleToSelect.drop(1).collect {
+            rectangleToSelectByGesture.drop(1).collect {
                 if (it != null) {
                     logCanvasObserver.v("Area to Select (screen): $it")
                     selectRectangle(it)
@@ -535,8 +545,7 @@ class DrawCanvas(
         }
         coroutineScope.launch {
             eraserTouchPoint.collect { p ->
-                if (!isErasing) {
-                    logCanvasObserver.v("Didn't draw point: $p -- eraser is not active")
+                if (!isErasing || !GlobalAppSettings.current.openGLRendering) {
                     return@collect
                 }
                 logCanvasObserver.v("collected: $p")
@@ -627,16 +636,20 @@ class DrawCanvas(
 
     }
 
+    /**
+     * handles selection, and decide if we should exit the animation mode
+     */
     private suspend fun selectRectangle(rectToSelect: Rect) {
         val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
 
         val imagesToSelect = PageDataManager.getImagesInRectangle(inPageCoordinates, page.id)
         val strokesToSelect = PageDataManager.getStrokesInRectangle(inPageCoordinates, page.id)
         if (imagesToSelect.isNotNull() && strokesToSelect.isNotNull()) {
-            rectangleToSelect.value = null
+            rectangleToSelectByGesture.value = null
             if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
                 selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
             } else {
+                setAnimationMode(false)
                 SnackState.Companion.globalSnackFlow.emit(
                     SnackConf(
                         text = "There isn't anything.",

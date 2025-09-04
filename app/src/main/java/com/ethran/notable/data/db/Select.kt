@@ -154,9 +154,9 @@ fun handleSelect(
     val state = editorState.selectionState
 
     val firstPointPosition =
-        if (points.first().x < 50) SelectPointPosition.LEFT else if (points.first().x > page.width - 50) SelectPointPosition.RIGHT else SelectPointPosition.CENTER
+        if (points.first().x < 50) SelectPointPosition.LEFT else if (points.first().x > page.viewWidth - 50) SelectPointPosition.RIGHT else SelectPointPosition.CENTER
     val lastPointPosition =
-        if (points.last().x < 50) SelectPointPosition.LEFT else if (points.last().x > page.width - 50) SelectPointPosition.RIGHT else SelectPointPosition.CENTER
+        if (points.last().x < 50) SelectPointPosition.LEFT else if (points.last().x > page.viewWidth - 50) SelectPointPosition.RIGHT else SelectPointPosition.CENTER
 
     if (firstPointPosition != SelectPointPosition.CENTER && lastPointPosition != SelectPointPosition.CENTER && firstPointPosition != lastPointPosition) {
         // Page cut situation
@@ -165,7 +165,7 @@ fun handleSelect(
         // lets make this end to end
         val completePoints =
             listOf(SimplePointF(0f, correctedPoints.first().y)) + correctedPoints + listOf(
-                SimplePointF(page.width.toFloat(), correctedPoints.last().y)
+                SimplePointF(page.viewWidth.toFloat(), correctedPoints.last().y)
             )
         if (state.firstPageCut == null) {
             // this is the first page cut

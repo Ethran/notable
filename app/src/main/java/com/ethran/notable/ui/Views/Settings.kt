@@ -529,6 +529,12 @@ fun DebugSettings(kv: KvProxy, settings: AppSettings) {
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(simpleRendering = isChecked))
             })
+        SettingToggleRow(
+            label = "Use openGL rendering for eraser.",
+            value = settings.openGLRendering,
+            onToggle = { isChecked ->
+                kv.setAppSettings(settings.copy(openGLRendering = isChecked))
+            })
     }
 }
 

@@ -452,7 +452,7 @@ private fun resolveGesture(
             log.i("select")
             scope.launch {
 //                log.w( "rect in screen coord: $rectangle")
-                DrawCanvas.rectangleToSelect.emit(rectangle)
+                DrawCanvas.rectangleToSelectByGesture.emit(rectangle)
             }
         }
     }

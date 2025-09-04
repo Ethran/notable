@@ -69,6 +69,8 @@ class EditorControlTower(
     }
 
     fun onPinchToZoom(delta: Float, center: Offset?) {
+        if (state.mode == Mode.Select)
+            return
         scope.launch {
             scrollInProgress.withLock {
                 if (GlobalAppSettings.current.simpleRendering || !GlobalAppSettings.current.continuousZoom)
