@@ -76,7 +76,6 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -323,9 +322,6 @@ class DrawCanvas(
                             } else {
                                 log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                                 drawCanvasToView(erasedByScribbleDirtyRect)
-                                // we need to wait before refreshing, as onyx library has its own buffer that needs to be updated. Otherwise we will refresh to correct, then  incorrect and then correct state.
-                                awaitFrame()
-                                awaitFrame()
                                 partialRefreshRegionOnce(
                                     this@DrawCanvas,
                                     erasedByScribbleDirtyRect,

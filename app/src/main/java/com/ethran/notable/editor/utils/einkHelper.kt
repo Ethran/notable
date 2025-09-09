@@ -273,6 +273,9 @@ fun restoreDefaults(view: View) {
 fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelper) {
     refreshScreenRegion(view, dirtyRect)
     resetScreenFreeze(touchHelper)
+    // we need to wait before refreshing, as onyx library has its own buffer that needs to be updated. Otherwise we will refresh to correct, then  incorrect and then correct state.
+//    delay(100)
+//    resetScreenFreeze(touchHelper)
 }
 
 fun resetScreenFreeze(touchHelper: TouchHelper, view: View? = null) {
