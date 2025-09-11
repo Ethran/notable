@@ -542,11 +542,12 @@ object PageDataManager {
 
     private fun stopObservingBackground(pageId: String) {
         synchronized(fileObservers) {
-            fileToPages.forEach { (filePath, pageIds) ->
+            val iterator = fileToPages.entries.iterator()
+            while (iterator.hasNext()) {
+                val (filePath, pageIds) = iterator.next()
                 if (pageIds.remove(pageId) && pageIds.isEmpty()) {
-                    // No more pages using this file
                     fileObservers.remove(filePath)?.stopWatching()
-                    fileToPages.remove(filePath)
+                    iterator.remove()
                 }
             }
         }
