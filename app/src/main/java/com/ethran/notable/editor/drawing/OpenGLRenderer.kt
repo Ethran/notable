@@ -177,10 +177,6 @@ class OpenGLRenderer(
             pressure = motionEvent.pressure,
             x = motionEvent.x,
             y = motionEvent.y,
-            size = 0f,
-            tiltX = 0,
-            tiltY = 0,
-            timestamp = 0
         )
     }
 

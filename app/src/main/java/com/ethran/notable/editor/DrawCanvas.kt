@@ -300,13 +300,14 @@ class DrawCanvas(
                             // transform points to page space
                             val scaledPoints =
                                 copyInput(plist.points, page.scroll, page.zoomLevel.value)
-
+                            val firstPointTime = plist.points.first().timestamp
                             val erasedByScribbleDirtyRect = handleScribbleToErase(
                                 page,
                                 scaledPoints,
                                 history,
                                 getActualState().pen,
-                                currentLastStrokeEndTime
+                                currentLastStrokeEndTime,
+                                firstPointTime
                             )
                             if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
                                 log.d("Drawing...")
@@ -550,10 +551,8 @@ class DrawCanvas(
                     x = p.x,
                     y = p.y,
                     pressure = 1f,
-                    size = 10f,
                     tiltX = 0,
                     tiltY = 0,
-                    timestamp = 0,
                 )
                 glRenderer.frontBufferRenderer?.renderFrontBufferedLayer(strokePoint)
             }

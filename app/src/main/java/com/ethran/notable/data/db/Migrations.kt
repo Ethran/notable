@@ -1,9 +1,11 @@
 package com.ethran.notable.data.db
 
 import androidx.room.RenameColumn
+import androidx.room.TypeConverter
 import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.serialization.json.Json
 
 val MIGRATION_16_17 = object : Migration(16, 17) {
     override fun migrate(database: SupportSQLiteDatabase) {
@@ -51,3 +53,110 @@ class AutoMigration30to31 : AutoMigrationSpec
     )
 )
 class AutoMigration31to32 : AutoMigrationSpec
+
+
+val MIGRATION_32_33 = object : Migration(32, 33) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+
+        // 1. Create new table with BLOB points + mask column.
+        // IMPORTANT: Column order & types must match new entity expectations.
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `stroke_new` (
+                `id` TEXT NOT NULL,
+                `size` REAL NOT NULL,
+                `pen` TEXT NOT NULL,
+                `color` INTEGER NOT NULL DEFAULT 0,
+                `top` REAL NOT NULL,
+                `bottom` REAL NOT NULL,
+                `left` REAL NOT NULL,
+                `right` REAL NOT NULL,
+                `points` BLOB NOT NULL,
+                `mask` INTEGER NOT NULL DEFAULT 0,
+                `pageId` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`),
+                FOREIGN KEY(`pageId`) REFERENCES `Page`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """.trimIndent())
+
+        // 2. Read all rows from old stroke table.
+        val cursor = db.query("SELECT id,size,pen,color,top,bottom,left,right,points,pageId,createdAt,updatedAt FROM stroke")
+
+        // 3. Prepare insert into new table.
+        val insertSql = """
+            INSERT INTO stroke_new 
+            (id,size,pen,color,top,bottom,left,right,points,mask,pageId,createdAt,updatedAt)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        """.trimIndent()
+        val stmt = db.compileStatement(insertSql)
+
+        db.beginTransaction()
+        try {
+            val idIdx = cursor.getColumnIndex("id")
+            val sizeIdx = cursor.getColumnIndex("size")
+            val penIdx = cursor.getColumnIndex("pen")
+            val colorIdx = cursor.getColumnIndex("color")
+            val topIdx = cursor.getColumnIndex("top")
+            val bottomIdx = cursor.getColumnIndex("bottom")
+            val leftIdx = cursor.getColumnIndex("left")
+            val rightIdx = cursor.getColumnIndex("right")
+            val pointsIdx = cursor.getColumnIndex("points")
+            val pageIdIdx = cursor.getColumnIndex("pageId")
+            val createdIdx = cursor.getColumnIndex("createdAt")
+            val updatedIdx = cursor.getColumnIndex("updatedAt")
+
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(idIdx)
+                val size = cursor.getDouble(sizeIdx)
+                val pen = cursor.getString(penIdx)
+                val color = cursor.getInt(colorIdx)
+                val top = cursor.getDouble(topIdx)
+                val bottom = cursor.getDouble(bottomIdx)
+                val left = cursor.getDouble(leftIdx)
+                val right = cursor.getDouble(rightIdx)
+                val pointsJson = cursor.getString(pointsIdx) ?: "[]"
+                val pageId = cursor.getString(pageIdIdx)
+                val createdAt = cursor.getLong(createdIdx)
+                val updatedAt = cursor.getLong(updatedIdx)
+
+                // Decode JSON → List<StrokePoint>
+                val pointsList = try {
+                    Json.decodeFromString<List<StrokePoint>>(pointsJson)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                val mask = computeStrokeMask(pointsList)
+                val blob = encodeStrokePoints(pointsList, mask)
+
+                // Bind & execute
+                stmt.clearBindings()
+                stmt.bindString(1, id)
+                stmt.bindDouble(2, size)
+                stmt.bindString(3, pen)
+                stmt.bindLong(4, color.toLong())
+                stmt.bindDouble(5, top)
+                stmt.bindDouble(6, bottom)
+                stmt.bindDouble(7, left)
+                stmt.bindDouble(8, right)
+                stmt.bindBlob(9, blob)
+                stmt.bindLong(10, mask.toLong())
+                stmt.bindString(11, pageId)
+                stmt.bindLong(12, createdAt)
+                stmt.bindLong(13, updatedAt)
+                stmt.executeInsert()
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            cursor.close()
+            db.endTransaction()
+        }
+
+        // 4. Drop old table & rename
+        db.execSQL("DROP TABLE stroke")
+        db.execSQL("ALTER TABLE stroke_new RENAME TO stroke")
+
+        // 5. Recreate index on pageId (if previously existed)
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_stroke_pageId` ON `stroke` (`pageId`)")
+    }
+}

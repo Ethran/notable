@@ -77,7 +77,13 @@ fun <T> calculateBoundingBox(
 fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
     return stroke.points.map {
         TouchPoint(
-            it.x, it.y, it.pressure, stroke.size, it.tiltX, it.tiltY, it.timestamp
+            it.x,
+            it.y,
+            it.pressure ?: 1f,
+            stroke.size,
+            it.tiltX ?: 0,
+            it.tiltY ?: 0,
+            stroke.updatedAt.time
         )
     }
 }
@@ -88,9 +94,7 @@ fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
         x = x / scale + scroll.x,
         y = y / scale + scroll.y,
         pressure = pressure,
-        size = size,
         tiltX = tiltX,
         tiltY = tiltY,
-        timestamp = timestamp,
     )
 }

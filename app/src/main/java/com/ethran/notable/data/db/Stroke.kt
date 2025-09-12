@@ -1,16 +1,11 @@
 package com.ethran.notable.data.db
 
 import android.content.Context
-import androidx.room.ColumnInfo
-import androidx.room.Dao
-import androidx.room.Entity
-import androidx.room.ForeignKey
-import androidx.room.Insert
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Transaction
-import androidx.room.Update
+import androidx.room.*
 import com.ethran.notable.editor.utils.Pen
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import java.util.Date
 import java.util.UUID
 
@@ -18,11 +13,12 @@ import java.util.UUID
 data class StrokePoint(
     val x: Float,
     var y: Float,
-    val pressure: Float,
-    val size: Float, //TODO: remove? It seams the same as Stroke size
-    val tiltX: Int,
-    val tiltY: Int,
-    val timestamp: Long,
+    val pressure: Float? = null,
+    val tiltX: Int? = null,
+    val tiltY: Int? = null,
+    val dt: UShort? = null,
+    @SerialName("timestamp") private val legacyTimestamp: Long? = null,
+    @SerialName("size") private val legacySize: Float? = null,
 )
 
 @Entity(

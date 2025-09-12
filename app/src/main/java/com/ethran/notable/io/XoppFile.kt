@@ -167,7 +167,7 @@ object XoppFile {
             strokeElement.setAttribute("color", getColorName(Color(stroke.color)))
             val widthValues = mutableListOf(stroke.size * scaleFactor)
             if (stroke.pen == Pen.FOUNTAIN || stroke.pen == Pen.BRUSH || stroke.pen == Pen.PENCIL)
-                widthValues += stroke.points.map { it.pressure / pressureFactor }
+                widthValues += stroke.points.map { it.pressure?.div(pressureFactor) ?: 1f }
             val widthString = widthValues.joinToString(" ")
 
             strokeElement.setAttribute("width", widthString)
@@ -385,10 +385,8 @@ object XoppFile {
                         y = chunk[1].toFloat() / scaleFactor,
                         pressure = pressureValues.getOrNull(index - 1)?.times(pressureFactor)
                             ?: (maxPressure / 2),
-                        size = strokeSize,
                         tiltX = 0,
                         tiltY = 0,
-                        timestamp = System.currentTimeMillis()
                     )
                 } catch (e: Exception) {
                     Log.Companion.e(TAG, "Error parsing stroke point: ${e.message}")
