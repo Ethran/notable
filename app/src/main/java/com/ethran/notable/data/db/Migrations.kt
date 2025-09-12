@@ -1,10 +1,16 @@
 package com.ethran.notable.data.db
 
+import android.util.Log
 import androidx.room.RenameColumn
 import androidx.room.TypeConverter
 import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.invoke
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 val MIGRATION_16_17 = object : Migration(16, 17) {
@@ -57,56 +63,76 @@ class AutoMigration31to32 : AutoMigrationSpec
 
 val MIGRATION_32_33 = object : Migration(32, 33) {
     override fun migrate(db: SupportSQLiteDatabase) {
-
-        // 1. Create new table with BLOB points + mask column.
-        // IMPORTANT: Column order & types must match new entity expectations.
-        db.execSQL("""
+        // 1) Create new table with the exact defaults Room expects
+        db.execSQL(
+            """
             CREATE TABLE IF NOT EXISTS `stroke_new` (
                 `id` TEXT NOT NULL,
                 `size` REAL NOT NULL,
                 `pen` TEXT NOT NULL,
-                `color` INTEGER NOT NULL DEFAULT 0,
+                `color` INTEGER NOT NULL DEFAULT 0xFF000000,
                 `top` REAL NOT NULL,
                 `bottom` REAL NOT NULL,
                 `left` REAL NOT NULL,
                 `right` REAL NOT NULL,
                 `points` BLOB NOT NULL,
-                `mask` INTEGER NOT NULL DEFAULT 0,
                 `pageId` TEXT NOT NULL,
                 `createdAt` INTEGER NOT NULL,
                 `updatedAt` INTEGER NOT NULL,
                 PRIMARY KEY(`id`),
                 FOREIGN KEY(`pageId`) REFERENCES `Page`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
             )
-        """.trimIndent())
+            """.trimIndent()
+        )
 
-        // 2. Read all rows from old stroke table.
-        val cursor = db.query("SELECT id,size,pen,color,top,bottom,left,right,points,pageId,createdAt,updatedAt FROM stroke")
-
-        // 3. Prepare insert into new table.
-        val insertSql = """
-            INSERT INTO stroke_new 
-            (id,size,pen,color,top,bottom,left,right,points,mask,pageId,createdAt,updatedAt)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-        """.trimIndent()
-        val stmt = db.compileStatement(insertSql)
-
+        // 2) Copy from old stroke, converting JSON->BLOB for points
         db.beginTransaction()
+        val cursor = db.query(
+            "SELECT id,size,pen,color,top,bottom,left,right,points,pageId,createdAt,updatedAt FROM `Stroke`"
+        )
+        val totalRows = cursor.count
+        val progressSnackId = "migration_progress"
+
+        // Initial snack (0%)
+        if (totalRows > 0) {
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    id = progressSnackId,
+                    text = "Migrating strokes: 0% (0/$totalRows)",
+                    duration = null
+                )
+            )
+        } else {
+            // Nothing to do
+            cursor.close()
+            return
+        }
+
+        var processed = 0
+        var lastPercent = -1
         try {
-            val idIdx = cursor.getColumnIndex("id")
-            val sizeIdx = cursor.getColumnIndex("size")
-            val penIdx = cursor.getColumnIndex("pen")
-            val colorIdx = cursor.getColumnIndex("color")
-            val topIdx = cursor.getColumnIndex("top")
-            val bottomIdx = cursor.getColumnIndex("bottom")
-            val leftIdx = cursor.getColumnIndex("left")
-            val rightIdx = cursor.getColumnIndex("right")
-            val pointsIdx = cursor.getColumnIndex("points")
-            val pageIdIdx = cursor.getColumnIndex("pageId")
-            val createdIdx = cursor.getColumnIndex("createdAt")
-            val updatedIdx = cursor.getColumnIndex("updatedAt")
+            val idIdx = cursor.getColumnIndexOrThrow("id")
+            val sizeIdx = cursor.getColumnIndexOrThrow("size")
+            val penIdx = cursor.getColumnIndexOrThrow("pen")
+            val colorIdx = cursor.getColumnIndexOrThrow("color")
+            val topIdx = cursor.getColumnIndexOrThrow("top")
+            val bottomIdx = cursor.getColumnIndexOrThrow("bottom")
+            val leftIdx = cursor.getColumnIndexOrThrow("left")
+            val rightIdx = cursor.getColumnIndexOrThrow("right")
+            val pointsIdx = cursor.getColumnIndexOrThrow("points")
+            val pageIdIdx = cursor.getColumnIndexOrThrow("pageId")
+            val createdIdx = cursor.getColumnIndexOrThrow("createdAt")
+            val updatedIdx = cursor.getColumnIndexOrThrow("updatedAt")
+
+            val insertSql = """
+                INSERT INTO `stroke_new` 
+                (id,size,pen,color,top,bottom,left,right,points,pageId,createdAt,updatedAt)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """.trimIndent()
+            val stmt = db.compileStatement(insertSql)
 
             while (cursor.moveToNext()) {
+                processed++
                 val id = cursor.getString(idIdx)
                 val size = cursor.getDouble(sizeIdx)
                 val pen = cursor.getString(penIdx)
@@ -121,15 +147,10 @@ val MIGRATION_32_33 = object : Migration(32, 33) {
                 val updatedAt = cursor.getLong(updatedIdx)
 
                 // Decode JSON → List<StrokePoint>
-                val pointsList = try {
-                    Json.decodeFromString<List<StrokePoint>>(pointsJson)
-                } catch (_: Exception) {
-                    emptyList()
-                }
+                val pointsList = Json.decodeFromString<List<StrokePoint>>(pointsJson)
                 val mask = computeStrokeMask(pointsList)
                 val blob = encodeStrokePoints(pointsList, mask)
 
-                // Bind & execute
                 stmt.clearBindings()
                 stmt.bindString(1, id)
                 stmt.bindDouble(2, size)
@@ -140,11 +161,22 @@ val MIGRATION_32_33 = object : Migration(32, 33) {
                 stmt.bindDouble(7, left)
                 stmt.bindDouble(8, right)
                 stmt.bindBlob(9, blob)
-                stmt.bindLong(10, mask.toLong())
-                stmt.bindString(11, pageId)
-                stmt.bindLong(12, createdAt)
-                stmt.bindLong(13, updatedAt)
+                stmt.bindString(10, pageId)
+                stmt.bindLong(11, createdAt)
+                stmt.bindLong(12, updatedAt)
                 stmt.executeInsert()
+                val percent = (processed * 100) / totalRows
+                if (percent > lastPercent) {
+                    Log.d("MIGRATION", "Migrating strokes: $percent% ($processed/$totalRows)")
+                    lastPercent = percent
+                    SnackState.globalSnackFlow.tryEmit(
+                        SnackConf(
+                            id = progressSnackId,
+                            text = "Migrating strokes: $percent% ($processed/$totalRows)",
+                            duration = null
+                        )
+                    )
+                }
             }
             db.setTransactionSuccessful()
         } finally {
@@ -152,11 +184,11 @@ val MIGRATION_32_33 = object : Migration(32, 33) {
             db.endTransaction()
         }
 
-        // 4. Drop old table & rename
-        db.execSQL("DROP TABLE stroke")
-        db.execSQL("ALTER TABLE stroke_new RENAME TO stroke")
+        // 3) Drop old table & rename
+        db.execSQL("DROP TABLE `Stroke`")
+        db.execSQL("ALTER TABLE `stroke_new` RENAME TO `Stroke`")
 
-        // 5. Recreate index on pageId (if previously existed)
-        db.execSQL("CREATE INDEX IF NOT EXISTS `index_stroke_pageId` ON `stroke` (`pageId`)")
+        // 4) Recreate index with the exact expected identifier
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_Stroke_pageId` ON `Stroke` (`pageId`)")
     }
 }

@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.ethran.notable.TAG
+import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -52,8 +54,8 @@ class SnackState {
     // this does work, but I have doubts if it is a proper way for doing it
     // Register Observers for Global Actions
     companion object {
-        val globalSnackFlow = MutableSharedFlow<SnackConf>()
-        val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 1)
+        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 1)
+        val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 5)
     }
 
     fun registerGlobalSnackObserver() {
@@ -106,6 +108,7 @@ class SnackState {
 
 @Composable
 fun SnackBar(state: SnackState) {
+    Log.i(TAG, "Snack Bar started")
     val snacks = remember {
         mutableStateListOf<SnackConf>()
     }

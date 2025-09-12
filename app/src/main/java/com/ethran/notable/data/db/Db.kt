@@ -31,12 +31,6 @@ class Converters {
         return date?.time
     }
 
-
-    /**
-     * Store only the point blob. Caller is responsible for writing stroke.mask column
-     * using computeStrokeMask(points). If you prefer to trust the blob’s embedded mask,
-     * decode and overwrite the column after reading.
-     */
     @TypeConverter
     fun fromStrokePoints(points: List<StrokePoint>?): ByteArray? {
         if (points == null) return null
