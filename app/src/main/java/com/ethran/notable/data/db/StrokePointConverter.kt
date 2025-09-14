@@ -4,10 +4,13 @@ import android.util.Log
 import com.ethran.notable.TAG
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import net.jpountz.lz4.LZ4Factory
+import net.jpountz.lz4.LZ4FrameInputStream
+import net.jpountz.lz4.LZ4FrameOutputStream
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.pow
-import kotlin.math.sqrt
 
 /* ------------------ Mask Bits & Helpers ------------------ */
 
@@ -37,9 +40,9 @@ fun computeStrokeMask(points: List<StrokePoint>): Int {
     val p = points[0]
     var m = 0
     if (p.pressure != null) m = m or PRESSURE_MASK
-    if (p.tiltX != null)    m = m or TILT_X_MASK
-    if (p.tiltY != null)    m = m or TILT_Y_MASK
-    if (p.dt != null)       m = m or DT_MASK
+    if (p.tiltX != null) m = m or TILT_X_MASK
+    if (p.tiltY != null) m = m or TILT_Y_MASK
+    if (p.dt != null) m = m or DT_MASK
     return m
 }
 
@@ -70,24 +73,24 @@ private fun validateUniform(mask: Int, points: List<StrokePoint>) {
     }
 }
 
-/* ------------------ SB1 Encoding ------------------ */
-/*
+/* ------------------ SB1 Encoding ------------------ *//*
 Header (little-endian):
-  MAGIC0 (1 byte) = 'S'
-  MAGIC1 (1 byte) = 'B'
-  VERSION (1 byte) = 1
-  MASK (1 byte)
-  COUNT (4 bytes, Int)
-  X_SIZE (4 bytes, Int)
-  X_DATA [X_SIZE]
-  Y_SIZE (4 bytes, Int)
-  Y_DATA [Y_SIZE]
-Then, for each present channel,in fixed SoA order:
-  [if mask&PRESSURE] pressure[count] float
-  [if mask&TILT_X]   tiltX[count] int
-  [if mask&TILT_Y]   tiltY[count] int
-  [if mask&DT]       dt[count] uint16
-
+     MAGIC0 (1 byte) = 'S'
+     MAGIC1 (1 byte) = 'B'
+     VERSION (1 byte) = 1
+     MASK (1 byte)
+     COUNT (4 bytes, Int)
+     COMPRESSION (1 byte) = 0 (no), 1 (LZ4)
+   Body (compressed or uncompressed):
+     X_SIZE (4 bytes, Int)
+     X_DATA [X_SIZE]
+     Y_SIZE (4 bytes, Int)
+     Y_DATA [Y_SIZE]
+     [if mask&PRESSURE] pressure[count] int16
+     [if mask&TILT_X]   tiltX[count] int8
+     [if mask&TILT_Y]   tiltY[count] int8
+     [if mask&DT]       dt[count] uint16
+--------
 Notes:
 - ENCODE_SIZE is always present for each channel, regardless of encoding.
 - COUNT is the logical number of points for the stroke (for metadata or array allocation).
@@ -98,27 +101,50 @@ Notes:
 private const val MAGIC0: Byte = 'S'.code.toByte()
 private const val MAGIC1: Byte = 'B'.code.toByte()
 private const val FORMAT_VERSION: Byte = 1
-private const val HEADER_SIZE: Int = 1 + 1 + 1 + 1 + 4
+private const val HEADER_SIZE: Int = 1 + 1 + 1 + 1 + 1 + 4
+
+// Compression flag values
+private const val COMPRESSION_NONE: Byte = 0
+private const val COMPRESSION_LZ4: Byte = 1
+private const val MIN_BYTES_FOR_COMPRESSION: Int = 256
 
 // Reserved for future use if you ever support per-point null dt in a later version.
 private const val DT_NULL_SENTINEL_INT = 0xFFFF  // 65535
 private const val DT_MAX_VALUE_INT = DT_NULL_SENTINEL_INT - 1  // 65534
+private const val MIN_SAVING_RATIO: Double = 0.92
 
 // Encoding precision constants
 private const val ENCODING_PRECISION_XY = 2
 
+
+/* ------------------ LZ4 Helpers ------------------ */
+
+private fun lz4CompressFrame(raw: ByteArray): ByteArray {
+    val baos = ByteArrayOutputStream()
+    LZ4FrameOutputStream(baos).use { it.write(raw) }
+    return baos.toByteArray()
+}
+
+private fun lz4DecompressFrame(compressed: ByteArray, offset: Int, length: Int): ByteArray {
+    require(length > 0) { "No LZ4 data (length=0)" }
+    ByteArrayInputStream(compressed, offset, length).use { bais ->
+        LZ4FrameInputStream(bais).use { lz4 ->
+            return lz4.readBytes()
+        }
+    }
+}
+
+/* ------------------ Encoding ------------------ */
+
 @Suppress("KotlinConstantConditions")
 fun encodeStrokePoints(
-    points: List<StrokePoint>,
-    mask: Int = computeStrokeMask(points)
+    points: List<StrokePoint>, mask: Int = computeStrokeMask(points)
 ): ByteArray {
     if (points.first().y > 1000000f) {
         Log.e(TAG, "Page is too large!")
         SnackState.globalSnackFlow.tryEmit(
             SnackConf(
-                id = "oversize",
-                text = "Page is too large!",
-                duration = 4000
+                id = "oversize", text = "Page is too large!", duration = 4000
             )
         )
         throw IllegalArgumentException("Page is too large!")
@@ -129,54 +155,71 @@ fun encodeStrokePoints(
     validateUniform(mask, points)
 
     // encode mandatory data, using Polyline
-    val encodedX = encode(points.map { it.x }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
-    val encodedY = encode(points.map { it.y }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
+    val encodedX =
+        encode(points.map { it.x }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
+    val encodedY =
+        encode(points.map { it.y }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
 
     val hasP = mask.hasPressure()
     val hasTX = mask.hasTiltX()
     val hasTY = mask.hasTiltY()
     val hasDT = mask.hasDeltaTime()
 
-    // Size calculation
-    var size = HEADER_SIZE + 4 + encodedX.size + 4 + encodedY.size
-    if (hasP)  size += count * 2  // values 0 to 4098
-    if (hasTX) size += count * 1  // values -90  to 90
-    if (hasTY) size += count * 1  // values -90  to 90
-    if (hasDT) size += count * 2
-    require(size >= HEADER_SIZE) { "Invalid encoded size" }
+    // Build raw (uncompressed) body first to optionally compress
+    val rawBodySize =
+        4 + encodedX.size + 4 + encodedY.size + (if (hasP) count * 2 else 0) + (if (hasTX) count * 1 else 0) + (if (hasTY) count * 1 else 0) + (if (hasDT) count * 2 else 0)
 
-    val buffer = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
-    buffer.put(MAGIC0)
-    buffer.put(MAGIC1)
-    buffer.put(FORMAT_VERSION)
-    buffer.put(mask.toByte())
-    buffer.putInt(count)
+    val bodyBuffer = ByteBuffer.allocate(rawBodySize).order(ByteOrder.LITTLE_ENDIAN)
+    // Body layout
+    bodyBuffer.putInt(encodedX.size)
+    bodyBuffer.put(encodedX)
+    bodyBuffer.putInt(encodedY.size)
+    bodyBuffer.put(encodedY)
 
-    // Mandatory coordinates
-    buffer.putInt(encodedX.size)
-    buffer.put(encodedX)
-    buffer.putInt(encodedY.size)
-    buffer.put(encodedY)
-
-    if (mask.hasPressure()) {
-        for (p in points) buffer.putShort(p.pressure!!.toInt().toShort())
+    if (hasP) {
+        for (p in points) bodyBuffer.putShort(p.pressure!!.toInt().toShort())
     }
-    if (mask.hasTiltX()) {
-        for (p in points) buffer.put(p.tiltX!!.toByte())
+    if (hasTX) {
+        for (p in points) bodyBuffer.put(p.tiltX!!.toByte())
     }
-    if (mask.hasTiltY()) {
-        for (p in points) buffer.put(p.tiltY!!.toByte())
+    if (hasTY) {
+        for (p in points) bodyBuffer.put(p.tiltY!!.toByte())
     }
-    if (mask.hasDeltaTime()) {
+    if (hasDT) {
         for (p in points) {
             val v = p.dt!!.toInt().coerceIn(0, DT_MAX_VALUE_INT)
-            buffer.putShort(v.toShort()) // lower 16 bits; sign doesn't matter
+            bodyBuffer.putShort(v.toShort())
         }
     }
-    return buffer.array()
+
+    val rawBody = bodyBuffer.array()
+    val (compressionFlag, finalBody) = if (rawBody.size >= MIN_BYTES_FOR_COMPRESSION) {
+        val compressed = lz4CompressFrame(rawBody)
+        if (compressed.size.toDouble() <= rawBody.size * MIN_SAVING_RATIO) {
+            COMPRESSION_LZ4 to compressed
+        } else {
+            COMPRESSION_NONE to rawBody
+        }
+    } else {
+        COMPRESSION_NONE to rawBody
+    }
+
+    // Allocate final buffer: header + body
+    val totalSize = HEADER_SIZE + finalBody.size
+    val out = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN)
+    // Header
+    out.put(MAGIC0)
+    out.put(MAGIC1)
+    out.put(FORMAT_VERSION)
+    out.put(mask.toByte())
+    out.putInt(count)
+    out.put(compressionFlag)
+
+    // Body (compressed or raw)
+    out.put(finalBody)
+
+    return out.array()
 }
-
-
 
 
 /**
@@ -207,27 +250,47 @@ fun getStrokeMask(bytes: ByteArray): Int {
  * if a decoded dt equals 0xFFFF, it returns null for that field.
  */
 fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
-    val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-    if (buffer.remaining() < HEADER_SIZE) {
-        throw IllegalArgumentException("Buffer too small for header")
+    if (bytes.size < HEADER_SIZE + 8) {
+        throw IllegalArgumentException("Buffer too small for SB1 header (need $HEADER_SIZE bytes)")
     }
-    val m0 = buffer.get()
-    val m1 = buffer.get()
+//    val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    val header = ByteBuffer.wrap(bytes, 0, HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+
+
+    val m0 = header.get()
+    val m1 = header.get()
     if (m0 != MAGIC0 || m1 != MAGIC1) {
         throw IllegalArgumentException("Bad magic, not a Stroke binary")
     }
-    val version = buffer.get()
+    val version = header.get()
     if (version > FORMAT_VERSION) {
         throw IllegalArgumentException("Unsupported version: $version")
     }
-    val mask = buffer.get().toInt() and 0xFF
-    val count = buffer.int
+    val mask = header.get().toInt() and 0xFF
+    val count = header.int
     if (count < 0) throw IllegalArgumentException("Negative point count")
+    val compressionFlag = header.get()
+
+
+    val buffer: ByteBuffer = when (compressionFlag) {
+        COMPRESSION_NONE -> {
+            ByteBuffer.wrap(bytes, HEADER_SIZE, bytes.size - HEADER_SIZE)
+                .order(ByteOrder.LITTLE_ENDIAN)
+        }
+
+        COMPRESSION_LZ4 -> {
+            // Decompress from the existing array without creating a body copy first
+            ByteBuffer.wrap(lz4DecompressFrame(bytes, HEADER_SIZE, bytes.size - HEADER_SIZE))
+                .order(ByteOrder.LITTLE_ENDIAN)
+        }
+
+        else -> throw IllegalArgumentException("Unknown compression flag $compressionFlag")
+    }
 
     // decode mandatory coordinates
     val xs = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
     val ys = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
-    require(xs.size ==count && ys.size == count) { "Point count mismatch, xs=${xs.size} ys=${ys.size} count=$count, $ys" }
+    require(xs.size == count && ys.size == count) { "Point count mismatch, xs=${xs.size} ys=${ys.size} count=$count, $ys" }
 
     val pressures: ShortArray? = if (mask.hasPressure()) {
         if (buffer.remaining() < count * 2) throw IllegalArgumentException("Truncated pressure section")
