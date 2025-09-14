@@ -5,12 +5,11 @@ import android.database.sqlite.SQLiteBlobTooBigException
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.serialization.json.Json
 
-
 private val log = ShipBook.getLogger("StrokeReencode")
-
 
 /**
  * Runtime backfill:
@@ -34,6 +33,7 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
 
     var batchSize = 1500
     val progressSnackId = "migration_progress"
+    val maxPressure = EpdController.getMaxTouchPressure().toLong()
 
     while (true) {
         val remaining = countRemaining(db, "stroke_old")
@@ -88,8 +88,8 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
             val insertStmt = db.compileStatement(
                 """
                 INSERT OR IGNORE INTO stroke
-                (id,size,pen,color,top,bottom,left,right,points,pageId,createdAt,updatedAt)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                (id,size,pen,color,maxPressure,top,bottom,left,right,points,pageId,createdAt,updatedAt)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """.trimIndent()
             )
             val deleteStmt = db.compileStatement("DELETE FROM stroke_old WHERE id=?")
@@ -118,14 +118,15 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
                     insertStmt.bindDouble(2, size)
                     insertStmt.bindString(3, pen)
                     insertStmt.bindLong(4, color.toLong())
-                    insertStmt.bindDouble(5, top)
-                    insertStmt.bindDouble(6, bottom)
-                    insertStmt.bindDouble(7, left)
-                    insertStmt.bindDouble(8, right)
-                    insertStmt.bindBlob(9, blob)
-                    insertStmt.bindString(10, pageId)
-                    insertStmt.bindLong(11, createdAt)
-                    insertStmt.bindLong(12, updatedAt)
+                    insertStmt.bindLong(5, maxPressure)
+                    insertStmt.bindDouble(6, top)
+                    insertStmt.bindDouble(7, bottom)
+                    insertStmt.bindDouble(8, left)
+                    insertStmt.bindDouble(9, right)
+                    insertStmt.bindBlob(10, blob)
+                    insertStmt.bindString(11, pageId)
+                    insertStmt.bindLong(12, createdAt)
+                    insertStmt.bindLong(13, updatedAt)
                     insertStmt.executeInsert()
 
                     deleteStmt.clearBindings()

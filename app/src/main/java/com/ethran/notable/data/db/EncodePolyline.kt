@@ -1,6 +1,7 @@
 package com.ethran.notable.data.db
 
 import kotlin.math.pow
+import kotlin.math.round
 
 
 /**
@@ -60,7 +61,7 @@ private fun splitIntoChunks(toEncode: Int): List<Int> {
  * @param polyline-string
  * @return (long,lat)-Coordinates
  */
-fun <T : Number> decode(polyline: String, precision: Int = 5): List<T> {
+fun <T : Number> decode(polyline: String, precision: Int = 5, caster: (Double) -> T): List<T> {
     val valueChunks: MutableList<MutableList<Int>> = mutableListOf()
     valueChunks.add(mutableListOf())
 
@@ -80,32 +81,29 @@ fun <T : Number> decode(polyline: String, precision: Int = 5): List<T> {
 
     valueChunks.removeAt(valueChunks.lastIndex)
 
-    val values: MutableList<T> = mutableListOf()
-
+    val deltas: MutableList<Double> = mutableListOf()
     for (coordinateChunk in valueChunks) {
-        var coordinate = coordinateChunk.mapIndexed { i, chunk -> chunk shl (i * precision) }.reduce { i, j -> i or j }
+        var coordinate = coordinateChunk.mapIndexed { i, chunk -> chunk shl (i * 5) }.reduce { i, j -> i or j }
 
         // there is a 1 on the right if the coordinate is negative
         if (coordinate and 0x1 > 0)
             coordinate = (coordinate).inv()
 
         coordinate = coordinate shr 1
-        values.add((coordinate).toDouble() /  10.0.pow(precision))
+        deltas.add(coordinate.toDouble() / 10.0.pow(precision))
     }
 
     val points: MutableList<T> = mutableListOf()
-    var prevValue = T(0)
+    var prevValue = 0.0
 
-    for(i in 0..values.size-1) {
-        if(values[i] == 0.0)
-            continue
-
-        prevValue += values[i]
-
-        points.add(T(round(prevValue, precision)))
+    for (delta in deltas) {
+        prevValue += delta
+        points.add(caster(roundToPrecision(prevValue, precision)))
     }
     return points
 }
 
-private fun <T : Number> round(value: Double, precision: Int) =
-    T((value * Math.pow(10.0,precision.toDouble())).toInt().toDouble() / Math.pow(10.0,precision.toDouble())
+private fun roundToPrecision(value: Double, precision: Int): Double {
+    val factor = 10.0.pow(precision)
+    return round(value * factor) / factor
+}

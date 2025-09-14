@@ -423,7 +423,8 @@ object XoppFile {
                     (color.red * 255).toInt(),
                     (color.green * 255).toInt(),
                     (color.blue * 255).toInt()
-                )
+                ),
+                maxPressure = maxPressure.toInt()
             )
             strokes.add(stroke)
         }

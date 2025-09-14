@@ -1,5 +1,9 @@
 package com.ethran.notable.data.db
 
+import android.util.Log
+import com.ethran.notable.TAG
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -64,7 +68,7 @@ private fun validateUniform(mask: Int, points: List<StrokePoint>) {
     }
 }
 
-/* ------------------ Encoding ------------------ */
+/* ------------------ SB1 Encoding ------------------ */
 /*
 Header (little-endian):
   MAGIC0 (1 byte) = 'S'
@@ -72,13 +76,22 @@ Header (little-endian):
   VERSION (1 byte) = 1
   MASK (1 byte)
   COUNT (4 bytes, Int)
-Then sections in Structure-of-Arrays (SoA) order:
-  x[count] float, y[count] float
-  [if mask&PRESSURE] pressure[count] float
-  [if mask&TILT_X]   tiltX[count] int
-  [if mask&TILT_Y]   tiltY[count] int
-  [if mask&DT]       dt[count] uint16
-SB1: data must be uniform per stroke (no per-point nulls). Future versions may enable sparse/null-per-point with sentinels.
+Then, for each present channel,in fixed SoA order:
+    x,
+    y,
+    [pressure],
+    [tiltX],
+    [tiltY],
+    [dt]):
+
+  ENCODE_SIZE (4 bytes, Int)     // Size in bytes of the encoded channel data
+  ENCODED_DATA [ENCODE_SIZE]     // Channel data
+
+Notes:
+- ENCODE_SIZE is always present for each channel, regardless of encoding.
+- COUNT is the logical number of points for the stroke (for metadata or array allocation).
+- All arrays must be uniform per stroke (no per-point nulls).
+- Optional: In future, add ENCODE_TYPE, FLAGS, or META fields per channel for more flexibility.
 */
 
 private const val MAGIC0: Byte = 'S'.code.toByte()
@@ -88,18 +101,35 @@ private const val HEADER_SIZE: Int = 1 + 1 + 1 + 1 + 4
 
 // Reserved for future use if you ever support per-point null dt in a later version.
 private const val DT_NULL_SENTINEL_INT = 0xFFFF  // 65535
-private val DT_MAX_VALUE_INT = DT_NULL_SENTINEL_INT - 1  // 65534
+private const val DT_MAX_VALUE_INT = DT_NULL_SENTINEL_INT - 1  // 65534
+
+// Encoding precision constants
+private const val ENCODING_PRECISION_XY = 4
 
 @Suppress("KotlinConstantConditions")
 fun encodeStrokePoints(
     points: List<StrokePoint>,
     mask: Int = computeStrokeMask(points)
 ): ByteArray {
+    if (points.first().y > 1000000f) {
+        Log.e(TAG, "Page is too large!")
+        SnackState.globalSnackFlow.tryEmit(
+            SnackConf(
+                id = "oversize",
+                text = "Page is too large!",
+                duration = 4000
+            )
+        )
+        throw IllegalArgumentException("Page is too large!")
+    }
     val count = points.size
     require(count > 0) { "Empty point list" }
-
     // Enforce SB1 invariant before writing (gives clear error instead of NPE).
     validateUniform(mask, points)
+
+    // encode mandatory data, using Polyline
+    val encodedX = encode(points.map { it.x }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
+    val encodedY = encode(points.map { it.y }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
 
     val hasP = mask.hasPressure()
     val hasTX = mask.hasTiltX()
@@ -107,10 +137,10 @@ fun encodeStrokePoints(
     val hasDT = mask.hasDeltaTime()
 
     // Size calculation
-    var size = HEADER_SIZE + count * (4 + 4)
-    if (hasP)  size += count * 4
-    if (hasTX) size += count * 4
-    if (hasTY) size += count * 4
+    var size = HEADER_SIZE + 4 + encodedX.size + 4 + encodedY.size
+    if (hasP)  size += count * 2  // values 0 to 4098
+    if (hasTX) size += count * 1  // values -90  to 90
+    if (hasTY) size += count * 1  // values -90  to 90
     if (hasDT) size += count * 2
     require(size >= HEADER_SIZE) { "Invalid encoded size" }
 
@@ -122,30 +152,31 @@ fun encodeStrokePoints(
     buffer.putInt(count)
 
     // Mandatory coordinates
-    for (p in points) {
-        buffer.putFloat(p.x)
-        buffer.putFloat(p.y)
-    }
+    buffer.putInt(encodedX.size)
+    buffer.put(encodedX)
+    buffer.putInt(encodedY.size)
+    buffer.put(encodedY)
 
-    // Optional sections (safe to use !! after uniform validation)
-    if (hasP) {
-        for (p in points) buffer.putFloat(p.pressure!!)
+    if (mask.hasPressure()) {
+        for (p in points) buffer.putShort(p.pressure!!.toInt().toShort())
     }
-    if (hasTX) {
-        for (p in points) buffer.putInt(p.tiltX!!)
+    if (mask.hasTiltX()) {
+        for (p in points) buffer.put(p.tiltX!!.toByte())
     }
-    if (hasTY) {
-        for (p in points) buffer.putInt(p.tiltY!!)
+    if (mask.hasTiltY()) {
+        for (p in points) buffer.put(p.tiltY!!.toByte())
     }
-    if (hasDT) {
+    if (mask.hasDeltaTime()) {
         for (p in points) {
             val v = p.dt!!.toInt().coerceIn(0, DT_MAX_VALUE_INT)
             buffer.putShort(v.toShort()) // lower 16 bits; sign doesn't matter
         }
     }
-
     return buffer.array()
 }
+
+
+
 
 /**
  * Returns the mask stored in the binary header without decoding the points.
@@ -174,11 +205,7 @@ fun getStrokeMask(bytes: ByteArray): Int {
  * SB1 decoding assumes uniform presence per mask. It still tolerates a future dt null sentinel:
  * if a decoded dt equals 0xFFFF, it returns null for that field.
  */
-@Suppress("KotlinConstantConditions")
-fun decodeStrokePoints(
-    bytes: ByteArray,
-    failOnTrailing: Boolean = false
-): List<StrokePoint> {
+fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
     val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
     if (buffer.remaining() < HEADER_SIZE) {
         throw IllegalArgumentException("Buffer too small for header")
@@ -196,70 +223,57 @@ fun decodeStrokePoints(
     val count = buffer.int
     if (count < 0) throw IllegalArgumentException("Negative point count")
 
-    if (buffer.remaining() < count * 8) {
-        throw IllegalArgumentException("Truncated coordinates section")
-    }
-    val xs = FloatArray(count)
-    val ys = FloatArray(count)
-    for (i in 0 until count) {
-        xs[i] = buffer.float
-        ys[i] = buffer.float
-    }
+    // decode mandatory coordinates
+    val xs = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
+    val ys = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
+    require(xs.size ==count && ys.size == count) { "Point count mismatch, xs=${xs.size} ys=${ys.size} count=$count, $ys" }
 
-    val hasP = mask.hasPressure()
-    val hasTX = mask.hasTiltX()
-    val hasTY = mask.hasTiltY()
-    val hasDT = mask.hasDeltaTime()
-
-    val pressures: FloatArray? = if (hasP) {
-        if (buffer.remaining() < count * 4) throw IllegalArgumentException("Truncated pressure section")
-        FloatArray(count) { buffer.float }
+    val pressures: ShortArray? = if (mask.hasPressure()) {
+        if (buffer.remaining() < count * 2) throw IllegalArgumentException("Truncated pressure section")
+        ShortArray(count) { buffer.short }
     } else null
 
-    val tiltXs: IntArray? = if (hasTX) {
-        if (buffer.remaining() < count * 4) throw IllegalArgumentException("Truncated tiltX section")
-        IntArray(count) { buffer.int }
+    val tiltXs: ByteArray? = if (mask.hasTiltX()) {
+        if (buffer.remaining() < count * 1) throw IllegalArgumentException("Truncated tiltX section")
+        ByteArray(count) { buffer.get() }
     } else null
 
-    val tiltYs: IntArray? = if (hasTY) {
-        if (buffer.remaining() < count * 4) throw IllegalArgumentException("Truncated tiltY section")
-        IntArray(count) { buffer.int }
+    val tiltYs: ByteArray? = if (mask.hasTiltY()) {
+        if (buffer.remaining() < count * 1) throw IllegalArgumentException("Truncated tiltY section")
+        ByteArray(count) { buffer.get() }
     } else null
 
-    // Store raw signed shorts; convert to UShort at materialization time
-    val dts: ShortArray? = if (hasDT) {
+    val dts: ShortArray? = if (mask.hasDeltaTime()) {
         if (buffer.remaining() < count * 2) throw IllegalArgumentException("Truncated dt section")
         ShortArray(count) { buffer.short }
     } else null
 
-    val points = ArrayList<StrokePoint>(count)
-    for (i in 0 until count) {
-        val pressure = pressures?.get(i) // SB1 expects non-null if section present
-        val tiltX = tiltXs?.get(i)
-        val tiltY = tiltYs?.get(i)
-
-        val dt = dts?.get(i)?.let { s ->
-            val unsigned = s.toInt() and 0xFFFF
-            if (unsigned == DT_NULL_SENTINEL_INT) null else unsigned.toUShort()
-        }
-
-        points.add(
-            StrokePoint(
-                x = xs[i],
-                y = ys[i],
-                pressure = pressure,
-                tiltX = tiltX,
-                tiltY = tiltY,
-                dt = dt,
-                legacyTimestamp = null,
-                legacySize = null
-            )
+    val points = List(count) { i ->
+        StrokePoint(
+            x = xs[i],
+            y = ys[i],
+            pressure = pressures?.getOrNull(i)?.toFloat(),
+            tiltX = tiltXs?.getOrNull(i)?.toInt(),
+            tiltY = tiltYs?.getOrNull(i)?.toInt(),
+            dt = dts?.getOrNull(i)?.toUShort(),
+            legacyTimestamp = null,
+            legacySize = null
         )
     }
-
-    if (failOnTrailing && buffer.hasRemaining()) {
+    if (buffer.hasRemaining()) {
         throw IllegalArgumentException("Trailing bytes after decoding stroke")
     }
-
     return points
+
+}
+
+
+fun getDecodedListFloat(buffer: ByteBuffer, precision: Int): List<Float> {
+    val size = buffer.int
+    val bytes = ByteArray(size)
+    if (buffer.remaining() < size) {
+        throw IllegalArgumentException("Truncated coordinates section")
+    }
+    buffer.get(bytes)
+    return decode(String(bytes, Charsets.UTF_8), precision) { it.toFloat() }
 }

@@ -1,22 +1,21 @@
 package com.ethran.notable.data.db
 
 import android.content.Context
+import androidx.compose.ui.geometry.Offset
 import androidx.room.*
 import com.ethran.notable.editor.utils.Pen
 import kotlinx.serialization.SerialName
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
 import java.util.Date
 import java.util.UUID
 
 @kotlinx.serialization.Serializable
 data class StrokePoint(
-    val x: Float,
-    var y: Float,
-    val pressure: Float? = null,
-    val tiltX: Int? = null,
+    val x: Float,                   // with scroll
+    var y: Float,                   // with scroll
+    val pressure: Float? = null,    // relative pressure values 1 to 4096, usually whole number
+    val tiltX: Int? = null,         // tilt values in degrees, -90 to 90
     val tiltY: Int? = null,
-    val dt: UShort? = null,
+    val dt: UShort? = null,         // delta time in milliseconds, from first point in stroke, not used yet.
     @SerialName("timestamp") private val legacyTimestamp: Long? = null,
     @SerialName("size") private val legacySize: Float? = null,
 )
@@ -36,6 +35,8 @@ data class Stroke(
     val pen: Pen,
     @ColumnInfo(defaultValue = "0xFF000000")
     val color: Int = 0xFF000000.toInt(),
+    @ColumnInfo(defaultValue = "4096")
+    val maxPressure: Int = 4096,   // might be useful for synchronization between devices
 
     var top: Float,
     var bottom: Float,

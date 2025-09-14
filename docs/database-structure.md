@@ -202,10 +202,16 @@ Errors thrown as `IllegalArgumentException` for:
 - Truncated sections
 - Trailing bytes (only if `failOnTrailing = true`)
 
-### 3.9 Summary
+## 4) Ideas for Improvements
 
-The active storage is a compact binary layout with:
-- Fixed header (magic, version, mask, count)
-- Structure-of-Arrays for predictable contiguous memory
-- Uniform optional channels indicated globally via mask
-- No compression, no CRC, no per-point null markers in SB1
+- [PolylineUtils gist (Kotlin, encoding + RDP)](https://gist.github.com/ghiermann/ed692322088bb39166a669a8ed3a6d14)
+- [Ramer–Douglas–Peucker on Rosetta Code (Kotlin)](https://rosettacode.org/wiki/Ramer-Douglas-Peucker_line_simplification#Kotlin)
+- [Google’s Encoded Polyline Algorithm](https://developers.google.com/maps/documentation/utilities/polylinealgorithm?csw=1)
+
+### Notes
+- Store **offsets (deltas)** between consecutive points instead of absolute values → smaller numbers, better compression.
+- Use **curve simplification** (e.g. Ramer–Douglas–Peucker) to remove redundant points.
+- Ignore unused stroke attributes:
+  - Ballpoint: only `x, y`
+  - Fountain pen: add `pressure`
+  - Pencil: add `pressure + tilt`

@@ -76,6 +76,7 @@ val MIGRATION_32_33 = object : Migration(32, 33) {
                 `size` REAL NOT NULL,
                 `pen` TEXT NOT NULL,
                 `color` INTEGER NOT NULL DEFAULT 0xFF000000,
+                `maxPressure` INTEGER NOT NULL DEFAULT 4096,
                 `top` REAL NOT NULL,
                 `bottom` REAL NOT NULL,
                 `left` REAL NOT NULL,

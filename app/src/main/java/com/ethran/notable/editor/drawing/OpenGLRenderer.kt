@@ -174,7 +174,6 @@ class OpenGLRenderer(
         val orientation = motionEvent.orientation
 
         return StrokePoint(
-            pressure = motionEvent.pressure,
             x = motionEvent.x,
             y = motionEvent.y,
         )
