@@ -54,71 +54,26 @@ class AutoMigration30to31 : AutoMigrationSpec
 )
 class AutoMigration31to32 : AutoMigrationSpec
 
+
+
+// Migration 32 -> 33:
+// 1. Rename original Stroke table to stroke_old
+// 2. Drop any carried indexes from old table (index_Stroke_pageId)
+// 3. Create new Stroke table (with points as BLOB and color default)
+// 4. Recreate required index on the NEW table
 val MIGRATION_32_33 = object : Migration(32, 33) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        db.query("PRAGMA cache_size=-65536").use { } // ~65MB page cache (negative => KB)
 
-        // 1) Add the new column
-        db.execSQL("ALTER TABLE `Stroke` ADD COLUMN `points_new` BLOB")
+        db.execSQL("ALTER TABLE stroke RENAME TO stroke_old")
 
-        // 2) Copy + encode into new column
-        val cursor = db.query(
-            "SELECT id,points FROM `Stroke`"
-        )
-        val totalRows = cursor.count
-        if (totalRows == 0) {
-            cursor.close()
-            Log.d("MIGRATION_32_33", "No rows to migrate")
-            return
-        }
+        // IMPORTANT: drop the old index that now belongs to stroke_old
+        // (otherwise we can't recreate it for the new table)
+        db.execSQL("DROP INDEX IF EXISTS `index_Stroke_pageId`")
 
-        var processed = 0
-        var lastPercent = -1
-        val idIdx = cursor.getColumnIndexOrThrow("id")
-        val pointsIdx = cursor.getColumnIndexOrThrow("points")
-
-        val updateSql = "UPDATE `Stroke` SET `points_new`=? WHERE `id`=?"
-        val stmt = db.compileStatement(updateSql)
-
-        // Reusable Json
-        val json = Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            explicitNulls = false
-            encodeDefaults = false
-        }
-        val strokePointListSer =
-            kotlinx.serialization.builtins.ListSerializer(StrokePoint.serializer())
-
-        while (cursor.moveToNext()) {
-            val id = cursor.getString(idIdx)
-            val pointsJson = cursor.getString(pointsIdx) ?: "[]"
-
-            val pointsList = json.decodeFromString(strokePointListSer, pointsJson)
-            val mask = computeStrokeMask(pointsList)
-            val blob = encodeStrokePoints(pointsList, mask)
-
-            stmt.clearBindings()
-            stmt.bindBlob(1, blob)
-            stmt.bindString(2, id)
-            stmt.executeUpdateDelete()
-
-            processed++
-            val percent = (processed * 100) / totalRows
-            if (percent > lastPercent) {
-                lastPercent = percent
-                Log.d("MIGRATION_32_33", "Progress: $percent % ($processed/$totalRows)")
-            }
-        }
-        stmt.close()
-        cursor.close()
-        Runtime.getRuntime().gc()
-        Log.d("MIGRATION_32_33", "finished re-encodings.")
-
-        // 3) Drop old column → recreate table without JSON column
+        // Create new table with correct name/case matching the entity @Entity(tableName = "Stroke") (default)
         db.execSQL(
             """
-            CREATE TABLE `Stroke_tmp` (
+            CREATE TABLE `Stroke` (
                 `id` TEXT NOT NULL,
                 `size` REAL NOT NULL,
                 `pen` TEXT NOT NULL,
@@ -136,16 +91,8 @@ val MIGRATION_32_33 = object : Migration(32, 33) {
             )
             """.trimIndent()
         )
-        db.execSQL(
-            """
-            INSERT INTO `Stroke_tmp`
-            (id,size,pen,color,top,bottom,left,right,points,pageId,createdAt,updatedAt)
-            SELECT id,size,pen,color,top,bottom,left,right,points_new,pageId,createdAt,updatedAt FROM `Stroke`
-            """.trimIndent()
-        )
-        db.execSQL("DROP TABLE `Stroke`")
-        db.execSQL("ALTER TABLE `Stroke_tmp` RENAME TO `Stroke`")
+
+        // Recreate the expected index for the NEW table
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_Stroke_pageId` ON `Stroke` (`pageId`)")
-        Log.d("MIGRATION_32_33", "Finished migration")
     }
 }

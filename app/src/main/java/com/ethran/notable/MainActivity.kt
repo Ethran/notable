@@ -39,6 +39,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.db.reencodeStrokePointsToSB1
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.Router
@@ -48,6 +49,7 @@ import com.ethran.notable.ui.theme.InkaTheme
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 
@@ -114,6 +116,9 @@ class MainActivity : ComponentActivity() {
                     SnackBar(state = snackState)
                 }
             }
+        }
+        this.lifecycleScope.launch(Dispatchers.IO) {
+            reencodeStrokePointsToSB1(this@MainActivity)
         }
     }
 
