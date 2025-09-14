@@ -6,6 +6,8 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 /* ------------------ Mask Bits & Helpers ------------------ */
 
@@ -76,16 +78,15 @@ Header (little-endian):
   VERSION (1 byte) = 1
   MASK (1 byte)
   COUNT (4 bytes, Int)
+  X_SIZE (4 bytes, Int)
+  X_DATA [X_SIZE]
+  Y_SIZE (4 bytes, Int)
+  Y_DATA [Y_SIZE]
 Then, for each present channel,in fixed SoA order:
-    x,
-    y,
-    [pressure],
-    [tiltX],
-    [tiltY],
-    [dt]):
-
-  ENCODE_SIZE (4 bytes, Int)     // Size in bytes of the encoded channel data
-  ENCODED_DATA [ENCODE_SIZE]     // Channel data
+  [if mask&PRESSURE] pressure[count] float
+  [if mask&TILT_X]   tiltX[count] int
+  [if mask&TILT_Y]   tiltY[count] int
+  [if mask&DT]       dt[count] uint16
 
 Notes:
 - ENCODE_SIZE is always present for each channel, regardless of encoding.
@@ -104,7 +105,7 @@ private const val DT_NULL_SENTINEL_INT = 0xFFFF  // 65535
 private const val DT_MAX_VALUE_INT = DT_NULL_SENTINEL_INT - 1  // 65534
 
 // Encoding precision constants
-private const val ENCODING_PRECISION_XY = 4
+private const val ENCODING_PRECISION_XY = 2
 
 @Suppress("KotlinConstantConditions")
 fun encodeStrokePoints(

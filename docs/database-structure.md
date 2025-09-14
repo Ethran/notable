@@ -96,7 +96,6 @@ https://github.com/Ethran/notable/blob/main/app/src/main/java/com/ethran/notable
 The stored field is `pen` (serialized form of `Pen`).
 
 ---
-
 ## 3) List<StrokePoint> storage format
 https://github.com/Ethran/notable/blob/dev/app/src/main/java/com/ethran/notable/data/db/StrokePointConverter.kt
 
@@ -140,22 +139,28 @@ Invariants (enforced by `validateUniform`):
 
 ### 3.3 Body layout (SoA sections)
 
-Immediately after the header, arrays appear in fixed order:
+After the header, coordinate arrays are encoded as compressed UTF-8 polylines, followed by optional fields in order:
 
-1. `x[COUNT]` as `float32`
-2. `y[COUNT]` as `float32`
-3. If MASK pressure bit: `pressure[COUNT]` as `float32`
-4. If MASK tiltX bit: `tiltX[COUNT]` as `int32`
-5. If MASK tiltY bit: `tiltY[COUNT]` as `int32`
-6. If MASK dt bit: `dt[COUNT]` as `uint16`
+1. `X_SIZE` as `int32` (length of encoded X array, in bytes)
+2. `x[X_SIZE]` as polyline-encoded bytes (precision=2, see StrokePointConverter.kt)
+3. `Y_SIZE` as `int32` (length of encoded Y array, in bytes)
+4. `y[Y_SIZE]` as polyline-encoded bytes (precision=2)
+5. If MASK pressure bit: `pressure[COUNT]` as `int16` (little-endian)
+6. If MASK tiltX bit: `tiltX[COUNT]` as `int8`
+7. If MASK tiltY bit: `tiltY[COUNT]` as `int8`
+8. If MASK dt bit: `dt[COUNT]` as `uint16` (little-endian)
+
+The order of the body is:
+- X_SIZE, X_DATA, Y_SIZE, Y_DATA, [pressure...], [tiltX...], [tiltY...], [dt...]
 
 Total size calculation:
 ```
-size = 8
-     + COUNT * 8                        // x + y
-     + (MASK.pressure ? COUNT * 4 : 0)
-     + (MASK.tiltX    ? COUNT * 4 : 0)
-     + (MASK.tiltY    ? COUNT * 4 : 0)
+size = 8                                               // header
+     + 4 + x_polyline.size                             // X_SIZE + X_DATA
+     + 4 + y_polyline.size                             // Y_SIZE + Y_DATA
+     + (MASK.pressure ? COUNT * 2 : 0)
+     + (MASK.tiltX    ? COUNT * 1 : 0)
+     + (MASK.tiltY    ? COUNT * 1 : 0)
      + (MASK.dt       ? COUNT * 2 : 0)
 ```
 
@@ -172,10 +177,10 @@ Decoder steps (`decodeStrokePoints`):
 2. Check magic `'S' 'B'`.
 3. Read version; if `> 1` → unsupported.
 4. Read MASK (byte) and COUNT (int ≥ 0).
-5. Read coordinate arrays (must have `COUNT * 8` bytes).
+5. Read X_SIZE, X_DATA, Y_SIZE, Y_DATA, then decode to coordinate lists.
 6. Conditionally read optional arrays according to MASK (validate remaining size).
 7. Materialize `List<StrokePoint>` combining parallel arrays.
-8. If `failOnTrailing = true`, any leftover bytes cause error.
+8. If any leftover bytes, throw error.
 
 ### 3.6 Encoding rules
 
@@ -183,13 +188,14 @@ Decoder steps (`decodeStrokePoints`):
 1. Require non-empty point list.
 2. Derive `MASK` from first point (`computeStrokeMask`).
 3. Validate uniformity across all points (`validateUniform`).
-4. Allocate buffer with exact size.
-5. Write header, then mandatory and optional arrays in order.
+4. Encode X and Y arrays using polyline algorithm (precision=2), store as UTF-8 bytes.
+5. Allocate buffer with exact size.
+6. Write header, then encode and write all sections in order.
 
 ### 3.7 Forward compatibility
 
-- Decoder permits (but currently rejects) future higher version numbers (`version > 1` → error).
-- Reserved sentinel for dt allows future relaxation of uniformity when combined with a new version.
+- Decoder rejects future higher version numbers (`version > 1` → error).
+- Reserved sentinel for dt allows future relaxation of uniformity with a new version.
 
 ### 3.8 Error handling (per code)
 
@@ -200,17 +206,13 @@ Errors thrown as `IllegalArgumentException` for:
 - Unsupported version
 - Negative count
 - Truncated sections
-- Trailing bytes (only if `failOnTrailing = true`)
+- Trailing bytes after decoding
 
 ## 4) Ideas for Improvements
 
 - [PolylineUtils gist (Kotlin, encoding + RDP)](https://gist.github.com/ghiermann/ed692322088bb39166a669a8ed3a6d14)
 - [Ramer–Douglas–Peucker on Rosetta Code (Kotlin)](https://rosettacode.org/wiki/Ramer-Douglas-Peucker_line_simplification#Kotlin)
 - [Google’s Encoded Polyline Algorithm](https://developers.google.com/maps/documentation/utilities/polylinealgorithm?csw=1)
-
-### Notes
-- Store **offsets (deltas)** between consecutive points instead of absolute values → smaller numbers, better compression.
-- Use **curve simplification** (e.g. Ramer–Douglas–Peucker) to remove redundant points.
 - Ignore unused stroke attributes:
   - Ballpoint: only `x, y`
   - Fountain pen: add `pressure`
