@@ -1,11 +1,16 @@
 package com.ethran.notable.data.db
 
 import android.content.Context
-import android.util.Log
+import android.database.sqlite.SQLiteBlobTooBigException
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.serialization.json.Json
+
+
+private val log = ShipBook.getLogger("StrokeReencode")
+
 
 /**
  * Runtime backfill:
@@ -27,7 +32,7 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
         return
     }
 
-    val batchSize = 1500
+    var batchSize = 1500
     val progressSnackId = "migration_progress"
 
     while (true) {
@@ -44,12 +49,12 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
             )
             break
         }
-        SnackState.Companion.cancelGlobalSnack.tryEmit(progressSnackId)
+        SnackState.cancelGlobalSnack.tryEmit(progressSnackId)
         val percent = (100.0 * (totalInitial - remaining).toFloat() / totalInitial.toFloat())
         SnackState.globalSnackFlow.tryEmit(
             SnackConf(
                 id = progressSnackId,
-                text = "Migrating strokes: ${"%.1f".format(percent)}% (${totalInitial - remaining}/$totalInitial)",
+                text = "Migrating strokes: ${"%.1f".format(percent)}% (${totalInitial - remaining}/$totalInitial) batch=$batchSize",
                 duration = null
             )
         )
@@ -126,12 +131,63 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
                     deleteStmt.clearBindings()
                     deleteStmt.bindString(1, id)
                     deleteStmt.executeUpdateDelete()
-                } catch (e: Exception) {
-                    Log.e("StrokeMigration", "Failed to migrate stroke $id", e)
+                } catch (rowBlob: SQLiteBlobTooBigException) {
+                    log.e("Oversize stroke $id; deleting from stroke_old.", rowBlob)
+                    try {
+                        deleteStmt.clearBindings()
+                        deleteStmt.bindString(1, id)
+                        deleteStmt.executeUpdateDelete()
+                    } catch (delEx: Exception) {
+                        log.e("Failed to delete oversize stroke id=$id", delEx)
+                        SnackState.globalSnackFlow.tryEmit(
+                            SnackConf(
+                                id = "oversize_$id",
+                                text = "Failed to delete oversize stroke $id",
+                                duration = 4000
+                            )
+                        )
+                        throw delEx
+                    }
+                } catch (rowEx: Exception) {
+                    log.e("Failed stroke id=$id; leaving for retry.", rowEx)
+                    throw rowEx
                 }
             } while (cursor.moveToNext())
 
             db.setTransactionSuccessful()
+        } catch (rowBlob: SQLiteBlobTooBigException) {
+            // Single-row still too large: mark & skip
+            log.e("Oversize bach $batchSize, trying again with half batchsize.", rowBlob)
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    id = "oversize_$batchSize",
+                    text = "Oversize bach $batchSize, trying again with half batchsize.",
+                    duration = 4000
+                )
+            )
+            batchSize /= 2
+            require(batchSize!=0) {"Batch size cannot be 0"}
+            if (batchSize == 1) {
+                SnackState.globalSnackFlow.tryEmit(
+                    SnackConf(
+                        id = "oversize_$batchSize",
+                        text = "Failed, $rowBlob",
+                        duration = 4000
+                    )
+                )
+                break
+            }
+        } catch (rowEx: Exception) {
+            // Leave it; remains in stroke_old
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    id = "oversize_$batchSize",
+                    text = "ERROR: $rowEx",
+                    duration = 4000
+                )
+            )
+            log.e("Batch failed (size=$batchSize)", rowEx)
+            break
         } finally {
             cursor.close()
             db.endTransaction()
