@@ -5,10 +5,6 @@ import com.ethran.notable.TAG
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import net.jpountz.lz4.LZ4Factory
-import net.jpountz.lz4.LZ4FrameInputStream
-import net.jpountz.lz4.LZ4FrameOutputStream
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -82,6 +78,7 @@ Header (little-endian):
      COUNT (4 bytes, Int)
      COMPRESSION (1 byte) = 0 (no), 1 (LZ4)
    Body (compressed or uncompressed):
+     [if compression] uncompressed size (4 bytes, Int)
      X_SIZE (4 bytes, Int)
      X_DATA [X_SIZE]
      Y_SIZE (4 bytes, Int)
@@ -106,12 +103,12 @@ private const val HEADER_SIZE: Int = 1 + 1 + 1 + 1 + 1 + 4
 // Compression flag values
 private const val COMPRESSION_NONE: Byte = 0
 private const val COMPRESSION_LZ4: Byte = 1
-private const val MIN_BYTES_FOR_COMPRESSION: Int = 256
+private const val MIN_BYTES_FOR_COMPRESSION: Int = 512
 
 // Reserved for future use if you ever support per-point null dt in a later version.
 private const val DT_NULL_SENTINEL_INT = 0xFFFF  // 65535
 private const val DT_MAX_VALUE_INT = DT_NULL_SENTINEL_INT - 1  // 65534
-private const val MIN_SAVING_RATIO: Double = 0.92
+private const val MIN_SAVING_RATIO: Double = 0.75
 
 // Encoding precision constants
 private const val ENCODING_PRECISION_XY = 2
@@ -119,22 +116,131 @@ private const val ENCODING_PRECISION_XY = 2
 
 /* ------------------ LZ4 Helpers ------------------ */
 
-private fun lz4CompressFrame(raw: ByteArray): ByteArray {
-    val baos = ByteArrayOutputStream()
-    LZ4FrameOutputStream(baos).use { it.write(raw) }
-    return baos.toByteArray()
+private val lz4Factory = LZ4Factory.fastestInstance()
+private val compressor = lz4Factory.highCompressor() // slower, but smaller size
+
+private fun lz4CompressBlock(raw: ByteArray): ByteArray {
+    val maxCompressedLength = compressor.maxCompressedLength(raw.size)
+    val compressed = ByteArray(maxCompressedLength)
+    val compressedSize = compressor.compress(raw, 0, raw.size, compressed, 0, maxCompressedLength)
+    return compressed.copyOf(compressedSize) // trim unused tail
 }
 
-private fun lz4DecompressFrame(compressed: ByteArray, offset: Int, length: Int): ByteArray {
-    require(length > 0) { "No LZ4 data (length=0)" }
-    ByteArrayInputStream(compressed, offset, length).use { bais ->
-        LZ4FrameInputStream(bais).use { lz4 ->
-            return lz4.readBytes()
+private val decompressor = lz4Factory.fastDecompressor()
+
+// Thread-local reusable compression buffer to avoid reallocating for each stroke.
+private val TL_DECOMP_BUFFER = object : ThreadLocal<ByteArray>() {
+    override fun initialValue(): ByteArray = ByteArray(0)
+}
+
+private fun lz4DecompressBlock(
+    compressed: ByteArray,
+    offset: Int,
+    length: Int,
+    originalSize: Int
+): ByteArray {
+    var restored = TL_DECOMP_BUFFER.get()
+    if (restored!!.size < originalSize) {
+        restored = ByteArray(originalSize)
+        TL_DECOMP_BUFFER.set(restored)
+    }
+    decompressor.decompress(compressed, offset, restored, 0, originalSize)
+    return restored
+}
+
+
+private fun compress(rawBody: ByteArray): Pair<Byte, ByteArray> {
+    return if (rawBody.size >= MIN_BYTES_FOR_COMPRESSION) {
+        val compressed = lz4CompressBlock(rawBody)
+        if (compressed.size.toDouble() <= rawBody.size * MIN_SAVING_RATIO) {
+            CompressionStats.record(rawBody.size, compressed.size, true)
+            COMPRESSION_LZ4 to compressed
+        } else {
+            CompressionStats.record(rawBody.size, compressed.size, false)
+            COMPRESSION_NONE to rawBody
         }
+    } else {
+        COMPRESSION_NONE to rawBody
     }
 }
 
+
+object CompressionStats {
+    private var callCount = 0L
+    private var totalRaw = 0L
+    private var totalCompressed = 0L
+    private var savedCases = 0L
+    private var skippedCases = 0L
+
+    // configurable interval
+    private const val REPORT_INTERVAL = 1500
+
+    @Synchronized
+    fun record(rawSize: Int, compressedSize: Int?, usedCompression: Boolean) {
+        callCount++
+        totalRaw += rawSize
+
+        if (usedCompression && compressedSize != null) {
+            totalCompressed += compressedSize
+            if (compressedSize < rawSize) savedCases++ else skippedCases++
+        } else {
+            totalCompressed += rawSize // treat uncompressed as "same as raw"
+            skippedCases++
+        }
+
+        if (callCount % REPORT_INTERVAL == 0L) {
+            report()
+//            reset()
+        }
+    }
+
+    private fun report() {
+        val avgRaw = if (callCount > 0) totalRaw / callCount else 0
+        val avgComp = if (callCount > 0) totalCompressed / callCount else 0
+        val ratio = if (totalRaw > 0) totalCompressed.toDouble() / totalRaw else 1.0
+        println(
+            """
+            [CompressionStats]
+            Calls: $callCount
+            Avg Raw Size: $avgRaw
+            Avg Compressed Size: $avgComp
+            Compression Ratio: ${"%.3f".format(ratio)}
+            Successful Savings: $savedCases
+            Skipped (no gain or too small): $skippedCases
+            """.trimIndent()
+        )
+    }
+
+    private fun reset() {
+        callCount = 0
+        totalRaw = 0
+        totalCompressed = 0
+        savedCases = 0
+        skippedCases = 0
+    }
+}
+
+
 /* ------------------ Encoding ------------------ */
+
+private val TL_ENCODING_BUFFER = object : ThreadLocal<ByteBuffer>() {
+    override fun initialValue(): ByteBuffer =
+        ByteBuffer.allocate(1024).order(ByteOrder.LITTLE_ENDIAN)
+}
+
+fun getReusableBuffer(rawBodySize: Int): ByteBuffer {
+    var bodyBuffer = TL_ENCODING_BUFFER.get()
+    // Resize the buffer if it's smaller than needed
+    if (bodyBuffer!!.capacity() < rawBodySize) {
+        // Allocate a new buffer and replace the old one in the ThreadLocal
+        bodyBuffer = ByteBuffer.allocate(rawBodySize).order(ByteOrder.LITTLE_ENDIAN)
+        TL_ENCODING_BUFFER.set(bodyBuffer)
+    }
+    // Reset the buffer before reuse
+    bodyBuffer.clear()
+    return bodyBuffer
+}
+
 
 @Suppress("KotlinConstantConditions")
 fun encodeStrokePoints(
@@ -169,7 +275,7 @@ fun encodeStrokePoints(
     val rawBodySize =
         4 + encodedX.size + 4 + encodedY.size + (if (hasP) count * 2 else 0) + (if (hasTX) count * 1 else 0) + (if (hasTY) count * 1 else 0) + (if (hasDT) count * 2 else 0)
 
-    val bodyBuffer = ByteBuffer.allocate(rawBodySize).order(ByteOrder.LITTLE_ENDIAN)
+    val bodyBuffer = getReusableBuffer(rawBodySize)
     // Body layout
     bodyBuffer.putInt(encodedX.size)
     bodyBuffer.put(encodedX)
@@ -191,21 +297,15 @@ fun encodeStrokePoints(
             bodyBuffer.putShort(v.toShort())
         }
     }
+    bodyBuffer.flip() // Ready for reading
+    val rawBody = ByteArray(bodyBuffer.remaining()) // Extract only valid data
+    bodyBuffer.get(rawBody) // Copy from position to limit into new array
+    require(rawBodySize == rawBody.size) { "Body size mismatch: expected $rawBodySize, got ${rawBody.size}" }
 
-    val rawBody = bodyBuffer.array()
-    val (compressionFlag, finalBody) = if (rawBody.size >= MIN_BYTES_FOR_COMPRESSION) {
-        val compressed = lz4CompressFrame(rawBody)
-        if (compressed.size.toDouble() <= rawBody.size * MIN_SAVING_RATIO) {
-            COMPRESSION_LZ4 to compressed
-        } else {
-            COMPRESSION_NONE to rawBody
-        }
-    } else {
-        COMPRESSION_NONE to rawBody
-    }
-
+    val (compressionFlag, finalBody) = compress(rawBody)
     // Allocate final buffer: header + body
-    val totalSize = HEADER_SIZE + finalBody.size
+    val totalSize =
+        HEADER_SIZE + finalBody.size + (if (compressionFlag == COMPRESSION_LZ4) 4 else 0)
     val out = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN)
     // Header
     out.put(MAGIC0)
@@ -214,6 +314,9 @@ fun encodeStrokePoints(
     out.put(mask.toByte())
     out.putInt(count)
     out.put(compressionFlag)
+
+    if (compressionFlag == COMPRESSION_LZ4)
+        out.putInt(rawBodySize) // needed for decompression
 
     // Body (compressed or raw)
     out.put(finalBody)
@@ -277,15 +380,26 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
             ByteBuffer.wrap(bytes, HEADER_SIZE, bytes.size - HEADER_SIZE)
                 .order(ByteOrder.LITTLE_ENDIAN)
         }
-
         COMPRESSION_LZ4 -> {
-            // Decompress from the existing array without creating a body copy first
-            ByteBuffer.wrap(lz4DecompressFrame(bytes, HEADER_SIZE, bytes.size - HEADER_SIZE))
-                .order(ByteOrder.LITTLE_ENDIAN)
+            require(bytes.size > HEADER_SIZE + 4) { "Truncated (missing raw size)" }
+            val rawSize = ByteBuffer.wrap(bytes, HEADER_SIZE, 4)
+                .order(ByteOrder.LITTLE_ENDIAN).int
+            require(rawSize > 0) { "Invalid raw size $rawSize" }
+            val compressedDataOffset = HEADER_SIZE + 4
+            val compressedLen = bytes.size - compressedDataOffset
+            require(compressedLen > 0) { "No compressed data" }
+            val decompressed = lz4DecompressBlock(
+                compressed = bytes,
+                offset = compressedDataOffset,
+                length = compressedLen,
+                originalSize = rawSize
+            )
+            ByteBuffer.wrap(decompressed).order(ByteOrder.LITTLE_ENDIAN)
         }
 
-        else -> throw IllegalArgumentException("Unknown compression flag $compressionFlag")
+        else -> error("Unknown compression flag $compressionFlag")
     }
+
 
     // decode mandatory coordinates
     val xs = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
@@ -324,7 +438,7 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
             legacySize = null
         )
     }
-    if (buffer.hasRemaining()) {
+    if (buffer.hasRemaining() && compressionFlag == COMPRESSION_NONE) {
         throw IllegalArgumentException("Trailing bytes after decoding stroke")
     }
     return points
