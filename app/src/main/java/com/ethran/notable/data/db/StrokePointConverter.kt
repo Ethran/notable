@@ -135,8 +135,7 @@ private val TL_DECOMP_BUFFER = object : ThreadLocal<ByteArray>() {
 
 private fun lz4DecompressBlock(
     compressed: ByteArray,
-    offset: Int,
-    length: Int,
+    @Suppress("SameParameterValue") offset: Int,
     originalSize: Int
 ): ByteArray {
     var restored = TL_DECOMP_BUFFER.get()
@@ -153,70 +152,12 @@ private fun compress(rawBody: ByteArray): Pair<Byte, ByteArray> {
     return if (rawBody.size >= MIN_BYTES_FOR_COMPRESSION) {
         val compressed = lz4CompressBlock(rawBody)
         if (compressed.size.toDouble() <= rawBody.size * MIN_SAVING_RATIO) {
-            CompressionStats.record(rawBody.size, compressed.size, true)
             COMPRESSION_LZ4 to compressed
         } else {
-            CompressionStats.record(rawBody.size, compressed.size, false)
             COMPRESSION_NONE to rawBody
         }
     } else {
         COMPRESSION_NONE to rawBody
-    }
-}
-
-
-object CompressionStats {
-    private var callCount = 0L
-    private var totalRaw = 0L
-    private var totalCompressed = 0L
-    private var savedCases = 0L
-    private var skippedCases = 0L
-
-    // configurable interval
-    private const val REPORT_INTERVAL = 1500
-
-    @Synchronized
-    fun record(rawSize: Int, compressedSize: Int?, usedCompression: Boolean) {
-        callCount++
-        totalRaw += rawSize
-
-        if (usedCompression && compressedSize != null) {
-            totalCompressed += compressedSize
-            if (compressedSize < rawSize) savedCases++ else skippedCases++
-        } else {
-            totalCompressed += rawSize // treat uncompressed as "same as raw"
-            skippedCases++
-        }
-
-        if (callCount % REPORT_INTERVAL == 0L) {
-            report()
-//            reset()
-        }
-    }
-
-    private fun report() {
-        val avgRaw = if (callCount > 0) totalRaw / callCount else 0
-        val avgComp = if (callCount > 0) totalCompressed / callCount else 0
-        val ratio = if (totalRaw > 0) totalCompressed.toDouble() / totalRaw else 1.0
-        println(
-            """
-            [CompressionStats]
-            Calls: $callCount
-            Avg Raw Size: $avgRaw
-            Avg Compressed Size: $avgComp
-            Compression Ratio: ${"%.3f".format(ratio)}
-            Successful Savings: $savedCases
-            Skipped (no gain or too small): $skippedCases
-            """.trimIndent()
-        )
-    }
-
-    private fun reset() {
-        callCount = 0
-        totalRaw = 0
-        totalCompressed = 0
-        savedCases = 0
-        skippedCases = 0
     }
 }
 
@@ -242,11 +183,10 @@ fun getReusableBuffer(rawBodySize: Int): ByteBuffer {
 }
 
 
-@Suppress("KotlinConstantConditions")
 fun encodeStrokePoints(
     points: List<StrokePoint>, mask: Int = computeStrokeMask(points)
 ): ByteArray {
-    if (points.first().y > 1000000f) {
+    if (points.first().y > 10000000f) {
         Log.e(TAG, "Page is too large!")
         SnackState.globalSnackFlow.tryEmit(
             SnackConf(
@@ -391,7 +331,6 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
             val decompressed = lz4DecompressBlock(
                 compressed = bytes,
                 offset = compressedDataOffset,
-                length = compressedLen,
                 originalSize = rawSize
             )
             ByteBuffer.wrap(decompressed).order(ByteOrder.LITTLE_ENDIAN)
@@ -426,6 +365,7 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
         ShortArray(count) { buffer.short }
     } else null
 
+    @Suppress("KotlinConstantConditions")
     val points = List(count) { i ->
         StrokePoint(
             x = xs[i],

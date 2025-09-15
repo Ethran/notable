@@ -76,6 +76,63 @@ class EncodingTest {
         Log.d(tag, "Total points: ${points.size}")
     }
 
+
+    object CompressionStats {
+        private var callCount = 0L
+        private var totalRaw = 0L
+        private var totalCompressed = 0L
+        private var savedCases = 0L
+        private var skippedCases = 0L
+
+        // configurable interval
+        private const val REPORT_INTERVAL = 1500
+
+        @Synchronized
+        fun record(rawSize: Int, compressedSize: Int?, usedCompression: Boolean) {
+            callCount++
+            totalRaw += rawSize
+
+            if (usedCompression && compressedSize != null) {
+                totalCompressed += compressedSize
+                if (compressedSize < rawSize) savedCases++ else skippedCases++
+            } else {
+                totalCompressed += rawSize // treat uncompressed as "same as raw"
+                skippedCases++
+            }
+
+            if (callCount % REPORT_INTERVAL == 0L) {
+                report()
+//            reset()
+            }
+        }
+
+        private fun report() {
+            val avgRaw = if (callCount > 0) totalRaw / callCount else 0
+            val avgComp = if (callCount > 0) totalCompressed / callCount else 0
+            val ratio = if (totalRaw > 0) totalCompressed.toDouble() / totalRaw else 1.0
+            println(
+                """
+            [CompressionStats]
+            Calls: $callCount
+            Avg Raw Size: $avgRaw
+            Avg Compressed Size: $avgComp
+            Compression Ratio: ${"%.3f".format(ratio)}
+            Successful Savings: $savedCases
+            Skipped (no gain or too small): $skippedCases
+            """.trimIndent()
+            )
+        }
+
+        private fun reset() {
+            callCount = 0
+            totalRaw = 0
+            totalCompressed = 0
+            savedCases = 0
+            skippedCases = 0
+        }
+    }
+
+
 }
 
 

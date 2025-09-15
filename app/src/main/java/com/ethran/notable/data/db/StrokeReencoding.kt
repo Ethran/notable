@@ -167,12 +167,12 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
                 )
             )
             batchSize /= 2
-            require(batchSize!=0) {"Batch size cannot be 0"}
+            require(batchSize != 0) { "Batch size cannot be 0" }
             if (batchSize == 1) {
                 SnackState.globalSnackFlow.tryEmit(
                     SnackConf(
                         id = "oversize_$batchSize",
-                        text = "Failed, $rowBlob",
+                        text = "Migration failed due to oversized stroke data.",
                         duration = 4000
                     )
                 )
@@ -199,6 +199,7 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
     db.execSQL("CREATE INDEX IF NOT EXISTS index_Stroke_pageId ON stroke(pageId)")
 }
 
+@Suppress("SameParameterValue")
 private fun tableExists(db: SupportSQLiteDatabase, name: String): Boolean {
     db.query(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -206,6 +207,7 @@ private fun tableExists(db: SupportSQLiteDatabase, name: String): Boolean {
     ).use { c -> return c.moveToFirst() }
 }
 
+@Suppress("SameParameterValue")
 private fun countRemaining(db: SupportSQLiteDatabase, name: String): Int {
     db.query("SELECT COUNT(*) FROM $name").use { c ->
         return if (c.moveToFirst()) c.getInt(0) else 0
