@@ -296,7 +296,6 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
     if (bytes.size < HEADER_SIZE + 8) {
         throw IllegalArgumentException("Buffer too small for SB1 header (need $HEADER_SIZE bytes)")
     }
-//    val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
     val header = ByteBuffer.wrap(bytes, 0, HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
 
 

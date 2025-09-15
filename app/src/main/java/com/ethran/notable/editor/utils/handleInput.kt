@@ -52,8 +52,12 @@ fun transformToLine(
             startPoint.pressure != null && endPoint.pressure != null ->
                 lerp(startPoint.pressure, endPoint.pressure, fraction)
 
-            else ->
-                throw IllegalArgumentException("startPoint.pressure and endPoint.pressure must either both be null or both non-null")
+            else -> throw IllegalArgumentException(
+                "Inconsistent pressure values: " +
+                        "startPoint.pressure=${startPoint.pressure}, " +
+                        "endPoint.pressure=${endPoint.pressure}. " +
+                        "Both must be null or both must be non-null."
+            )
         }
 
         val tiltX = when {

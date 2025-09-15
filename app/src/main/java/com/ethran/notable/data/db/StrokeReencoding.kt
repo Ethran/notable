@@ -158,11 +158,11 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
             db.setTransactionSuccessful()
         } catch (rowBlob: SQLiteBlobTooBigException) {
             // Single-row still too large: mark & skip
-            log.e("Oversize bach $batchSize, trying again with half batchsize.", rowBlob)
+            log.e("Oversize batch $batchSize, trying again with half batchsize.", rowBlob)
             SnackState.globalSnackFlow.tryEmit(
                 SnackConf(
                     id = "oversize_$batchSize",
-                    text = "Oversize bach $batchSize, trying again with half batchsize.",
+                    text = "Oversize batch $batchSize, trying again with half batchsize.",
                     duration = 4000
                 )
             )
