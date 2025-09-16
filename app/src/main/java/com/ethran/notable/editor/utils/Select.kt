@@ -1,7 +1,9 @@
 package com.ethran.notable.editor.utils
 
 import android.graphics.Canvas
+import android.graphics.Path
 import android.graphics.Rect
+import android.graphics.RectF
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
@@ -20,6 +22,46 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 //TODO: clean up this code, there is a lot of duplication
+
+
+enum class SelectPointPosition {
+    LEFT,
+    RIGHT,
+    CENTER
+}
+
+
+fun selectStrokesFromPath(strokes: List<Stroke>, path: Path): List<Stroke> {
+    val bounds = RectF()
+    path.computeBounds(bounds, true)
+
+    //region is only 16 bit, so we need to move our region
+    val translatedPath = Path(path)
+    translatedPath.offset(0f, -bounds.top)
+    val region = pathToRegion(translatedPath)
+
+    return strokes.filter {
+        strokeBounds(it).intersect(bounds)
+    }.filter { it.points.any { region.contains(it.x.toInt(), (it.y - bounds.top).toInt()) } }
+}
+
+fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
+    val bounds = RectF()
+    path.computeBounds(bounds, true)
+
+    //region is only 16 bit, so we need to move our region
+    val translatedPath = Path(path)
+    translatedPath.offset(0f, -bounds.top)
+    val region = pathToRegion(translatedPath)
+
+    return images.filter {
+        imageBounds(it).intersect(bounds)
+    }.filter {
+        // include image if all its corners are within region
+        imagePoints(it).all { region.contains(it.x, (it.y - bounds.top).toInt()) }
+    }
+}
+
 
 // allows selection of all images and strokes in given rectangle
 fun selectImagesAndStrokes(
