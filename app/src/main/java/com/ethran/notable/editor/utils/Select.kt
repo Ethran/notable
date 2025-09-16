@@ -1,4 +1,4 @@
-package com.ethran.notable.data.db
+package com.ethran.notable.editor.utils
 
 import android.graphics.Canvas
 import android.graphics.Rect
@@ -6,6 +6,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
+import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.PageView
@@ -13,16 +15,6 @@ import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.PlacementMode
-import com.ethran.notable.editor.utils.SelectPointPosition
-import com.ethran.notable.editor.utils.divideStrokesFromCut
-import com.ethran.notable.editor.utils.imageBoundsInt
-import com.ethran.notable.editor.utils.pointsToPath
-import com.ethran.notable.editor.utils.selectImagesFromPath
-import com.ethran.notable.editor.utils.selectStrokesFromPath
-import com.ethran.notable.editor.utils.setAnimationMode
-import com.ethran.notable.editor.utils.strokeBounds
-import com.ethran.notable.editor.utils.takeTopLeftCornel
-import com.ethran.notable.editor.utils.toIntOffset
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
