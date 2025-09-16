@@ -335,7 +335,13 @@ object PageDataManager {
                         }
 
                         scope.launch(Dispatchers.IO) {
-                            persistBitmapFull(context, bitmap, pageId)
+                            persistBitmapFull(
+                                context,
+                                bitmap,
+                                pageId,
+                                pageScroll[pageId],
+                                pageZoom[pageId]
+                            )
                             persistBitmapThumbnail(context, bitmap, pageId)
                         }
                     }
