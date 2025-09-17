@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
 import androidx.core.graphics.scale
 import com.ethran.notable.R
+import com.ethran.notable.data.ensurePreviewsFullFolder
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
@@ -65,16 +66,8 @@ fun persistBitmapFull(
     if (!checkZoomAndScroll(scroll, zoom)) return
     val scrollYInt = scroll!!.y.roundToInt()
     val fileName = buildPreviewFileName(pageID, scrollYInt)
-    val dir = File(context.filesDir, "pages/previews/full")
+    val dir = ensurePreviewsFullFolder(context)
     val file = File(dir, fileName)
-    // also remove previous bitmap if it exists, we want to keep only one per page.
-    try {
-        Files.createDirectories(Path(dir.absolutePath))
-    } catch (t: Throwable) {
-        log.e("persistBitmapFull: failed to create directories: ${t.message}")
-        logCallStack("persistBitmapFull")
-        return
-    }
 
     file.outputStream().buffered().use { os ->
         val success = bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
@@ -93,9 +86,10 @@ fun persistBitmapFull(
                 "$pageID-sy"
             ) && f.name.endsWith(".png")))
         ) {
-            if (f.delete()) {
+            if (f.delete())
                 log.i("persistBitmapFull: removed old preview ${f.name}")
-            }
+            else
+                log.e("persistBitmapFull: failed to delete old preview ${f.name}")
         }
     }
 }
@@ -115,7 +109,7 @@ fun loadPersistBitmap(
     if (!checkZoomAndScroll(scroll, zoom)) return null
 
     val scrollYInt = scroll!!.y.roundToInt()
-    val dir = File(context.filesDir, "pages/previews/full")
+    val dir = ensurePreviewsFullFolder(context)
     val encodedFile = File(dir, buildPreviewFileName(pageID, scrollYInt))
 
     val candidateFiles = buildList {
