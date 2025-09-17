@@ -113,6 +113,7 @@ class MainActivity : ComponentActivity() {
                             .background(Color.Black)
                     )
                     // TODO: maybe this snack is responsible for buttons not clickable on the button of screen?
+                    //  No, without it the issue still persists.
                     SnackBar(state = snackState)
                 }
             }
