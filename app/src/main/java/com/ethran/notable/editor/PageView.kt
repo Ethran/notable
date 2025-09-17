@@ -497,6 +497,7 @@ class PageView(
         scaleDelta: Float,
         currentZoom: Float,
     ): Float {
+        // TODO: Better snapping logic
         val portraitRatio = SCREEN_WIDTH.toFloat() / SCREEN_HEIGHT
 
         return if (!GlobalAppSettings.current.continuousZoom) {
@@ -517,7 +518,14 @@ class PageView(
                 portraitRatio
             }
 
-            if (abs(newZoom - snapTarget) < ZOOM_SNAP_THRESHOLD) snapTarget else newZoom
+            if (abs(newZoom - snapTarget) < ZOOM_SNAP_THRESHOLD)
+            {
+                log.d("Zoom snap to $snapTarget")
+                snapTarget
+            } else {
+                log.d("Left zoom as is. $newZoom")
+                newZoom
+            }
         }
     }
 
