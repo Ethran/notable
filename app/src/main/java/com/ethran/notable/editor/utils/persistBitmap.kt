@@ -11,8 +11,6 @@ import com.ethran.notable.data.ensurePreviewsFullFolder
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
-import java.nio.file.Files
-import kotlin.io.path.Path
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -22,20 +20,23 @@ private val log = ShipBook.getLogger("bitmapUtils")
 class Provider : FileProvider(R.xml.file_paths)
 
 private const val EQUALITY_THRESHOLD = 0.01f
+private const val THUMBNAIL_WIDTH = 500
+private const val THUMBNAIL_QUALITY = 60
+private const val PREVIEW_QUALITY = 90
 
 private fun isEqqApprox(a: Float, b: Float): Boolean = abs(a - b) <= EQUALITY_THRESHOLD
 
 private fun checkZoomAndScroll(scroll: Offset?, zoom: Float?): Boolean {
     if (zoom == null || scroll == null) {
-        log.i("persistBitmapFull: skipping persist (zoom is $zoom, scroll is $scroll)")
+        log.d("persistBitmapFull: skipping persist (zoom is $zoom, scroll is $scroll)")
         return false
     }
     if (!isEqqApprox(zoom, 1f)) {
-        log.i("persistBitmapFull: skipping persist (zoom=$zoom not ~1.0)")
+        log.d("persistBitmapFull: skipping persist (zoom=$zoom not ~1.0)")
         return false
     }
     if (!isEqqApprox(scroll.x, 0f)) {
-        log.i("persistBitmapFull: skipping persist (scroll.x: ${scroll.x} != 0)")
+        log.d("persistBitmapFull: skipping persist (scroll.x: ${scroll.x} != 0)")
         return false
     }
     return true
@@ -69,28 +70,31 @@ fun persistBitmapFull(
     val dir = ensurePreviewsFullFolder(context)
     val file = File(dir, fileName)
 
-    file.outputStream().buffered().use { os ->
-        val success = bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
-        if (!success) {
-            log.e("persistBitmapFull: Failed to compress bitmap")
-            logCallStack("persistBitmapFull")
-            return
-        } else {
-            log.i("persistBitmapFull: cached preview saved as $fileName (scrollY=$scrollYInt)")
+    try {
+        file.outputStream().buffered().use { os ->
+            val success = bitmap.compress(Bitmap.CompressFormat.PNG, PREVIEW_QUALITY, os)
+            if (!success) {
+                log.e("persistBitmapFull: Failed to compress bitmap")
+                logCallStack("persistBitmapFull")
+                return
+            } else {
+                log.d("persistBitmapFull: cached preview saved as $fileName (scrollY=$scrollYInt)")
+            }
         }
-    }
 
-    // Remove other variants for this page (legacy + other scrollY encodings)
-    dir.listFiles()?.forEach { f ->
-        if (f.name != fileName && (f.name == pageID || f.name == "$pageID.png" || (f.name.startsWith(
-                "$pageID-sy"
-            ) && f.name.endsWith(".png")))
-        ) {
-            if (f.delete())
-                log.i("persistBitmapFull: removed old preview ${f.name}")
-            else
-                log.e("persistBitmapFull: failed to delete old preview ${f.name}")
+        // Remove other variants for this page (legacy + other scrollY encodings)
+        dir.listFiles()?.forEach { f ->
+            if (f.name != fileName && (f.name == pageID || f.name == "$pageID.png" || (f.name.startsWith(
+                    "$pageID-sy"
+                ) && f.name.endsWith(".png")))
+            ) {
+                if (f.delete()) log.d("persistBitmapFull: removed old preview ${f.name}")
+                else log.e("persistBitmapFull: failed to delete old preview ${f.name}")
+            }
         }
+    } catch (e: Exception) {
+        log.e("persistBitmapFull: Exception while saving preview: ${e.message}")
+        logCallStack("persistBitmapFull")
     }
 }
 
@@ -112,12 +116,7 @@ fun loadPersistBitmap(
     val dir = ensurePreviewsFullFolder(context)
     val encodedFile = File(dir, buildPreviewFileName(pageID, scrollYInt))
 
-    val candidateFiles = buildList {
-        add(encodedFile)
-        // Legacy fallback (older cache without scroll encoding)
-        add(File(dir, pageID)) // (no extension as previously used)
-        add(File(dir, "$pageID.png")) // possible variant with extension
-    }.distinct()
+    val candidateFiles = listOf(encodedFile, File(dir, pageID), File(dir, "$pageID.png"))
 
     val targetFile = candidateFiles.firstOrNull { it.exists() }
 
@@ -126,28 +125,42 @@ fun loadPersistBitmap(
         return null
     }
 
-    val imgBitmap = BitmapFactory.decodeFile(targetFile.absolutePath)
-    return if (imgBitmap != null) {
-        if (targetFile.name != encodedFile.name) {
-            log.i("loadPersistBitmap: loaded legacy cached preview (${targetFile.name})")
+    return try {
+        val imgBitmap = BitmapFactory.decodeFile(targetFile.absolutePath)
+        if (imgBitmap != null) {
+            if (targetFile.name != encodedFile.name) {
+                log.d("loadPersistBitmap: loaded legacy cached preview (${targetFile.name})")
+            } else {
+                log.d("loadPersistBitmap: loaded cached preview (${targetFile.name}) for scrollY=$scrollYInt")
+            }
+            imgBitmap
         } else {
-            log.i("loadPersistBitmap: loaded cached preview (${targetFile.name}) for scrollY=$scrollYInt")
+            log.w("loadPersistBitmap: failed to decode bitmap from ${targetFile.name}")
+            null
         }
-        imgBitmap
-    } else {
-        log.i("loadPersistBitmap: failed to decode bitmap from ${targetFile.name}")
+    } catch (e: Exception) {
+        log.e("loadPersistBitmap: Exception while loading bitmap: ${e.message}")
+        logCallStack("loadPersistBitmap")
         null
     }
 }
 
+/**
+ * Persist a thumbnail for a page.
+ */
 fun persistBitmapThumbnail(context: Context, bitmap: Bitmap, pageID: String) {
     val file = File(context.filesDir, "pages/previews/thumbs/$pageID")
-    Files.createDirectories(Path(file.absolutePath).parent)
+    file.parentFile?.mkdirs()
     val ratio = bitmap.height.toFloat() / bitmap.width.toFloat()
-    val scaledBitmap = bitmap.scale(500, (500 * ratio).toInt(), false)
+    val scaledBitmap = bitmap.scale(THUMBNAIL_WIDTH, (THUMBNAIL_WIDTH * ratio).toInt(), false)
 
-    file.outputStream().buffered().use { os ->
-        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, os)
+    try {
+        file.outputStream().buffered().use { os ->
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, THUMBNAIL_QUALITY, os)
+        }
+    } catch (e: Exception) {
+        log.e("persistBitmapThumbnail: Exception while saving thumbnail: ${e.message}")
+        logCallStack("persistBitmapThumbnail")
     }
 
     if (scaledBitmap != bitmap) {

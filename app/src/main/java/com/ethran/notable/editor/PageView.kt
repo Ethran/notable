@@ -98,7 +98,11 @@ class PageView(
 
     // scroll is observed by ui, represents top left corner
     var scroll: Offset
-        get() = PageDataManager.getPageScroll(id) ?: Offset.Zero
+        get() = PageDataManager.getPageScroll(id) ?: run {
+            val value = Offset(0f, pageFromDb?.scroll?.toFloat() ?: 0f)
+            PageDataManager.setPageScroll(id, value)
+            value
+        }
         set(value) {
             PageDataManager.setPageScroll(id, value)
         }
@@ -111,7 +115,6 @@ class PageView(
         }
 
     // we need to observe zoom level, to adjust strokes size.
-//    var zoomLevel = MutableStateFlow(1.0f)
     val zoomLevel: MutableStateFlow<Float> = MutableStateFlow(PageDataManager.getPageZoom(id))
 
     var height: Int
@@ -148,12 +151,13 @@ class PageView(
     init {
         PageDataManager.setPage(id)
         log.i("PageView init")
+        zoomLevel.value = PageDataManager.getPageZoom(id)
         PageDataManager.getCachedBitmap(id)?.let { cached ->
             log.i("PageView: using cached bitmap")
             windowedBitmap = cached
             windowedCanvas = Canvas(windowedBitmap)
         } ?: run {
-            log.i("PageView: creating new bitmap")
+            log.i("PageView.init: creating new bitmap")
             recreateCanvas()
             PageDataManager.cacheBitmap(id, windowedBitmap)
         }
@@ -175,8 +179,7 @@ class PageView(
         }
         pageFromDb = AppRepository(context).pageRepository.getById(id)
         PageDataManager.setPage(newPageId)
-
-
+        zoomLevel.value = PageDataManager.getPageZoom(id)
         PageDataManager.getCachedBitmap(newPageId)?.let { cached ->
             log.i("PageView: using cached bitmap")
             windowedBitmap = cached
@@ -185,7 +188,7 @@ class PageView(
             if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
                 updateCanvasDimensions()
         } ?: run {
-            log.i("PageView: creating new bitmap")
+            log.i("PageView.changePage: creating new bitmap")
             recreateCanvas()
             PageDataManager.cacheBitmap(newPageId, windowedBitmap)
         }
@@ -229,7 +232,6 @@ class PageView(
 
     private fun loadPage() {
         logCache.i("Init from persist layer, pageId: $id")
-        zoomLevel.value = PageDataManager.getPageZoom(id)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
         val bookId = pageFromDb?.notebookId
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
@@ -341,7 +343,7 @@ class PageView(
         appRepository.imageRepository.deleteAll(imageIds)
     }
 
-    // load background, fast. Might not be accurate.
+    // load background, fast, if it is accrued enough.
     private fun loadInitialBitmap(): Boolean {
         val bitmapFromDisc = loadPersistBitmap(context, id, scroll, zoomLevel.value)
         if (bitmapFromDisc != null) {
