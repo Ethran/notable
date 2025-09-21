@@ -18,8 +18,8 @@ android {
         minSdk 29
         targetSdk 35
 
-        versionCode 21
-        versionName '0.0.21'
+        versionCode 22
+        versionName '0.1.0'
         if (project.hasProperty('IS_NEXT') && project.IS_NEXT.toBoolean()) {
             def timestamp = new Date().format('dd.MM.YYYY-HH:mm')
             versionName = "${versionName}-next-${timestamp}"

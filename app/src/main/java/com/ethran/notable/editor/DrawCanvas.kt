@@ -673,7 +673,7 @@ class DrawCanvas(
     }
 
     private fun refreshUi(dirtyRect: Rect?) {
-        log.d("refreshUi")
+        log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoomLevel.value}")
 
         // post what page drawn to visible surface
         drawCanvasToView(dirtyRect)

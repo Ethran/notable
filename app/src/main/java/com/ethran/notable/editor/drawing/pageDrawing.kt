@@ -25,7 +25,6 @@ import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.io.uriToBitmap
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
-import kotlin.system.measureTimeMillis
 
 private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
 
@@ -140,47 +139,42 @@ fun drawOnCanvasFromPage(
     canvas.withClip(canvasClipBounds) {
         drawColor(Color.BLACK)
 
-        val timeToDraw = measureTimeMillis {
-            drawBg(page.context, this, backgroundType, background, page.scroll, zoomLevel, page)
-            if (GlobalAppSettings.current.debugMode) {
-                drawDebugRectWithLabels(canvas, RectF(canvasClipBounds), Color.BLACK)
-            }
-            try {
-                page.images.forEach { image ->
-                    if (ignoredImageIds.contains(image.id)) return@forEach
-                    pageDrawingLog.i("PageView.kt: drawing image!")
-                    val bounds = imageBounds(image)
-                    // if stroke is not inside page section
-                    if (!bounds.toRect().intersect(pageArea)) return@forEach
-                    drawImage(page.context, this, image, -page.scroll)
-
-                }
-            } catch (e: Exception) {
-                pageDrawingLog.e("PageView.kt(${page.id}): Drawing images failed: ${e.message}", e)
-
-                val errorMessage =
-                    if (e.message?.contains("does not have permission") == true) {
-                        "Permission error: Unable to access image."
-                    } else {
-                        "Failed to load images."
-                    }
-                showHint(errorMessage, page.coroutineScope)
-            }
-            try {
-                page.strokes.forEach { stroke ->
-                    if (ignoredStrokeIds.contains(stroke.id)) return@forEach
-                    val bounds = strokeBounds(stroke)
-                    // if stroke is not inside page section
-                    if (!bounds.toRect().intersect(pageArea)) return@forEach
-
-                    drawStroke(this, stroke, -page.scroll)
-                }
-            } catch (e: Exception) {
-                pageDrawingLog.e("PageView.kt: Drawing strokes failed: ${e.message}", e)
-                showHint("Error drawing strokes", page.coroutineScope)
-            }
-
+        drawBg(page.context, this, backgroundType, background, page.scroll, zoomLevel, page)
+        if (GlobalAppSettings.current.debugMode) {
+            drawDebugRectWithLabels(canvas, RectF(canvasClipBounds), Color.BLACK)
         }
-        pageDrawingLog.i("Drew area in ${timeToDraw}ms")
+        try {
+            page.images.forEach { image ->
+                if (ignoredImageIds.contains(image.id)) return@forEach
+                pageDrawingLog.i("PageView.kt: drawing image!")
+                val bounds = imageBounds(image)
+                // if stroke is not inside page section
+                if (!bounds.toRect().intersect(pageArea)) return@forEach
+                drawImage(page.context, this, image, -page.scroll)
+
+            }
+        } catch (e: Exception) {
+            pageDrawingLog.e("PageView.kt(${page.id}): Drawing images failed: ${e.message}", e)
+
+            val errorMessage = if (e.message?.contains("does not have permission") == true) {
+                "Permission error: Unable to access image."
+            } else {
+                "Failed to load images."
+            }
+            showHint(errorMessage, page.coroutineScope)
+        }
+        try {
+            page.strokes.forEach { stroke ->
+                if (ignoredStrokeIds.contains(stroke.id)) return@forEach
+                val bounds = strokeBounds(stroke)
+                // if stroke is not inside page section
+                if (!bounds.toRect().intersect(pageArea)) return@forEach
+
+                drawStroke(this, stroke, -page.scroll)
+            }
+        } catch (e: Exception) {
+            pageDrawingLog.e("PageView.kt: Drawing strokes failed: ${e.message}", e)
+            showHint("Error drawing strokes", page.coroutineScope)
+        }
     }
 }

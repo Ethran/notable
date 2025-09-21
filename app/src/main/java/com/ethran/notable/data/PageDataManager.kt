@@ -315,7 +315,7 @@ object PageDataManager {
         context: Context, scope: CoroutineScope
     ) {
         scope.launch(Dispatchers.IO) {
-            saveTopic.buffer(100).chunked(1000).collect { pageIdBatch ->
+            saveTopic.buffer(10).chunked(1000).collect { pageIdBatch ->
                     // 3. Take only the unique page IDs from the batch.
                     val uniquePageIds = pageIdBatch.distinct()
 
@@ -326,7 +326,10 @@ object PageDataManager {
                     // 4. Process each unique ID.
                     for (pageId in uniquePageIds) {
                         val ref = bitmapCache[pageId]
+                        val currentZoomLevel = pageZoom[pageId]
+                        val currentScroll = pageScroll[pageId]
                         val bitmap = ref?.get()
+
 
                         if (bitmap == null || bitmap.isRecycled) {
                             log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
@@ -338,8 +341,8 @@ object PageDataManager {
                                 context,
                                 bitmap,
                                 pageId,
-                                pageScroll[pageId],
-                                pageZoom[pageId]
+                                currentScroll,
+                                currentZoomLevel
                             )
                             persistBitmapThumbnail(context, bitmap, pageId)
                         }

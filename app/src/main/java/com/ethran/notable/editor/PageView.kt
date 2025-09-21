@@ -581,11 +581,11 @@ class PageView(
             this,
             redrawRect
         )
+        PageDataManager.cacheBitmap(id, windowedBitmap)
 
         drawAreaScreenCoordinates(redrawRect)
 
         saveToPersistLayer()
-        PageDataManager.cacheBitmap(id, windowedBitmap)
         log.i("Zoom and redraw completed")
     }
 
@@ -662,10 +662,8 @@ class PageView(
         if (scaleFactor < 1f)
             redrawOutsideRect(dstRect.toRect(), screenW, screenH)
 
-
         persistBitmapDebounced()
         saveToPersistLayer()
-        PageDataManager.cacheBitmap(id, windowedBitmap)
         log.i(
             "Zoom updated using snapshot scaling. " +
                     "oldZoom=$oldZoom newZoom=$newZoom " +
@@ -751,7 +749,6 @@ class PageView(
             DrawCanvas.forceUpdate.emit(null)
         }
         persistBitmapDebounced()
-        PageDataManager.cacheBitmap(id, windowedBitmap)
     }
 
     // should be run after every modification of widowedBitmap.
@@ -759,6 +756,9 @@ class PageView(
     // if its not correct, might cause ghosting
     private fun persistBitmapDebounced(pageId: String = this.id) {
         coroutineScope.launch {
+            // Make sure that persisting bitmap gets the newest possible bitmap
+            // TODO: There might still be some nasty race conditions.
+            PageDataManager.cacheBitmap(id, windowedBitmap)
             PageDataManager.saveTopic.emit(pageId)
         }
     }
