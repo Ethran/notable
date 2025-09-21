@@ -76,6 +76,7 @@ private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
  * - If scroll.x != 0f -> skip
  * - Encode scroll.y (rounded) in the file name.
  * - Remove previously persisted previews for the same page (keep only one).
+ * TODO: If scroll differs by a small factor, update scroll to match the saved value.
  */
 fun persistBitmapFull(
     context: Context, bitmap: Bitmap, pageID: String, scroll: Offset?, zoom: Float?
