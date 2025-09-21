@@ -343,7 +343,7 @@ class PageView(
         appRepository.imageRepository.deleteAll(imageIds)
     }
 
-    // load background, fast, if it is accrued enough.
+    // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {
         val bitmapFromDisc = loadPersistBitmap(context, id, scroll, zoomLevel.value)
         if (bitmapFromDisc != null) {

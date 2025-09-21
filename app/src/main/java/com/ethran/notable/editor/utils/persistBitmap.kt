@@ -51,6 +51,22 @@ private fun checkZoomAndScroll(scroll: Offset?, zoom: Float?): Boolean {
  */
 private fun buildPreviewFileName(pageID: String, scrollY: Int): String = "${pageID}-sy$scrollY.png"
 
+
+/**
+ *   Remove other variants for this page (legacy + other scrollY encodings)
+ */
+private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
+    dir.listFiles()?.forEach { f ->
+        if (f.name != latestPreview && (f.name == pageID || f.name == "$pageID.png" || (f.name.startsWith(
+                "$pageID-sy"
+            ) && f.name.endsWith(".png")))
+        ) {
+            if (f.delete()) log.d("persistBitmapFull: removed old preview ${f.name}")
+            else log.e("persistBitmapFull: failed to delete old preview ${f.name}")
+        }
+    }
+}
+
 /**
  * Persist a full bitmap preview for a page.
  *
@@ -81,17 +97,8 @@ fun persistBitmapFull(
                 log.d("persistBitmapFull: cached preview saved as $fileName (scrollY=$scrollYInt)")
             }
         }
+        removeOldBitmaps(dir, fileName, pageID)
 
-        // Remove other variants for this page (legacy + other scrollY encodings)
-        dir.listFiles()?.forEach { f ->
-            if (f.name != fileName && (f.name == pageID || f.name == "$pageID.png" || (f.name.startsWith(
-                    "$pageID-sy"
-                ) && f.name.endsWith(".png")))
-            ) {
-                if (f.delete()) log.d("persistBitmapFull: removed old preview ${f.name}")
-                else log.e("persistBitmapFull: failed to delete old preview ${f.name}")
-            }
-        }
     } catch (e: Exception) {
         log.e("persistBitmapFull: Exception while saving preview: ${e.message}")
         logCallStack("persistBitmapFull")
