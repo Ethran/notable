@@ -130,22 +130,23 @@ dependencies {
     implementation "androidx.compose.material:material:$compose_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_version"
     implementation "androidx.compose.material:material-icons-extended:$compose_version"
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.9.2'
-    implementation 'androidx.activity:activity-compose:1.10.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.9.4'
+    implementation 'androidx.activity:activity-compose:1.11.0'
     implementation 'androidx.fragment:fragment-ktx:1.8.9'
     implementation 'androidx.graphics:graphics-core:1.0.3'
     implementation"androidx.input:input-motionprediction:1.0.0-beta06"
 
     //implementation fileTree(dir: 'libs', include: ['*.aar'])
-    implementation('com.onyx.android.sdk:onyxsdk-device:1.3.1.2') {
+    implementation('com.onyx.android.sdk:onyxsdk-device:1.3.1.3') {
         exclude group: 'com.android.support', module: 'support-compat'
     }
+    // newest: 1.5.0.4, can't update, as onyxsdk-geometry is not available.
     implementation('com.onyx.android.sdk:onyxsdk-pen:1.4.12') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
     }
 
-    implementation('com.onyx.android.sdk:onyxsdk-base:1.8.1.6') {
+    implementation('com.onyx.android.sdk:onyxsdk-base:1.8.2.1') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
     }
@@ -167,7 +168,7 @@ dependencies {
     implementation "androidx.compose.runtime:runtime:$compose_version"
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0'
 
-    implementation "androidx.navigation:navigation-compose:2.9.3"
+    implementation "androidx.navigation:navigation-compose:2.9.4"
 
     def room_version = "2.7.1"
 
@@ -177,7 +178,7 @@ dependencies {
     ksp "androidx.room:room-compiler:$room_version"
 
     // For testing:
-    implementation 'androidx.room:room-testing-android:2.7.2'
+    implementation 'androidx.room:room-testing-android:2.8.0'
     testImplementation "androidx.room:room-testing:$room_version"
     testImplementation "androidx.arch.core:core-testing:2.2.0"
 
