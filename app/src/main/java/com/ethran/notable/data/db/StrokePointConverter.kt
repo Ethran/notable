@@ -92,7 +92,6 @@ Notes:
 - ENCODE_SIZE is always present for each channel, regardless of encoding.
 - COUNT is the logical number of points for the stroke (for metadata or array allocation).
 - All arrays must be uniform per stroke (no per-point nulls).
-- Optional: In future, add ENCODE_TYPE, FLAGS, or META fields per channel for more flexibility.
 */
 
 private const val MAGIC0: Byte = 'S'.code.toByte()
@@ -103,15 +102,16 @@ private const val HEADER_SIZE: Int = 1 + 1 + 1 + 1 + 1 + 4
 // Compression flag values
 private const val COMPRESSION_NONE: Byte = 0
 private const val COMPRESSION_LZ4: Byte = 1
-private const val MIN_BYTES_FOR_COMPRESSION: Int = 512
 
-// Reserved for future use if you ever support per-point null dt in a later version.
+// Reserved for future use, to allow support per-point null dt in a later version.
 private const val DT_NULL_SENTINEL_INT = 0xFFFF  // 65535
 private const val DT_MAX_VALUE_INT = DT_NULL_SENTINEL_INT - 1  // 65534
-private const val MIN_SAVING_RATIO: Double = 0.75
 
 // Encoding precision constants
 private const val ENCODING_PRECISION_XY = 2
+private const val MIN_BYTES_FOR_COMPRESSION: Int = 512
+private const val MIN_SAVING_RATIO: Double = 0.75
+private const val MAX_PAGE_HEIGHT = 10_000_000f
 
 
 /* ------------------ LZ4 Helpers ------------------ */
@@ -186,7 +186,7 @@ fun getReusableBuffer(rawBodySize: Int): ByteBuffer {
 fun encodeStrokePoints(
     points: List<StrokePoint>, mask: Int = computeStrokeMask(points)
 ): ByteArray {
-    if (points.first().y > 10000000f) {
+    if (points.first().y > MAX_PAGE_HEIGHT) {
         Log.e(TAG, "Page is too large!")
         SnackState.globalSnackFlow.tryEmit(
             SnackConf(
@@ -197,7 +197,7 @@ fun encodeStrokePoints(
     }
     val count = points.size
     require(count > 0) { "Empty point list" }
-    // Enforce SB1 invariant before writing (gives clear error instead of NPE).
+    // Enforce SB1 invariant before writing.
     validateUniform(mask, points)
 
     // encode mandatory data, using Polyline
@@ -255,8 +255,7 @@ fun encodeStrokePoints(
     out.putInt(count)
     out.put(compressionFlag)
 
-    if (compressionFlag == COMPRESSION_LZ4)
-        out.putInt(rawBodySize) // needed for decompression
+    if (compressionFlag == COMPRESSION_LZ4) out.putInt(rawBodySize) // put raw size for LZ4
 
     // Body (compressed or raw)
     out.put(finalBody)

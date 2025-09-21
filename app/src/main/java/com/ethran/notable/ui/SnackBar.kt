@@ -20,8 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.ethran.notable.TAG
-import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -108,7 +106,6 @@ class SnackState {
 
 @Composable
 fun SnackBar(state: SnackState) {
-    Log.i(TAG, "Snack Bar started")
     val snacks = remember {
         mutableStateListOf<SnackConf>()
     }
