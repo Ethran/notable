@@ -35,7 +35,7 @@ private fun checkZoomAndScroll(scroll: Offset?, zoom: Float?): Boolean {
         return false
     }
     if (!isEqqApprox(scroll.x, 0f)) {
-        log.i("persistBitmapFull: skipping persist (scroll.x: ${scroll.x} == 0)")
+        log.i("persistBitmapFull: skipping persist (scroll.x: ${scroll.x} != 0)")
         return false
     }
     return true
@@ -56,7 +56,7 @@ private fun buildPreviewFileName(pageID: String, scrollY: Int): String = "${page
  * Rules implemented from inline spec:
  * - If zoom or scroll is null -> skip (log)
  * - If zoom is not ~1.0 (with epsilon) -> skip
- * - If scroll.x == 0f -> skip
+ * - If scroll.x != 0f -> skip
  * - Encode scroll.y (rounded) in the file name.
  * - Remove previously persisted previews for the same page (keep only one).
  */

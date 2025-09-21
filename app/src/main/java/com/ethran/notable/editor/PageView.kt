@@ -518,8 +518,7 @@ class PageView(
                 portraitRatio
             }
 
-            if (abs(newZoom - snapTarget) < ZOOM_SNAP_THRESHOLD)
-            {
+            if (abs(newZoom - snapTarget) < ZOOM_SNAP_THRESHOLD) {
                 log.d("Zoom snap to $snapTarget")
                 snapTarget
             } else {
