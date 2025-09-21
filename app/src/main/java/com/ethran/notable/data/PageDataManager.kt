@@ -233,7 +233,6 @@ object PageDataManager {
             val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
             cacheImages(pageId, pageWithImages.images)
             recomputeHeight(pageId)
-            setPageScroll(pageId, Offset(0f, pageWithStrokes.page.scroll.toFloat()))
             indexImages(coroutineScope, pageId)
             indexStrokes(coroutineScope, pageId)
             calculateMemoryUsage(pageId, 1)
@@ -335,7 +334,13 @@ object PageDataManager {
                         }
 
                         scope.launch(Dispatchers.IO) {
-                            persistBitmapFull(context, bitmap, pageId)
+                            persistBitmapFull(
+                                context,
+                                bitmap,
+                                pageId,
+                                pageScroll[pageId],
+                                pageZoom[pageId]
+                            )
                             persistBitmapThumbnail(context, bitmap, pageId)
                         }
                     }
