@@ -139,7 +139,7 @@ fun loadPersistBitmap(
             if (targetFile.name != encodedFile.name) {
                 log.d("loadPersistBitmap: loaded legacy cached preview (${targetFile.name})")
             } else {
-                log.d("loadPersistBitmap: loaded cached preview (${targetFile.name}) for scrollY=$scrollYInt")
+                log.d("loadPersistBitmap: loaded cached preview (${targetFile.name}) for scrollY=${scroll.y}")
             }
             imgBitmap
         } else {
