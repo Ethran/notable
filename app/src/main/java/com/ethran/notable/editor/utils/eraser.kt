@@ -84,12 +84,13 @@ fun handleScribbleToErase(
     touchPoints: List<StrokePoint>,
     history: History,
     pen: Pen,
-    currentLastStrokeEndTime: Long
+    currentLastStrokeEndTime: Long,
+    firstPointTime: Long
 ): Rect? {
     if (pen == Pen.MARKER) return null // do not erase with highlighter
     if (!GlobalAppSettings.current.scribbleToEraseEnabled) return null // scribble to erase is disabled
     if (touchPoints.size < MINIMUM_SCRIBBLE_POINTS) return null
-    if (touchPoints.first().timestamp < currentLastStrokeEndTime + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS) return null // not enough time has passed since last stroke
+    if (firstPointTime < currentLastStrokeEndTime + SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS) return null // not enough time has passed since last stroke
     if (calculateNumReversals(touchPoints) < 2) return null
 
     val strokeLength = calculateStrokeLength(touchPoints)

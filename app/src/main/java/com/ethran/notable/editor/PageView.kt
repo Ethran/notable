@@ -250,14 +250,13 @@ class PageView(
                 }
                 logCache.d("Loaded page from persistent layer $id")
                 PageDataManager.isPageLoaded(id)
+                coroutineScope.launch(Dispatchers.Default) {
+                    delay(10)
+                    PageDataManager.reduceCache(20)
+                    if (bookId.isNotNull())
+                        cacheNeighbors(appRepository, id, bookId)
+                }
             }
-        }
-
-        coroutineScope.launch(Dispatchers.Default) {
-            delay(10)
-            PageDataManager.reduceCache(20)
-            if (bookId.isNotNull())
-                cacheNeighbors(appRepository, id, bookId)
         }
     }
 

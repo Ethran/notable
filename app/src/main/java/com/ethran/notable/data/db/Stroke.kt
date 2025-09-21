@@ -1,28 +1,23 @@
 package com.ethran.notable.data.db
 
 import android.content.Context
-import androidx.room.ColumnInfo
-import androidx.room.Dao
-import androidx.room.Entity
-import androidx.room.ForeignKey
-import androidx.room.Insert
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Transaction
-import androidx.room.Update
+import androidx.compose.ui.geometry.Offset
+import androidx.room.*
 import com.ethran.notable.editor.utils.Pen
+import kotlinx.serialization.SerialName
 import java.util.Date
 import java.util.UUID
 
 @kotlinx.serialization.Serializable
 data class StrokePoint(
-    val x: Float,
-    var y: Float,
-    val pressure: Float,
-    val size: Float, //TODO: remove? It seams the same as Stroke size
-    val tiltX: Int,
-    val tiltY: Int,
-    val timestamp: Long,
+    val x: Float,                   // with scroll
+    var y: Float,                   // with scroll
+    val pressure: Float? = null,    // relative pressure values 1 to 4096, usually whole number
+    val tiltX: Int? = null,         // tilt values in degrees, -90 to 90
+    val tiltY: Int? = null,
+    val dt: UShort? = null,         // delta time in milliseconds, from first point in stroke, not used yet.
+    @SerialName("timestamp") private val legacyTimestamp: Long? = null,
+    @SerialName("size") private val legacySize: Float? = null,
 )
 
 @Entity(
@@ -40,6 +35,8 @@ data class Stroke(
     val pen: Pen,
     @ColumnInfo(defaultValue = "0xFF000000")
     val color: Int = 0xFF000000.toInt(),
+    @ColumnInfo(defaultValue = "4096")
+    val maxPressure: Int = 4096,   // might be useful for synchronization between devices
 
     var top: Float,
     var bottom: Float,

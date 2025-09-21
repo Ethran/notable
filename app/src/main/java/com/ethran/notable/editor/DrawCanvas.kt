@@ -76,7 +76,6 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -301,13 +300,14 @@ class DrawCanvas(
                             // transform points to page space
                             val scaledPoints =
                                 copyInput(plist.points, page.scroll, page.zoomLevel.value)
-
+                            val firstPointTime = plist.points.first().timestamp
                             val erasedByScribbleDirtyRect = handleScribbleToErase(
                                 page,
                                 scaledPoints,
                                 history,
                                 getActualState().pen,
-                                currentLastStrokeEndTime
+                                currentLastStrokeEndTime,
+                                firstPointTime
                             )
                             if (erasedByScribbleDirtyRect.isNullOrEmpty()) {
                                 log.d("Drawing...")
@@ -323,9 +323,6 @@ class DrawCanvas(
                             } else {
                                 log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                                 drawCanvasToView(erasedByScribbleDirtyRect)
-                                // we need to wait before refreshing, as onyx library has its own buffer that needs to be updated. Otherwise we will refresh to correct, then  incorrect and then correct state.
-                                awaitFrame()
-                                awaitFrame()
                                 partialRefreshRegionOnce(
                                     this@DrawCanvas,
                                     erasedByScribbleDirtyRect,
@@ -554,10 +551,8 @@ class DrawCanvas(
                     x = p.x,
                     y = p.y,
                     pressure = 1f,
-                    size = 10f,
                     tiltX = 0,
                     tiltY = 0,
-                    timestamp = 0,
                 )
                 glRenderer.frontBufferRenderer?.renderFrontBufferedLayer(strokePoint)
             }

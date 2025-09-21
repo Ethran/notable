@@ -20,11 +20,6 @@ class Converters {
     @TypeConverter
     fun toListString(value: String) = Json.decodeFromString<List<String>>(value)
 
-    @TypeConverter
-    fun fromListPoint(value: List<StrokePoint>) = Json.encodeToString(value)
-
-    @TypeConverter
-    fun toListPoint(value: String) = Json.decodeFromString<List<StrokePoint>>(value)
 
     @TypeConverter
     fun fromTimestamp(value: Long?): Date? {
@@ -35,12 +30,25 @@ class Converters {
     fun dateToTimestamp(date: Date?): Long? {
         return date?.time
     }
+
+    @TypeConverter
+    fun fromStrokePoints(points: List<StrokePoint>?): ByteArray? {
+        if (points == null) return null
+        val mask = computeStrokeMask(points)
+        return encodeStrokePoints(points, mask)
+    }
+
+    @TypeConverter
+    fun toStrokePoints(bytes: ByteArray?): List<StrokePoint>? {
+        if (bytes == null || bytes.isEmpty()) return emptyList()
+        return decodeStrokePoints(bytes)
+    }
 }
 
 
 @Database(
     entities = [Folder::class, Notebook::class, Page::class, Stroke::class, Image::class, Kv::class],
-    version = 32,
+    version = 33,
     autoMigrations = [
         AutoMigration(19, 20),
         AutoMigration(20, 21),
@@ -53,8 +61,8 @@ class Converters {
         AutoMigration(28, 29),
         AutoMigration(29, 30),
         AutoMigration(30, 31, spec = AutoMigration30to31::class),
-        AutoMigration(31, 32, spec = AutoMigration31to32::class)
-
+        AutoMigration(31, 32, spec = AutoMigration31to32::class),
+        AutoMigration(32, 33),
     ], exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -80,7 +88,12 @@ abstract class AppDatabase : RoomDatabase() {
                     INSTANCE =
                         Room.databaseBuilder(context, AppDatabase::class.java, dbFile.absolutePath)
                             .allowMainThreadQueries() // Avoid in production
-                            .addMigrations(MIGRATION_16_17, MIGRATION_17_18, MIGRATION_22_23)
+                            .addMigrations(
+                                MIGRATION_16_17,
+                                MIGRATION_17_18,
+                                MIGRATION_22_23,
+                                MIGRATION_32_33
+                            )
                             .build()
 
                 }

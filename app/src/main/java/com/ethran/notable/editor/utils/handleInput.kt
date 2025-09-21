@@ -43,15 +43,42 @@ fun transformToLine(
     val numberOfPoints = 100 // Define how many points should line have
     val points2 = List(numberOfPoints) { i ->
         val fraction = i.toFloat() / (numberOfPoints - 1)
+
         val x = lerp(startPoint.x, endPoint.x, fraction)
         val y = lerp(startPoint.y, endPoint.y, fraction)
-        val pressure = lerp(startPoint.pressure, endPoint.pressure, fraction)
-        val size = lerp(startPoint.size, endPoint.size, fraction)
-        val tiltX = (lerp(startPoint.tiltX.toFloat(), endPoint.tiltX.toFloat(), fraction)).toInt()
-        val tiltY = (lerp(startPoint.tiltY.toFloat(), endPoint.tiltY.toFloat(), fraction)).toInt()
-        val timestamp = System.currentTimeMillis()
 
-        StrokePoint(x, y, pressure, size, tiltX, tiltY, timestamp)
+        val pressure = when {
+            startPoint.pressure == null && endPoint.pressure == null -> null
+            startPoint.pressure != null && endPoint.pressure != null ->
+                lerp(startPoint.pressure, endPoint.pressure, fraction)
+
+            else -> throw IllegalArgumentException(
+                "Inconsistent pressure values: " +
+                        "startPoint.pressure=${startPoint.pressure}, " +
+                        "endPoint.pressure=${endPoint.pressure}. " +
+                        "Both must be null or both must be non-null."
+            )
+        }
+
+        val tiltX = when {
+            startPoint.tiltX == null && endPoint.tiltX == null -> null
+            startPoint.tiltX != null && endPoint.tiltX != null ->
+                lerp(startPoint.tiltX.toFloat(), endPoint.tiltX.toFloat(), fraction).toInt()
+
+            else ->
+                throw IllegalArgumentException("startPoint.tiltX and endPoint.tiltX must either both be null or both non-null")
+        }
+
+        val tiltY = when {
+            startPoint.tiltY == null && endPoint.tiltY == null -> null
+            startPoint.tiltY != null && endPoint.tiltY != null ->
+                lerp(startPoint.tiltY.toFloat(), endPoint.tiltY.toFloat(), fraction).toInt()
+
+            else ->
+                throw IllegalArgumentException("startPoint.tiltY and endPoint.tiltY must either both be null or both non-null")
+        }
+
+        StrokePoint(x, y, pressure, tiltX, tiltY)
     }
     return (points2)
 }

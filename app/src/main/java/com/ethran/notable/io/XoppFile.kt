@@ -54,12 +54,14 @@ import javax.xml.transform.TransformerFactory
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 
+// I do not know what pressureFactor should be, I just guest it.
+// it's used to get strokes look relatively good in xournal++
+private const val PRESSURE_FACTOR = 0.5f
+
+
 object XoppFile {
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
     private val maxPressure = EpdController.getMaxTouchPressure()
-
-    //I do not know what pressureFactor should be, I just guest it.
-    private val pressureFactor = maxPressure / 2
 
     /**
      * Exports an entire book as a `.xopp` file.
@@ -110,8 +112,7 @@ object XoppFile {
 
         BufferedWriter(
             OutputStreamWriter(
-                FileOutputStream(tempFile),
-                Charsets.UTF_8
+                FileOutputStream(tempFile), Charsets.UTF_8
             )
         ).use { writer ->
             writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
@@ -166,8 +167,9 @@ object XoppFile {
             strokeElement.setAttribute("tool", stroke.pen.toString())
             strokeElement.setAttribute("color", getColorName(Color(stroke.color)))
             val widthValues = mutableListOf(stroke.size * scaleFactor)
-            if (stroke.pen == Pen.FOUNTAIN || stroke.pen == Pen.BRUSH || stroke.pen == Pen.PENCIL)
-                widthValues += stroke.points.map { it.pressure / pressureFactor }
+            if (stroke.pen == Pen.FOUNTAIN || stroke.pen == Pen.BRUSH || stroke.pen == Pen.PENCIL) widthValues += stroke.points.map {
+                it.pressure?.div(stroke.maxPressure * PRESSURE_FACTOR) ?: 1f
+            }
             val widthString = widthValues.joinToString(" ")
 
             strokeElement.setAttribute("width", widthString)
@@ -195,10 +197,8 @@ object XoppFile {
                 imgElement.setAttribute("filename", uri)
                 imgElement.textContent = convertImageToBase64(image.uri, context)
             }
-            if (imgElement.textContent.isNotBlank())
-                layer.appendChild(imgElement)
-            else
-                showHint("Image cannot be loaded.")
+            if (imgElement.textContent.isNotBlank()) layer.appendChild(imgElement)
+            else showHint("Image cannot be loaded.")
         }
 
         val xmlString = convertXmlToString(doc)
@@ -316,8 +316,7 @@ object XoppFile {
             bookRepo.addPage(book.id, page.id)
         }
         Log.Companion.i(
-            TAG,
-            "Successfully imported book '${book.title}' with ${pages.length} pages."
+            TAG, "Successfully imported book '${book.title}' with ${pages.length} pages."
         )
     }
 
@@ -383,12 +382,11 @@ object XoppFile {
                     StrokePoint(
                         x = chunk[0].toFloat() / scaleFactor,
                         y = chunk[1].toFloat() / scaleFactor,
-                        pressure = pressureValues.getOrNull(index - 1)?.times(pressureFactor)
-                            ?: (maxPressure / 2),
-                        size = strokeSize,
+                        // pressure is shifted by one spot
+                        pressure = pressureValues.getOrNull(index-1)
+                            ?.times(maxPressure * PRESSURE_FACTOR) ?: 0f,
                         tiltX = 0,
                         tiltY = 0,
-                        timestamp = System.currentTimeMillis()
                     )
                 } catch (e: Exception) {
                     Log.Companion.e(TAG, "Error parsing stroke point: ${e.message}")
@@ -401,8 +399,7 @@ object XoppFile {
 
             val decodedPoints = points.mapIndexed { index, it ->
                 if (index == 0) boundingBox.set(it.x, it.y, it.x, it.y) else boundingBox.union(
-                    it.x,
-                    it.y
+                    it.x, it.y
                 )
                 it
             }
@@ -425,7 +422,8 @@ object XoppFile {
                     (color.red * 255).toInt(),
                     (color.green * 255).toInt(),
                     (color.blue * 255).toInt()
-                )
+                ),
+                maxPressure = maxPressure.toInt()
             )
             strokes.add(stroke)
         }
@@ -437,9 +435,7 @@ object XoppFile {
      * Extracts images from a page element and saves them.
      */
     private fun parseImages(
-        context: Context,
-        pageElement: Element,
-        page: Page
+        context: Context, pageElement: Element, page: Page
     ) {
         val imageRepo = AppDatabase.Companion.getDatabase(context).ImageDao()
         val imageNodes = pageElement.getElementsByTagName("image")
@@ -538,11 +534,9 @@ object XoppFile {
             "yellow" -> Color.Companion.Yellow
             // Convert "#RRGGBBAA" → "#AARRGGBB" → Android Color
             else -> {
-                if (colorString.startsWith("#") && colorString.length == 9)
-                    Color(
-                        ("#" + colorString.substring(7, 9) +
-                                colorString.substring(1, 7)).toColorInt()
-                    )
+                if (colorString.startsWith("#") && colorString.length == 9) Color(
+                    ("#" + colorString.substring(7, 9) + colorString.substring(1, 7)).toColorInt()
+                )
                 else {
                     Log.Companion.e(TAG, "Unknown color: $colorString")
                     Color.Companion.Black
