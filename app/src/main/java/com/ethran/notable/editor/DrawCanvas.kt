@@ -21,9 +21,9 @@ import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.StrokePoint
-import com.ethran.notable.data.db.handleSelect
-import com.ethran.notable.data.db.selectImage
-import com.ethran.notable.data.db.selectImagesAndStrokes
+import com.ethran.notable.editor.utils.handleSelect
+import com.ethran.notable.editor.utils.selectImage
+import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.drawImage
