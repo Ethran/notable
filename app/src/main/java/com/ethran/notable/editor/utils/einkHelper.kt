@@ -179,14 +179,33 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
     }
 }
 
+/**
+ * Attempts to set the refresh mode for a view using the Onyx EPDController.
+ * Catches and logs exceptions to prevent crashes on unsupported devices or update modes.
+ * Returns true if successful, false otherwise.
+ * This is necessary because the Onyx library is unstable and unreliable.
+ */
+private fun tryToSetRefreshMode(view: View, mode: UpdateMode): Boolean {
+    return try {
+        EpdController.setViewDefaultUpdateMode(view, mode)
+        einkLogger.d("Set update mode $mode")
+        true
+    } catch (e: NullPointerException) {
+        einkLogger.d("Device does not support update mode $mode (NullPointerException): ${e.message}")
+        false
+    } catch (e: IllegalArgumentException) {
+        einkLogger.d("Device does not support update mode $mode (IllegalArgumentException): ${e.message}")
+        false
+    } catch (e: Exception) {
+        einkLogger.e("Unexpected error when setting update mode $mode: ${e.message}", e)
+        false
+    }
+}
 
 fun onSurfaceInit(view: View) {
     einkLogger.v("onSurfaceInit, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
-    EpdController.setViewDefaultUpdateMode(
-        view,
-        UpdateMode.HAND_WRITING_REPAINT_MODE
-    )
-//    EpdController.enablePost(view, 1)
+    if(!tryToSetRefreshMode(view, UpdateMode.HAND_WRITING_REPAINT_MODE))
+        tryToSetRefreshMode(view, UpdateMode.REGAL)
     EpdController.enablePost(1)
 }
 
