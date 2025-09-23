@@ -130,10 +130,10 @@ fun drawOnCanvasFromPage(
     ignoredStrokeIds: List<String> = listOf(),
     ignoredImageIds: List<String> = listOf(),
 ) {
-
     val zoomLevel = page.zoomLevel.value
     val backgroundType = page.pageFromDb?.getBackgroundType() ?: BackgroundType.Native
     val background = page.pageFromDb?.background ?: "blank"
+    pageDrawingLog.d("drawOnCanvasFromPage, zoom: $zoomLevel, background: $background, type: $backgroundType")
 
     // Canvas is scaled, it will scale page area.
     canvas.withClip(canvasClipBounds) {

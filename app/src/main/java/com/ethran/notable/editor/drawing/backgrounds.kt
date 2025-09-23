@@ -375,7 +375,10 @@ fun drawBg(
             if (pageNumber < getPdfPageCount(background)) drawPdfPage(
                 canvas, background, pageNumber, scroll, page, scale
             )
-            else canvas.drawColor(Color.WHITE)
+            else{
+                backgroundsLog.w("Page number $pageNumber is out of bounds")
+                canvas.drawColor(Color.WHITE)
+            }
         }
 
         is BackgroundType.Pdf -> {

@@ -21,9 +21,6 @@ import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.StrokePoint
-import com.ethran.notable.editor.utils.handleSelect
-import com.ethran.notable.editor.utils.selectImage
-import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.drawImage
@@ -42,6 +39,7 @@ import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
+import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
 import com.ethran.notable.editor.utils.onSurfaceInit
@@ -52,6 +50,8 @@ import com.ethran.notable.editor.utils.prepareForPartialUpdate
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.editor.utils.restoreDefaults
+import com.ethran.notable.editor.utils.selectImage
+import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.toPageCoordinates

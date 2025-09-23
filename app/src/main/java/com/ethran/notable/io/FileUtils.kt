@@ -9,15 +9,16 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.net.toUri
-import com.ethran.notable.TAG
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.utils.UriUtils.getDataColumn
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import kotlin.use
 
+private val fileUtilsLog = ShipBook.getLogger("FileUtilsLogger")
 
 // adapted from:
 // https://stackoverflow.com/questions/71241337/copy-image-from-uri-in-another-folder-with-another-name-in-kotlin-android
@@ -65,10 +66,15 @@ fun copyStreamToFile(inputStream: InputStream, outputFile: File) {
 }
 
 fun getPdfPageCount(uri: String): Int {
-    if (uri.isEmpty())
+    if (uri.isEmpty()) {
+        fileUtilsLog.w("getPdfPageCount: Empty URI")
         return 0
+    }
     val file = File(uri)
-    if (!file.exists()) return 0
+    if (!file.exists()) {
+        fileUtilsLog.w("getPdfPageCount: File does not exist: $uri")
+        return 0
+    }
 
     return try {
         val fileDescriptor =
@@ -79,16 +85,31 @@ fun getPdfPageCount(uri: String): Int {
                 renderer.pageCount
             }
         } else {
-            Log.e(TAG, "File descriptor is null for URI: $uri")
+            fileUtilsLog.e("File descriptor is null for URI: $uri")
             0
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Failed to open PDF: ${e.message}, for file $uri")
+        fileUtilsLog.e("Failed to open PDF: ${e.message}, for file $uri")
         logCallStack("getPdfPageCount")
         0
     }
 }
 
+suspend fun waitForFileAvailable(
+    filePath: String,
+    timeoutMs: Long = 500,
+    intervalMs: Long = 10
+): Boolean {
+    val file = File(filePath)
+    val start = System.currentTimeMillis()
+    while (System.currentTimeMillis() - start < timeoutMs) {
+        if (file.exists() && file.length() > 0) {
+            return true
+        }
+        delay(intervalMs)
+    }
+    return false
+}
 
 // Requires android.permission.READ_EXTERNAL_STORAGE
 fun getFilePathFromUri(context: Context, uri: Uri): String? {

@@ -16,6 +16,9 @@ import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
+import com.ethran.notable.io.waitForFileAvailable
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.chunked
 import com.onyx.android.sdk.extension.isNotNull
@@ -25,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
@@ -528,10 +532,27 @@ object PageDataManager {
                 return
             }
 
-            val observer = object : FileObserver(file, CLOSE_WRITE or MOVED_TO) {
+            val observer =
+                object : FileObserver(file, CLOSE_WRITE or MOVED_TO or CREATE or DELETE) {
                 override fun onEvent(event: Int, path: String?) {
                     dataLoadingScope.launch {
                         log.d("Background file changed: $filePath [event=$event]")
+                        delay(10) // Wait a little bit, to avoid race conditions
+                        if (event == DELETE) {
+                            log.d("Background file deleted: $filePath [event=$event]")
+                            SnackState.globalSnackFlow.emit(
+                                SnackConf(text = "Background file deleted", duration = 3000)
+                            )
+                            return@launch
+                        }
+                        // using adb push, file may be not visible immediately
+                        if (!waitForFileAvailable(filePath)) {
+                            log.w("File changed, but does not exist: $filePath")
+                            SnackState.globalSnackFlow.emit(
+                                SnackConf(text = "Background does not exist", duration = 3000)
+                            )
+                            return@launch
+                        }
                         // Invalidate all pages that use this file
                         fileToPages[filePath]?.forEach { pid ->
                             invalidateBackground(pid)
