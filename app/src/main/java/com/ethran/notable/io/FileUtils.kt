@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.FileObserver
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -97,16 +98,19 @@ fun getPdfPageCount(uri: String): Int {
 
 suspend fun waitForFileAvailable(
     filePath: String,
-    timeoutMs: Long = 500,
-    intervalMs: Long = 10
+    timeoutMs: Long = 5000
 ): Boolean {
     val file = File(filePath)
     val start = System.currentTimeMillis()
+    var intervalMs: Long = 5
+    var count = 1
     while (System.currentTimeMillis() - start < timeoutMs) {
         if (file.exists() && file.length() > 0) {
             return true
         }
         delay(intervalMs)
+        intervalMs += count * count // Quadratic growth
+        count++
     }
     return false
 }
@@ -152,4 +156,25 @@ fun getFilePathFromUri(context: Context, uri: Uri): String? {
 
         else -> null
     }
+}
+
+const val IN_IGNORED = 32768
+fun fileObserverEventNames(event: Int): String {
+    val names = mutableListOf<String>()
+    if (event and FileObserver.ACCESS != 0) names += "ACCESS"
+    if (event and FileObserver.ATTRIB != 0) names += "ATTRIB"
+    if (event and FileObserver.CLOSE_NOWRITE != 0) names += "CLOSE_NOWRITE"
+    if (event and FileObserver.CLOSE_WRITE != 0) names += "CLOSE_WRITE"
+    if (event and FileObserver.CREATE != 0) names += "CREATE"
+    if (event and FileObserver.DELETE != 0) names += "DELETE"
+    if (event and FileObserver.DELETE_SELF != 0) names += "DELETE_SELF"
+    if (event and FileObserver.MODIFY != 0) names += "MODIFY"
+    if (event and FileObserver.MOVED_FROM != 0) names += "MOVED_FROM"
+    if (event and FileObserver.MOVED_TO != 0) names += "MOVED_TO"
+    if (event and FileObserver.MOVE_SELF != 0) names += "MOVE_SELF"
+    if (event and FileObserver.OPEN != 0) names += "OPEN"
+    if (event and FileObserver.ALL_EVENTS == event) names += "ALL_EVENTS"
+    if (event and IN_IGNORED == event) names += "IN_IGNORED"
+    if (names.isEmpty()) names += "Unknow: $event"
+    return names.joinToString("|")
 }

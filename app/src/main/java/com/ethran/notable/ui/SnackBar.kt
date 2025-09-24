@@ -52,7 +52,7 @@ class SnackState {
     // this does work, but I have doubts if it is a proper way for doing it
     // Register Observers for Global Actions
     companion object {
-        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 1)
+        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 5)
         val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 5)
     }
 
