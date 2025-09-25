@@ -554,11 +554,8 @@ object PageDataManager {
                         if(event == IN_IGNORED)
                             return@launch
                         val eventString = fileObserverEventNames(event)
-                        val message = "Background file changed: $filePath [event=$eventString]"
-                        SnackState.globalSnackFlow.emit(
-                            SnackConf(text = message, duration = 4000)
-                        )
-                        log.d(message)
+
+                        log.d("Background file changed: $filePath [event=$eventString]")
                         if (event == DELETE || event == DELETE_SELF) {
                             log.d("Background file deleted.")
                             synchronized(fileObservers) {
@@ -602,6 +599,9 @@ object PageDataManager {
                             invalidateBackground(pid)
                             if (pid == currentPage) {
                                 DrawCanvas.Companion.forceUpdate.emit(null)
+                                SnackState.globalSnackFlow.emit(
+                                    SnackConf(text = "Background file changed", duration = 4000)
+                                )
                             }
                         }
                     }
