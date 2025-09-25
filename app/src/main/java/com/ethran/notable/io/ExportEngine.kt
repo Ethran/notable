@@ -91,7 +91,6 @@ class ExportEngine(
 
         val pageRepo = PageRepository(context)
         val bookRepo = BookRepository(context)
-        val appRepo = AppRepository(context)
         val timeStamp = SimpleDateFormat.getDateTimeInstance().format(Date())
 
 
@@ -132,8 +131,8 @@ class ExportEngine(
                 if (book != null) {
                     // Page inside a book
                     val bookTitle = sanitizeFileName(book.title)
-                    val pageNumber = appRepo.getPageNumber(page.notebookId, page.id)
-                    val pageToken = if (pageNumber >= 1) "p$pageNumber" else "p?"
+                    val pageNumber = getPageNumber(page.notebookId, page.id)
+                    val pageToken = if ((pageNumber ?: 0) >= 1) "p$pageNumber" else "p?"
                     val fileName = "$bookTitle-$pageToken"
 
                     val folders = if (book.parentFolderId != null) getFolderList(
@@ -318,7 +317,8 @@ class ExportEngine(
         drawBg(
             context,
             canvas,
-            data.page.getBackgroundType(),
+            data.page.getBackgroundType()
+                .resolveForExport(getPageNumber(data.page.notebookId, data.page.id)),
             data.page.background,
             scaledScroll,
             scaleFactor
@@ -462,4 +462,7 @@ class ExportEngine(
             }
         }
     }
+
+    fun getPageNumber(bookId: String?, id: String): Int? =
+        AppRepository(context).getPageNumber(bookId, id)
 }
