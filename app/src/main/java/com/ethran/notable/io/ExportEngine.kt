@@ -241,7 +241,7 @@ class ExportEngine(
                 val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
                 // Export each page separately (same folder = book title)
                 book.pageIds.forEachIndexed { index, pageId ->
-                    val fileName = "$baseFileName${index + 1}" // or "notable-page-$pageId"
+                    val fileName = "$baseFileName${index + 1}"
                     val bitmap = renderBitmapForPage(pageId)
                     bitmap.useAndRecycle { bmp ->
                         val bytes = bmp.toBytes(compressFormat)
