@@ -276,7 +276,7 @@ class ExportEngine(
                 drawPage(
                     canvas = page.canvas,
                     data = data,
-                    scroll = Offset(0f, currentTop / scaleFactor),
+                    scroll = Offset(0f, currentTop.toFloat()),
                     scaleFactor = scaleFactor
                 )
                 doc.finishPage(page)
