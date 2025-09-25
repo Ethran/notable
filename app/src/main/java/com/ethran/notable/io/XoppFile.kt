@@ -7,7 +7,6 @@ import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Environment
-import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
 import androidx.compose.ui.graphics.Color
@@ -30,6 +29,7 @@ import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.ensureImagesFolder
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.ui.showHint
+import com.ethran.notable.utils.ensureNotMainThread
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
@@ -59,7 +59,11 @@ import javax.xml.transform.stream.StreamResult
 private const val PRESSURE_FACTOR = 0.5f
 
 
-object XoppFile {
+class XoppFile(
+    private val context: Context,
+    private val pageRepo: PageRepository = PageRepository(context),
+    private val bookRepo: BookRepository = BookRepository(context)
+) {
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
     private val maxPressure = EpdController.getMaxTouchPressure()
 
@@ -73,10 +77,9 @@ object XoppFile {
      * @param context The application context.
      * @param bookId The ID of the book to export.
      */
-    fun exportBook(context: Context, bookId: String) {
+    fun exportBook(bookId: String) {
         Log.Companion.v(TAG, "Exporting book $bookId")
-        if (Looper.getMainLooper().isCurrentThread)
-            Log.Companion.w(TAG, "Exporting is done on main thread.")
+        ensureNotMainThread("xoppExportBook")
 
         val book = BookRepository(context).getById(bookId)
             ?: return Log.Companion.e(TAG, "Book ID($bookId) not found")
@@ -94,19 +97,19 @@ object XoppFile {
             writer.write("<xournal creator=\"Notable ${BuildConfig.VERSION_NAME}\" version=\"0.4\">\n")
 
             book.pageIds.forEach { pageId ->
-                writePage(context, pageId, writer)
+                writePage(pageId, writer)
             }
 
             writer.write("</xournal>\n")
         }
 
-        saveAsXopp(context, tempFile, fileName)
+        saveAsXopp(tempFile, fileName)
     }
 
     /**
      * Exports page as a `.xopp` file.
      */
-    fun exportPage(context: Context, pageId: String) {
+    fun exportPage(pageId: String) {
         Log.Companion.v(TAG, "Exporting page $pageId")
         val tempFile = File(context.cacheDir, "exported_page.xml")
 
@@ -117,11 +120,11 @@ object XoppFile {
         ).use { writer ->
             writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             writer.write("<xournal creator=\"Notable ${BuildConfig.VERSION_NAME}\" version=\"0.4\">\n")
-            writePage(context, pageId, writer)
+            writePage(pageId, writer)
             writer.write("</xournal>\n")
         }
 
-        saveAsXopp(context, tempFile, "exported_page")
+        saveAsXopp(tempFile, "exported_page")
     }
 
 
@@ -131,11 +134,10 @@ object XoppFile {
      * This method retrieves the strokes and images for the given page
      * and writes them to the provided BufferedWriter.
      *
-     * @param context The application context.
      * @param pageId The ID of the page to process.
      * @param writer The BufferedWriter to write XML data to.
      */
-    private fun writePage(context: Context, pageId: String, writer: BufferedWriter) {
+    private fun writePage(pageId: String, writer: BufferedWriter) {
         val pages = PageRepository(context)
         val (_, strokes) = pages.getWithStrokeById(pageId)
         val (_, images) = pages.getWithImageById(pageId)
@@ -250,11 +252,10 @@ object XoppFile {
     /**
      * Saves a temporary XML file as a compressed `.xopp` file.
      *
-     * @param context The application context.
      * @param file The temporary XML file to compress.
      * @param fileName The name of the final `.xopp` file.
      */
-    private fun saveAsXopp(context: Context, file: File, fileName: String) {
+    private fun saveAsXopp(file: File, fileName: String) {
         val contentValues = ContentValues().apply {
             put(MediaStore.Files.FileColumns.DISPLAY_NAME, "$fileName.xopp")
             put(MediaStore.Files.FileColumns.MIME_TYPE, "application/x-xopp")
@@ -284,10 +285,9 @@ object XoppFile {
      * @param context The application context.
      * @param uri The URI of the `.xopp` file to import.
      */
-    fun importBook(context: Context, uri: Uri, parentFolderId: String?) {
+    fun importBook(uri: Uri, parentFolderId: String?) {
         Log.Companion.v(TAG, "Importing book from $uri, into $parentFolderId")
-        if (Looper.getMainLooper().isCurrentThread)
-            Log.Companion.e(TAG, "Importing is done on main thread.")
+        ensureNotMainThread("xoppImportBook")
         val inputStream = context.contentResolver.openInputStream(uri) ?: return
         val xmlContent = extractXmlFromXopp(inputStream) ?: return
 

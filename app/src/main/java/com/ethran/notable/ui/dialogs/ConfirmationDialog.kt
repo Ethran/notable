@@ -18,8 +18,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.ExportFormat
+import com.ethran.notable.io.ExportOptions
+import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.io.XoppFile
-import com.ethran.notable.io.exportBook
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import kotlinx.coroutines.CoroutineScope
@@ -125,7 +128,14 @@ fun ShowExportDialog(
                                     id = "exportSnack"
                                 )
                             )
-                            val message = exportBook(context, bookId)
+                            val message =
+                                ExportEngine(context).export(
+                                    target = ExportTarget.Book(bookId = bookId),
+                                    format = ExportFormat.PDF,
+                                    options = ExportOptions(
+                                        copyToClipboard = false,
+                                    )
+                                )
                             removeSnack()
                             snackManager.displaySnack(
                                 SnackConf(text = message, duration = 2000)
@@ -143,7 +153,7 @@ fun ShowExportDialog(
                                     id = "exportSnack"
                                 )
                             )
-                            XoppFile.exportBook(context, bookId)
+                            XoppFile(context).exportBook(bookId)
                             removeSnack()
                         }
                         onConfirm()

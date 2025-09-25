@@ -3,7 +3,6 @@ package com.ethran.notable.ui.Views
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -84,6 +83,7 @@ import com.ethran.notable.ui.dialogs.ShowConfirmationDialog
 import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.showHint
+import com.ethran.notable.utils.ensureNotMainThread
 import com.ethran.notable.utils.isLatestVersion
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
@@ -484,7 +484,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                                     SnackConf(text = "importing from xopp file")
                                                 )
                                             importInProgress = true
-                                            XoppFile.importBook(context, uri, folderId)
+                                            XoppFile(context).importBook(uri, folderId)
                                             importInProgress = false
                                             removeSnack()
                                         }
@@ -606,8 +606,7 @@ fun Library(navController: NavController, folderId: String? = null) {
 
 fun handlePdfImport(context: Context, folderId: String?, uri: Uri, copyFile: Boolean = true) {
     Log.v(TAG, "Importing PDF from $uri")
-    if (Looper.getMainLooper().isCurrentThread)
-        Log.e(TAG, "Importing is done on main thread.")
+    ensureNotMainThread("Importing")
 
     //copy file:
     val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION

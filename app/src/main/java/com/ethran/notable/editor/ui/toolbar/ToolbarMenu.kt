@@ -23,13 +23,11 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.ExportFormat
+import com.ethran.notable.io.ExportOptions
+import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.io.XoppFile
-import com.ethran.notable.io.copyPagePngLinkForObsidian
-import com.ethran.notable.io.exportBook
-import com.ethran.notable.io.exportBookToPng
-import com.ethran.notable.io.exportPage
-import com.ethran.notable.io.exportPageToJpeg
-import com.ethran.notable.io.exportPageToPng
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
@@ -50,11 +48,12 @@ fun ToolbarMenu(
     val context = LocalContext.current
     val scope = CoroutineScope(Dispatchers.IO)
     val snackManager = LocalSnackContext.current
-    val page = AppRepository(context).pageRepository.getById(state.pageId)!!
+    val appRepository = AppRepository(context)
+    val page = appRepository.pageRepository.getById(state.pageId)!!
+    val book =
+        if (page.notebookId != null) appRepository.bookRepository.getById(page.notebookId) else null
     val parentFolder =
-        if (page.notebookId != null)
-            AppRepository(context).bookRepository.getById(page.notebookId)!!
-                .parentFolderId
+        if (book != null) book.parentFolderId
         else page.parentFolderId
 
     Popup(
@@ -96,9 +95,10 @@ fun ToolbarMenu(
                                     // A: I guess that we need to wait for strokes to be drawn.
                                     // checking if drawingInProgress.isLocked should be enough
                                     // but I do not have time to test it.
-                                    withContext(Dispatchers.IO) {
-                                        exportPage(context, state.pageId)
-                                    }
+                                    ExportEngine(context).export(
+                                        target = ExportTarget.Page(pageId = state.pageId),
+                                        format = ExportFormat.PDF,
+                                    )
                                 }
                             snackManager.displaySnack(
                                 SnackConf(text = message, duration = 2000)
@@ -117,7 +117,10 @@ fun ToolbarMenu(
                                 snackManager.showSnackDuring(text = "Exporting the page to PNG...") {
                                     delay(10L)
                                     withContext(Dispatchers.IO) {
-                                        exportPageToPng(context, state.pageId)
+                                        ExportEngine(context).export(
+                                            target = ExportTarget.Page(pageId = state.pageId),
+                                            format = ExportFormat.PNG,
+                                        )
                                     }
                                 }
                             snackManager.displaySnack(
@@ -133,28 +136,14 @@ fun ToolbarMenu(
                     .padding(10.dp)
                     .noRippleClickable {
                         scope.launch {
-                            delay(10L)
-                            copyPagePngLinkForObsidian(context, state.pageId)
-                            snackManager.displaySnack(
-                                SnackConf(text = "Copied page link for obsidian", duration = 2000)
-                            )
-                        }
-                        onClose()
-                    }
-            ) { Text("Copy page png link for obsidian") }
-
-            Box(
-                Modifier
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        scope.launch {
                             val message =
                                 snackManager.showSnackDuring(text = "Exporting the page to JPEG...") {
                                     delay(10L)
 
-                                    withContext(Dispatchers.IO) {
-                                        exportPageToJpeg(context, state.pageId)
-                                    }
+                                    ExportEngine(context).export(
+                                        target = ExportTarget.Page(pageId = state.pageId),
+                                        format = ExportFormat.JPEG,
+                                    )
                                 }
                             snackManager.displaySnack(
                                 SnackConf(text = message, duration = 2000)
@@ -173,14 +162,14 @@ fun ToolbarMenu(
                                 text = "Exporting the page to xopp"
                             ) {
                                 delay(10L)
-                                XoppFile.exportPage(context, state.pageId)
+                                XoppFile(context).exportPage(state.pageId)
                             }
                         }
                         onClose()
                     }
             ) { Text("Export page to xopp") }
 
-            if (state.bookId != null)
+            if (state.bookId != null){
                 Box(
                     Modifier
                         .padding(10.dp)
@@ -188,10 +177,10 @@ fun ToolbarMenu(
                             scope.launch {
                                 val message =
                                     snackManager.showSnackDuring("Exporting the book to PDF...") {
-                                        delay(10L)
-                                        withContext(Dispatchers.IO) {
-                                            exportBook(context, state.bookId)
-                                        }
+                                        ExportEngine(context).export(
+                                            target = ExportTarget.Book(bookId =  state.bookId),
+                                            format = ExportFormat.PDF,
+                                        )
                                     }
                                 snackManager.displaySnack(
                                     SnackConf(text = message, duration = 2000)
@@ -200,8 +189,6 @@ fun ToolbarMenu(
                             onClose()
                         }
                 ) { Text("Export book to PDF") }
-
-            if (state.bookId != null) {
                 Box(
                     Modifier
                         .padding(10.dp)
@@ -210,10 +197,10 @@ fun ToolbarMenu(
                                 val message = snackManager.showSnackDuring(
                                     text = "Exporting the book to PNG..."
                                 ) {
-                                    delay(10L)
-                                    withContext(Dispatchers.IO) {
-                                        exportBookToPng(context, state.bookId)
-                                    }
+                                    ExportEngine(context).export(
+                                        target = ExportTarget.Book(bookId = state.bookId),
+                                        format = ExportFormat.JPEG,
+                                    )
                                 }
                                 snackManager.displaySnack(
                                     SnackConf(text = message, duration = 2000)
@@ -231,7 +218,7 @@ fun ToolbarMenu(
                                     text = "Exporting the book to xopp"
                                 ) {
                                     delay(10L)
-                                    XoppFile.exportBook(context, state.bookId)
+                                    XoppFile(context).exportBook(state.bookId)
                                 }
 
                             }
@@ -260,16 +247,6 @@ fun ToolbarMenu(
                         onClose()
                     }
             ) { Text("Change Background") }
-
-            /*Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(0.5.dp)
-                    .background(Color.Black)
-            )
-            Box(Modifier.padding(10.dp)) {
-                Text("Refresh page")
-            }*/
         }
     }
 }
