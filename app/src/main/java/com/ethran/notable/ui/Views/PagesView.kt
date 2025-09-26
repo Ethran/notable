@@ -44,6 +44,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -127,7 +128,7 @@ fun PagesView(navController: NavController, bookId: String) {
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BreadCrumb(bookFolder) {
+                BreadCrumb(folderId = bookFolder) {
                     navController.navigate("library" + if (it == null) "" else "?folderId=${it}")
                 }
                 Spacer(modifier = Modifier.weight(1f))
@@ -218,8 +219,8 @@ fun PagesView(navController: NavController, bookId: String) {
                             Row(
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
-                                    .padding(6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconPill(icon = FeatherIcons.Trash, contentDesc = "Delete page") {
@@ -345,19 +346,20 @@ private fun IconPill(
 ) {
     Box(
         modifier = Modifier
-            .width(36.dp)
-            .height(28.dp)
+            .width(30.dp)
+            .height(30.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF111111))
+            .background(Color(0xFFFFFFFF))
             .border(1.dp, Color.Black, RoundedCornerShape(6.dp))
-            .then(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp))
+            .then(Modifier.sizeIn(minWidth = 40.dp, minHeight = 40.dp))
+            .padding(6.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null
             ) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = icon, contentDescription = contentDesc, tint = Color.White
+            imageVector = icon, contentDescription = contentDesc, tint = Color.Black
         )
     }
 }
@@ -372,10 +374,10 @@ private fun JumpToCurrentPill(onClick: () -> Unit) {
             .clip(RoundedCornerShape(16.dp))
             .background(Color(0xFF111111))
             .border(1.dp, Color.Black, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 8.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null
             ) { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text("Jump to current", color = Color.White)
     }

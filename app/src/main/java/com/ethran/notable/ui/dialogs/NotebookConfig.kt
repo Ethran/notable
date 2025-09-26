@@ -288,7 +288,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     Text("Size: TODO!")
                     Row {
                         Text("In Folder: ")
-                        BreadCrumb(bookFolder) { }
+                        BreadCrumb(folderId = bookFolder, fontSize = 16) { }
                     }
                     Text("Created: $formattedCreatedAt")
                     Text("Last Updated: $formattedUpdatedAt")

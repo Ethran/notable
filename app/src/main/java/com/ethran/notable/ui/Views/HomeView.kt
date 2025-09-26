@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
@@ -270,7 +271,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                 Modifier
                     .padding(10.dp)
             ) {
-                BreadCrumb(folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
+                BreadCrumb(folderId = folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
             }
 //           I do not know what the idea behind it was
 //            // Add the new "Floating Editor" button here
@@ -308,12 +309,12 @@ fun Library(navController: NavController, folderId: String? = null) {
                     // Add new folder row
                     Row(
                         Modifier
+                            .border(0.5.dp, Color.Black)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
                             .noRippleClickable {
                                 val folder = Folder(parentFolderId = folderId)
                                 appRepository.folderRepository.create(folder)
                             }
-                            .border(0.5.dp, Color.Black)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Icon(
                             imageVector = FeatherIcons.FolderPlus,
@@ -449,6 +450,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                     .weight(1f) // Takes half the height
                                     .fillMaxWidth()
                                     .background(Color.LightGray.copy(alpha = 0.3f))
+                                    .border(2.dp, Color.Black, RectangleShape)
                                     .noRippleClickable {
                                         appRepository.bookRepository.create(
                                             Notebook(
@@ -458,7 +460,6 @@ fun Library(navController: NavController, folderId: String? = null) {
                                             )
                                         )
                                     }
-                                    .border(2.dp, Color.Black, RectangleShape)
                             ) {
                                 Icon(
                                     imageVector = FeatherIcons.FilePlus,
@@ -499,6 +500,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .background(Color.LightGray.copy(alpha = 0.3f))
+                                    .border(2.dp, Color.Black, RectangleShape)
                                     .noRippleClickable {
                                         launcher.launch(
                                             arrayOf(
@@ -509,7 +511,6 @@ fun Library(navController: NavController, folderId: String? = null) {
                                             )
                                         )
                                     }
-                                    .border(2.dp, Color.Black, RectangleShape)
 
                             ) {
                                 Icon(

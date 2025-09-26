@@ -31,15 +31,14 @@ fun ToolbarButton(
     Box(
         Modifier
             .then(modifier)
-            .noRippleClickable {
-                onSelect()
-            }
             .background(
                 color = if (isSelected) penColor ?: Color.Black else penColor ?: Color.Transparent,
                 shape = if (!isSelected) CircleShape else RectangleShape
             )
             .padding(7.dp)
-
+            .noRippleClickable {
+                onSelect()
+            }
     ) {
         //needs simplification:
         if (iconId != null) {
