@@ -34,15 +34,15 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 <details>
   <summary>Table of Contents</summary>
 
-- [About This Fork](#about-this-fork)  
-- [Features](#features)  
-- [Download](#download)  
-- [Gestures](#gestures)  
-- [Supported Devices](#supported-devices)  
-- [Roadmap](#roadmap)  
+- [About This Fork](#about-this-fork)
+- [Features](#features)
+- [Download](#download)
+- [Gestures](#gestures)
+- [Supported Devices](#supported-devices)
+- [Roadmap](#roadmap)
 - [Screenshots](#screenshots)
-- [Working with LaTeX](#working-with-latex) 
-- [Contribute](#contribute)  
+- [Working with LaTeX](#working-with-latex)
+- [Contribute](#contribute)
 
 </details>
 
@@ -50,7 +50,7 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 ---
 
 ## About This Fork
-This fork is maintained by **Ethran** as a continuation and personal enhancement of the original Notable app. Development is semi-active and tailored toward personal utility while welcoming community suggestions.
+This fork is maintained by **Ethran** as a continuation and personal enhancement of the original Notable app. Development is semi-active and tailored toward personal utility while welcoming community contributions.
 
 ### What's New?
 - Regular updates and experimental features
@@ -62,64 +62,65 @@ This fork is maintained by **Ethran** as a continuation and personal enhancement
 ---
 
 ## Features
-* ⚡ **Fast Page Turn with Caching:** Notable leverages caching techniques to ensure smooth and swift page transitions, allowing you to navigate through your notes seamlessly. (next and previous pages are cached)
+* ⚡ **Fast Page Turn with Caching:** Notable leverages caching techniques to ensure smooth and swift page transitions, allowing you to navigate your notes seamlessly, including quick navigation to the next and previous pages.
 * ↕️ **Infinite Vertical Scroll:** Enjoy a virtually endless canvas for your notes. Scroll vertically without limitations. You can even enjoy smooth scrolling.
 * 📝 **Quick Pages:** Quickly create a new page using the Quick Pages feature.
-* 📒 **Notebooks:** Keep related notes together and easily switch between different noteboo︂︂ks based on your needs.
+* 📒 **Notebooks:** Keep related notes together and easily switch between different notebooks based on your needs.
 * 📁 **Folders:** Create folders to organize your notes.
-* 🤏 **Editors' Mode Gestures:** [Intuitive gesture controls](#gestures) to enhance the editing experience.
+* 🤏 **Editor Mode Gestures:** [Intuitive gesture controls](#gestures) to enhance the editing experience.
 * 🌅 **Images:** Add, move, scale, and remove images.
-* ︂︂᠋︁➤  **Selection export:** share selected text.
+* ➤ **Selection export:** Share selected text.
 * ✏️ **Scribble to Erase:** Erase content naturally by scribbling over it (disabled by default) – *Contributed by [@niknal357](https://github.com/niknal357)*
-* ∲  **Refresh on background change** can be used to use tablet for second display -- see [Working with LaTeX](#working-with-latex).
-
+* 🔄 **Refresh on background change:** Can turn your tablet into a second display — see [Working with LaTeX](#working-with-latex).
 
 ## Download
 **Download the latest stable version of the [Notable app here.](https://github.com/Ethran/notable/releases/latest)**
 
-Alternatively, get the latest build from main from the ["next" release](https://github.com/Ethran/notable/releases/next)
+Alternatively, get the latest build from the main branch via the ["next" release](https://github.com/Ethran/notable/releases/next).
 
-Open up the '**Assets**' from the release, and select the `.apk` file.
+Open the **Assets** section of the release and select the `.apk` file.
 
 <details><summary title="Click to show/hide details">❓ Where can I see alternative/older releases?</summary><br/>
-You can go to original olup <a href="https://github.com/olup/notable/tags" target="_blank">'Releases'</a> and download alternative versions of the Notable app.
+You can go to the original olup <a href="https://github.com/olup/notable/tags" target="_blank">Releases</a> and download alternative versions of the Notable app.
 </details>
 
 <details><summary title="Click to show/hide details">❓ What is a 'next' release?</summary><br/>
-The 'next' release is a pre-release, and will contain features implemented but not yet released as part of a version - and sometimes experiments that could very well not be part a release.
+The "next" release is a pre-release and may contain features implemented but not yet released as part of a stable version — and sometimes experiments that may not make it into a release.
 </details>
 
 ---
 
 ## Gestures
-Notable features intuitive gestures controls within Editor's Mode, to optimize the editing experience:
+Notable features intuitive gesture controls within Editor mode to optimize the editing experience:
+
 #### ☝️ 1 Finger
-* **Swipe up or down**: Scroll the page.
+* **Swipe up or down:** Scroll the page.
 * **Swipe left or right:** Change to the previous/next page (only available in notebooks).
-* **Double tap:** Undo
-* **Hold and drag:** select text and images
+* **Double tap:** Undo.
+* **Hold and drag:** Select text and images.
+
 #### ✌️ 2 Fingers
 * **Swipe left or right:** Show or hide the toolbar.
-* **Single tap:** Switch between writing modes and eraser modes.
-* **Pinch**: Zoom in and out.
-* **Hold and drag:** move canvas.
-
+* **Single tap:** Switch between writing and eraser modes.
+* **Pinch:** Zoom in and out.
+* **Hold and drag:** Move the canvas.
 
 #### 🔲 Selection
-* **Drag:** Move the selected writing around.
+* **Drag:** Move the selection.
 * **Double tap:** Copy the selected writing.
 
 ## Supported Devices
 
 The following table lists devices confirmed by users to be compatible with specific versions of Notable.  
 This does not imply any commitment from the developers.
-| Device Name                                                                           | v0.0.10 | v0.0.11dev |   v0.0.14+     |        |        |
-|---------------------------------------------------------------------------------------|---------|------------|--------|--------|--------|
-| [ONYX Boox Go 10.3](https://onyxboox.com/boox_go103)                                  | ✔       | ?          |    ✔    |        |        |
-| [Onyx Boox Note Air 4 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-4-c) | ✘       | ✔          |    ✔    |        |        |
-| [Onyx Boox Note Air 3 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-3-c) | ✘       | ✔          |    ✔    |        |        |
-| [Onyx Boox Note Max](https://shop.boox.com/products/notemax)                          | ✘       | ✔          |    ✔    |        |        |
-| [Boox Note 3](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-3)    | ✔       |  ✘   https://github.com/Ethran/notable/issues/24        |    ✔    |        |        |
+
+| Device Name                                                                           | v0.0.10 | v0.0.11dev                                   | v0.0.14+ |
+|---------------------------------------------------------------------------------------|---------|-----------------------------------------------|----------|
+| [ONYX Boox Go 10.3](https://onyxboox.com/boox_go103)                                  | ✔       | ?                                             | ✔        |
+| [Onyx Boox Note Air 4 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-4-c) | ✘       | ✔                                             | ✔        |
+| [Onyx Boox Note Air 3 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-3-c) | ✘       | ✔                                             | ✔        |
+| [Onyx Boox Note Max](https://shop.boox.com/products/notemax)                          | ✘       | ✔                                             | ✔        |
+| [Boox Note 3](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-3)                  | ✔       | ✘ ([issue #24](https://github.com/Ethran/notable/issues/24)) | ✔        |
 
 Feel free to add your device if tested successfully!
 
@@ -127,34 +128,33 @@ Feel free to add your device if tested successfully!
 
 Features I’d like to implement in the future (some might take a while — or a long while):
 
-- [ ] Bookmarks support, tags, and internal links — [Issue #52](https://github.com/Ethran/notable/issues/52)  
-  - [ ] Export links to PDF  
+- [ ] Bookmarks support, tags, and internal links — [Issue #52](https://github.com/Ethran/notable/issues/52)
+  - [ ] Export links to PDF
 
 - [x] Better notebook covers, provide default styles of title page
 
 - [ ] PDF annotation
-  - [x] basic support
-  - [ ] Show annotation from other programs
-  - [ ] Allow to save annotations to original pdf file
+  - [x] Basic support
+  - [ ] Show annotations from other programs
+  - [ ] Allow saving annotations to the original PDF file
 
-- [ ] Figure and text recognition — [Issue #44](https://github.com/Ethran/notable/issues/44)  
-  - [ ] Searchable notes  
-  - [ ] Automatic creation of tag descriptions  
-  - [ ] Shape recognition  
+- [ ] Figure and text recognition — [Issue #44](https://github.com/Ethran/notable/issues/44)
+  - [ ] Searchable notes
+  - [ ] Automatic creation of tag descriptions
+  - [ ] Shape recognition
 
-- [x] Moving page horizontally -- it would be nice to write on margins.
+- [x] Moving the page horizontally — it would be nice to write in the margins.
 
-- [ ] Better selection tools  
-  - [ ] Stroke editing: color, size, etc.  
-  - [ ] Rotate  
-  - [ ] Flip selection  
-  - [ ] Auto-scroll when dragging selection to screen edges  
-  - [ ] Easier selection movement (e.g. dragging to scroll page)
+- [ ] Better selection tools
+  - [ ] Stroke editing: color, size, etc.
+  - [ ] Rotate
+  - [ ] Flip selection
+  - [ ] Auto-scroll when dragging selection to screen edges
+  - [ ] Easier selection movement (e.g., dragging to scroll page)
 
-- [ ] More dynamic page and notebook movement. Currently, pages can only be moved left/right — add drag-and-drop support
+- [x] More dynamic page and notebook movement. Currently, pages can only be moved left/right — add drag-and-drop support
 
 - [!] Custom drawing tools: not possible.
-
 
 ---
 
@@ -170,9 +170,6 @@ Features I’d like to implement in the future (some might take a while — or a
   <img src="https://github.com/user-attachments/assets/e8304495-dbab-4d7a-987a-b76bf91a3a74" alt="screenshot-7" width="200"/>
   <img src="https://github.com/user-attachments/assets/38226966-0e19-45c9-a318-a8fd9d8edf02" alt="screenshot-7" width="200"/>
   <img src="https://github.com/user-attachments/assets/df29f77c-94a8-4c56-bbd4-d7285654df30" alt="screenshot-7" width="200"/>
-
-
-
 </div>
 
 ---
@@ -185,7 +182,7 @@ in real time on your tablet.
 ### Steps:
 
 - Connect your device to your computer via USB (MTP).
-- Set up automatic copying of the compiled PDF to the tablet:  
+- Set up automatic copying of the compiled PDF to the tablet:
   <details>
   <summary>Example using a custom <code>latexmkrc</code>:</summary>
 
@@ -203,14 +200,12 @@ in real time on your tablet.
   ```
 
   </details>
-- Compile, and test if it copies file to the tablet.
-- Import your compiled PDF document into Notable, choose to observe pdf file.
+- Compile, and test if it copies the file to the tablet.
+- Import your compiled PDF document into Notable, and choose to observe the PDF file.
 
 > After each recompilation, Notable will detect the updated PDF and automatically refresh the view.
 
-
 ---
-
 
 ## Contribute
 
@@ -240,7 +235,7 @@ Feel free to open issues or submit pull requests. I appreciate your help!
 [issues-url]: https://github.com/Ethran/notable/issues
 [license-shield]: https://img.shields.io/github/license/Ethran/notable.svg?style=for-the-badge
 
-[license-url]: https://github.com/Ethran/notable/blob/master/LICENSE.txt
+[license-url]: https://github.com/Ethran/notable/blob/main/LICENSE.txt <!-- To be added. -->
 [download-shield]: https://img.shields.io/github/v/release/Ethran/notable?style=for-the-badge&label=⬇️%20Download
 [download-url]: https://github.com/Ethran/notable/releases/latest
 [downloads-shield]: https://img.shields.io/github/downloads/Ethran/notable/total?style=for-the-badge&color=47c219&logo=cloud-download
