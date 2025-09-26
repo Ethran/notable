@@ -42,7 +42,7 @@ import java.util.Date
 
 /* ---------------------------- Public API ---------------------------- */
 
-enum class ExportFormat { PDF, PNG, JPEG }
+enum class ExportFormat { PDF, PNG, JPEG, XOPP }
 
 sealed class ExportTarget {
     data class Book(val bookId: String) : ExportTarget()
@@ -65,8 +65,110 @@ class ExportEngine(
     ): String = when (format) {
         ExportFormat.PDF -> exportAsPdf(target, options)
         ExportFormat.PNG, ExportFormat.JPEG -> exportAsImages(target, format, options)
+        ExportFormat.XOPP -> exportAsXopp(target)
     }
 
+
+    /* -------------------- PDF EXPORT -------------------- */
+
+    private suspend fun exportAsPdf(target: ExportTarget, options: ExportOptions): String {
+        val writeAction: suspend (OutputStream) -> Unit
+        val (filename, folder) = createFileNameAndFolder(target)
+        when (target) {
+            is ExportTarget.Book -> {
+                val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
+                writeAction = { out ->
+                    PdfDocument().use { doc ->
+                        book.pageIds.forEachIndexed { index, pageId ->
+                            writePageToPdfDocument(doc, pageId, pageNumber = index + 1)
+                        }
+                        doc.writeTo(out)
+                    }
+                }
+            }
+
+            is ExportTarget.Page -> {
+                writeAction = { out ->
+                    PdfDocument().use { doc ->
+                        writePageToPdfDocument(doc, target.pageId, pageNumber = 1)
+                        doc.writeTo(out)
+                    }
+                }
+                if (options.copyToClipboard) copyPagePngLink(
+                    context, target.pageId
+                ) // You may want a separate PDF variant
+            }
+        }
+
+        return saveStream(
+            fileName = filename,
+            extension = "pdf",
+            mimeType = "application/pdf",
+            subfolder = folder,
+            writer = writeAction
+        )
+    }
+
+    /* -------------------- IMAGE EXPORT (PNG / JPEG) -------------------- */
+
+    private suspend fun exportAsImages(
+        target: ExportTarget, format: ExportFormat, options: ExportOptions
+    ): String {
+        val (baseFileName, folder) = createFileNameAndFolder(target)
+
+        val (ext, mime, compressFormat) = when (format) {
+            ExportFormat.PNG -> Triple("png", "image/png", Bitmap.CompressFormat.PNG)
+            ExportFormat.JPEG -> Triple("jpg", "image/jpeg", Bitmap.CompressFormat.JPEG)
+            else -> error("Unsupported image format")
+        }
+
+        when (target) {
+            is ExportTarget.Page -> {
+                val pageId = target.pageId
+                val bitmap = renderBitmapForPage(pageId)
+                bitmap.useAndRecycle { bmp ->
+                    val bytes = bmp.toBytes(compressFormat)
+                    saveBytes(baseFileName, ext, mime, folder, bytes)
+                }
+                if (options.copyToClipboard && format == ExportFormat.PNG) {
+                    copyPagePngLink(context, pageId)
+                }
+                return "Page exported: $baseFileName.$ext"
+            }
+
+            is ExportTarget.Book -> {
+                val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
+                // Export each page separately (same folder = book title)
+                book.pageIds.forEachIndexed { index, pageId ->
+                    val fileName = "$baseFileName${index + 1}"
+                    val bitmap = renderBitmapForPage(pageId)
+                    bitmap.useAndRecycle { bmp ->
+                        val bytes = bmp.toBytes(compressFormat)
+                        saveBytes(fileName, ext, mime, book.title, bytes)
+                    }
+                }
+                if (options.copyToClipboard) {
+                    Log.w(TAG, "Can't copy book links or images to clipboard -- batch export.")
+                }
+                return "Book exported: ${book.title} (${book.pageIds.size} pages)"
+            }
+        }
+    }
+    /* -------------------- XOPP export -------------------- */
+
+    private suspend fun exportAsXopp(target: ExportTarget): String {
+        val (filename, folder) = createFileNameAndFolder(target)
+        return saveStream(
+            fileName = filename,
+            extension = "xopp",
+            mimeType = "application/x-xopp",
+            subfolder = folder
+        ) { out ->
+            XoppFile(context).writeToXoppStream(target, out)
+        }
+    }
+
+    /* -------------------- File naming -------------------- */
 
     /**
      * Returns: Pair(fileNameWithoutExtension, folderPath)
@@ -166,92 +268,6 @@ class ExportEngine(
                     val fileName = "quickpage-$timeStamp"
                     fileName to folderPath
                 }
-            }
-        }
-    }
-
-    /* -------------------- PDF EXPORT -------------------- */
-
-    private suspend fun exportAsPdf(target: ExportTarget, options: ExportOptions): String {
-        val writeAction: suspend (OutputStream) -> Unit
-        val (filename, folder) = createFileNameAndFolder(target)
-        when (target) {
-            is ExportTarget.Book -> {
-                val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
-                writeAction = { out ->
-                    PdfDocument().use { doc ->
-                        book.pageIds.forEachIndexed { index, pageId ->
-                            writePageToPdfDocument(doc, pageId, pageNumber = index + 1)
-                        }
-                        doc.writeTo(out)
-                    }
-                }
-            }
-
-            is ExportTarget.Page -> {
-                writeAction = { out ->
-                    PdfDocument().use { doc ->
-                        writePageToPdfDocument(doc, target.pageId, pageNumber = 1)
-                        doc.writeTo(out)
-                    }
-                }
-                if (options.copyToClipboard) copyPagePngLink(
-                    context, target.pageId
-                ) // You may want a separate PDF variant
-            }
-        }
-
-        return saveStream(
-            fileName = filename,
-            extension = "pdf",
-            mimeType = "application/pdf",
-            subfolder = folder,
-            writer = writeAction
-        )
-    }
-
-    /* -------------------- IMAGE EXPORT (PNG / JPEG) -------------------- */
-
-    private suspend fun exportAsImages(
-        target: ExportTarget, format: ExportFormat, options: ExportOptions
-    ): String {
-        val (baseFileName, folder) = createFileNameAndFolder(target)
-
-        val (ext, mime, compressFormat) = when (format) {
-            ExportFormat.PNG -> Triple("png", "image/png", Bitmap.CompressFormat.PNG)
-            ExportFormat.JPEG -> Triple("jpg", "image/jpeg", Bitmap.CompressFormat.JPEG)
-            else -> error("Unsupported image format")
-        }
-
-        when (target) {
-            is ExportTarget.Page -> {
-                val pageId = target.pageId
-                val bitmap = renderBitmapForPage(pageId)
-                bitmap.useAndRecycle { bmp ->
-                    val bytes = bmp.toBytes(compressFormat)
-                    saveBytes(baseFileName, ext, mime, folder, bytes)
-                }
-                if (options.copyToClipboard && format == ExportFormat.PNG) {
-                    copyPagePngLink(context, pageId)
-                }
-                return "Page exported: $baseFileName.$ext"
-            }
-
-            is ExportTarget.Book -> {
-                val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
-                // Export each page separately (same folder = book title)
-                book.pageIds.forEachIndexed { index, pageId ->
-                    val fileName = "$baseFileName${index + 1}"
-                    val bitmap = renderBitmapForPage(pageId)
-                    bitmap.useAndRecycle { bmp ->
-                        val bytes = bmp.toBytes(compressFormat)
-                        saveBytes(fileName, ext, mime, book.title, bytes)
-                    }
-                }
-                if (options.copyToClipboard) {
-                    Log.w(TAG, "Can't copy book links or images to clipboard -- batch export.")
-                }
-                return "Book exported: ${book.title} (${book.pageIds.size} pages)"
             }
         }
     }

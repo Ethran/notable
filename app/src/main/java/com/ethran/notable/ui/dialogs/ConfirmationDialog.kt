@@ -22,8 +22,6 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportOptions
 import com.ethran.notable.io.ExportTarget
-import com.ethran.notable.io.XoppFile
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,11 +99,7 @@ fun ShowExportDialog(
         ) {
             Text(text = "Choose Export Format", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text(
-                text = "Select the format in which you want to export the book:\n" +
-                        "- Xopp: Preserves all data and can be imported. " +
-                        "However, if opened and saved by Xournal++, tool-specific information will be lost, " +
-                        "and all strokes will be interpreted as ballpoint pen.\n" +
-                        "- PDF: A standard format for document sharing.",
+                text = "Select the format in which you want to export the book:\n" + "- Xopp: Preserves all data and can be imported. " + "However, if opened and saved by Xournal++, tool-specific information will be lost, " + "and all strokes will be interpreted as ballpoint pen.\n" + "- PDF: A standard format for document sharing.",
                 fontSize = 16.sp
             )
             Row(
@@ -115,20 +109,14 @@ fun ShowExportDialog(
                     .padding(24.dp)
             ) {
                 ActionButton(
-                    text = "Cancel",
-                    onClick = onCancel
+                    text = "Cancel", onClick = onCancel
                 )
                 ActionButton(
-                    text = "Export as PDF",
-                    onClick = {
+                    text = "Export as PDF", onClick = {
                         CoroutineScope(Dispatchers.IO).launch {
-                            val removeSnack = snackManager.displaySnack(
-                                SnackConf(
-                                    text = "Exporting book to PDF...",
-                                    id = "exportSnack"
-                                )
-                            )
-                            val message =
+                            snackManager.runWithSnack(
+                                "Exporting book to PDF.."
+                            ) {
                                 ExportEngine(context).export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.PDF,
@@ -136,29 +124,27 @@ fun ShowExportDialog(
                                         copyToClipboard = false,
                                     )
                                 )
-                            removeSnack()
-                            snackManager.displaySnack(
-                                SnackConf(text = message, duration = 2000)
-                            )
+
+                            }
+
                         }
                         onConfirm()
                     })
                 ActionButton(
-                    text = "Export as Xopp",
-                    onClick = {
+                    text = "Export as Xopp", onClick = {
                         CoroutineScope(Dispatchers.IO).launch {
-                            val removeSnack = snackManager.displaySnack(
-                                SnackConf(
-                                    text = "Exporting book to Xopp format...",
-                                    id = "exportSnack"
+                            snackManager.runWithSnack(
+                                "Exporting the book to xopp..."
+                            ) {
+                                ExportEngine(context).export(
+                                    target = ExportTarget.Book(bookId = bookId),
+                                    format = ExportFormat.XOPP,
                                 )
-                            )
-                            XoppFile(context).exportBook(bookId)
-                            removeSnack()
+                            }
                         }
+
                         onConfirm()
-                    }
-                )
+                    })
             }
         }
     }
