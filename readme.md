@@ -161,12 +161,18 @@ Features I’d like to implement in the future (some might take a while — or a
 ## Screenshots
 
 <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-  <img src="https://github.com/user-attachments/assets/1025087c-5765-425f-ab1d-a82908b56d5e" alt="screenshot-1" width="200"/>
-  <img src="https://github.com/user-attachments/assets/1d6ba940-828c-47fe-a5f5-3128e06382dd" alt="screenshot-2" width="200"/>
-  <img src="https://github.com/user-attachments/assets/bfa9ee13-3f89-4ae3-8349-1a25e2efd275" alt="screenshot-3" width="200"/>
+  <img src="https://github.com/user-attachments/assets/c3054254-043b-4cce-8524-43d10505ad0b" alt="screenshot-1" width="200"/>
+  <img src="https://github.com/user-attachments/assets/c23119b7-cdae-4742-83f2-a4f39863c571" alt="screenshot-3" width="200"/>
   <img src="https://github.com/user-attachments/assets/9f3e7012-69e4-4125-bf69-509b52e1ebaf" alt="screenshot-5" width="200"/>
   <img src="https://github.com/user-attachments/assets/24c8c750-eb8e-4f01-ac62-6a9f8e5f9e4f" alt="screenshot-6" width="200"/>
   <img src="https://github.com/user-attachments/assets/4cdb0e74-bfce-4dba-bc21-886a5834401e" alt="screenshot-7" width="200"/>
+  <img src="https://github.com/user-attachments/assets/857f16d3-e59c-48ca-99b5-577d96ef33e0" alt="screenshot-7" width="200"/>
+  <img src="https://github.com/user-attachments/assets/e8304495-dbab-4d7a-987a-b76bf91a3a74" alt="screenshot-7" width="200"/>
+  <img src="https://github.com/user-attachments/assets/38226966-0e19-45c9-a318-a8fd9d8edf02" alt="screenshot-7" width="200"/>
+  <img src="https://github.com/user-attachments/assets/df29f77c-94a8-4c56-bbd4-d7285654df30" alt="screenshot-7" width="200"/>
+
+
+
 </div>
 
 ---
