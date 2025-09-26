@@ -148,9 +148,10 @@ fun Library(navController: NavController, folderId: String? = null) {
         } else {
             // User stopped scrolling - delay before resetting
             scrollJob = scope.launch {
-                delay(500) // Wait 500ms to ensure scrolling really stopped
-                setAnimationMode(false)
                 isScrolling = false
+                delay(500) // Wait 500ms to ensure scrolling really stopped
+                if (!isScrolling)
+                    setAnimationMode(false)
             }
         }
     }
