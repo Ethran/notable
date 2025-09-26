@@ -235,7 +235,7 @@ Feel free to open issues or submit pull requests. I appreciate your help!
 [issues-url]: https://github.com/Ethran/notable/issues
 [license-shield]: https://img.shields.io/github/license/Ethran/notable.svg?style=for-the-badge
 
-[license-url]: https://github.com/Ethran/notable/blob/main/LICENSE.txt <!-- To be added. -->
+[license-url]: https://github.com/Ethran/notable/blob/main/LICENSE.txt
 [download-shield]: https://img.shields.io/github/v/release/Ethran/notable?style=for-the-badge&label=⬇️%20Download
 [download-url]: https://github.com/Ethran/notable/releases/latest
 [downloads-shield]: https://img.shields.io/github/downloads/Ethran/notable/total?style=for-the-badge&color=47c219&logo=cloud-download
