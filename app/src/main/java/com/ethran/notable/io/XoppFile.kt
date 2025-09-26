@@ -81,7 +81,7 @@ class XoppFile(
         Log.Companion.v(TAG, "Exporting book $bookId")
         ensureNotMainThread("xoppExportBook")
 
-        val book = BookRepository(context).getById(bookId)
+        val book = bookRepo.getById(bookId)
             ?: return Log.Companion.e(TAG, "Book ID($bookId) not found")
 
         val fileName = book.title
@@ -138,9 +138,8 @@ class XoppFile(
      * @param writer The BufferedWriter to write XML data to.
      */
     private fun writePage(pageId: String, writer: BufferedWriter) {
-        val pages = PageRepository(context)
-        val (_, strokes) = pages.getWithStrokeById(pageId)
-        val (_, images) = pages.getWithImageById(pageId)
+        val (_, strokes) = pageRepo.getWithStrokeById(pageId)
+        val (_, images) = pageRepo.getWithImageById(pageId)
 
         val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument()
 
@@ -293,8 +292,6 @@ class XoppFile(
 
         val document = parseXml(xmlContent) ?: return
         val bookTitle = getBookTitle(uri)
-        val bookRepo = BookRepository(context)
-        val pageRepo = PageRepository(context)
 
         val book = Notebook(
             title = bookTitle,
