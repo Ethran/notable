@@ -203,8 +203,7 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
             )
             log.e("Batch failed (size=$batchSize)", rowEx)
             batchSize /= 2
-            if(batchSize <2)
-            {
+            if (batchSize < 2) {
                 SnackState.globalSnackFlow.tryEmit(
                     SnackConf(
                         id = "oversize_$batchSize",

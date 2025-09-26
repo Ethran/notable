@@ -175,6 +175,6 @@ fun fileObserverEventNames(event: Int): String {
     if (event and FileObserver.OPEN != 0) names += "OPEN"
     if (event and FileObserver.ALL_EVENTS == event) names += "ALL_EVENTS"
     if (event and IN_IGNORED == event) names += "IN_IGNORED"
-    if (names.isEmpty()) names += "Unknow: $event"
+    if (names.isEmpty()) names += "Unknown: $event"
     return names.joinToString("|")
 }
