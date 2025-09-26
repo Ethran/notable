@@ -151,6 +151,13 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
                     }
                 } catch (rowEx: Exception) {
                     log.e("Failed stroke id=$id; leaving for retry.", rowEx)
+                    SnackState.globalSnackFlow.tryEmit(
+                        SnackConf(
+                            id = "oversize_$id",
+                            text = "Failed stroke id=$id; leaving for retry.",
+                            duration = 4000
+                        )
+                    )
                     throw rowEx
                 }
             } while (cursor.moveToNext())
@@ -183,12 +190,30 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
             SnackState.globalSnackFlow.tryEmit(
                 SnackConf(
                     id = "oversize_$batchSize",
-                    text = "ERROR: $rowEx",
+                    text = "Stroke Reencoding, batch size $batchSize, trying again with smaller batchSize",
+                    duration = 4000
+                )
+            )
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    id = "oversize2_$batchSize",
+                    text = "Error message: $rowEx",
                     duration = 4000
                 )
             )
             log.e("Batch failed (size=$batchSize)", rowEx)
-            break
+            batchSize /= 2
+            if(batchSize <2)
+            {
+                SnackState.globalSnackFlow.tryEmit(
+                    SnackConf(
+                        id = "oversize_$batchSize",
+                        text = "Migration failed(batchSize=$batchSize), reducing batchSize didn't help",
+                        duration = 4000
+                    )
+                )
+                break
+            }
         } finally {
             cursor.close()
             db.endTransaction()
