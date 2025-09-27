@@ -29,7 +29,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +45,7 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.deletePage
 import com.ethran.notable.editor.ui.toolbar.Topbar
+import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.FastScroller
@@ -55,9 +55,9 @@ import com.ethran.notable.utils.InsertionSlot
 import com.ethran.notable.utils.ReorderableGridItem
 import com.ethran.notable.utils.computeInsertionSlotRect
 import com.ethran.notable.utils.rememberReorderableGridState
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -73,19 +73,6 @@ fun PagesView(navController: NavController, bookId: String) {
 
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
-
-    // E‑ink animation handling (debounced, no Job needed)
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.isScrollInProgress }.collect { scrolling ->
-            if (scrolling) {
-                setAnimationMode(true)
-            } else {
-                // debounce off
-                delay(500)
-                setAnimationMode(false)
-            }
-        }
-    }
 
     // Initial focus on current page
     LaunchedEffect(openPageId, pageIds) {
@@ -134,11 +121,13 @@ fun PagesView(navController: NavController, bookId: String) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(end = 40.dp),
-                modifier = Modifier.onGloballyPositioned { coords ->
-                    val r = coords.boundsInRoot()
-                    reorderState.gridOriginInRoot =
-                        IntOffset(r.left.roundToInt(), r.top.roundToInt())
-                }
+                modifier = Modifier
+                    .onGloballyPositioned { coords ->
+                        val r = coords.boundsInRoot()
+                        reorderState.gridOriginInRoot =
+                            IntOffset(r.left.roundToInt(), r.top.roundToInt())
+                    }
+                    .autoEInkAnimationOnScroll()
             ) {
                 itemsIndexed(
                     items = pageIds,
