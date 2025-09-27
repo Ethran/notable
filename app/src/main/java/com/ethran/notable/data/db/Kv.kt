@@ -13,7 +13,7 @@ import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.ui.Views.hasFilePermission
+import com.ethran.notable.ui.views.hasFilePermission
 import io.shipbook.shipbooksdk.Log
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json

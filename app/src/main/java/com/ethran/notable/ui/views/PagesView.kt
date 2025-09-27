@@ -1,4 +1,4 @@
-package com.ethran.notable.ui.Views
+package com.ethran.notable.ui.views
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
