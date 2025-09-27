@@ -28,8 +28,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +55,7 @@ import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.FastScroller
 import com.ethran.notable.ui.components.PageCard
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
 import com.ethran.notable.utils.InsertionSlot
 import com.ethran.notable.utils.ReorderableGridItem
 import com.ethran.notable.utils.computeInsertionSlotRect
@@ -86,6 +90,21 @@ fun PagesView(navController: NavController, bookId: String) {
             Log.d("PagesView", "Initial focus on page $index")
             gridState.scrollToItem(index)
         }
+    }
+    var pendingDeletePageId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    pendingDeletePageId?.let { id ->
+        ShowSimpleConfirmationDialog(
+            title = "Confirm Deletion",
+            message = "Are you sure you want to delete this page?",
+            onConfirm = {
+                deletePage(context, id)
+                pendingDeletePageId = null
+            },
+            onCancel = {
+                pendingDeletePageId = null
+            }
+        )
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -156,7 +175,7 @@ fun PagesView(navController: NavController, bookId: String) {
                             isReorderDragging = reorderState.draggingId == null,
                             touchModifier = touchMod,
                             onOpen = { navController.navigate("books/$bookId/pages/$pageId") },
-                            onDelete = { deletePage(context, pageId) },
+                            onDelete = { pendingDeletePageId = pageId },
                             onDuplicate = { appRepository.duplicatePage(pageId) },
                             onAddAfter = {
                                 val bookNow =

@@ -88,19 +88,19 @@ fun PageCard(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconPill(icon = FeatherIcons.Trash, contentDesc = "Delete page") {
-                onDelete
+                onDelete()
             }
             IconPill(icon = FeatherIcons.Copy, contentDesc = "Duplicate page") {
-                onDuplicate
+                onDuplicate()
             }
             IconPill(
                 icon = FeatherIcons.PlusCircle, contentDesc = "Add page after"
             ) {
-                onAddAfter
+                onAddAfter()
             }
         }
     }
@@ -115,8 +115,8 @@ private fun IconPill(
 ) {
     Box(
         modifier = Modifier
-            .width(30.dp)
-            .height(30.dp)
+            .width(35.dp)
+            .height(35.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xFFFFFFFF))
             .border(1.dp, Color.Black, RoundedCornerShape(6.dp))
