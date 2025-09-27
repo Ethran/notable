@@ -41,16 +41,13 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 - [System Requirements and Permissions](#system-requirements-and-permissions)
 - [Export and Import](#export-and-import)
 - [Roadmap](#roadmap)
-  - [Near-term](#near-term)
-  - [Planned](#planned)
-  - [Long-term](#long-term)
 - [Known Limitations](#known-limitations)
 - [Troubleshooting and FAQ](#troubleshooting-and-faq)
 - [Bug Reporting](#bug-reporting)
 - [Screenshots](#screenshots)
 - [Working with LaTeX](#working-with-latex)
 - [App Distribution](#app-distribution)
-- [For Developers & Contributing](#for-developers-&-contributing)
+- [For Developers & Contributing](#for-developers--contributing)
 
 </details>
 
@@ -252,7 +249,7 @@ Notable is not distributed on Google Play or F‑Droid. Official builds are prov
 - Project file layout: see [docs/file-structure.md](./docs/file-structure.md)  
 - Data model and stroke encoding: see [docs/database-structure.md](./docs/database-structure.md)  
 - Additional documentation will be added as needed  
-  Note: This documents ware AI-generated and lightly verified; refer to the code for the authoritative source.
+  Note: These documents were AI-generated and lightly verified; refer to the code for the authoritative source.
 
 ### Development Notes
 
