@@ -127,7 +127,7 @@ The app supports the following formats:
 - **PDF** — export and import supported. You can also link a page to an external PDF so that changes on your computer are reflected live on the tablet (see [Working with LaTeX](#working-with-latex)).  
 - **PNG** — export supported for handwriting selections, individual pages, and entire books.  
 - **JPEG** — export supported for individual pages.  
-- **XOPP** — export and import partially supported. Only stroke and image data are preserved; tool information for strokes may be lost when files are opened and saved with [Xournal++](https://xournalpp.github.io/). Backgrounds are not exported correctly.  
+- **XOPP** — export and import partially supported. Only stroke and image data are preserved; tool information for strokes may be lost when files are opened and saved with [Xournal++](https://xournalpp.github.io/). Backgrounds are not exported.  
 
 
 ---
