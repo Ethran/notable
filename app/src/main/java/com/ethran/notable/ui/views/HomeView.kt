@@ -1,9 +1,8 @@
-package com.ethran.notable.ui.Views
+package com.ethran.notable.ui.views
 
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -27,9 +26,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Badge
 import androidx.compose.material.BadgedBox
@@ -42,7 +39,6 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -69,7 +65,7 @@ import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.ui.PageMenu
 import com.ethran.notable.editor.ui.toolbar.Topbar
-import com.ethran.notable.editor.utils.setAnimationMode
+import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.floatingEditor.FloatingEditorView
 import com.ethran.notable.io.XoppFile
 import com.ethran.notable.io.getFilePathFromUri
@@ -84,6 +80,7 @@ import com.ethran.notable.ui.dialogs.ShowConfirmationDialog
 import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.showHint
+import com.ethran.notable.utils.ensureNotMainThread
 import com.ethran.notable.utils.isLatestVersion
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
@@ -94,8 +91,6 @@ import compose.icons.feathericons.Upload
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.concurrent.thread
@@ -133,27 +128,6 @@ fun Library(navController: NavController, folderId: String? = null) {
     val snackManager = LocalSnackContext.current
 
 
-    // ensure scrolling is done in animation mode.
-    val lazyGridStateNotebooks = rememberLazyGridState()
-    val lazyListStateFolders = rememberLazyListState()
-    val lazyListStateQuickPages = rememberLazyListState()
-    var isScrolling by remember { mutableStateOf(false) }
-    var scrollJob by remember { mutableStateOf<Job?>(null) }
-    fun handleAnimations(scope: CoroutineScope, scrolling: Boolean) {
-        if (scrolling) {
-            // User started scrolling
-            isScrolling = true
-            setAnimationMode(true)
-            scrollJob?.cancel()
-        } else {
-            // User stopped scrolling - delay before resetting
-            scrollJob = scope.launch {
-                delay(500) // Wait 500ms to ensure scrolling really stopped
-                setAnimationMode(false)
-                isScrolling = false
-            }
-        }
-    }
 
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
     fun importPdf(uri: Uri, copy: Boolean) {
@@ -225,22 +199,6 @@ fun Library(navController: NavController, folderId: String? = null) {
 
 
 
-    LaunchedEffect(lazyGridStateNotebooks, lazyListStateFolders) {
-        snapshotFlow { lazyGridStateNotebooks.isScrollInProgress }
-            .collect { scrolling ->
-                handleAnimations(this, scrolling)
-            }
-        snapshotFlow { lazyListStateFolders.isScrollInProgress }
-            .collect { scrolling ->
-                handleAnimations(this, scrolling)
-            }
-        snapshotFlow { lazyListStateQuickPages.isScrollInProgress }
-            .collect { scrolling ->
-                handleAnimations(this, scrolling)
-            }
-    }
-
-
     Column(
         Modifier.fillMaxSize()
     ) {
@@ -269,7 +227,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                 Modifier
                     .padding(10.dp)
             ) {
-                BreadCrumb(folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
+                BreadCrumb(folderId = folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
             }
 //           I do not know what the idea behind it was
 //            // Add the new "Floating Editor" button here
@@ -299,20 +257,19 @@ fun Library(navController: NavController, folderId: String? = null) {
             Spacer(Modifier.height(10.dp))
 
             LazyRow(
-                state = lazyListStateFolders,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().autoEInkAnimationOnScroll()
             ) {
                 item {
                     // Add new folder row
                     Row(
                         Modifier
+                            .border(0.5.dp, Color.Black)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
                             .noRippleClickable {
                                 val folder = Folder(parentFolderId = folderId)
                                 appRepository.folderRepository.create(folder)
                             }
-                            .border(0.5.dp, Color.Black)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Icon(
                             imageVector = FeatherIcons.FolderPlus,
@@ -361,9 +318,8 @@ fun Library(navController: NavController, folderId: String? = null) {
             Spacer(Modifier.height(10.dp))
 
             LazyRow(
-                state = lazyListStateQuickPages,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().autoEInkAnimationOnScroll()
             ) {
                 // Add the "Add quick page" button
                 item {
@@ -426,10 +382,10 @@ fun Library(navController: NavController, folderId: String? = null) {
             Spacer(Modifier.height(10.dp))
 
             LazyVerticalGrid(
-                state = lazyGridStateNotebooks,
                 columns = GridCells.Adaptive(100.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.autoEInkAnimationOnScroll()
             ) {
                 item {
                     Box(
@@ -448,6 +404,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                     .weight(1f) // Takes half the height
                                     .fillMaxWidth()
                                     .background(Color.LightGray.copy(alpha = 0.3f))
+                                    .border(2.dp, Color.Black, RectangleShape)
                                     .noRippleClickable {
                                         appRepository.bookRepository.create(
                                             Notebook(
@@ -457,7 +414,6 @@ fun Library(navController: NavController, folderId: String? = null) {
                                             )
                                         )
                                     }
-                                    .border(2.dp, Color.Black, RectangleShape)
                             ) {
                                 Icon(
                                     imageVector = FeatherIcons.FilePlus,
@@ -484,7 +440,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                                     SnackConf(text = "importing from xopp file")
                                                 )
                                             importInProgress = true
-                                            XoppFile.importBook(context, uri, folderId)
+                                            XoppFile(context).importBook(uri, folderId)
                                             importInProgress = false
                                             removeSnack()
                                         }
@@ -498,6 +454,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .background(Color.LightGray.copy(alpha = 0.3f))
+                                    .border(2.dp, Color.Black, RectangleShape)
                                     .noRippleClickable {
                                         launcher.launch(
                                             arrayOf(
@@ -508,7 +465,6 @@ fun Library(navController: NavController, folderId: String? = null) {
                                             )
                                         )
                                     }
-                                    .border(2.dp, Color.Black, RectangleShape)
 
                             ) {
                                 Icon(
@@ -606,8 +562,7 @@ fun Library(navController: NavController, folderId: String? = null) {
 
 fun handlePdfImport(context: Context, folderId: String?, uri: Uri, copyFile: Boolean = true) {
     Log.v(TAG, "Importing PDF from $uri")
-    if (Looper.getMainLooper().isCurrentThread)
-        Log.e(TAG, "Importing is done on main thread.")
+    ensureNotMainThread("Importing")
 
     //copy file:
     val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION

@@ -16,6 +16,7 @@ import androidx.core.graphics.createBitmap
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
 import com.ethran.notable.utils.Timing
+import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
@@ -55,10 +56,7 @@ fun uriToBitmap(context: Context, uri: Uri): Bitmap? {
 fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
     // TODO: it's very slow, needs to be changed for better tool
     if (filePath.isEmpty()) return null
-//    logCallStack("loadBackgroundBitmap", 14)
-    if (Looper.getMainLooper().isCurrentThread) {
-        log.w("loadBackgroundBitmap called from main thread")
-    }
+    ensureNotMainThread("loadBackgroundBitmap")
     Log.v(TAG, "Reloading background, path: $filePath, scale: $scale")
     val file = File(filePath)
     if (!file.exists()) {

@@ -1,4 +1,4 @@
-package com.ethran.notable.ui.Views
+package com.ethran.notable.ui.views
 
 import android.content.Context
 import android.content.Intent
@@ -226,7 +226,7 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             })
 
         SettingToggleRow(
-            label = "Visualize PDF Pagination",
+            label = "Preview PDF Pagination",
             value = settings.visualizePdfPagination,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(visualizePdfPagination = isChecked))

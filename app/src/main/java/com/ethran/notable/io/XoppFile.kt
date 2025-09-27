@@ -1,14 +1,10 @@
 package com.ethran.notable.io
 
-import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.net.Uri
-import android.os.Environment
-import android.os.Looper
-import android.provider.MediaStore
 import android.util.Base64
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -30,6 +26,7 @@ import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.ensureImagesFolder
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.ui.showHint
+import com.ethran.notable.utils.ensureNotMainThread
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
@@ -45,6 +42,7 @@ import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.io.StringWriter
 import java.util.UUID
@@ -58,70 +56,48 @@ import javax.xml.transform.stream.StreamResult
 // it's used to get strokes look relatively good in xournal++
 private const val PRESSURE_FACTOR = 0.5f
 
-
-object XoppFile {
+// https://github.com/xournalpp/xournalpp/issues/2124
+class XoppFile(
+    private val context: Context,
+    private val pageRepo: PageRepository = PageRepository(context),
+    private val bookRepo: BookRepository = BookRepository(context)
+) {
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
     private val maxPressure = EpdController.getMaxTouchPressure()
 
-    /**
-     * Exports an entire book as a `.xopp` file.
-     *
-     * This method processes each page separately, writing the XML data
-     * to a temporary file to prevent excessive memory usage. After all
-     * pages are processed, the file is compressed into a `.xopp` format.
-     *
-     * @param context The application context.
-     * @param bookId The ID of the book to export.
-     */
-    fun exportBook(context: Context, bookId: String) {
-        Log.Companion.v(TAG, "Exporting book $bookId")
-        if (Looper.getMainLooper().isCurrentThread)
-            Log.Companion.w(TAG, "Exporting is done on main thread.")
 
-        val book = BookRepository(context).getById(bookId)
-            ?: return Log.Companion.e(TAG, "Book ID($bookId) not found")
-
-        val fileName = book.title
-        val tempFile = File(context.cacheDir, "$fileName.xml")
-
-        BufferedWriter(
-            OutputStreamWriter(
-                FileOutputStream(tempFile),
-                Charsets.UTF_8
-            )
-        ).use { writer ->
-            writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-            writer.write("<xournal creator=\"Notable ${BuildConfig.VERSION_NAME}\" version=\"0.4\">\n")
-
-            book.pageIds.forEach { pageId ->
-                writePage(context, pageId, writer)
+    fun writeToXoppStream(target: ExportTarget, output: OutputStream) {
+        // Build a temporary plain-XML file using existing writePage(), then gzip it into 'output'
+        val tmp = File(
+            context.cacheDir, when (target) {
+                is ExportTarget.Book -> "notable_xopp_book.xml"
+                is ExportTarget.Page -> "notable_xopp_page.xml"
             }
+        )
 
-            writer.write("</xournal>\n")
-        }
-
-        saveAsXopp(context, tempFile, fileName)
-    }
-
-    /**
-     * Exports page as a `.xopp` file.
-     */
-    fun exportPage(context: Context, pageId: String) {
-        Log.Companion.v(TAG, "Exporting page $pageId")
-        val tempFile = File(context.cacheDir, "exported_page.xml")
-
-        BufferedWriter(
-            OutputStreamWriter(
-                FileOutputStream(tempFile), Charsets.UTF_8
-            )
-        ).use { writer ->
+        BufferedWriter(OutputStreamWriter(FileOutputStream(tmp), Charsets.UTF_8)).use { writer ->
             writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             writer.write("<xournal creator=\"Notable ${BuildConfig.VERSION_NAME}\" version=\"0.4\">\n")
-            writePage(context, pageId, writer)
+            when (target) {
+                is ExportTarget.Book -> {
+                    val book = BookRepository(context).getById(target.bookId)
+                        ?: throw IOException("Book not found: ${target.bookId}")
+                    book.pageIds.forEach { pageId ->
+                        writePage(pageId, writer)
+                    }
+                }
+
+                is ExportTarget.Page -> {
+                    writePage(target.pageId, writer)
+                }
+            }
             writer.write("</xournal>\n")
         }
 
-        saveAsXopp(context, tempFile, "exported_page")
+        GzipCompressorOutputStream(BufferedOutputStream(output)).use { gz ->
+            tmp.inputStream().use { it.copyTo(gz) }
+        }
+        tmp.delete()
     }
 
 
@@ -131,14 +107,12 @@ object XoppFile {
      * This method retrieves the strokes and images for the given page
      * and writes them to the provided BufferedWriter.
      *
-     * @param context The application context.
      * @param pageId The ID of the page to process.
      * @param writer The BufferedWriter to write XML data to.
      */
-    private fun writePage(context: Context, pageId: String, writer: BufferedWriter) {
-        val pages = PageRepository(context)
-        val (_, strokes) = pages.getWithStrokeById(pageId)
-        val (_, images) = pages.getWithImageById(pageId)
+    private fun writePage(pageId: String, writer: BufferedWriter) {
+        val (_, strokes) = pageRepo.getWithStrokeById(pageId)
+        val (_, images) = pageRepo.getWithImageById(pageId)
 
         val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument()
 
@@ -163,6 +137,9 @@ object XoppFile {
 
 
         for (stroke in strokes) {
+            // skip the small strokes, to avoid error: Wrong count of points (2)
+            if (stroke.points.size < 3)
+                continue
             val strokeElement = doc.createElement("stroke")
             strokeElement.setAttribute("tool", stroke.pen.toString())
             strokeElement.setAttribute("color", getColorName(Color(stroke.color)))
@@ -248,53 +225,19 @@ object XoppFile {
 
 
     /**
-     * Saves a temporary XML file as a compressed `.xopp` file.
-     *
-     * @param context The application context.
-     * @param file The temporary XML file to compress.
-     * @param fileName The name of the final `.xopp` file.
-     */
-    private fun saveAsXopp(context: Context, file: File, fileName: String) {
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Files.FileColumns.DISPLAY_NAME, "$fileName.xopp")
-            put(MediaStore.Files.FileColumns.MIME_TYPE, "application/x-xopp")
-            put(
-                MediaStore.Files.FileColumns.RELATIVE_PATH,
-                Environment.DIRECTORY_DOCUMENTS + "/Notable/"
-            )
-        }
-
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Files.getContentUri("external"), contentValues)
-            ?: throw IOException("Failed to create Media Store entry")
-
-        resolver.openOutputStream(uri)?.use { outputStream ->
-            GzipCompressorOutputStream(BufferedOutputStream(outputStream)).use { gzipOutputStream ->
-                file.inputStream().copyTo(gzipOutputStream)
-            }
-        } ?: throw IOException("Failed to open output stream")
-
-        file.delete()
-    }
-
-
-    /**
      * Imports a `.xopp` file, creating a new book and pages in the database.
      *
      * @param context The application context.
      * @param uri The URI of the `.xopp` file to import.
      */
-    fun importBook(context: Context, uri: Uri, parentFolderId: String?) {
+    fun importBook(uri: Uri, parentFolderId: String?) {
         Log.Companion.v(TAG, "Importing book from $uri, into $parentFolderId")
-        if (Looper.getMainLooper().isCurrentThread)
-            Log.Companion.e(TAG, "Importing is done on main thread.")
+        ensureNotMainThread("xoppImportBook")
         val inputStream = context.contentResolver.openInputStream(uri) ?: return
         val xmlContent = extractXmlFromXopp(inputStream) ?: return
 
         val document = parseXml(xmlContent) ?: return
         val bookTitle = getBookTitle(uri)
-        val bookRepo = BookRepository(context)
-        val pageRepo = PageRepository(context)
 
         val book = Notebook(
             title = bookTitle,

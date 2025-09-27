@@ -89,16 +89,10 @@ class AppRepository(val context: Context) {
                 createdAt = Date()
             )
         })
-        if (pageWithStrokes.page.notebookId != null) {
-            val book = bookRepository.getById(pageWithStrokes.page.notebookId) ?: return
-            val pageIndex = book.pageIds.indexOf(pageWithStrokes.page.id)
-            if (pageIndex == -1) return
-            val pageIds = book.pageIds.toMutableList()
-            pageIds.add(pageIndex + 1, duplicatedPage.id)
-            bookRepository.update(book.copy(pageIds = pageIds))
-        }
-        if (pageWithImages.page.notebookId != null) {
-            val book = bookRepository.getById(pageWithImages.page.notebookId) ?: return
+        require(pageWithStrokes.page.notebookId == pageWithImages.page.notebookId) { "pageWithStrokes.page.notebookId != pageWithImages.page.notebookId" }
+        val notebookId = pageWithStrokes.page.notebookId
+        if (notebookId != null) {
+            val book = bookRepository.getById(notebookId) ?: return
             val pageIndex = book.pageIds.indexOf(pageWithImages.page.id)
             if (pageIndex == -1) return
             val pageIds = book.pageIds.toMutableList()

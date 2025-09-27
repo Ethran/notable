@@ -52,7 +52,7 @@ class SnackState {
     // this does work, but I have doubts if it is a proper way for doing it
     // Register Observers for Global Actions
     companion object {
-        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 1)
+        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 5)
         val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 5)
     }
 
@@ -102,6 +102,21 @@ class SnackState {
             throw e
         }
     }
+
+    /**
+     * Runs [block] while showing a "working" snack, then shows the resulting message as a new snack.
+     * Returns the result message from [block].
+     */
+    suspend fun runWithSnack(
+        textDuring: String,
+        resultDurationMs: Int = 2000,
+        block: suspend () -> String
+    ): String {
+        val message = showSnackDuring(text = textDuring) { block() }
+        displaySnack(SnackConf(text = message, duration = resultDurationMs))
+        return message
+    }
+
 }
 
 @Composable

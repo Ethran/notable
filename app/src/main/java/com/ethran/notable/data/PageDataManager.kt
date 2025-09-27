@@ -15,7 +15,12 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
+import com.ethran.notable.io.IN_IGNORED
+import com.ethran.notable.io.fileObserverEventNames
 import com.ethran.notable.io.loadBackgroundBitmap
+import com.ethran.notable.io.waitForFileAvailable
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.chunked
 import com.onyx.android.sdk.extension.isNotNull
@@ -74,6 +79,7 @@ object PageDataManager {
     // fileToPages: filename to files with this file
     private val fileObservers = mutableMapOf<String, FileObserver>()
     private val fileToPages = mutableMapOf<String, MutableSet<String>>()
+    val invalidateFileFlow = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
     // needs to be observable by UI, for scroll bars
     private var pageHigh = mutableStateMapOf<String, Int>()
@@ -91,6 +97,10 @@ object PageDataManager {
     private val jobLock = Mutex()
     private val dataLoadingJobs = mutableMapOf<String, Job>()
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    init {
+        startFileInvalidationCollector()
+    }
 
     /**
      * Suspends until the page is done loading (if it is being loaded).
@@ -515,9 +525,11 @@ object PageDataManager {
         }
     }
 
-    private fun observeBackgroundFile(
-        pageId: String, filePath: String, onChange: suspend () -> Unit = {}
-    ) {
+    /**
+     * Start observing a background file for changes.
+     * Registers the pageId to the file, and launches a FileObserver if not already present.
+     */
+    private fun observeBackgroundFile(pageId: String, filePath: String) {
         synchronized(fileObservers) {
             fileToPages.getOrPut(filePath) { mutableSetOf() }.add(pageId)
             if (fileObservers.containsKey(filePath)) return // Already observing this file
@@ -527,19 +539,40 @@ object PageDataManager {
                 log.w("Cannot observe background file: $filePath does not exist or is not readable")
                 return
             }
+            val mask = (FileObserver.CREATE or
+                    FileObserver.DELETE or
+                    FileObserver.DELETE_SELF or
+                    FileObserver.CLOSE_WRITE or
+                    FileObserver.MOVED_TO or
+                    FileObserver.MOVE_SELF or
+                    FileObserver.MODIFY)
 
-            val observer = object : FileObserver(file, CLOSE_WRITE or MOVED_TO) {
+            // Launch a FileObserver for this file
+            val observer = object : FileObserver(file, mask) {
                 override fun onEvent(event: Int, path: String?) {
                     dataLoadingScope.launch {
-                        log.d("Background file changed: $filePath [event=$event]")
-                        // Invalidate all pages that use this file
-                        fileToPages[filePath]?.forEach { pid ->
-                            invalidateBackground(pid)
-                            if (pid == currentPage) {
-                                DrawCanvas.Companion.forceUpdate.emit(null)
+                        if(event == IN_IGNORED)
+                            return@launch
+                        val eventString = fileObserverEventNames(event)
+
+                        log.d("Background file changed: $filePath [event=$eventString]")
+                        if (event == DELETE || event == DELETE_SELF) {
+                            log.d("Background file deleted.")
+                            synchronized(fileObservers) {
+                                fileObservers.remove(filePath)?.stopWatching()
                             }
+                            if (!waitForFileAvailable(filePath)) {
+                                log.w("File changed, but does not exist: $filePath")
+                                SnackState.globalSnackFlow.emit(
+                                    SnackConf(text = "Background does not exist", duration = 3000)
+                                )
+                                return@launch
+                            } else
+                                observeBackgroundFile(pageId, filePath)
                         }
-                        onChange()
+
+
+                        invalidateFileFlow.emit(filePath)
                     }
                 }
             }
@@ -548,6 +581,38 @@ object PageDataManager {
         }
     }
 
+
+    /**
+     * Starts the collector to process file invalidation events.
+     * Uses chunked batching to process all events received in a 10ms window.
+     */
+    fun startFileInvalidationCollector() {
+        dataLoadingScope.launch {
+            invalidateFileFlow.chunked(10) // Batch events every 20ms
+                .collect { filePathBatch ->
+                    val uniqueFilePaths = filePathBatch.distinct()
+                    if (uniqueFilePaths.isEmpty()) return@collect
+                    log.i("Persisting batch of fileChanges: $uniqueFilePaths")
+                    for (filePath in uniqueFilePaths) {
+                        // Invalidate all pages that use this file
+                        fileToPages[filePath]?.forEach { pid ->
+                            invalidateBackground(pid)
+                            if (pid == currentPage) {
+                                DrawCanvas.Companion.forceUpdate.emit(null)
+                                SnackState.globalSnackFlow.emit(
+                                    SnackConf(text = "Background file changed", duration = 4000)
+                                )
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    /**
+     * Stop observing the background file for the given page.
+     * Cleans up observers if no more pages are using the file.
+     */
     private fun stopObservingBackground(pageId: String) {
         synchronized(fileObservers) {
             val iterator = fileToPages.entries.iterator()

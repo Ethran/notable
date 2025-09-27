@@ -2,6 +2,19 @@ package com.ethran.notable.editor.utils
 
 import android.graphics.Rect
 import android.view.View
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -15,7 +28,9 @@ import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val einkLogger = ShipBook.getLogger("einkHelper")
 
@@ -311,3 +326,75 @@ fun resetScreenFreeze(touchHelper: TouchHelper, view: View? = null) {
 //    EpdController.repaintEveryThing()
 //    EpdController.setScreenHandWritingPenState(view, EpdPenManager.PEN_PAUSE)
 //    EpdController.setScreenHandWritingPenState(view, EpdPenManager.PEN_DRAWING)
+
+
+/**
+ * Automatically toggles e‑ink animation mode when the attached subtree scrolls.
+ * Works with any Compose scrollable that supports nested scroll (Lazy* and scrollable()).
+ *
+ * - Turns on immediately when any scroll/drag/fling starts.
+ * - Turns off after [debounceOffMillis] from the end of drag/fling.
+ */
+fun Modifier.autoEInkAnimationOnScroll(
+    debounceOffMillis: Long = 500,
+    setMode: (Boolean) -> Unit = ::setAnimationMode
+): Modifier = composed {
+    val scope = rememberCoroutineScope()
+    var offJob: Job? by remember { mutableStateOf(null) }
+
+    fun turnOn() {
+        offJob?.cancel()
+        setMode(true)
+    }
+
+    fun scheduleOff() {
+        offJob?.cancel()
+        offJob = scope.launch {
+            delay(debounceOffMillis)
+            setMode(false)
+        }
+    }
+
+    val connection = remember(debounceOffMillis, setMode) {
+        object : NestedScrollConnection {
+            // Any pre-scroll (user drag) -> ON
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available != Offset.Zero) turnOn()
+                return Offset.Zero
+            }
+
+            // Any post-scroll (child consumed) -> ON
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (consumed != Offset.Zero) {
+                    turnOn()
+                } else if (source == NestedScrollSource.UserInput && available == Offset.Zero) {
+                    // Likely drag end without fling -> schedule OFF
+                    scheduleOff()
+                }
+                return Offset.Zero
+            }
+
+            // Fling start -> ON
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                turnOn()
+                return Velocity.Zero
+            }
+
+            // Fling finished -> schedule OFF
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                scheduleOff()
+                return Velocity.Zero
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { offJob?.cancel() }
+    }
+
+    this.nestedScroll(connection)
+}

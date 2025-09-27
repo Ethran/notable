@@ -63,7 +63,7 @@ fun ShowFolderSelectionDialog(
                 fontSize = 24.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            BreadCrumb(currentFolderId) { currentFolderId = it }
+            BreadCrumb(folderId = currentFolderId) { currentFolderId = it }
             // Folder List
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),

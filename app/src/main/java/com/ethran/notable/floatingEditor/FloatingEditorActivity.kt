@@ -23,8 +23,9 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.io.exportBook
-import com.ethran.notable.io.exportPageToPng
+import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.ExportFormat
+import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.theme.InkaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -127,15 +128,21 @@ class FloatingEditorActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        val context = this
         pageId?.let { id ->
-            val context = this
             lifecycleScope.launch(Dispatchers.IO) {
-                exportPageToPng(context, id)
+                ExportEngine(context).export(
+                    target = ExportTarget.Page(id),
+                    format = ExportFormat.PNG,
+                )
             }
         }
         bookId?.let { id ->
             lifecycleScope.launch(Dispatchers.IO) {
-                exportBook(this@FloatingEditorActivity, id)
+                ExportEngine(context).export(
+                    target = ExportTarget.Book(bookId = id),
+                    format = ExportFormat.PNG,
+                )
             }
         }
     }

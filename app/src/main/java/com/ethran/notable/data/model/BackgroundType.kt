@@ -30,10 +30,22 @@ sealed class BackgroundType(val key: String, val folderName: String) {
             }
 
             else -> {
-                Log.Companion.e(TAG, "BackgroundType.fromKey: Unknown key: $key")
+                Log.e(TAG, "BackgroundType.fromKey: Unknown key: $key")
                 Native
             } // fallback
         }
     }
 
+    fun resolveForExport(currentPage: Int?): BackgroundType =
+        when (this) {
+            AutoPdf ->
+                if (currentPage == null) {
+                    Log.e(TAG, "BackgroundType.resolveForExport: missing currentPage for AutoPdf")
+                    Native
+                } else {
+                    Pdf(currentPage)
+                }
+
+            else -> this
+        }
 }
