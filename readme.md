@@ -161,7 +161,7 @@ The app supports the following formats:
 ---
 
 ## Known Limitations
-Custom drawing tools are not supported because the Onyx E‑Ink library does not support them and its documentation is limited. Some advanced features depend on Onyx vendor libraries and may behave differently across firmware versions. Non‑Onyx devices currently lack handwriting support.
+Custom drawing tools are not supported because the Onyx E-Ink library does not support them and its documentation is limited. Some advanced features depend on Onyx vendor libraries and may behave differently across firmware versions. Non-Onyx devices currently lack handwriting support.
 
 ---
 
