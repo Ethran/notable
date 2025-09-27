@@ -41,7 +41,6 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 - [System Requirements and Permissions](#system-requirements-and-permissions)
 - [Export and Import](#export-and-import)
 - [Roadmap](#roadmap)
-- [Known Limitations](#known-limitations)
 - [Troubleshooting and FAQ](#troubleshooting-and-faq)
 - [Bug Reporting](#bug-reporting)
 - [Screenshots](#screenshots)
@@ -157,11 +156,6 @@ The app supports the following formats:
   - Automatic creation of tag descriptions
   - Shape recognition
   - Handwriting to Latex
-
----
-
-## Known Limitations
-Custom drawing tools are not supported because the Onyx E-Ink library does not support them and its documentation is limited. Some advanced features depend on Onyx vendor libraries and may behave differently across firmware versions. Non-Onyx devices currently lack handwriting support.
 
 ---
 
