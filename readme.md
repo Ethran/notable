@@ -240,7 +240,7 @@ in real time on your tablet.
 ---
 
 ## App Distribution
-Notable is not distributed on Google Play or F‑Droid. Official builds are provided exclusively via [GitHub Releases](https://github.com/Ethran/notable/releases).
+Notable is not distributed on Google Play or F-Droid. Official builds are provided exclusively via [GitHub Releases](https://github.com/Ethran/notable/releases).
 
 ---
 
