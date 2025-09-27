@@ -1,5 +1,6 @@
 package com.ethran.notable.ui.views
 
+import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,14 +75,18 @@ fun PagesView(navController: NavController, bookId: String) {
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
-    // Initial focus on current page
-    LaunchedEffect(openPageId, pageIds) {
-        val index = pageIds.indexOf(openPageId)
-        if (index >= 0) gridState.scrollToItem(index)
-    }
 
     val reorderState = rememberReorderableGridState()
     val density = LocalDensity.current
+
+    // Initial focus on current page
+    LaunchedEffect(openPageId, pageIds) {
+        val index = pageIds.indexOf(openPageId)
+        if (index >= 0 && !reorderState.wareReordered) {
+            Log.d("PagesView", "Initial focus on page $index")
+            gridState.scrollToItem(index)
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         Topbar {
@@ -148,7 +153,7 @@ fun PagesView(navController: NavController, bookId: String) {
                             pageId = pageId,
                             pageIndex = pageIndex,
                             isOpen = isOpen,
-                            isReorderDragging = reorderState.draggingId != null,
+                            isReorderDragging = reorderState.draggingId == null,
                             touchModifier = touchMod,
                             onOpen = { navController.navigate("books/$bookId/pages/$pageId") },
                             onDelete = { deletePage(context, pageId) },

@@ -39,6 +39,8 @@ class ReorderableGridState internal constructor() {
     var hoverInsertionIndex by mutableIntStateOf(-1)
         internal set
 
+    var wareReordered by mutableStateOf(false)
+
     // Per-item bounds in root (visible items only)
     internal val itemBounds: MutableMap<String, Pair<IntOffset, IntSize>> = mutableStateMapOf()
 
@@ -51,6 +53,7 @@ class ReorderableGridState internal constructor() {
         fromIndex = -1
         dragDelta = IntOffset.Zero
         hoverInsertionIndex = -1
+        wareReordered = true
     }
 }
 
