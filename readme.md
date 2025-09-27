@@ -34,15 +34,19 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 <details>
   <summary>Table of Contents</summary>
 
-- [About This Fork](#about-this-fork)  
-- [Features](#features)  
-- [Download](#download)  
-- [Gestures](#gestures)  
-- [Supported Devices](#supported-devices)  
-- [Roadmap](#roadmap)  
+- [About This Fork](#about-this-fork)
+- [Features](#features)
+- [Download](#download)
+- [Gestures](#gestures)
+- [System Requirements and Permissions](#system-requirements-and-permissions)
+- [Export and Import](#export-and-import)
+- [Roadmap](#roadmap)
+- [Troubleshooting and FAQ](#troubleshooting-and-faq)
+- [Bug Reporting](#bug-reporting)
 - [Screenshots](#screenshots)
-- [Working with LaTeX](#working-with-latex) 
-- [Contribute](#contribute)  
+- [Working with LaTeX](#working-with-latex)
+- [App Distribution](#app-distribution)
+- [For Developers & Contributing](#for-developers--contributing)
 
 </details>
 
@@ -50,123 +54,148 @@ A maintained and customized fork of the archived [olup/notable](https://github.c
 ---
 
 ## About This Fork
-This fork is maintained by **Ethran** as a continuation and personal enhancement of the original Notable app. Development is semi-active and tailored toward personal utility while welcoming community suggestions.
+This project began as a fork of the original Notable app and has since evolved into a continuation of it. The architecture is largely the same, but many of the functions have been rewritten and expanded with a focus on practical, everyday use. Development is active when possible, guided by the principle that the app must be fast and dependable — performance comes first, and the basics need to feel right before new features are introduced. Waiting for things to load is seen as unacceptable, so responsiveness is a core priority.
 
-### What's New?
-- Regular updates and experimental features
-- Improved usability and speed
-- Custom features suited for e-ink devices and note-taking
-
-> ⚠️ Note: Features may reflect personal preferences.
+Future plans include exploring how AI can enhance the app, with a focus on solutions that run directly on the device. A long-term goal is local handwriting conversion to LaTeX or plain text, making advanced features available without relying on external services.
 
 ---
 
 ## Features
-* ⚡ **Fast Page Turn with Caching:** Notable leverages caching techniques to ensure smooth and swift page transitions, allowing you to navigate through your notes seamlessly. (next and previous pages are cached)
-* ↕️ **Infinite Vertical Scroll:** Enjoy a virtually endless canvas for your notes. Scroll vertically without limitations. You can even enjoy smooth scrolling.
-* 📝 **Quick Pages:** Quickly create a new page using the Quick Pages feature.
-* 📒 **Notebooks:** Keep related notes together and easily switch between different noteboo︂︂ks based on your needs.
-* 📁 **Folders:** Create folders to organize your notes.
-* 🤏 **Editors' Mode Gestures:** [Intuitive gesture controls](#gestures) to enhance the editing experience.
-* 🌅 **Images:** Add, move, scale, and remove images.
-* ︂︂᠋︁➤  **Selection export:** share selected text.
-* ✏️ **Scribble to Erase:** Erase content naturally by scribbling over it (disabled by default) – *Contributed by [@niknal357](https://github.com/niknal357)*
-* ∲  **Refresh on background change** can be used to use tablet for second display -- see [Working with LaTeX](#working-with-latex).
+* ⚡ **Fast page turns with caching:** smooth, swift page transitions, including quick navigation to the next and previous pages.
+* ↕️ **Infinite vertical scroll:** a virtually endless canvas for notes with smooth vertical scrolling.
+* 📝 **Quick Pages:** instantly create a new page.
+* 📒 **Notebooks:** group related notes and switch easily between notebooks.
+* 📁 **Folders:** organize notes with folders.
+* 🤏 **Editor mode gestures:** [intuitive gesture controls](#gestures) to enhance editing.
+* 🌅 **Images:** add, move, scale, and remove images.
+* ➤ **Selection export:** export or share selected handwriting as PNG.
+* ✏️ **Scribble to erase:** erase content by scribbling over it (disabled by default) — contributed by [@niknal357](https://github.com/niknal357).
+* 🔄 **Auto-refresh on background change:** useful when using a tablet as a second display — see [Working with LaTeX](#working-with-latex).
 
+---
 
 ## Download
 **Download the latest stable version of the [Notable app here.](https://github.com/Ethran/notable/releases/latest)**
 
-Alternatively, get the latest build from main from the ["next" release](https://github.com/Ethran/notable/releases/next)
+Alternatively, get the latest build from the main branch via the ["next" release](https://github.com/Ethran/notable/releases/next).
 
-Open up the '**Assets**' from the release, and select the `.apk` file.
+Open the **Assets** section of the release and select the `.apk` file.
 
 <details><summary title="Click to show/hide details">❓ Where can I see alternative/older releases?</summary><br/>
-You can go to original olup <a href="https://github.com/olup/notable/tags" target="_blank">'Releases'</a> and download alternative versions of the Notable app.
+You can go to the original olup <a href="https://github.com/olup/notable/tags" target="_blank">Releases</a> and download alternative versions of the Notable app.
 </details>
 
 <details><summary title="Click to show/hide details">❓ What is a 'next' release?</summary><br/>
-The 'next' release is a pre-release, and will contain features implemented but not yet released as part of a version - and sometimes experiments that could very well not be part a release.
+The "next" release is a pre-release and may contain features implemented but not yet released as part of a stable version — and sometimes experiments that may not make it into a release.
 </details>
 
 ---
 
 ## Gestures
-Notable features intuitive gestures controls within Editor's Mode, to optimize the editing experience:
-#### ☝️ 1 Finger
-* **Swipe up or down**: Scroll the page.
-* **Swipe left or right:** Change to the previous/next page (only available in notebooks).
-* **Double tap:** Undo
-* **Hold and drag:** select text and images
-#### ✌️ 2 Fingers
-* **Swipe left or right:** Show or hide the toolbar.
-* **Single tap:** Switch between writing modes and eraser modes.
-* **Pinch**: Zoom in and out.
-* **Hold and drag:** move canvas.
+Notable features intuitive gesture controls within Editor mode to optimize the editing experience:
 
+#### ☝️ 1 Finger
+* **Swipe up or down:** scroll the page.
+* **Swipe left or right:** change to the previous/next page (only available in notebooks).
+* **Double tap:** undo.
+* **Hold and drag:** select text and images.
+
+#### ✌️ 2 Fingers
+* **Swipe left or right:** show or hide the toolbar.
+* **Single tap:** switch between writing and eraser modes.
+* **Pinch:** zoom in and out.
+* **Hold and drag:** move the canvas.
 
 #### 🔲 Selection
-* **Drag:** Move the selected writing around.
-* **Double tap:** Copy the selected writing.
+* **Drag:** move the selection.
+* **Double tap:** copy the selected writing.
 
-## Supported Devices
+---
 
-The following table lists devices confirmed by users to be compatible with specific versions of Notable.  
-This does not imply any commitment from the developers.
-| Device Name                                                                           | v0.0.10 | v0.0.11dev |   v0.0.14+     |        |        |
-|---------------------------------------------------------------------------------------|---------|------------|--------|--------|--------|
-| [ONYX Boox Go 10.3](https://onyxboox.com/boox_go103)                                  | ✔       | ?          |    ✔    |        |        |
-| [Onyx Boox Note Air 4 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-4-c) | ✘       | ✔          |    ✔    |        |        |
-| [Onyx Boox Note Air 3 C](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-air-3-c) | ✘       | ✔          |    ✔    |        |        |
-| [Onyx Boox Note Max](https://shop.boox.com/products/notemax)                          | ✘       | ✔          |    ✔    |        |        |
-| [Boox Note 3](https://onyxboox.pl/en/ebook-readers/onyx-boox-note-3)    | ✔       |  ✘   https://github.com/Ethran/notable/issues/24        |    ✔    |        |        |
+## System Requirements and Permissions
+The app targets Onyx BOOX devices and requires Android 10 (SDK 29) or higher. Limited support for Android 9 (SDK 28) may be possible if [issue #93](https://github.com/Ethran/notable/issues/93) is resolved. Handwriting functionality is currently not available on non-Onyx devices. Enabling handwriting on other devices may be possible in the future but is not supported at the moment.
 
-Feel free to add your device if tested successfully!
+Storage access is required to manage notes, assets, and to observe PDF backgrounds, which need “all files access”. The database is stored at `Documents/natabledb` to simplify backups and reduce the risk of accidental deletion. Exports are written to `Documents/natable`.
 
-## Roadmap
+---
 
-Features I’d like to implement in the future (some might take a while — or a long while):
+## Export and Import
 
-- [ ] Bookmarks support, tags, and internal links — [Issue #52](https://github.com/Ethran/notable/issues/52)  
-  - [ ] Export links to PDF  
+The app supports the following formats:
 
-- [x] Better notebook covers, provide default styles of title page
-
-- [ ] PDF annotation
-  - [x] basic support
-  - [ ] Show annotation from other programs
-  - [ ] Allow to save annotations to original pdf file
-
-- [ ] Figure and text recognition — [Issue #44](https://github.com/Ethran/notable/issues/44)  
-  - [ ] Searchable notes  
-  - [ ] Automatic creation of tag descriptions  
-  - [ ] Shape recognition  
-
-- [x] Moving page horizontally -- it would be nice to write on margins.
-
-- [ ] Better selection tools  
-  - [ ] Stroke editing: color, size, etc.  
-  - [ ] Rotate  
-  - [ ] Flip selection  
-  - [ ] Auto-scroll when dragging selection to screen edges  
-  - [ ] Easier selection movement (e.g. dragging to scroll page)
-
-- [ ] More dynamic page and notebook movement. Currently, pages can only be moved left/right — add drag-and-drop support
-
-- [!] Custom drawing tools: not possible.
+- **PDF** — export and import supported. You can also link a page to an external PDF so that changes on your computer are reflected live on the tablet (see [Working with LaTeX](#working-with-latex)).  
+- **PNG** — export supported for handwriting selections, individual pages, and entire books.  
+- **JPEG** — export supported for individual pages.  
+- **XOPP** — export and import partially supported. Only stroke and image data are preserved; tool information for strokes may be lost when files are opened and saved with [Xournal++](https://xournalpp.github.io/). Backgrounds are not exported.  
 
 
 ---
 
+## Roadmap
+
+### Near-term
+- Better selection tools:
+  - Stroke editing (color, size, etc.)
+  - Rotate and flip selection
+  - Auto‑scroll when dragging a selection near screen edges
+  - Easier selection movement, including dragging while scrolling
+- PDF improvements:
+  - Migration to a dedicated PDF library to replace the default Android renderer
+  - Allow saving annotations back to the original PDF
+  - Improved rendering and stability across devices
+
+### Planned
+- PDF annotation enhancements:
+  - Display annotations from other programs
+  - Additional quality‑of‑life tools for annotating imported PDFs
+
+### Long-term
+- Bookmarks, tags, and internal links — see [issue #52](https://github.com/Ethran/notable/issues/52), including link export to PDF.
+- Figure and text recognition — see [issue #44](https://github.com/Ethran/notable/issues/44):
+  - Searchable notes
+  - Automatic creation of tag descriptions
+  - Shape recognition
+  - Handwriting to Latex
+
+---
+
+## Troubleshooting and FAQ
+**What are “NeoTools,” and why are some disabled?**
+NeoTools are components of the Onyx E-Ink toolset, made available through Onyx’s libraries. However, certain tools are unstable and can cause crashes, so they are disabled by default to ensure better app stability. Examples include:
+
+* `com.onyx.android.sdk.pen.NeoCharcoalPenV2`
+* `com.onyx.android.sdk.pen.NeoMarkerPen`
+* `com.onyx.android.sdk.pen.NeoBrushPen`
+
+---
+
+## Bug Reporting
+
+If you encounter unexpected behavior, please include an app log with your report. To do this:  
+1. Navigate to the page where the issue occurs.  
+2. Reproduce the problem.  
+3. Open the page menu.  
+4. Select **“Bug Report”** and either copy the log or submit it directly.  
+
+This will open a new GitHub issue in your browser with useful device information attached, which greatly helps in diagnosing and resolving the problem.  
+
+Bug reporting with logs is currently supported only in notebooks/pages. Issues outside of writing are unlikely to require this level of detail.  
+
+---
+
+
 ## Screenshots
 
 <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-  <img src="https://github.com/user-attachments/assets/1025087c-5765-425f-ab1d-a82908b56d5e" alt="screenshot-1" width="200"/>
-  <img src="https://github.com/user-attachments/assets/1d6ba940-828c-47fe-a5f5-3128e06382dd" alt="screenshot-2" width="200"/>
-  <img src="https://github.com/user-attachments/assets/bfa9ee13-3f89-4ae3-8349-1a25e2efd275" alt="screenshot-3" width="200"/>
-  <img src="https://github.com/user-attachments/assets/9f3e7012-69e4-4125-bf69-509b52e1ebaf" alt="screenshot-5" width="200"/>
-  <img src="https://github.com/user-attachments/assets/24c8c750-eb8e-4f01-ac62-6a9f8e5f9e4f" alt="screenshot-6" width="200"/>
-  <img src="https://github.com/user-attachments/assets/4cdb0e74-bfce-4dba-bc21-886a5834401e" alt="screenshot-7" width="200"/>
+  <img src="https://github.com/user-attachments/assets/c3054254-043b-4cce-8524-43d10505ad0b" alt="Writing on a page" width="200"/>
+  <img src="https://github.com/user-attachments/assets/c23119b7-cdae-4742-83f2-a4f39863c571" alt="Notebook overview" width="200"/>
+  <img src="https://github.com/user-attachments/assets/9f3e7012-69e4-4125-bf69-509b52e1ebaf" alt="Gestures and selection" width="200"/>
+  <img src="https://github.com/user-attachments/assets/24c8c750-eb8e-4f01-ac62-6a9f8e5f9e4f" alt="Image handling" width="200"/>
+  <img src="https://github.com/user-attachments/assets/4cdb0e74-bfce-4dba-bc21-886a5834401e" alt="Toolbar and tools" width="200"/>
+  <img src="https://github.com/user-attachments/assets/f37ec6c9-fda3-41d1-8933-940c2806c6b0" alt="Page management" width="200"/>
+  <img src="https://github.com/user-attachments/assets/e8304495-dbab-4d7a-987a-b76bf91a3a74" alt="PDF viewing" width="200"/>
+  <img src="https://github.com/user-attachments/assets/38226966-0e19-45c9-a318-a8fd9d8edf02" alt="Customization" width="200"/>
+  <img src="https://github.com/user-attachments/assets/df29f77c-94a8-4c56-bbd4-d7285654df30" alt="Settings" width="200"/>
 </div>
 
 ---
@@ -179,7 +208,7 @@ in real time on your tablet.
 ### Steps:
 
 - Connect your device to your computer via USB (MTP).
-- Set up automatic copying of the compiled PDF to the tablet:  
+- Set up automatic copying of the compiled PDF to the tablet:
   <details>
   <summary>Example using a custom <code>latexmkrc</code>:</summary>
 
@@ -197,21 +226,24 @@ in real time on your tablet.
   ```
 
   </details>
-- Compile, and test if it copies file to the tablet.
-- Import your compiled PDF document into Notable, choose to observe pdf file.
+- Compile, and test if it copies the file to the tablet.
+- Import your compiled PDF document into Notable, and choose to observe the PDF file.
 
 > After each recompilation, Notable will detect the updated PDF and automatically refresh the view.
 
+---
+
+## App Distribution
+Notable is not distributed on Google Play or F-Droid. Official builds are provided exclusively via [GitHub Releases](https://github.com/Ethran/notable/releases).
 
 ---
 
+## For Developers & Contributing
 
-## Contribute
-
-Notable is an open-source project, and contributions are welcome. If you'd like to get started, please refer to [GitHub's contributing guide](https://docs.github.com/en/get-started/quickstart/contributing-to-projects).
-
-### Project structure
-Project structure can be found [here](./docs/file-structure.md).
+- Project file layout: see [docs/file-structure.md](./docs/file-structure.md)  
+- Data model and stroke encoding: see [docs/database-structure.md](./docs/database-structure.md)  
+- Additional documentation will be added as needed  
+  Note: These documents were AI-generated and lightly verified; refer to the code for the authoritative source.
 
 ### Development Notes
 
@@ -234,7 +266,7 @@ Feel free to open issues or submit pull requests. I appreciate your help!
 [issues-url]: https://github.com/Ethran/notable/issues
 [license-shield]: https://img.shields.io/github/license/Ethran/notable.svg?style=for-the-badge
 
-[license-url]: https://github.com/Ethran/notable/blob/master/LICENSE.txt
+[license-url]: https://github.com/Ethran/notable/blob/main/LICENSE
 [download-shield]: https://img.shields.io/github/v/release/Ethran/notable?style=for-the-badge&label=⬇️%20Download
 [download-url]: https://github.com/Ethran/notable/releases/latest
 [downloads-shield]: https://img.shields.io/github/downloads/Ethran/notable/total?style=for-the-badge&color=47c219&logo=cloud-download
