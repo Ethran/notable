@@ -1,15 +1,17 @@
-package com.ethran.notable.ui.components
+package com.ethran.notable.utils
 
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
 import androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -24,111 +26,114 @@ import kotlin.math.roundToInt
 /**
  * Shared state for drag-and-drop reordering in a LazyVerticalGrid.
  */
-class ReorderableState {
+@Stable
+class ReorderableGridState internal constructor() {
     var draggingId by mutableStateOf<String?>(null)
+        internal set
     var fromIndex by mutableIntStateOf(-1)
+        internal set
     var dragDelta by mutableStateOf(IntOffset.Zero)
+        internal set
 
-    // -1 means "no-op" (drop before self or after self -> no change)
+    // -1 => no valid insertion (drop before/after itself)
     var hoverInsertionIndex by mutableIntStateOf(-1)
+        internal set
 
     // Per-item bounds in root (visible items only)
-    val itemBounds: MutableMap<String, Pair<IntOffset, IntSize>> = mutableStateMapOf()
+    internal val itemBounds: MutableMap<String, Pair<IntOffset, IntSize>> = mutableStateMapOf()
 
     // Coordinate conversion helpers
     var gridOriginInRoot by mutableStateOf(IntOffset.Zero)
     var containerOriginInRoot by mutableStateOf(IntOffset.Zero)
+
+    fun reset() {
+        draggingId = null
+        fromIndex = -1
+        dragDelta = IntOffset.Zero
+        hoverInsertionIndex = -1
+    }
 }
 
+@Composable
+fun rememberReorderableGridState(): ReorderableGridState = remember { ReorderableGridState() }
+
 /**
- * Attach to a grid item to enable long-press drag. It updates [reorderState] and
- * calls [onDrop] with a "between items" insertion index (0..N) on release.
- *
- * Use [computeInsertionSlotRect] to render the in-between highlight elsewhere.
+ * Minimal item wrapper that exposes a Modifier you attach to the item root.
+ * It updates [state] and invokes [onDrop] with between-items insertion index.
  */
 @Composable
 fun ReorderableGridItem(
-    modifier: Modifier = Modifier,
     itemId: String,
     index: Int,
     gridState: LazyGridState,
-    reorderState: ReorderableState,
+    state: ReorderableGridState,
     onDrop: (fromIndex: Int, toInsertionIndex: Int, itemId: String) -> Unit,
     content: @Composable (Modifier) -> Unit
 ) {
-    var lastItemOriginInRoot by remember { mutableStateOf<IntOffset?>(null) }
-    var lastItemSize by remember { mutableStateOf<IntSize?>(null) }
+    // Prevent stale lambda capture inside pointerInput
+    val currentOnDrop = rememberUpdatedState(onDrop)
+
+    var lastItemOriginInRoot: IntOffset? by remember { mutableStateOf(null) }
+    var lastItemSize: IntSize? by remember { mutableStateOf(null) }
 
     val gestureMod = Modifier
         .onGloballyPositioned { coords ->
             val b = coords.boundsInRoot()
             val origin = IntOffset(b.left.roundToInt(), b.top.roundToInt())
             val size = IntSize(b.width.roundToInt(), b.height.roundToInt())
-            reorderState.itemBounds[itemId] = origin to size
+            state.itemBounds[itemId] = origin to size
             lastItemOriginInRoot = origin
             lastItemSize = size
         }
         .pointerInput(itemId) {
             detectDragGesturesAfterLongPress(
                 onDragStart = {
-                    reorderState.draggingId = itemId
-                    reorderState.fromIndex = index
-                    reorderState.dragDelta = IntOffset.Zero
-                    // Start with a bar right before this item (visually clearer)
-                    reorderState.hoverInsertionIndex = index
+                    state.draggingId = itemId
+                    state.fromIndex = index
+                    state.dragDelta = IntOffset.Zero
+                    state.hoverInsertionIndex = index // Start with bar before this
                     setAnimationMode(true)
                 },
                 onDragCancel = {
-                    reorderState.draggingId = null
-                    reorderState.fromIndex = -1
-                    reorderState.dragDelta = IntOffset.Zero
-                    reorderState.hoverInsertionIndex = -1
+                    state.reset()
                     setAnimationMode(false)
                 },
                 onDragEnd = {
-                    val id = reorderState.draggingId
-                    val from = reorderState.fromIndex
-                    val to = reorderState.hoverInsertionIndex
-                    // -1 means "no-op" (drop at original location)
+                    val id = state.draggingId
+                    val from = state.fromIndex
+                    val to = state.hoverInsertionIndex
                     if (id != null && from >= 0 && to >= 0 && to != from && to != from + 1) {
-                        onDrop(from, to, id)
+                        currentOnDrop.value.invoke(from, to, id)
                     }
-                    reorderState.draggingId = null
-                    reorderState.fromIndex = -1
-                    reorderState.dragDelta = IntOffset.Zero
-                    reorderState.hoverInsertionIndex = -1
+                    state.reset()
                     setAnimationMode(false)
                 }
             ) { change, dragAmount ->
                 change.consume()
-                reorderState.dragDelta += IntOffset(
-                    dragAmount.x.roundToInt(),
-                    dragAmount.y.roundToInt()
-                )
+                state.dragDelta += IntOffset(dragAmount.x.roundToInt(), dragAmount.y.roundToInt())
 
                 // Update insertion index from pointer center
                 val origin = lastItemOriginInRoot
                 val size = lastItemSize
                 if (origin != null && size != null) {
                     val dropCenter = IntOffset(
-                        x = origin.x + reorderState.dragDelta.x + size.width / 2,
-                        y = origin.y + reorderState.dragDelta.y + size.height / 2
+                        x = origin.x + state.dragDelta.x + size.width / 2,
+                        y = origin.y + state.dragDelta.y + size.height / 2
                     )
                     val insertion = computeInsertionIndex(
                         gridState = gridState,
-                        gridOriginInRoot = reorderState.gridOriginInRoot,
+                        gridOriginInRoot = state.gridOriginInRoot,
                         pointInRoot = dropCenter,
                         itemCount = gridState.layoutInfo.totalItemsCount
                     )
-                    val from = reorderState.fromIndex
-                    // No-op if before self or after self
-                    reorderState.hoverInsertionIndex =
+                    val from = state.fromIndex
+                    state.hoverInsertionIndex =
                         if (insertion == from || insertion == from + 1) -1 else insertion
                 }
             }
         }
 
-    content(modifier.then(gestureMod))
+    content(gestureMod)
 }
 
 /**
@@ -138,7 +143,7 @@ fun ReorderableGridItem(
  * 2) If pointer is to the left of that center -> insert before; otherwise after.
  * 3) Clamp to [0, itemCount].
  */
-private fun computeInsertionIndex(
+fun computeInsertionIndex(
     gridState: LazyGridState,
     gridOriginInRoot: IntOffset,
     pointInRoot: IntOffset,
