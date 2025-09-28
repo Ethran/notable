@@ -1,37 +1,26 @@
 package com.ethran.notable
 
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.Settings
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.data.PageDataManager
@@ -46,6 +35,7 @@ import com.ethran.notable.ui.Router
 import com.ethran.notable.ui.SnackBar
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.ui.views.hasFilePermission
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
@@ -83,7 +73,7 @@ class MainActivity : ComponentActivity() {
         snackState.registerGlobalSnackObserver()
         snackState.registerCancelGlobalSnackObserver()
         PageDataManager.registerComponentCallbacks(this)
-        if (hasRequiredPermissions()) {
+        if (hasFilePermission(this)) {
             // Init app settings, also do migration
             GlobalAppSettings.update(
                 KvProxy(this).get(APP_SETTINGS_KEY, AppSettings.serializer())
@@ -92,11 +82,14 @@ class MainActivity : ComponentActivity() {
             // Used to load up app settings, latter used in
             // class EditorState
             EditorSettingCacheManager.init(applicationContext)
+            this.lifecycleScope.launch(Dispatchers.IO) {
+                reencodeStrokePointsToSB1(this@MainActivity)
+            }
         }
 
         //EpdDeviceManager.enterAnimationUpdate(true);
+//        val intentData = intent.data?.lastPathSegment
 
-        val intentData = intent.data?.lastPathSegment
         setContent {
             InkaTheme {
                 CompositionLocalProvider(LocalSnackContext provides snackState) {
@@ -117,9 +110,6 @@ class MainActivity : ComponentActivity() {
                     SnackBar(state = snackState)
                 }
             }
-        }
-        this.lifecycleScope.launch(Dispatchers.IO) {
-            reencodeStrokePointsToSB1(this@MainActivity)
         }
     }
 
@@ -170,44 +160,6 @@ class MainActivity : ComponentActivity() {
 //        }
     }
 
-    private fun hasRequiredPermissions(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) != PackageManager.PERMISSION_GRANTED
-            )
-                return false
-        } else if (!Environment.isExternalStorageManager())
-            return false
-        return true
-    }
-
-    private fun requestPermissions() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                    1001
-                )
-            }
-        } else if (!Environment.isExternalStorageManager()) {
-            requestManageAllFilesPermission()
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun requestManageAllFilesPermission() {
-        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-        intent.data = Uri.fromParts("package", packageName, null)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        startActivity(intent)
-    }
 
     // written by GPT, but it works
     // needs to be checked if it is ok approach.

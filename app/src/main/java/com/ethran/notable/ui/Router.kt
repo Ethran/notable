@@ -1,6 +1,5 @@
 package com.ethran.notable.ui
 
-import android.util.Log
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -22,22 +21,27 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorView
+import com.ethran.notable.ui.components.QuickNav
 import com.ethran.notable.ui.views.BugReportScreen
 import com.ethran.notable.ui.views.Library
 import com.ethran.notable.ui.views.PagesView
 import com.ethran.notable.ui.views.SettingsView
 import com.ethran.notable.ui.views.WelcomeView
-import com.ethran.notable.ui.components.QuickNav
+import com.ethran.notable.ui.views.hasFilePermission
+import io.shipbook.shipbooksdk.ShipBook
+
+
+private val logRouter = ShipBook.getLogger("Router")
 
 @ExperimentalAnimationApi
 @ExperimentalFoundationApi
@@ -49,15 +53,14 @@ fun Router() {
         mutableStateOf(false)
     }
     LaunchedEffect(isQuickNavOpen) {
-        Log.d(TAG, "Changing drawing state, isQuickNavOpen: $isQuickNavOpen")
+        logRouter.d("Changing drawing state, isQuickNavOpen: $isQuickNavOpen")
         DrawCanvas.isDrawing.emit(!isQuickNavOpen)
     }
     val startDestination =
-        if (GlobalAppSettings.current.showWelcome)
+        if (GlobalAppSettings.current.showWelcome || !hasFilePermission(LocalContext.current))
             "welcome"
         else
             "library?folderId={folderId}"
-//            "bugReport"
 
     NavHost(
         navController = navController,
