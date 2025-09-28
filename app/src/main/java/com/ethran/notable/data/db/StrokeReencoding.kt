@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteBlobTooBigException
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.views.hasFilePermission
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.serialization.json.Json
@@ -21,6 +22,17 @@ private val log = ShipBook.getLogger("StrokeReencode")
  * Idempotent: safe to call multiple times; exits early if stroke_old missing or already empty.
  */
 fun reencodeStrokePointsToSB1(appContext: Context) {
+    if(!hasFilePermission(appContext))
+    {
+        SnackState.globalSnackFlow.tryEmit(
+            SnackConf(
+                id = "FilePermissions",
+                text = "No file permissions! Please grant file permissions and restart the app",
+                duration = 10000
+            )
+        )
+        log.e("No file permission!!!")
+    }
     val db = AppDatabase.getDatabase(appContext).openHelper.writableDatabase
     if (!tableExists(db, "stroke_old")) return
 

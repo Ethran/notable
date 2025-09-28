@@ -423,7 +423,11 @@ private fun PermissionItem(
 
 // Helper functions
 
-
+/**
+ * Returns true if the app has "full file access" for your current storage model:
+ * - < Android 11: WRITE_EXTERNAL_STORAGE is granted
+ * - >= Android 11: MANAGE_EXTERNAL_STORAGE ("All files access") is granted
+ */
 fun hasFilePermission(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         Environment.isExternalStorageManager()
