@@ -22,8 +22,7 @@ private val log = ShipBook.getLogger("StrokeReencode")
  * Idempotent: safe to call multiple times; exits early if stroke_old missing or already empty.
  */
 fun reencodeStrokePointsToSB1(appContext: Context) {
-    if(!hasFilePermission(appContext))
-    {
+    if (!hasFilePermission(appContext)) {
         SnackState.globalSnackFlow.tryEmit(
             SnackConf(
                 id = "FilePermissions",
@@ -32,6 +31,7 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
             )
         )
         log.e("No file permission!!!")
+        return
     }
     val db = AppDatabase.getDatabase(appContext).openHelper.writableDatabase
     if (!tableExists(db, "stroke_old")) return
