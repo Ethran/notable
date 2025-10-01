@@ -72,6 +72,7 @@ import com.ethran.notable.io.getFilePathFromUri
 import com.ethran.notable.io.getPdfPageCount
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
@@ -258,7 +259,9 @@ fun Library(navController: NavController, folderId: String? = null) {
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth().autoEInkAnimationOnScroll()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autoEInkAnimationOnScroll()
             ) {
                 item {
                     // Add new folder row
@@ -319,7 +322,9 @@ fun Library(navController: NavController, folderId: String? = null) {
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth().autoEInkAnimationOnScroll()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autoEInkAnimationOnScroll()
             ) {
                 // Add the "Add quick page" button
                 item {
@@ -426,25 +431,31 @@ fun Library(navController: NavController, folderId: String? = null) {
                             val launcher = rememberLauncherForActivityResult(
                                 contract = ActivityResultContracts.OpenDocument()
                             ) { uri: Uri? ->
-                                uri?.let {
+                                if (uri == null) {
+                                    Log.w(
+                                        TAG,
+                                        "PickVisualMedia: uri is null (user cancelled or provider returned null)"
+                                    )
+                                    return@rememberLauncherForActivityResult
+                                }
+                                try {
+//                                    val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
+//                                    context.contentResolver.takePersistableUriPermission(uri, flag)
                                     val mimeType = context.contentResolver.getType(uri)
                                     Log.d(TAG, "Selected file mimeType: $mimeType, uri: $uri")
                                     if (mimeType == "application/pdf" || uri.toString()
                                             .endsWith(".pdf", ignoreCase = true)
-                                    ) {
-                                        showPdfImportChoiceDialog = uri
-                                    } else {
-                                        CoroutineScope(Dispatchers.IO).launch {
-                                            val removeSnack =
-                                                snackManager.displaySnack(
-                                                    SnackConf(text = "importing from xopp file")
-                                                )
-                                            importInProgress = true
+                                    ) showPdfImportChoiceDialog = uri
+                                    else CoroutineScope(Dispatchers.IO).launch {
+                                        importInProgress = true
+                                        snackManager.showSnackDuring("importing from xopp file") {
                                             XoppFile(context).importBook(uri, folderId)
-                                            importInProgress = false
-                                            removeSnack()
                                         }
+                                        importInProgress = false
                                     }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "contentPicker failed: ${e.message}", e)
+                                    SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Importing failed: ${e.message}"))
                                 }
                             }
                             // Import Notebook (Bottom Half)
