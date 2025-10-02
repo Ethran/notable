@@ -18,6 +18,7 @@ import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.IN_IGNORED
 import com.ethran.notable.io.fileObserverEventNames
 import com.ethran.notable.io.loadBackgroundBitmap
+import com.ethran.notable.io.loadBackgroundBitmap2
 import com.ethran.notable.io.waitForFileAvailable
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
