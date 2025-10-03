@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.Timing
 import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.Log
@@ -73,12 +74,11 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
     }
     val targetWidth = SCREEN_WIDTH * (scale.coerceAtMost(2f))
     timer.step("start android Pdf")
-    val newBitmap: Bitmap? =
-        renderPdfPageAndroid(file, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
-    timer.step("finish android, staring mu")
-    val newBitmapMuPdf: Bitmap? =
+    log.d("Rendering using ${if (GlobalAppSettings.current.muPdfRendering) "MuPdf" else "Android Pdf"}")
+    val newBitmap: Bitmap? = if (GlobalAppSettings.current.muPdfRendering)
         renderPdfPageMuPdf(filePath, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
-    timer.step("ended mu")
+    else
+        renderPdfPageAndroid(file, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
     timer.end("loaded background")
     return newBitmap
 }
