@@ -200,6 +200,9 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.28.0") // GZip support
     implementation("org.lz4:lz4-java:1.8.0") // LZ4 support
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
+
+    // for PDF support:
+    implementation("com.artifex.mupdf:fitz:1.26.0")
 }
 
 tasks.register('printVersionName') {

@@ -72,7 +72,13 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
         }
     }
     val targetWidth = SCREEN_WIDTH * (scale.coerceAtMost(2f))
-    val newBitmap: Bitmap? = renderPdfPageAndroid(file, pageNumber, targetWidth.toInt()  )
+    timer.step("start android Pdf")
+    val newBitmap: Bitmap? =
+        renderPdfPageAndroid(file, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
+    timer.step("finish android, staring mu")
+    val newBitmapMuPdf: Bitmap? =
+        renderPdfPageMuPdf(filePath, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
+    timer.step("ended mu")
     timer.end("loaded background")
     return newBitmap
 }
