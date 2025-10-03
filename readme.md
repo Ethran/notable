@@ -196,7 +196,7 @@ in real time on your tablet.
   }
   ```
   
-  It was also tasted with `adb push`, instead of `cp`.
+  It was also tested with `adb push`, instead of `cp`.
 
   </details>
 - Compile, and test if it copies file to the tablet.
