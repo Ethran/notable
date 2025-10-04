@@ -658,7 +658,7 @@ object PageDataManager {
     private var currentCacheSizeMB = 0
 
     fun removePage(pageId: String) {
-        log.e("Removing page $pageId")
+        log.d("Removing page $pageId")
         if (pageId == currentPage) log.w("Removing current page!")
         synchronized(accessLock) {
             strokes.remove(pageId)
