@@ -1,7 +1,6 @@
 package com.ethran.notable.ui.views
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,27 +48,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.ui.PageMenu
 import com.ethran.notable.editor.ui.toolbar.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
-import com.ethran.notable.floatingEditor.FloatingEditorView
 import com.ethran.notable.io.XoppFile
-import com.ethran.notable.io.getFilePathFromUri
-import com.ethran.notable.io.getPdfPageCount
+import com.ethran.notable.io.handlePdfImport
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
@@ -80,8 +76,6 @@ import com.ethran.notable.ui.dialogs.NotebookConfigDialog
 import com.ethran.notable.ui.dialogs.ShowConfirmationDialog
 import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
 import com.ethran.notable.ui.noRippleClickable
-import com.ethran.notable.ui.showHint
-import com.ethran.notable.utils.ensureNotMainThread
 import com.ethran.notable.utils.isLatestVersion
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
@@ -93,7 +87,6 @@ import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.File
 import kotlin.concurrent.thread
 
 @ExperimentalFoundationApi
@@ -121,15 +114,248 @@ fun Library(navController: NavController, folderId: String? = null) {
         }
     })
 
-    var importInProgress = false
+    /* ------------------------------------------------------*/
+//           I do not know what the idea behind it was
 
-    var showFloatingEditor by remember { mutableStateOf(false) }
-    var floatingEditorPageId by remember { mutableStateOf<String?>(null) }
+//    var showFloatingEditor by remember { mutableStateOf(false) }
+//    var floatingEditorPageId by remember { mutableStateOf<String?>(null) }
+//    // Add the new "Floating Editor" button here
+//    Text(
+//        text = "Floating Editor",
+//        textAlign = TextAlign.Center,
+//        modifier = Modifier
+//            .noRippleClickable {
+//                val page = Page(
+//                    notebookId = null,
+//                    parentFolderId = folderId,
+//                    nativeTemplate = appRepository.kvProxy.get(
+//                        APP_SETTINGS_KEY, AppSettings.serializer()
+//                    )?.defaultNativeTemplate ?: "blank"
+//                )
+//                appRepository.pageRepository.create(page)
+//                floatingEditorPageId = page.id
+//                showFloatingEditor = true
+//            }
+//            .padding(10.dp))
+//
+//    if (showFloatingEditor && floatingEditorPageId != null) {
+//        FloatingEditorView(
+//            navController = navController,
+//            pageId = floatingEditorPageId!!,
+//            onDismissRequest = {
+//                showFloatingEditor = false
+//                floatingEditorPageId = null
+//            }
+//        )
+//    }
+    /* ------------------------------------------------------*/
 
+
+    Column(
+        Modifier.fillMaxSize()
+    ) {
+        Topbar {
+            Row(Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.weight(1f))
+                BadgedBox(
+                    badge = {
+                        if (!isLatestVersion) Badge(
+                            backgroundColor = Color.Black,
+                            modifier = Modifier.offset((-12).dp, 10.dp)
+                        )
+                    }
+                ) {
+                    Icon(
+                        imageVector = FeatherIcons.Settings,
+                        contentDescription = "",
+                        Modifier
+                            .padding(8.dp)
+                            .noRippleClickable {
+                                navController.navigate("settings")
+                            })
+                }
+            }
+            Row(
+                Modifier
+                    .padding(10.dp)
+            ) {
+                BreadCrumb(folderId = folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
+            }
+
+        }
+
+        Column(
+            Modifier.padding(10.dp)
+        ) {
+            Spacer(Modifier.height(10.dp))
+            FolderList(folders, navController, appRepository, folderId)
+
+            Spacer(Modifier.height(10.dp))
+            QuickPagesSection(singlePages, navController, appRepository, folderId)
+
+            Spacer(Modifier.height(10.dp))
+            NotebookGrid(context, books, navController, bookRepository, folderId)
+        }
+    }
+
+
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun FolderList(
+    folders: List<Folder>?,
+    navController: NavController,
+    appRepository: AppRepository,
+    folderId: String?
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .autoEInkAnimationOnScroll()
+    ) {
+        item {
+            // Add new folder row
+            Row(
+                Modifier
+                    .border(0.5.dp, Color.Black)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                    .noRippleClickable {
+                        val folder = Folder(parentFolderId = folderId)
+                        appRepository.folderRepository.create(folder)
+                    }
+            ) {
+                Icon(
+                    imageVector = FeatherIcons.FolderPlus,
+                    contentDescription = "Add Folder Icon",
+                    Modifier.height(20.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(text = "Add new folder")
+            }
+        }
+        if (folders?.isNotEmpty() == true) {
+            items(folders!!) { folder ->
+                var isFolderSettingsOpen by remember { mutableStateOf(false) }
+                if (isFolderSettingsOpen) FolderConfigDialog(
+                    folderId = folder.id,
+                    onClose = {
+                        Log.i(TAG, "Closing Directory Dialog")
+                        isFolderSettingsOpen = false
+                    })
+                Row(
+                    Modifier
+                        .combinedClickable(
+                            onClick = {
+                                navController.navigate("library?folderId=${folder.id}")
+                            },
+                            onLongClick = {
+                                isFolderSettingsOpen = !isFolderSettingsOpen
+                            },
+                        )
+                        .border(0.5.dp, Color.Black)
+                        .padding(10.dp, 5.dp)
+                ) {
+                    Icon(
+                        imageVector = FeatherIcons.Folder,
+                        contentDescription = "folder icon",
+                        Modifier.height(20.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(text = folder.title)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickPagesSection(
+    singlePages: List<Page>?,
+    navController: NavController,
+    appRepository: AppRepository,
+    folderId: String?
+) {
+    Text(text = "Quick pages")
+    Spacer(Modifier.height(10.dp))
+
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .autoEInkAnimationOnScroll()
+    ) {
+        // Add the "Add quick page" button
+        item {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .width(100.dp)
+                    .aspectRatio(3f / 4f)
+                    .border(1.dp, Color.Gray, RectangleShape)
+                    .noRippleClickable {
+                        val page = Page(
+                            notebookId = null,
+                            background = GlobalAppSettings.current.defaultNativeTemplate,
+                            backgroundType = BackgroundType.Native.key,
+                            parentFolderId = folderId
+                        )
+                        appRepository.pageRepository.create(page)
+                        navController.navigate("pages/${page.id}")
+                    }
+            ) {
+                Icon(
+                    imageVector = FeatherIcons.FilePlus,
+                    contentDescription = "Add Quick Page",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+        }
+        // Render existing pages
+        if (singlePages?.isNotEmpty() == true) {
+            items(singlePages!!.reversed()) { page ->
+                val pageId = page.id
+                var isPageSelected by remember { mutableStateOf(false) }
+                Box {
+                    PagePreview(
+                        modifier = Modifier
+                            .combinedClickable(
+                                onClick = {
+                                    navController.navigate("pages/$pageId")
+                                },
+                                onLongClick = {
+                                    isPageSelected = true
+                                },
+                            )
+                            .width(100.dp)
+                            .aspectRatio(3f / 4f)
+                            .border(1.dp, Color.Black, RectangleShape),
+                        pageId = pageId
+                    )
+                    if (isPageSelected) PageMenu(
+                        pageId = pageId,
+                        canDelete = true,
+                        onClose = { isPageSelected = false })
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun NotebookGrid(
+    context: Context,
+    books: List<Notebook>?,
+    navController: NavController,
+    bookRepository: BookRepository,
+    folderId: String?
+) {
     val snackManager = LocalSnackContext.current
 
-
-
+    var importInProgress = false
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
     fun importPdf(uri: Uri, copy: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
@@ -149,6 +375,7 @@ fun Library(navController: NavController, folderId: String? = null) {
             }
         }
     }
+
 
     @Composable
     fun content() {
@@ -199,150 +426,40 @@ fun Library(navController: NavController, folderId: String? = null) {
     }
 
 
-
-    Column(
-        Modifier.fillMaxSize()
+    Text(text = "Notebooks")
+    Spacer(Modifier.height(10.dp))
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(100.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.autoEInkAnimationOnScroll()
     ) {
-        Topbar {
-            Row(Modifier.fillMaxWidth()) {
-                Spacer(modifier = Modifier.weight(1f))
-                BadgedBox(
-                    badge = {
-                        if (!isLatestVersion) Badge(
-                            backgroundColor = Color.Black,
-                            modifier = Modifier.offset((-12).dp, 10.dp)
-                        )
-                    }
+        item {
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .aspectRatio(3f / 4f)
+                    .border(1.dp, Color.Gray, RectangleShape),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    Icon(
-                        imageVector = FeatherIcons.Settings,
-                        contentDescription = "",
-                        Modifier
-                            .padding(8.dp)
-                            .noRippleClickable {
-                                navController.navigate("settings")
-                            })
-                }
-            }
-            Row(
-                Modifier
-                    .padding(10.dp)
-            ) {
-                BreadCrumb(folderId = folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
-            }
-//           I do not know what the idea behind it was
-//            // Add the new "Floating Editor" button here
-//            Text(text = "Floating Editor",
-//                textAlign = TextAlign.Center,
-//                modifier = Modifier
-//                    .noRippleClickable {
-//                        val page = Page(
-//                            notebookId = null,
-//                            parentFolderId = folderId,
-//                            nativeTemplate = appRepository.kvProxy.get(
-//                                APP_SETTINGS_KEY, AppSettings.serializer()
-//                            )?.defaultNativeTemplate ?: "blank"
-//                        )
-//                        appRepository.pageRepository.create(page)
-//                        floatingEditorPageId = page.id
-//                        showFloatingEditor = true
-//                    }
-//                    .padding(10.dp))
-
-        }
-
-        Column(
-            Modifier.padding(10.dp)
-        ) {
-
-            Spacer(Modifier.height(10.dp))
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .autoEInkAnimationOnScroll()
-            ) {
-                item {
-                    // Add new folder row
-                    Row(
-                        Modifier
-                            .border(0.5.dp, Color.Black)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                            .noRippleClickable {
-                                val folder = Folder(parentFolderId = folderId)
-                                appRepository.folderRepository.create(folder)
-                            }
-                    ) {
-                        Icon(
-                            imageVector = FeatherIcons.FolderPlus,
-                            contentDescription = "Add Folder Icon",
-                            Modifier.height(20.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(text = "Add new folder")
-                    }
-                }
-                if (folders?.isNotEmpty() == true) {
-                    items(folders!!) { folder ->
-                        var isFolderSettingsOpen by remember { mutableStateOf(false) }
-                        if (isFolderSettingsOpen) FolderConfigDialog(
-                            folderId = folder.id,
-                            onClose = {
-                                Log.i(TAG, "Closing Directory Dialog")
-                                isFolderSettingsOpen = false
-                            })
-                        Row(
-                            Modifier
-                                .combinedClickable(
-                                    onClick = {
-                                        navController.navigate("library?folderId=${folder.id}")
-                                    },
-                                    onLongClick = {
-                                        isFolderSettingsOpen = !isFolderSettingsOpen
-                                    },
-                                )
-                                .border(0.5.dp, Color.Black)
-                                .padding(10.dp, 5.dp)
-                        ) {
-                            Icon(
-                                imageVector = FeatherIcons.Folder,
-                                contentDescription = "folder icon",
-                                Modifier.height(20.dp)
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(text = folder.title)
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(text = "Quick pages")
-            Spacer(Modifier.height(10.dp))
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .autoEInkAnimationOnScroll()
-            ) {
-                // Add the "Add quick page" button
-                item {
+                    // Create New Notebook Button (Top Half)
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .width(100.dp)
-                            .aspectRatio(3f / 4f)
-                            .border(1.dp, Color.Gray, RectangleShape)
+                            .weight(1f) // Takes half the height
+                            .fillMaxWidth()
+                            .background(Color.LightGray.copy(alpha = 0.3f))
+                            .border(2.dp, Color.Black, RectangleShape)
                             .noRippleClickable {
-                                val page = Page(
-                                    notebookId = null,
-                                    background = GlobalAppSettings.current.defaultNativeTemplate,
-                                    backgroundType = BackgroundType.Native.key,
-                                    parentFolderId = folderId
+                                bookRepository.create(
+                                    Notebook(
+                                        parentFolderId = folderId,
+                                        defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
+                                        defaultBackgroundType = BackgroundType.Native.key
+                                    )
                                 )
-                                appRepository.pageRepository.create(page)
-                                navController.navigate("pages/${page.id}")
                             }
                     ) {
                         Icon(
@@ -352,267 +469,135 @@ fun Library(navController: NavController, folderId: String? = null) {
                             modifier = Modifier.size(40.dp),
                         )
                     }
-                }
-                // Render existing pages
-                if (singlePages?.isNotEmpty() == true) {
-                    items(singlePages!!.reversed()) { page ->
-                        val pageId = page.id
-                        var isPageSelected by remember { mutableStateOf(false) }
-                        Box {
-                            PagePreview(
-                                modifier = Modifier
-                                    .combinedClickable(
-                                        onClick = {
-                                            navController.navigate("pages/$pageId")
-                                        },
-                                        onLongClick = {
-                                            isPageSelected = true
-                                        },
-                                    )
-                                    .width(100.dp)
-                                    .aspectRatio(3f / 4f)
-                                    .border(1.dp, Color.Black, RectangleShape),
-                                pageId = pageId
+
+                    val launcher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.OpenDocument()
+                    ) { uri: Uri? ->
+                        if (uri == null) {
+                            Log.w(
+                                TAG,
+                                "PickVisualMedia: uri is null (user cancelled or provider returned null)"
                             )
-                            if (isPageSelected) PageMenu(
-                                pageId = pageId,
-                                canDelete = true,
-                                onClose = { isPageSelected = false })
+                            return@rememberLauncherForActivityResult
                         }
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(text = "Notebooks")
-            Spacer(Modifier.height(10.dp))
-
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(100.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.autoEInkAnimationOnScroll()
-            ) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .width(100.dp)
-                            .aspectRatio(3f / 4f)
-                            .border(1.dp, Color.Gray, RectangleShape),
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            // Create New Notebook Button (Top Half)
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .weight(1f) // Takes half the height
-                                    .fillMaxWidth()
-                                    .background(Color.LightGray.copy(alpha = 0.3f))
-                                    .border(2.dp, Color.Black, RectangleShape)
-                                    .noRippleClickable {
-                                        appRepository.bookRepository.create(
-                                            Notebook(
-                                                parentFolderId = folderId,
-                                                defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
-                                                defaultBackgroundType = BackgroundType.Native.key
-                                            )
-                                        )
-                                    }
-                            ) {
-                                Icon(
-                                    imageVector = FeatherIcons.FilePlus,
-                                    contentDescription = "Add Quick Page",
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(40.dp),
-                                )
-                            }
-
-                            val launcher = rememberLauncherForActivityResult(
-                                contract = ActivityResultContracts.OpenDocument()
-                            ) { uri: Uri? ->
-                                if (uri == null) {
-                                    Log.w(
-                                        TAG,
-                                        "PickVisualMedia: uri is null (user cancelled or provider returned null)"
-                                    )
-                                    return@rememberLauncherForActivityResult
-                                }
-                                try {
+                        try {
 //                                    val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
 //                                    context.contentResolver.takePersistableUriPermission(uri, flag)
-                                    val mimeType = context.contentResolver.getType(uri)
-                                    Log.d(TAG, "Selected file mimeType: $mimeType, uri: $uri")
-                                    if (mimeType == "application/pdf" || uri.toString()
-                                            .endsWith(".pdf", ignoreCase = true)
-                                    ) showPdfImportChoiceDialog = uri
-                                    else CoroutineScope(Dispatchers.IO).launch {
-                                        importInProgress = true
-                                        snackManager.showSnackDuring("importing from xopp file") {
-                                            XoppFile(context).importBook(uri, folderId)
-                                        }
-                                        importInProgress = false
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "contentPicker failed: ${e.message}", e)
-                                    SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Importing failed: ${e.message}"))
+                            val mimeType = context.contentResolver.getType(uri)
+                            Log.d(TAG, "Selected file mimeType: $mimeType, uri: $uri")
+                            if (mimeType == "application/pdf" || uri.toString()
+                                    .endsWith(".pdf", ignoreCase = true)
+                            ) showPdfImportChoiceDialog = uri
+                            else CoroutineScope(Dispatchers.IO).launch {
+                                importInProgress = true
+                                snackManager.showSnackDuring("importing from xopp file") {
+                                    XoppFile(context).importBook(uri, folderId)
                                 }
+                                importInProgress = false
                             }
-                            // Import Notebook (Bottom Half)
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .background(Color.LightGray.copy(alpha = 0.3f))
-                                    .border(2.dp, Color.Black, RectangleShape)
-                                    .noRippleClickable {
-                                        launcher.launch(
-                                            arrayOf(
-                                                "application/x-xopp",
-                                                "application/gzip",
-                                                "application/octet-stream",
-                                                "application/pdf"
-                                            )
-                                        )
-                                    }
-
-                            ) {
-                                Icon(
-                                    imageVector = FeatherIcons.Upload,
-                                    contentDescription = "Import Notebook",
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(40.dp),
-                                )
-                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "contentPicker failed: ${e.message}", e)
+                            SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Importing failed: ${e.message}"))
                         }
                     }
-                }
-                if (books?.isNotEmpty() == true) {
-                    items(books!!.reversed()) { item ->
-                        if (item.pageIds.isEmpty()) {
-                            if (!importInProgress) {
-                                ShowSimpleConfirmationDialog(
-                                    title = "There is a book without pages!!!",
-                                    message = "We suggest deleting book title \"${item.title}\", it was created at ${item.createdAt}. Do you want to do it?",
-                                    onConfirm = {
-                                        bookRepository.delete(item.id)
-                                    },
-                                    onCancel = { }
+                    // Import Notebook (Bottom Half)
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(Color.LightGray.copy(alpha = 0.3f))
+                            .border(2.dp, Color.Black, RectangleShape)
+                            .noRippleClickable {
+                                launcher.launch(
+                                    arrayOf(
+                                        "application/x-xopp",
+                                        "application/gzip",
+                                        "application/octet-stream",
+                                        "application/pdf"
+                                    )
                                 )
                             }
-                            return@items
-                        }
-                        var isSettingsOpen by remember { mutableStateOf(false) }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(3f / 4f)
-                                .border(1.dp, Color.Black, RectangleShape)
-                                .background(Color.White)
-                                .clip(RoundedCornerShape(2))
-                        ) {
-                            Box {
-                                val pageId = item.pageIds[0]
 
-                                PagePreview(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(3f / 4f)
-                                        .border(1.dp, Color.Black, RectangleShape)
-                                        .combinedClickable(
-                                            onClick = {
-                                                val bookId = item.id
-                                                val pageId = item.openPageId ?: item.pageIds[0]
-                                                navController.navigate("books/$bookId/pages/$pageId")
-                                            },
-                                            onLongClick = {
-                                                isSettingsOpen = true
-                                            },
-                                        ), pageId
-                                )
-                            }
-                            Text(
-                                text = item.pageIds.size.toString(),
-                                modifier = Modifier
-                                    .background(Color.Black)
-                                    .padding(5.dp),
-                                color = Color.White
-                            )
-                            Text(
-                                text = item.title,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .fillMaxWidth()
-                                    .padding(bottom = 8.dp) // Add some padding above the row
-                                    .background(Color.White)
-                            )
-                        }
-                        if (isSettingsOpen) NotebookConfigDialog(
-                            bookId = item.id,
-                            onClose = { isSettingsOpen = false })
+                    ) {
+                        Icon(
+                            imageVector = FeatherIcons.Upload,
+                            contentDescription = "Import Notebook",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(40.dp),
+                        )
                     }
                 }
             }
         }
-    }
+        if (books?.isNotEmpty() == true) {
+            items(books!!.reversed()) { item ->
+                if (item.pageIds.isEmpty()) {
+                    if (!importInProgress) {
+                        ShowSimpleConfirmationDialog(
+                            title = "There is a book without pages!!!",
+                            message = "We suggest deleting book title \"${item.title}\", it was created at ${item.createdAt}. Do you want to do it?",
+                            onConfirm = {
+                                bookRepository.delete(item.id)
+                            },
+                            onCancel = { }
+                        )
+                    }
+                    return@items
+                }
+                var isSettingsOpen by remember { mutableStateOf(false) }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(3f / 4f)
+                        .border(1.dp, Color.Black, RectangleShape)
+                        .background(Color.White)
+                        .clip(RoundedCornerShape(2))
+                ) {
+                    Box {
+                        val pageId = item.pageIds[0]
 
-// Add the FloatingEditorView here
-    if (showFloatingEditor && floatingEditorPageId != null) {
-        FloatingEditorView(
-            navController = navController,
-            pageId = floatingEditorPageId!!,
-            onDismissRequest = {
-                showFloatingEditor = false
-                floatingEditorPageId = null
+                        PagePreview(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(3f / 4f)
+                                .border(1.dp, Color.Black, RectangleShape)
+                                .combinedClickable(
+                                    onClick = {
+                                        val bookId = item.id
+                                        val pageId = item.openPageId ?: item.pageIds[0]
+                                        navController.navigate("books/$bookId/pages/$pageId")
+                                    },
+                                    onLongClick = {
+                                        isSettingsOpen = true
+                                    },
+                                ), pageId
+                        )
+                    }
+                    Text(
+                        text = item.pageIds.size.toString(),
+                        modifier = Modifier
+                            .background(Color.Black)
+                            .padding(5.dp),
+                        color = Color.White
+                    )
+                    Text(
+                        text = item.title,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp) // Add some padding above the row
+                            .background(Color.White)
+                    )
+
+                }
+                if (isSettingsOpen) NotebookConfigDialog(
+                    bookId = item.id,
+                    onClose = { isSettingsOpen = false })
             }
-        )
+        }
     }
-}
-
-fun handlePdfImport(context: Context, folderId: String?, uri: Uri, copyFile: Boolean = true) {
-    Log.v(TAG, "Importing PDF from $uri")
-    ensureNotMainThread("Importing")
-
-    //copy file:
-    val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
-    context.contentResolver.takePersistableUriPermission(uri, flag)
-    val subfolder = BackgroundType.Pdf(0).folderName
-    val fileToSave = if (copyFile) copyBackgroundToDatabase(context, uri, subfolder)
-    else {
-        val fileName = getFilePathFromUri(context, uri)
-        if (fileName == null) {
-            Log.e(TAG, "File name is null")
-            showHint(
-                "Couldn't determine file path. Does the app have permission to read external storage?",
-                duration = 5000
-            )
-            return
-        } else File(fileName)
-    } //content://com.android.providers.media.documents/document/document%3A1000000754
-
-    val pageRepo = PageRepository(context)
-    val bookRepo = BookRepository(context)
-
-    val book = Notebook(
-        title = fileToSave.nameWithoutExtension,
-        parentFolderId = folderId,
-        defaultBackground = fileToSave.toString(),
-        defaultBackgroundType = BackgroundType.AutoPdf.key
-    )
-    bookRepo.createEmpty(book)
-
-    val numberOfPages = getPdfPageCount(fileToSave.toString())
-
-    for (i in 0 until numberOfPages) {
-        val page = Page(
-            notebookId = book.id,
-            background = fileToSave.toString(),
-            backgroundType = if (copyFile) BackgroundType.Pdf(i).key else BackgroundType.AutoPdf.key
-        )
-        pageRepo.create(page)
-        bookRepo.addPage(book.id, page.id)
-    }
-
 }
