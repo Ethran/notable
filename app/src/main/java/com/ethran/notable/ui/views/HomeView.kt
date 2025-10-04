@@ -193,7 +193,7 @@ fun Library(navController: NavController, folderId: String? = null) {
 
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun FolderList(
     folders: List<Folder>?,
@@ -260,6 +260,7 @@ fun FolderList(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun QuickPagesSection(
     singlePages: List<Page>?,

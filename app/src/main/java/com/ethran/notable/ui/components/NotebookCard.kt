@@ -1,5 +1,6 @@
 package com.ethran.notable.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -19,7 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NotebookCard(
     bookId: String,
