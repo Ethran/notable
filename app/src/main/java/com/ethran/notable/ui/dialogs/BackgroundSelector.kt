@@ -136,7 +136,7 @@ fun BackgroundSelector(
             "Image" -> BackgroundType.Image
             "PDF" -> BackgroundType.Pdf(1)
             else -> {
-                throw Exception("Unknown background folder for selection $selectedBackgroundMode")
+                throw Exception("Unknown BackgroundType for selection $selectedBackgroundMode")
             }
 
         }
@@ -181,7 +181,7 @@ fun BackgroundSelector(
         if (uri == null) {
             Log.w(
                 TAG,
-                "PickVisualMedia: uri is null (user cancelled or provider returned null)"
+                "PickPdf: uri is null (user cancelled or provider returned null)"
             )
             return@rememberLauncherForActivityResult
         }
@@ -190,7 +190,7 @@ fun BackgroundSelector(
         context.contentResolver.takePersistableUriPermission(uri, flag)
 
         val currentType = selectedToType()
-        Log.d(TAG, "PickVisualMedia: will copy to subfolder=\"$currentType\"")
+        Log.d(TAG, "PickPdf: will copy to subfolder=\"$currentType\"")
         scope.launch(Dispatchers.IO) {
             try {
                 val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)

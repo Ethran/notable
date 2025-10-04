@@ -53,7 +53,7 @@ fun renderPdfPageAndroid(
         return null
     }
     if (resolutionModifier <= 1.0f) {
-        Log.w(TAG, "Are you sure you want to use low resolution Modifier?: $resolutionModifier")
+        Log.w(TAG, "Are you sure you want to use low resolution modifier?: $resolutionModifier")
     }
 
     val safeResolution = resolutionModifier.coerceIn(0.5f, 3f)

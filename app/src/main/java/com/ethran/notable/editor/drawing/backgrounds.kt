@@ -393,7 +393,7 @@ fun drawBg(
                 "squared" -> drawSquaredBg(canvas, scroll, scale)
                 "hexed" -> drawHexedBg(canvas, scroll, scale)
                 else -> {
-                    throw Exception("Unknown background type: $background")
+                    throw IllegalArgumentException("Unknown background type: $background")
                 }
             }
         }
