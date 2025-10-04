@@ -360,15 +360,14 @@ fun NotebookGrid(
                         } else {
                             "Setting up observer for PDF"
                         }
-                        CoroutineScope(Dispatchers.IO).launch {
-                            importInProgress = true
-                            snackManager.showSnackDuring(snackText) {
-                                handlePdfImport(
-                                    context, folderId, uri, copy
-                                )
-                            }
-                            importInProgress = false
+
+                        importInProgress = true
+                        snackManager.showSnackDuring(snackText) {
+                            handlePdfImport(
+                                context, folderId, uri, copy
+                            )
                         }
+                        importInProgress = false
                     }
                 },
                 context = context,
