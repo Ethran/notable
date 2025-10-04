@@ -2,6 +2,8 @@ package com.ethran.notable.io
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
@@ -51,6 +53,8 @@ sealed class ExportTarget {
 
 data class ExportOptions(
     val copyToClipboard: Boolean = true,
+    val saveTo: String? = null,
+    val overwrite: Boolean = false,
 )
 
 class ExportEngine(
@@ -65,7 +69,7 @@ class ExportEngine(
     ): String = when (format) {
         ExportFormat.PDF -> exportAsPdf(target, options)
         ExportFormat.PNG, ExportFormat.JPEG -> exportAsImages(target, format, options)
-        ExportFormat.XOPP -> exportAsXopp(target)
+        ExportFormat.XOPP -> exportAsXopp(target, options)
     }
 
 
@@ -73,7 +77,7 @@ class ExportEngine(
 
     private suspend fun exportAsPdf(target: ExportTarget, options: ExportOptions): String {
         val writeAction: suspend (OutputStream) -> Unit
-        val (filename, folder) = createFileNameAndFolder(target)
+        val (filename, folder) = createFileNameAndFolder(target, options)
         when (target) {
             is ExportTarget.Book -> {
                 val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
@@ -105,7 +109,8 @@ class ExportEngine(
             extension = "pdf",
             mimeType = "application/pdf",
             subfolder = folder,
-            writer = writeAction
+            writer = writeAction,
+            overwrite = options.overwrite
         )
     }
 
@@ -114,7 +119,7 @@ class ExportEngine(
     private suspend fun exportAsImages(
         target: ExportTarget, format: ExportFormat, options: ExportOptions
     ): String {
-        val (baseFileName, folder) = createFileNameAndFolder(target)
+        val (baseFileName, folder) = createFileNameAndFolder(target, options)
 
         val (ext, mime, compressFormat) = when (format) {
             ExportFormat.PNG -> Triple("png", "image/png", Bitmap.CompressFormat.PNG)
@@ -128,7 +133,7 @@ class ExportEngine(
                 val bitmap = renderBitmapForPage(pageId)
                 bitmap.useAndRecycle { bmp ->
                     val bytes = bmp.toBytes(compressFormat)
-                    saveBytes(baseFileName, ext, mime, folder, bytes)
+                    saveBytes(baseFileName, ext, mime, folder, bytes, options.overwrite)
                 }
                 if (options.copyToClipboard && format == ExportFormat.PNG) {
                     copyPagePngLink(context, pageId)
@@ -144,7 +149,7 @@ class ExportEngine(
                     val bitmap = renderBitmapForPage(pageId)
                     bitmap.useAndRecycle { bmp ->
                         val bytes = bmp.toBytes(compressFormat)
-                        saveBytes(fileName, ext, mime, book.title, bytes)
+                        saveBytes(fileName, ext, mime, book.title, bytes, options.overwrite)
                     }
                 }
                 if (options.copyToClipboard) {
@@ -156,13 +161,14 @@ class ExportEngine(
     }
     /* -------------------- XOPP export -------------------- */
 
-    private suspend fun exportAsXopp(target: ExportTarget): String {
-        val (filename, folder) = createFileNameAndFolder(target)
+    private suspend fun exportAsXopp(target: ExportTarget, options: ExportOptions): String {
+        val (filename, folder) = createFileNameAndFolder(target, options)
         return saveStream(
             fileName = filename,
             extension = "xopp",
             mimeType = "application/x-xopp",
-            subfolder = folder
+            subfolder = folder,
+            overwrite = options.overwrite
         ) { out ->
             XoppFile(context).writeToXoppStream(target, out)
         }
@@ -189,7 +195,28 @@ class ExportEngine(
      *  - Does NOT append extension.
      *  - folderHierarchy is derived from ancestor folders root→leaf (if any).
      */
-    fun createFileNameAndFolder(target: ExportTarget): Pair<String, String> {
+    fun createFileNameAndFolder(
+        target: ExportTarget,
+        options: ExportOptions
+    ): Pair<String, String> {
+        // First, handle the explicit saveTo override
+        if (!options.saveTo.isNullOrBlank()) {
+            // Remove leading/trailing slashes
+            val path = options.saveTo.trim('/')
+            // Find the last separator (directory/file split)
+            val lastSlash = path.lastIndexOf('/')
+            val folder: String
+            val name: String
+            if (lastSlash >= 0) {
+                folder = path.substring(0, lastSlash)
+                name = path.substring(lastSlash + 1)
+            } else {
+                folder = "" // No folder, just a filename
+                name = path
+            }
+            return Pair(name, folder)
+        }
+
 
         val pageRepo = PageRepository(context)
         val bookRepo = BookRepository(context)
@@ -204,7 +231,7 @@ class ExportEngine(
                     return "" to "ERROR"
                 }
 
-                val bookTitle = sanitizeFileName(book.title)
+                val bookTitle = sanitizeFileName(book.title).ifBlank { "notable-export" }
 
                 // Build folder hierarchy (excluding the book title itself until the end)
                 val folders = if (book.parentFolderId != null) getFolderList(
@@ -378,11 +405,22 @@ class ExportEngine(
     /* -------------------- Saving Helpers -------------------- */
 
     private suspend fun saveBytes(
-        fileName: String, extension: String, mimeType: String, subfolder: String, bytes: ByteArray
+        fileName: String,
+        extension: String,
+        mimeType: String,
+        subfolder: String,
+        bytes: ByteArray,
+        overwrite: Boolean
     ): String = withContext(Dispatchers.IO) {
         try {
             val cv = buildContentValues(fileName, extension, mimeType, subfolder)
             val resolver = context.contentResolver
+
+            // Check for existing file if overwrite is true
+            if (overwrite) {
+                deleteIfExists(resolver, fileName, extension, subfolder)
+            }
+
             val uri = resolver.insert(MediaStore.Files.getContentUri("external"), cv)
                 ?: throw IOException("Failed to create MediaStore entry")
             resolver.openOutputStream(uri)?.use { it.write(bytes) }
@@ -398,11 +436,18 @@ class ExportEngine(
         extension: String,
         mimeType: String,
         subfolder: String,
+        overwrite: Boolean,
         writer: suspend (OutputStream) -> Unit
     ): String = withContext(Dispatchers.IO) {
         try {
             val cv = buildContentValues(fileName, extension, mimeType, subfolder)
             val resolver = context.contentResolver
+
+            // Check for existing file if overwrite is true
+            if (overwrite) {
+                deleteIfExists(resolver, fileName, extension, subfolder)
+            }
+
             val uri = resolver.insert(MediaStore.Files.getContentUri("external"), cv)
                 ?: throw IOException("Failed to create MediaStore entry")
             resolver.openOutputStream(uri)?.use { out -> writer(out) }
@@ -446,8 +491,34 @@ class ExportEngine(
 
     /* -------------------- Utilities -------------------- */
 
-    private fun sanitizeFileName(raw: String): String =
-        raw.replace(Regex("""[\\/:*?"<>|]"""), "_").trim().ifBlank { "notable-export" }
+    private fun deleteIfExists(
+        resolver: ContentResolver,
+        fileName: String,
+        extension: String,
+        subfolder: String,
+    ): Boolean {
+        val displayName = if (extension.isNotBlank()) "$fileName.$extension" else fileName
+        val relativePath = "${Environment.DIRECTORY_DOCUMENTS}/Notable/${subfolder.trimEnd('/')}/"
+
+        val contentUri = MediaStore.Files.getContentUri("external")
+        val projection = arrayOf(MediaStore.Files.FileColumns._ID)
+
+        val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME}=? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH}=?"
+        val selectionArgs = arrayOf(displayName, relativePath)
+
+        resolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(0)
+                val rows = resolver.delete(ContentUris.withAppendedId(contentUri, id), null, null)
+                log.i("deleteIfExists: deleted $rows rows for $displayName at $relativePath")
+                return rows > 0
+            }
+        }
+
+        log.d("deleteIfExists: no existing file found for $displayName")
+        return false
+    }
+
 
 
     private fun Bitmap.toBytes(format: Bitmap.CompressFormat, quality: Int = 100): ByteArray {
