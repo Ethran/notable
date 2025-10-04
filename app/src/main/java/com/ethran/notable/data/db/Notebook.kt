@@ -39,6 +39,8 @@ data class Notebook(
     @ColumnInfo(defaultValue = "native")
     val defaultBackgroundType: String = "native",
 
+    // File that its linked to:
+    val linkedExternalUri: String? = null,
     val createdAt: Date = Date(),
     val updatedAt: Date = Date()
 )

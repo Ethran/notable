@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.text.Normalizer
 import kotlin.use
 
 private val fileUtilsLog = ShipBook.getLogger("FileUtilsLogger")
@@ -49,8 +50,28 @@ fun createFileFromContentUri(context: Context, fileUri: Uri, outputDir: File): F
     return outputFile
 }
 
-fun sanitizeFileName(fileName: String): String {
-    return fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+fun sanitizeFileName(raw: String, maxLen: Int = 100): String {
+    // Normalize accents → é → e, Ł → L, etc.
+    var name = Normalizer.normalize(raw, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "") // remove diacritics
+
+    // Replace illegal filename characters with "_"
+    name = name.replace(Regex("""[\\/:*?"<>|]"""), "_")
+
+    // Collapse multiple underscores/spaces into one space
+    name = name.replace(Regex("[_ ]+"), " ").trim()
+
+    // Prevent names like ".hidden" by stripping leading dots
+    name = name.trim('.')
+
+    // Enforce max length and fallback name
+    if (name.length > maxLen) {
+        name = name.take(maxLen).trimEnd()
+    }
+    if (name.isBlank()) {
+        name = "notable-export"
+    }
+    return name
 }
 
 fun copyStreamToFile(inputStream: InputStream, outputFile: File) {
