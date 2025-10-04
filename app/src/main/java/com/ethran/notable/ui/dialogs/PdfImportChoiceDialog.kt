@@ -1,7 +1,9 @@
 package com.ethran.notable.ui.dialogs
 
 import android.net.Uri
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -15,6 +17,7 @@ fun PdfImportChoiceDialog(
     uri: Uri,
     onCopy: (Uri) -> Unit,
     onObserve: (Uri) -> Unit,
+    onDismiss: () -> Unit
 ) {
     ShowConfirmationDialog(
         title = "Import PDF Background",
@@ -49,6 +52,7 @@ fun PdfImportChoiceDialog(
         },
         onConfirm = { onCopy(uri) },
         onCancel = { onObserve(uri) },
+        onDismiss = { onDismiss() },
         confirmButtonText = "Copy",
         cancelButtonText = "Observe"
     )

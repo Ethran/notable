@@ -437,7 +437,11 @@ fun NotebookImportPanel(
         }, onObserve = { uri ->
             showPdfImportChoiceDialog = null
             onPdfFile(uri, /* copy= */ false)
-        })
+        },
+            onDismiss = {
+                showPdfImportChoiceDialog = null
+            }
+        )
     }
 
 
