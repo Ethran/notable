@@ -535,6 +535,12 @@ fun DebugSettings(kv: KvProxy, settings: AppSettings) {
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(openGLRendering = isChecked))
             })
+        SettingToggleRow(
+            label = "Use MuPdf as a renderer for pdfs.",
+            value = settings.muPdfRendering,
+            onToggle = { isChecked ->
+                kv.setAppSettings(settings.copy(muPdfRendering = isChecked))
+            })
     }
 }
 

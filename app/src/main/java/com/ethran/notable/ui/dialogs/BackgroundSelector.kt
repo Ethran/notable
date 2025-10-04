@@ -88,6 +88,7 @@ import com.ethran.notable.io.getPdfPageCount
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Loader
 import io.shipbook.shipbooksdk.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -129,50 +130,82 @@ fun BackgroundSelector(
         )
     }
 
+    fun selectedToType(): BackgroundType {
+        return when (selectedBackgroundMode) {
+            "Cover" -> BackgroundType.CoverImage
+            "Image" -> BackgroundType.Image
+            "PDF" -> BackgroundType.Pdf(1)
+            else -> {
+                throw Exception("Unknown BackgroundType for selection $selectedBackgroundMode")
+            }
+
+        }
+    }
+
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
-            uri?.let {
-                // Grant read URI permission to access the selected URI
-                val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                context.contentResolver.takePersistableUriPermission(uri, flag)
-                Log.e(TAG, "PageSettingsModal: $pageBackgroundType")
-                val subfolder = pageBackgroundType.folderName
-                //  copy image to documents/notabledb/images/filename
-                val copiedFile = copyBackgroundToDatabase(context, uri, subfolder)
-
-                Log.i(
-                    "InsertImage",
-                    "Image was received and copied, it is now at:${copiedFile.toUri()}"
+            if (uri == null) {
+                Log.w(
+                    TAG,
+                    "PickVisualMedia: uri is null (user cancelled or provider returned null)"
                 )
-//                            DrawCanvas.addImageByUri.value = copiedFile.toUri()
-                onChange(pageBackgroundType.key, copiedFile.toString())
-                scope.launch { DrawCanvas.refreshUi.emit(Unit) }
-                pageBackground = copiedFile.toString()
+                return@rememberLauncherForActivityResult
+            }
+
+            val currentType = selectedToType()
+            Log.d(TAG, "PickVisualMedia: will copy to subfolder=\"$currentType\"")
+
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
+
+                    Log.i(TAG, "PickVisualMedia: copied -> ${copiedFile.absolutePath}")
+                    onChange(currentType.key, copiedFile.toString())
+                    scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+                    pageBackground = copiedFile.toString()
+                    Log.d(
+                        TAG,
+                        "PickVisualMedia: UI updated, pageBackground=$pageBackground, type=${currentType.key}"
+                    )
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "PickVisualMedia: copy failed: ${e.message}", e)
+                }
             }
         }
-// PDF picker for backgrounds
+    // PDF picker for backgrounds
     val pickPdf = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let {
-            val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
-            context.contentResolver.takePersistableUriPermission(uri, flag)
-            val subfolder = pageBackgroundType.folderName
-            val copiedFile = copyBackgroundToDatabase(context, uri, subfolder)
-
-            onChange(
-                "pdf0", copiedFile.toString()
-            )
-
-            scope.launch { DrawCanvas.refreshUi.emit(Unit) }
-            pageBackground = copiedFile.toString()
-            pageBackgroundType = BackgroundType.Pdf(1)
-            Log.i(
+        if (uri == null) {
+            Log.w(
                 TAG,
-                "PDF was received and copied, it is now at:${copiedFile.toUri()}"
+                "PickPdf: uri is null (user cancelled or provider returned null)"
             )
-            Log.i(TAG, "PageSettingsModal: $pageBackgroundType")
+            return@rememberLauncherForActivityResult
+        }
+
+        val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        context.contentResolver.takePersistableUriPermission(uri, flag)
+
+        val currentType = selectedToType()
+        Log.d(TAG, "PickPdf: will copy to subfolder=\"$currentType\"")
+        scope.launch(Dispatchers.IO) {
+            try {
+                val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
+                onChange(currentType.key, copiedFile.toString())
+                scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+                pageBackground = copiedFile.toString()
+                pageBackgroundType = currentType
+                Log.i(
+                    TAG,
+                    "PDF was received and copied, it is now at:${copiedFile.toUri()}"
+                )
+                Log.i(TAG, "PageSettingsModal: $pageBackgroundType")
+            } catch (e: Exception) {
+                Log.e(TAG, "PdfPicker: copy failed: ${e.message}", e)
+            }
         }
     }
 

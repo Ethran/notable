@@ -224,6 +224,8 @@ in real time on your tablet.
       postprocess();
   }
   ```
+  
+  It was also tested with `adb push`, instead of `cp`.
 
   </details>
 - Compile, and test if it copies the file to the tablet.

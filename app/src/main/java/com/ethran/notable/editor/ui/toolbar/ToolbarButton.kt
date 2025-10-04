@@ -28,50 +28,43 @@ fun ToolbarButton(
     penColor: Color? = null,
     contentDescription: String = ""
 ) {
+    val bgColor = if (isSelected) (penColor ?: Color.Black) else (penColor ?: Color.Transparent)
+    val tint = when {
+        (penColor == Color.Black || penColor == Color.DarkGray) -> Color.White
+        isSelected -> Color.White
+        else -> Color.Black
+    }
+
     Box(
         Modifier
             .then(modifier)
+            .noRippleClickable { onSelect() }
             .background(
-                color = if (isSelected) penColor ?: Color.Black else penColor ?: Color.Transparent,
-                shape = if (!isSelected) CircleShape else RectangleShape
+                color = bgColor, shape = if (!isSelected) CircleShape else RectangleShape
             )
             .padding(7.dp)
-            .noRippleClickable {
-                onSelect()
-            }
     ) {
-        //needs simplification:
-        if (iconId != null) {
-            Icon(
-                painter = painterResource(id = iconId),
-                contentDescription,
-                Modifier,
-                if (penColor == Color.Black || penColor == Color.DarkGray) Color.White else if (isSelected) Color.White else Color.Black
-            )
-        }
-        if (vectorIcon != null) {
-            Icon(
-                imageVector = vectorIcon,
-                contentDescription,
-                Modifier,
-                if (penColor == Color.Black || penColor == Color.DarkGray) Color.White else if (isSelected) Color.White else Color.Black
-            )
-        }
+        when {
+            iconId != null -> {
+                Icon(painterResource(iconId), contentDescription, tint = tint)
+            }
 
-        if (imageVector != null) {
-            Icon(
-                imageVector = imageVector,
-                contentDescription,
-                Modifier,
-                if (isSelected) Color.White else Color.Black
-            )
-        }
-        if (text != null) {
-            Text(
-                text = text,
-                fontSize = 20.sp,
-                color = if (isSelected) Color.White else Color.Black
-            )
+            vectorIcon != null -> {
+                Icon(vectorIcon, contentDescription, tint = tint)
+            }
+
+            imageVector != null -> {
+                Icon(
+                    imageVector,
+                    contentDescription,
+                    tint = if (isSelected) Color.White else Color.Black
+                )
+            }
+            text != null -> {
+                Text(
+                    text, fontSize = 20.sp, color = if (isSelected) Color.White else Color.Black
+                )
+            }
         }
     }
 }

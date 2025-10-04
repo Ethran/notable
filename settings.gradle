@@ -15,6 +15,7 @@ dependencyResolutionManagement {
             allowInsecureProtocol = true
         }
         maven { url "https://jitpack.io" }
+        maven {url "https://maven.ghostscript.com"}
     }
 }
 rootProject.name = "Notable"

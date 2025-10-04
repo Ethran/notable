@@ -544,8 +544,7 @@ object PageDataManager {
                     FileObserver.DELETE_SELF or
                     FileObserver.CLOSE_WRITE or
                     FileObserver.MOVED_TO or
-                    FileObserver.MOVE_SELF or
-                    FileObserver.MODIFY)
+                    FileObserver.MOVE_SELF)
 
             // Launch a FileObserver for this file
             val observer = object : FileObserver(file, mask) {
@@ -659,7 +658,7 @@ object PageDataManager {
     private var currentCacheSizeMB = 0
 
     fun removePage(pageId: String) {
-        log.e("Removing page $pageId")
+        log.d("Removing page $pageId")
         if (pageId == currentPage) log.w("Removing current page!")
         synchronized(accessLock) {
             strokes.remove(pageId)

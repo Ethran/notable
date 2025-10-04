@@ -153,7 +153,7 @@ class OpenGLRenderer(
 
     fun attachSurfaceView(surfaceView: SurfaceView) {
         if (isAttached)
-            Log.e("OpenGLRenderer", "Already attached")
+            Log.w("OpenGLRenderer", "Already attached")
         frontBufferRenderer = GLFrontBufferedRenderer(surfaceView, this)
         motionEventPredictor = MotionEventPredictor.newInstance(surfaceView)
     }

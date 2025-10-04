@@ -39,6 +39,7 @@ data class AppSettings(
     val scribbleToEraseEnabled: Boolean = false,
     val simpleRendering: Boolean = false,
     val openGLRendering: Boolean = true,
+    val muPdfRendering: Boolean = true,
 
     val doubleTapAction: GestureAction? = defaultDoubleTapAction,
     val twoFingerTapAction: GestureAction? = defaultTwoFingerTapAction,

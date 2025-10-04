@@ -41,6 +41,7 @@ fun ShowSimpleConfirmationDialog(
         content = { Text(text = message, fontSize = 16.sp) },
         onConfirm = onConfirm,
         onCancel = onCancel,
+        onDismiss = onCancel,
         confirmButtonText = confirmButtonText,
         cancelButtonText = cancelButtonText
     )
@@ -53,10 +54,11 @@ fun ShowConfirmationDialog(
     content: @Composable (() -> Unit),
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
+    onDismiss: () -> Unit = onCancel,
     confirmButtonText: String = "Confirm",
     cancelButtonText: String = "Cancel"
 ) {
-    Dialog(onDismissRequest = { onCancel() }) {
+    Dialog(onDismissRequest = { onDismiss() }) {
         Column(
             modifier = Modifier
                 .background(Color.White)

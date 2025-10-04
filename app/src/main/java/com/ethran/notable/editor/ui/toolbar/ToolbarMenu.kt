@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,153 +63,140 @@ fun ToolbarMenu(
                 .background(Color.White)
                 .width(IntrinsicSize.Max)
         ) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        navController.navigate(
-                            route = if (parentFolder != null) "library?folderId=${parentFolder}"
-                            else "library"
-                        )
-                    }) { Text("Library") }
-            Box(
-                Modifier
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        scope.launch {
-                            snackManager.runWithSnack("Exporting the page to PDF...") {
-                                // delay(10L)
-                                // Q:  Why do I need this ?
-                                // A: I guess that we need to wait for strokes to be drawn.
-                                // checking if drawingInProgress.isLocked should be enough
-                                // but I do not have time to test it.
-                                ExportEngine(context).export(
-                                    target = ExportTarget.Page(pageId = state.pageId),
-                                    format = ExportFormat.PDF,
-                                )
-                            }
-                        }
-                        onClose()
-                    }) { Text("Export page to PDF") }
-
-            Box(
-                Modifier
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        scope.launch {
-                            snackManager.runWithSnack("Exporting the page to PNG...") {
-                                withContext(Dispatchers.IO) {
-                                    ExportEngine(context).export(
-                                        target = ExportTarget.Page(pageId = state.pageId),
-                                        format = ExportFormat.PNG,
-                                    )
-                                }
-                            }
-
-                        }
-                        onClose()
-                    }) { Text("Export page to PNG") }
-
-            Box(
-                Modifier
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        scope.launch {
-                            snackManager.runWithSnack("Exporting the page to JPEG...") {
-                                ExportEngine(context).export(
-                                    target = ExportTarget.Page(pageId = state.pageId),
-                                    format = ExportFormat.JPEG,
-                                )
-                            }
-                        }
-                        onClose()
-                    }) { Text("Export page to JPEG") }
-
-            Box(
-                Modifier
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        scope.launch {
-                            snackManager.runWithSnack(
-                                "Exporting the page to xopp"
-                            ) {
-                                ExportEngine(context).export(
-                                    target = ExportTarget.Page(pageId = state.pageId),
-                                    format = ExportFormat.XOPP,
-                                )
-                            }
-                        }
-                        onClose()
-                    }) { Text("Export page to xopp") }
-
-            if (state.bookId != null) {
-                Box(
-                    Modifier
-                        .padding(10.dp)
-                        .noRippleClickable {
-                            scope.launch {
-                                snackManager.runWithSnack("Exporting the book to PDF...") {
-                                    ExportEngine(context).export(
-                                        target = ExportTarget.Book(bookId = state.bookId),
-                                        format = ExportFormat.PDF,
-                                    )
-                                }
-                            }
-                            onClose()
-                        }) { Text("Export book to PDF") }
-                Box(
-                    Modifier
-                        .padding(10.dp)
-                        .noRippleClickable {
-                            scope.launch {
-                                snackManager.runWithSnack(
-                                    "Exporting the book to PNG..."
-                                ) {
-                                    ExportEngine(context).export(
-                                        target = ExportTarget.Book(bookId = state.bookId),
-                                        format = ExportFormat.JPEG,
-                                    )
-                                }
-                            }
-                            onClose()
-                        }) { Text("Export book to PNG") }
-                Box(
-                    Modifier
-                        .padding(10.dp)
-                        .noRippleClickable {
-                            scope.launch {
-                                snackManager.runWithSnack(
-                                    "Exporting the book to xopp"
-                                ) {
-                                    ExportEngine(context).export(
-                                        target = ExportTarget.Book(bookId = state.bookId),
-                                        format = ExportFormat.XOPP,
-                                    )
-                                }
-                            }
-                            onClose()
-                        }) { Text("Export book to xopp") }
+            // Library
+            MenuItem("Library") {
+                navController.navigate(
+                    if (parentFolder != null) "library?folderId=$parentFolder" else "library"
+                )
+                onClose()
             }
-            Box(
-                Modifier
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        navController.navigate("bugReport") {}
-                    }) { Text("Bug Report") }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(0.5.dp)
-                    .background(Color.Black)
-            )
-            Box(
-                Modifier
-                    .padding(10.dp)
-                    .noRippleClickable {
-                        onBackgroundSelectorModalOpen()
-                        onClose()
-                    }) { Text("Change Background") }
+            DividerCentered()
+
+            // Page exports
+            MenuItem("Export page to PDF") {
+                scope.launch {
+                    snackManager.runWithSnack("Exporting the page to PDF...") {
+                        ExportEngine(context).export(
+                            target = ExportTarget.Page(pageId = state.pageId),
+                            format = ExportFormat.PDF
+                        )
+                    }
+                }
+                onClose()
+            }
+            MenuItem("Export page to PNG") {
+                scope.launch {
+                    snackManager.runWithSnack("Exporting the page to PNG...") {
+                        withContext(Dispatchers.IO) {
+                            ExportEngine(context).export(
+                                target = ExportTarget.Page(pageId = state.pageId),
+                                format = ExportFormat.PNG
+                            )
+                        }
+                    }
+                }
+                onClose()
+            }
+            MenuItem("Export page to JPEG") {
+                scope.launch {
+                    snackManager.runWithSnack("Exporting the page to JPEG...") {
+                        ExportEngine(context).export(
+                            target = ExportTarget.Page(pageId = state.pageId),
+                            format = ExportFormat.JPEG
+                        )
+                    }
+                }
+                onClose()
+            }
+            MenuItem("Export page to xopp") {
+                scope.launch {
+                    snackManager.runWithSnack("Exporting the page to xopp") {
+                        ExportEngine(context).export(
+                            target = ExportTarget.Page(pageId = state.pageId),
+                            format = ExportFormat.XOPP
+                        )
+                    }
+                }
+                onClose()
+            }
+            DividerCentered()
+
+            // Book exports
+            if (state.bookId != null && book != null) {
+                MenuItem("Export book to PDF") {
+                    scope.launch {
+                        snackManager.runWithSnack("Exporting the book to PDF...") {
+                            ExportEngine(context).export(
+                                target = ExportTarget.Book(bookId = state.bookId),
+                                format = ExportFormat.PDF
+                            )
+                        }
+                    }
+                    onClose()
+                }
+                MenuItem("Export book to PNG") {
+                    scope.launch {
+                        snackManager.runWithSnack("Exporting the book to PNG...") {
+                            ExportEngine(context).export(
+                                target = ExportTarget.Book(bookId = state.bookId),
+                                format = ExportFormat.PNG
+                            )
+                        }
+                    }
+                    onClose()
+                }
+                MenuItem("Export book to xopp") {
+                    scope.launch {
+                        snackManager.runWithSnack("Exporting the book to xopp") {
+                            ExportEngine(context).export(
+                                target = ExportTarget.Book(bookId = state.bookId),
+                                format = ExportFormat.XOPP
+                            )
+                        }
+                    }
+                    onClose()
+                }
+                DividerCentered()
+            }
+
+            MenuItem("Change Background") {
+                onBackgroundSelectorModalOpen()
+                onClose()
+            }
+
+            MenuItem("Bug Report") {
+                navController.navigate("bugReport")
+                onClose()
+            }
         }
     }
+}
+
+@Composable
+private fun MenuItem(
+    label: String,
+    onClick: () -> Unit
+) {
+    Box(
+        Modifier
+            .fillMaxWidth()                 // occupy the menu's width
+            .noRippleClickable { onClick() } // click covers entire box
+            .padding(horizontal = 10.dp, vertical = 8.dp) // inner spacing
+    ) {
+        Text(
+            text = label,
+            color = Color.Black
+        )
+    }
+}
+
+@Composable
+private fun ColumnScope.DividerCentered() {
+    Box(
+        Modifier
+            .fillMaxWidth(1f / 2f)
+            .align(Alignment.CenterHorizontally)
+            .height(0.5.dp)
+            .background(Color(0xFF777777))
+    )
 }

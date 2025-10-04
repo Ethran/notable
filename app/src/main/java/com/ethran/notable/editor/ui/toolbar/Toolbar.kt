@@ -1,7 +1,6 @@
 package com.ethran.notable.editor.ui.toolbar
 
 
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.R
+import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.AppSettings
@@ -52,7 +52,9 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.RefreshCcw
+import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 private val toolbarLog = ShipBook.getLogger("Toolbar")
@@ -106,19 +108,27 @@ fun Toolbar(
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
-            uri?.let {
-                // Grant read URI permission to access the selected URI
-                val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                context.contentResolver.takePersistableUriPermission(uri, flag)
-
-                //  copy image to documents/notabledb/images/filename
-                val copiedFile = copyImageToDatabase(context, uri)
-
-                // Set isImageLoaded to true
-                toolbarLog.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
-                DrawCanvas.addImageByUri.value = copiedFile.toUri()
-
+            if (uri == null) {
+                Log.w(
+                    TAG,
+                    "PickVisualMedia: uri is null (user cancelled or provider returned null)"
+                )
+                return@rememberLauncherForActivityResult
             }
+            scope.launch(Dispatchers.IO) {
+                try {
+                    //  copy image to documents/notabledb/images/filename
+                    val copiedFile = copyImageToDatabase(context, uri)
+
+                    // Set isImageLoaded to true
+                    toolbarLog.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
+                    DrawCanvas.addImageByUri.value = copiedFile.toUri()
+
+                } catch (e: Exception) {
+                    toolbarLog.e("ImagePicker: copy failed: ${e.message}", e)
+                }
+            }
+
         }
 
     // on exit of toolbar, update drawing state

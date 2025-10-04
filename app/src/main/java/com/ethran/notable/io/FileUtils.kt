@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Environment
 import android.os.FileObserver
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
@@ -115,46 +116,139 @@ suspend fun waitForFileAvailable(
     return false
 }
 
-// Requires android.permission.READ_EXTERNAL_STORAGE
+// Requires android.permission.READ_EXTERNAL_STORAGE (pre-Android 13) and file actually readable
 fun getFilePathFromUri(context: Context, uri: Uri): String? {
-    return when {
-        DocumentsContract.isDocumentUri(context, uri) -> {
-            val docId = DocumentsContract.getDocumentId(uri)
-            when {
-                uri.authority?.contains("media") == true -> {
-                    val split = docId.split(":")
-                    val type = split[0]
-                    val contentUri = when (type) {
-                        "image" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                        "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                        "audio" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                        else -> MediaStore.Files.getContentUri("external")
+    try {
+        return when {
+            DocumentsContract.isDocumentUri(context, uri) -> {
+                val docId = runCatching { DocumentsContract.getDocumentId(uri) }
+                    .getOrElse {
+                        fileUtilsLog.e("getFilePathFromUri: getDocumentId failed for uri=$uri: ${it.message}", it)
+                        return null
                     }
-                    val selection = "_id=?"
-                    val selectionArgs = arrayOf(split[1])
-                    getDataColumn(context, contentUri, selection, selectionArgs)
-                }
 
-                uri.authority?.contains("downloads") == true -> {
-                    val contentUri = ContentUris.withAppendedId(
-                        "content://downloads/public_downloads".toUri(), docId.toLong()
-                    )
-                    getDataColumn(context, contentUri, null, null)
-                }
+                when {
+                    // MediaStore provider
+                    uri.authority?.contains("media") == true -> {
+                        val split = docId.split(":")
+                        if (split.size < 2) {
+                            fileUtilsLog.w("getFilePathFromUri: Unexpected docId for media: '$docId', uri=$uri")
+                            return null
+                        }
+                        val type = split[0]
+                        val id = split[1]
+                        val contentUri = when (type) {
+                            "image" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                            "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                            "audio" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                            else -> MediaStore.Files.getContentUri("external")
+                        }
+                        val selection = "_id=?"
+                        val selectionArgs = arrayOf(id)
+                        getDataColumn(context, contentUri, selection, selectionArgs).also {
+                            if (it == null) {
+                                fileUtilsLog.w("getFilePathFromUri: getDataColumn returned null for media id=$id, uri=$uri, contentUri=$contentUri, docId='$docId'")
+                            }
+                        }
+                    }
 
-                else -> null
+                    // Downloads provider
+                    uri.authority?.contains("downloads") == true -> {
+                        val contentUri = runCatching {
+                            ContentUris.withAppendedId(
+                                "content://downloads/public_downloads".toUri(),
+                                docId.toLong()
+                            )
+                        }.getOrElse {
+                            fileUtilsLog.w("getFilePathFromUri: Bad downloads docId '$docId' for uri=$uri: ${it.message}")
+                            return null
+                        }
+                        getDataColumn(context, contentUri, null, null).also {
+                            if (it == null) {
+                                fileUtilsLog.w("getFilePathFromUri: getDataColumn returned null for downloads contentUri=$contentUri (orig uri=$uri, docId='$docId')")
+                            }
+                        }
+                    }
+
+                    // External storage provider (primary/non-primary volumes)
+                    uri.authority == "com.android.externalstorage.documents" -> {
+                        // docId examples:
+                        // - "primary:Download/file.pdf"
+                        // - "home:Documents/file.pdf"
+                        // - "0000-0000:Android/data/..."
+                        val split = docId.split(":")
+                        val type = split.getOrNull(0).orEmpty()
+                        val relative = split.getOrNull(1).orEmpty()
+
+                        val basePath: String? = when {
+                            type.equals("primary", ignoreCase = true) -> {
+                                Environment.getExternalStorageDirectory().absolutePath
+                            }
+                            type.equals("home", ignoreCase = true) -> {
+                                // "home" generally maps under primary; treat like primary root
+                                Environment.getExternalStorageDirectory().absolutePath
+                            }
+                            type.isNotEmpty() -> {
+                                // Non-primary (SD card/USB) volume id; best-effort mount path
+                                // Commonly /storage/<UUID>/...
+                                "/storage/$type"
+                            }
+                            else -> null
+                        }
+
+                        if (basePath == null) {
+                            fileUtilsLog.w("getFilePathFromUri: externalstorage: unknown volume for docId='$docId', uri=$uri")
+                            null
+                        } else {
+                            val candidate = if (relative.isNotEmpty()) {
+                                File(basePath, relative).absolutePath
+                            } else {
+                                basePath
+                            }
+                            val f = File(candidate)
+                            if (f.exists()) {
+                                candidate
+                            } else {
+                                fileUtilsLog.w("getFilePathFromUri: externalstorage resolved path does not exist: $candidate (uri=$uri, docId='$docId')")
+                                null
+                            }
+                        }
+                    }
+
+                    else -> {
+                        fileUtilsLog.w("getFilePathFromUri: Unhandled document authority='${uri.authority}' for uri=$uri, docId='$docId'")
+                        null
+                    }
+                }
+            }
+
+            "content".equals(uri.scheme, ignoreCase = true) -> {
+                getDataColumn(context, uri, null, null).also {
+                    if (it == null) {
+                        fileUtilsLog.w("getFilePathFromUri: getDataColumn returned null for content uri=$uri (provider=${uri.authority})")
+                    }
+                }
+            }
+
+            "file".equals(uri.scheme, ignoreCase = true) -> {
+                uri.path.also {
+                    if (it.isNullOrEmpty()) {
+                        fileUtilsLog.w("getFilePathFromUri: file scheme but empty path for uri=$uri")
+                    }
+                }
+            }
+
+            else -> {
+                fileUtilsLog.w("getFilePathFromUri: Unsupported scheme='${uri.scheme}' authority='${uri.authority}' for uri=$uri")
+                null
             }
         }
-
-        "content".equals(uri.scheme, ignoreCase = true) -> {
-            getDataColumn(context, uri, null, null)
-        }
-
-        "file".equals(uri.scheme, ignoreCase = true) -> {
-            uri.path
-        }
-
-        else -> null
+    } catch (se: SecurityException) {
+        fileUtilsLog.e("getFilePathFromUri: SecurityException for uri=$uri: ${se.message}", se)
+        return null
+    } catch (e: Exception) {
+        fileUtilsLog.e("getFilePathFromUri: Unexpected error for uri=$uri: ${e.message}", e)
+        return null
     }
 }
 

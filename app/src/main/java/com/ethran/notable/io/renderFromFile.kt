@@ -5,16 +5,12 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
-import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import android.os.Looper
-import android.os.ParcelFileDescriptor
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.createBitmap
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.TAG
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.Timing
 import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.Log
@@ -57,52 +53,32 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
     // TODO: it's very slow, needs to be changed for better tool
     if (filePath.isEmpty()) return null
     ensureNotMainThread("loadBackgroundBitmap")
-    Log.v(TAG, "Reloading background, path: $filePath, scale: $scale")
+    log.v("Reloading background, path: $filePath, scale: $scale")
     val file = File(filePath)
     if (!file.exists()) {
-        Log.e(TAG, "getOrLoadBackground: File does not exist at path: $filePath")
+        log.v("getOrLoadBackground: File does not exist at path: $filePath")
         return null
     }
     val timer = Timing("loadBackgroundBitmap")
-    val newBitmap: ImageBitmap? = try {
-        if (filePath.endsWith(".pdf", ignoreCase = true)) {
-            timer.step("preparing for rendering pdf")
-            // PDF rendering
-            val fileDescriptor =
-                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            PdfRenderer(fileDescriptor).use { renderer ->
-                if (pageNumber < 0 || pageNumber >= renderer.pageCount) {
-                    Log.e(
-                        TAG,
-                        "getOrLoadBackground: Invalid page number $pageNumber (total: ${renderer.pageCount})"
-                    )
-                    return null
-                }
-
-                renderer.openPage(pageNumber).use { pdfPage ->
-                    // Render in bigger resolution, as there are nasty artifacts
-                    // when rendering in exact resolution (with colors, highlights and math formulas )
-                    val targetWidth = SCREEN_WIDTH * (scale.coerceAtMost(2f))
-                    val scaleFactor = (targetWidth / pdfPage.width) * 3f
-
-                    val width = (pdfPage.width * scaleFactor).toInt()
-                    val height = (pdfPage.height * scaleFactor).toInt()
-
-                    val bitmap = createBitmap(width, height)
-                    timer.step("prepared for recreation for render")
-                    pdfPage.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    bitmap.asImageBitmap()
-                }
-            }
-        } else {
-            timer.step("loading image")
-            // Image file
-            BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+    if (!filePath.endsWith(".pdf", ignoreCase = true)) {
+        try {
+            timer.step("decode bitmap image")
+            val result = BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+            if (result == null)
+                log.e("loadBackgroundBitmap: result is null, couldn't decode image")
+            timer.end("loaded background")
+            return result?.asAndroidBitmap()
+        } catch (e: Exception) {
+            Log.e(TAG, "getOrLoadBackground: Error loading background - ${e.message}", e)
         }
-    } catch (e: Exception) {
-        Log.e(TAG, "getOrLoadBackground: Error loading background - ${e.message}", e)
-        null
     }
+    val targetWidth = SCREEN_WIDTH * (scale.coerceAtMost(2f))
+    timer.step("start android Pdf")
+    log.d("Rendering using ${if (GlobalAppSettings.current.muPdfRendering) "MuPdf" else "Android Pdf"}")
+    val newBitmap: Bitmap? = if (GlobalAppSettings.current.muPdfRendering)
+        renderPdfPageMuPdf(filePath, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
+    else
+        renderPdfPageAndroid(file, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
     timer.end("loaded background")
-    return newBitmap?.asAndroidBitmap()
+    return newBitmap
 }
