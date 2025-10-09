@@ -264,7 +264,7 @@ fun SettingToggleRow(
         IconSwitch(
             checked = value,
             onCheckedChange = onToggle,
-            modifier = Modifier.padding(start = 8.dp,top = 10.dp, bottom = 12.dp),
+            modifier = Modifier.padding(start = 8.dp, top = 10.dp, bottom = 12.dp),
             thumbIcon = {
                 if (value) {
                     Icon(
@@ -312,7 +312,7 @@ fun IconSwitch(
     )
 
     val startOffset = -bleed
-    val endOffset   = trackWidth - thumbDiameter + bleed
+    val endOffset = trackWidth - thumbDiameter + bleed
 
     val thumbOffset by animateDpAsState(
         if (checked) endOffset else startOffset,
@@ -320,7 +320,7 @@ fun IconSwitch(
     )
 
     Box(
-        modifier
+        modifier = modifier
             .size(trackWidth, trackHeight)
             .toggleable(
                 value = checked,
