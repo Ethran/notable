@@ -2,8 +2,11 @@ package com.ethran.notable.ui.views
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,10 +15,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
@@ -23,8 +29,6 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Tab
 import androidx.compose.material.TabRow
 import androidx.compose.material.TabRowDefaults
@@ -33,6 +37,8 @@ import androidx.compose.material.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.Upgrade
@@ -45,8 +51,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -236,7 +244,9 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
 
 @Composable
 fun SettingToggleRow(
-    label: String, value: Boolean, onToggle: (Boolean) -> Unit
+    label: String,
+    value: Boolean,
+    onToggle: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -251,16 +261,96 @@ fun SettingToggleRow(
             color = MaterialTheme.colors.onSurface,
             maxLines = 2 // allow wrapping for long labels
         )
-        Switch(
-            checked = value, onCheckedChange = onToggle, colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colors.onSurface,
-                uncheckedThumbColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-                checkedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.2f),
-                uncheckedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.1f)
-            ), modifier = Modifier.padding(start = 8.dp)
+        IconSwitch(
+            checked = value,
+            onCheckedChange = onToggle,
+            modifier = Modifier.padding(start = 8.dp,top = 10.dp, bottom = 12.dp),
+            thumbIcon = {
+                if (value) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colors.primary
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
         )
     }
     SettingsDivider()
+}
+
+@Composable
+fun IconSwitch(
+    modifier: Modifier = Modifier,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
+    thumbIcon: @Composable () -> Unit
+) {
+    val trackWidth = 40.dp
+    val trackHeight = 20.dp
+    val thumbDiameter = 24.dp
+    val bleed = (thumbDiameter - trackHeight) / 2
+
+    val interactionSource = remember { MutableInteractionSource() }
+
+    val trackColor by animateColorAsState(
+        if (checked) MaterialTheme.colors.primary.copy(alpha = 0.54f)
+        else MaterialTheme.colors.onSurface.copy(alpha = 0.32f),
+        label = "trackColor"
+    )
+
+    val thumbColor by animateColorAsState(
+        if (enabled) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface.copy(alpha = 0.38f),
+        label = "thumbColor"
+    )
+
+    val startOffset = -bleed
+    val endOffset   = trackWidth - thumbDiameter + bleed
+
+    val thumbOffset by animateDpAsState(
+        if (checked) endOffset else startOffset,
+        label = "thumbOffset"
+    )
+
+    Box(
+        modifier
+            .size(trackWidth, trackHeight)
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+                interactionSource = interactionSource,
+            ),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(RoundedCornerShape(trackHeight / 2))
+                .background(trackColor)
+        )
+
+        Surface(
+            color = thumbColor,
+            shape = CircleShape,
+            elevation = 2.dp,
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(thumbDiameter)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                thumbIcon()
+            }
+        }
+    }
 }
 
 @Composable
