@@ -1,10 +1,13 @@
 package com.ethran.notable.ui.views
 
+import android.R.attr.startOffset
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -265,21 +268,6 @@ fun SettingToggleRow(
             checked = value,
             onCheckedChange = onToggle,
             modifier = Modifier.padding(start = 8.dp, top = 10.dp, bottom = 12.dp),
-            thumbIcon = {
-                if (value) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colors.primary
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                        tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
         )
     }
     SettingsDivider()
@@ -291,65 +279,81 @@ fun IconSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
-    thumbIcon: @Composable () -> Unit
 ) {
-    val trackWidth = 40.dp
+    val trackWidth = 48.dp
     val trackHeight = 20.dp
-    val thumbDiameter = 24.dp
-    val bleed = (thumbDiameter - trackHeight) / 2
-
+    val thumbSize = 18.dp
     val interactionSource = remember { MutableInteractionSource() }
 
     val trackColor by animateColorAsState(
-        if (checked) MaterialTheme.colors.primary.copy(alpha = 0.54f)
-        else MaterialTheme.colors.onSurface.copy(alpha = 0.32f),
+        targetValue = if (checked) MaterialTheme.colors.onSurface else MaterialTheme.colors.surface,
         label = "trackColor"
     )
-
     val thumbColor by animateColorAsState(
-        if (enabled) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface.copy(alpha = 0.38f),
+        targetValue = if (checked) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface,
         label = "thumbColor"
     )
+    val labelColor = if (checked) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface
 
-    val startOffset = -bleed
-    val endOffset = trackWidth - thumbDiameter + bleed
-
+    val startOffset = 2.dp
+    val endOffset = trackWidth - thumbSize - startOffset
     val thumbOffset by animateDpAsState(
-        if (checked) endOffset else startOffset,
+        targetValue = if (checked) endOffset else startOffset,
         label = "thumbOffset"
     )
+
+    val safePad = thumbSize + 4.dp
+    val padStart = if (!checked) safePad else 6.dp
+    val padEnd = if (checked) safePad else 6.dp
 
     Box(
         modifier = modifier
             .size(trackWidth, trackHeight)
+            .background(trackColor)
             .toggleable(
                 value = checked,
                 enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
                 interactionSource = interactionSource,
-            ),
+                indication = null
+            )
+            .border(BorderStroke(1.dp, MaterialTheme.colors.onSurface)),
         contentAlignment = Alignment.CenterStart
     ) {
         Box(
             Modifier
                 .matchParentSize()
-                .clip(RoundedCornerShape(trackHeight / 2))
-                .background(trackColor)
-        )
+                .padding(start = padStart, end = padEnd)
+        ) {
+            if (checked) {
+                Text(
+                    text = "ON",
+                    color = labelColor,
+                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.caption,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    maxLines = 1
+                )
+            } else {
+                Text(
+                    text = "OFF",
+                    color = labelColor,
+                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.caption,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    maxLines = 1
+                )
+            }
+        }
 
         Surface(
             color = thumbColor,
-            shape = CircleShape,
-            elevation = 2.dp,
             modifier = Modifier
                 .offset(x = thumbOffset)
-                .size(thumbDiameter)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                thumbIcon()
-            }
-        }
+                .size(thumbSize)
+                .padding(2.dp)
+        ) {}
     }
 }
 
