@@ -1,6 +1,5 @@
 package com.ethran.notable.ui.views
 
-import android.R.attr.startOffset
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
@@ -40,8 +38,6 @@ import androidx.compose.material.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.Upgrade
@@ -54,13 +50,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -273,38 +269,79 @@ fun SettingToggleRow(
     SettingsDivider()
 }
 
+
+/**
+ * A custom switch composable that displays "ON" or "OFF" text inside the track.
+ *
+ * This switch animates its colors and thumb position based on the checked state, providing
+ * clear visual feedback. It is designed to mimic a physical toggle switch.
+ *
+ * @param modifier The [Modifier] to be applied to the switch.
+ * @param checked Whether the switch is in the 'on' or 'off' state.
+ * @param onCheckedChange A callback that is invoked when the user toggles the switch.
+ *                        The new checked state is passed as a parameter.
+ * @param enabled Controls the enabled state of the switch. When `false`, this switch will not
+ *                be interactive.
+ * @param animateTransition If `true`, the switch will animate color and position changes.
+ */
 @Composable
 fun IconSwitch(
     modifier: Modifier = Modifier,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
+    animateTransition: Boolean = false,
 ) {
+    // Dimensions
     val trackWidth = 48.dp
     val trackHeight = 20.dp
     val thumbSize = 18.dp
-    val interactionSource = remember { MutableInteractionSource() }
-
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colors.onSurface else MaterialTheme.colors.surface,
-        label = "trackColor"
-    )
-    val thumbColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface,
-        label = "thumbColor"
-    )
-    val labelColor = if (checked) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface
-
     val startOffset = 2.dp
-    val endOffset = trackWidth - thumbSize - startOffset
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) endOffset else startOffset,
-        label = "thumbOffset"
-    )
 
+
+    val endOffset = trackWidth - thumbSize - startOffset
     val safePad = thumbSize + 4.dp
     val padStart = if (!checked) safePad else 6.dp
     val padEnd = if (checked) safePad else 6.dp
+
+    // Color
+    val targetTrackColor =
+        if (checked) MaterialTheme.colors.onSurface else MaterialTheme.colors.surface
+    val targetThumbColor =
+        if (checked) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface
+    val targetLabelColor =
+        if (checked) MaterialTheme.colors.surface else MaterialTheme.colors.onSurface
+    val targetThumbOffset = if (checked) endOffset else startOffset
+
+
+    val interactionSource = remember { MutableInteractionSource() }
+
+
+    // Animate or Set Values
+    val trackColor: Color by if (animateTransition) {
+        animateColorAsState(targetValue = targetTrackColor, label = "trackColor")
+    } else {
+        remember(targetTrackColor) { mutableStateOf(targetTrackColor) }
+    }
+
+    val thumbColor: Color by if (animateTransition) {
+        animateColorAsState(targetValue = targetThumbColor, label = "thumbColor")
+    } else {
+        remember(targetThumbColor) { mutableStateOf(targetThumbColor) }
+    }
+
+    val labelColor: Color by if (animateTransition) {
+        animateColorAsState(targetValue = targetLabelColor, label = "labelColor")
+    } else {
+        remember(targetLabelColor) { mutableStateOf(targetLabelColor) }
+    }
+
+    val thumbOffset: Dp by if (animateTransition) {
+        animateDpAsState(targetValue = targetThumbOffset, label = "thumbOffset")
+    } else {
+        remember(targetThumbOffset) { mutableStateOf(targetThumbOffset) }
+    }
+
 
     Box(
         modifier = modifier
@@ -322,29 +359,18 @@ fun IconSwitch(
         contentAlignment = Alignment.CenterStart
     ) {
         Box(
-            Modifier
+            modifier = Modifier
                 .matchParentSize()
-                .padding(start = padStart, end = padEnd)
+                .padding(start = padStart, end = padEnd),
+            contentAlignment = if (checked) Alignment.CenterStart else Alignment.CenterEnd
         ) {
-            if (checked) {
-                Text(
-                    text = "ON",
-                    color = labelColor,
-                    fontSize = 10.sp,
-                    style = MaterialTheme.typography.caption,
-                    modifier = Modifier.align(Alignment.CenterStart),
-                    maxLines = 1
-                )
-            } else {
-                Text(
-                    text = "OFF",
-                    color = labelColor,
-                    fontSize = 10.sp,
-                    style = MaterialTheme.typography.caption,
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    maxLines = 1
-                )
-            }
+            Text(
+                text = if (checked) "ON" else "OFF",
+                color = labelColor,
+                fontSize = 10.sp,
+                style = MaterialTheme.typography.caption,
+                maxLines = 1
+            )
         }
 
         Surface(
