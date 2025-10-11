@@ -23,8 +23,6 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Tab
 import androidx.compose.material.TabRow
 import androidx.compose.material.TabRowDefaults
@@ -59,6 +57,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.ui.SelectMenu
+import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.isNext
@@ -236,7 +235,9 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
 
 @Composable
 fun SettingToggleRow(
-    label: String, value: Boolean, onToggle: (Boolean) -> Unit
+    label: String,
+    value: Boolean,
+    onToggle: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -251,17 +252,15 @@ fun SettingToggleRow(
             color = MaterialTheme.colors.onSurface,
             maxLines = 2 // allow wrapping for long labels
         )
-        Switch(
-            checked = value, onCheckedChange = onToggle, colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colors.onSurface,
-                uncheckedThumbColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-                checkedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.2f),
-                uncheckedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.1f)
-            ), modifier = Modifier.padding(start = 8.dp)
+        OnOffSwitch(
+            checked = value,
+            onCheckedChange = onToggle,
+            modifier = Modifier.padding(start = 8.dp, top = 10.dp, bottom = 12.dp),
         )
     }
     SettingsDivider()
 }
+
 
 @Composable
 fun TitleBar(navController: NavController) {
