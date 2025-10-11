@@ -32,18 +32,12 @@ import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
-import com.ethran.notable.io.ExportEngine
-import com.ethran.notable.io.ExportFormat
-import com.ethran.notable.io.ExportOptions
-import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.ui.LocalSnackContext
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -106,33 +100,7 @@ fun EditorView(
             onDispose {
                 // finish selection operation
                 editorState.selectionState.applySelectionDisplace(page)
-                if (bookId != null) {
-                    // TODO: move it to separate file
-                    val uriStr = appRepository.bookRepository.getById(bookId)?.linkedExternalUri
-                    if (!uriStr.isNullOrBlank()) {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                ExportEngine(context).export(
-                                    target = ExportTarget.Book(bookId),
-                                    format = ExportFormat.XOPP,
-                                    options = ExportOptions(
-                                        copyToClipboard = false,
-                                        saveTo = uriStr,
-                                        overwrite = true
-                                    )
-                                )
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error when exporting page to linked file: ${e.message}")
-                                snackManager.displaySnack(
-                                    SnackConf(
-                                        text = "Error when exporting page to linked file: ${e.message}",
-                                        duration = 3000
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
+                exportToLinkedFile(context, bookId, appRepository.bookRepository)
                 page.disposeOldPage()
             }
         }

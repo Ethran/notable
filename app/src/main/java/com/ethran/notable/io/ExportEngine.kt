@@ -222,7 +222,8 @@ class ExportEngine(
         options.targetFolderUri?.let { provided ->
             if (!isDirectoryUri(provided) && !isFileDirectory(provided)) {
                 throw IllegalArgumentException(
-                    "ExportOptions.saveToUri must point to a directory (SAF tree/document folder or file:// directory)"
+                    "ExportOptions.targetFolderUri must point to a directory (SAF tree/document folder or file:// directory)\n" +
+                            "Maybe folder was deleted?"
                 )
             }
             return provided to fileName

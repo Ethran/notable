@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -54,6 +55,11 @@ class SnackState {
     companion object {
         val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 5)
         val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 5)
+        suspend fun logAndShowError(reason: String, message: String) {
+            Log.e(reason, message)
+            globalSnackFlow.emit(SnackConf(text = message, duration = 3000))
+        }
+
     }
 
     fun registerGlobalSnackObserver() {

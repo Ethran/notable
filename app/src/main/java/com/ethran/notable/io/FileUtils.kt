@@ -23,6 +23,18 @@ import kotlin.use
 
 private val fileUtilsLog = ShipBook.getLogger("FileUtilsLogger")
 
+
+fun getLinkedFilesDir(): File {
+    val documentsDir =
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+    val dbDir = File(documentsDir, "/notable/Linked")
+    if (!dbDir.exists()) {
+        dbDir.mkdirs()
+    }
+    return dbDir
+}
+
+
 // adapted from:
 // https://stackoverflow.com/questions/71241337/copy-image-from-uri-in-another-folder-with-another-name-in-kotlin-android
 fun createFileFromContentUri(context: Context, fileUri: Uri, outputDir: File): File {

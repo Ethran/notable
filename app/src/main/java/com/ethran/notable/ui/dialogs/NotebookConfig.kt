@@ -52,9 +52,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.net.toUri
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.io.sanitizeFileName
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
@@ -288,8 +290,9 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     }
 
                     /* -------------- Linking to external files -----------*/
-                    val defaultPath =
-                        "/Linked/${sanitizeFileName(book!!.title)}"
+
+
+                    val defaultPath = getLinkedFilesDir().toUri().toString()
                     NotebookLinkRow(
                         isLinkedInit = book!!.linkedExternalUri != null,
                         linkedUriInit = book!!.linkedExternalUri,
@@ -368,7 +371,7 @@ fun NotebookLinkRow(
     var isLinked by remember { mutableStateOf(isLinkedInit) }
 
     val linkText = linkedUriInit?.let {
-        if (it.length > 32) "${it.take(10)}...${it.takeLast(18)}" else it
+        if (it.length > 32) "${it.take(5)}...${it.takeLast(7)}/\${bookTitle}" else it
     } ?: "none"
 
     Row(
