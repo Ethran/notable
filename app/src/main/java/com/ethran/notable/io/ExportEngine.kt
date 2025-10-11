@@ -39,8 +39,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 /* ---------------------------- Public API ---------------------------- */
 
@@ -54,7 +54,7 @@ sealed class ExportTarget {
 data class ExportOptions(
     val copyToClipboard: Boolean = true,
     val targetFolderUri: Uri? = null, // can be made to also get from it fileName.
-    val overwrite: Boolean = false,
+    val overwrite: Boolean = false,   // TODO: Fix it -- for now it does not work correctly (it overwrites the files too often)
     val fileName: String? = null
 )
 
@@ -69,7 +69,7 @@ class ExportEngine(
         target: ExportTarget, format: ExportFormat, options: ExportOptions = ExportOptions()
     ): String {
         // prepare file name and folder
-        val (folderUri, baseFileName) = createFileNameAndFolder(target, options)
+        val (folderUri, baseFileName) = createFileNameAndFolder(target, format, options)
         return when (format) {
             ExportFormat.PDF -> exportAsPdf(target, folderUri, baseFileName, options)
             ExportFormat.PNG, ExportFormat.JPEG -> exportAsImages(
@@ -159,7 +159,7 @@ class ExportEngine(
                 val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
                 // Export each page separately (same folder = book title)
                 book.pageIds.forEachIndexed { index, pageId ->
-                    val fileName = "$baseFileName${index + 1}"
+                    val fileName = "$baseFileName-p${index + 1}"
                     val bitmap = renderBitmapForPage(pageId)
                     bitmap.useAndRecycle { bmp ->
                         val bytes = bmp.toBytes(compressFormat)
@@ -213,39 +213,45 @@ class ExportEngine(
      * - If options.saveToUri is provided, it must point to a directory (tree/document folder Uri or file:// directory).
      */
     fun createFileNameAndFolder(
-        target: ExportTarget, options: ExportOptions
+        target: ExportTarget, format: ExportFormat, options: ExportOptions
     ): Pair<Uri, String> {
         val fileName =
-            options.fileName?.trim()?.takeIf { it.isNotBlank() } ?: createFileName(target)
+            sanitizeFileName(options.fileName?.trim()?.takeIf { it.isNotBlank() } ?: createFileName(
+                target
+            ))
 
         // If caller provided a directory Uri, accept both SAF directory and file:// directory.
         options.targetFolderUri?.let { provided ->
             if (!isDirectoryUri(provided) && !isFileDirectory(provided)) {
                 throw IllegalArgumentException(
-                    "ExportOptions.targetFolderUri must point to a directory (SAF tree/document folder or file:// directory)\n" +
-                            "Maybe folder was deleted?"
+                    "ExportOptions.targetFolderUri must point to a directory (SAF tree/document folder or file:// directory). Maybe folder was deleted?"
                 )
             }
             return provided to fileName
         }
 
         // Default export directory under Documents/notable/<subfolder>
-        val subfolderPath = createSubfolderName(target)
+        val subfolderPath = createSubfolderName(target, format)
         val folderUri = getDefaultExportDirectoryUri(subfolderPath)
         return folderUri to fileName
     }
 
     /**
-     * Builds subfolder path relative to the export root ("notable").
-     * - For a Book: "<folderHierarchy>"
-     * - For a Page inside a book: "<folderHierarchy>"
-     * - For a Quick page: "<folderHierarchyFromPageParent?>"
+     * Builds a subfolder path relative to the "notable" export root.
      *
-     * Returns path without leading or trailing slashes. Returns empty string if nothing to add.
+     * Rules:
+     * - Book (PDF/XOPP): folder hierarchy of the book.
+     * - Book (PNG/JPEG): folder hierarchy + a folder for the book itself.
+     * - Page (in a book): folder hierarchy + a folder for the book itself.
+     * - Page (Quick Page): folder hierarchy of the page.
+     *
+     * @return A path without leading/trailing slashes, or an empty string.
      */
-    fun createSubfolderName(target: ExportTarget): String {
+    fun createSubfolderName(target: ExportTarget, format: ExportFormat): String {
+        // Helper to build a full folder hierarchy path from a parent folder ID.
         fun buildFolderPath(parentFolderId: String?): String {
             return parentFolderId?.let {
+                // Fetches folder hierarchy and joins their sanitized titles with "/".
                 getFolderList(context, it)
                     .reversed()
                     .joinToString("/") { folder -> sanitizeFileName(folder.title) }
@@ -256,21 +262,34 @@ class ExportEngine(
             is ExportTarget.Book -> {
                 val book = bookRepo.getById(target.bookId)
                     ?: run { log.e("Book ID not found"); return "" }
-                buildFolderPath(book.parentFolderId)
+
+                val basePath = buildFolderPath(book.parentFolderId)
+                val bookTitleFolder = sanitizeFileName(book.title)
+
+                // For image formats, create an extra subfolder named after the book.
+                if (format == ExportFormat.PNG || format == ExportFormat.JPEG) {
+                    listOfNotNull(basePath.takeIf { it.isNotEmpty() }, bookTitleFolder)
+                        .joinToString("/")
+                } else {
+                    basePath
+                }
             }
 
             is ExportTarget.Page -> {
                 val page = pageRepo.getById(target.pageId)
                     ?: run { log.e("Page ID not found"); return "" }
 
+                // Check if the page belongs to a book.
                 val book = page.notebookId?.let { bookRepo.getById(it) }
 
                 if (book != null) {
-                    val bookPath = buildFolderPath(book.parentFolderId)
-                    val bookTitle = sanitizeFileName(book.title)
-                    listOfNotNull(bookPath.takeIf { it.isNotEmpty() }, bookTitle)
+                    // Page is inside a book: create path from the book's hierarchy + book title.
+                    val basePath = buildFolderPath(book.parentFolderId)
+                    val bookTitleFolder = sanitizeFileName(book.title)
+                    listOfNotNull(basePath.takeIf { it.isNotEmpty() }, bookTitleFolder)
                         .joinToString("/")
                 } else {
+                    // This is a "Quick Page": use its own folder hierarchy.
                     buildFolderPath(page.parentFolderId)
                 }
             }
@@ -313,11 +332,11 @@ class ExportEngine(
                 if (book != null) {
                     // Page inside a book
                     val bookTitle = sanitizeFileName(book.title)
-                    val pageNumber = getPageNumber(page.notebookId, page.id)
-                    val pageToken = if ((pageNumber ?: 0) >= 1) "p$pageNumber" else "p?"
+                    val pageNumber = getPageNumber(page.notebookId, page.id)?.plus(1)
+                    val pageToken = if ((pageNumber ?: 0) >= 1) "p$pageNumber" else "p_"
                     "$bookTitle-$pageToken"
                 } else {
-                    val timeStamp = SimpleDateFormat.getDateTimeInstance().format(Date())
+                    val timeStamp = getReadableUtcTimestamp()
                     "quickpage-$timeStamp"
                 }
             }
@@ -502,7 +521,7 @@ class ExportEngine(
         try {
             val dest = createOrGetFileInDir(folderUri, displayName, mimeType, overwrite)
                 ?: throw IOException(
-                    "Unable to create or access destination file in target directory, $folderUri"
+                    "Unable to create or access destination file in target directory, $folderUri, file: $displayName"
                 )
 
             when (dest.scheme) {
@@ -549,6 +568,16 @@ class ExportEngine(
     }
 
     /* -------------------- Utilities -------------------- */
+
+    /**
+     * Gets the current time in UTC and formats it into a human-readable, filename-safe string.
+     * Example output: "2025-10-11_21-48"
+     */
+    fun getReadableUtcTimestamp(): String {
+        val currentUtcTime = ZonedDateTime.now()
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm")
+        return currentUtcTime.format(formatter)
+    }
 
     // Accepts SAF tree/document directory Uris OR file:// directory Uris
     private fun isDirectoryUri(uri: Uri): Boolean {
@@ -739,6 +768,7 @@ class ExportEngine(
     private fun listOfNotBlank(vararg parts: String): List<String> =
         parts.filter { it.isNotBlank() }
 
+    // Retrieves the 0-based page number of a specific page within a book.
     fun getPageNumber(bookId: String?, id: String): Int? =
         AppRepository(context).getPageNumber(bookId, id)
 }

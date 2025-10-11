@@ -67,11 +67,12 @@ fun sanitizeFileName(raw: String, maxLen: Int = 100): String {
     var name = Normalizer.normalize(raw, Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "") // remove diacritics
 
-    // Replace illegal filename characters with "_"
-    name = name.replace(Regex("""[\\/:*?"<>|]"""), "_")
+    // Replace illegal filename characters with " "
+    name = name.replace(Regex("""[\\/:*?"<>|]"""), " ")
 
-    // Collapse multiple underscores/spaces into one space
-    name = name.replace(Regex("[_ ]+"), " ").trim()
+    // Collapse multiple underscores & spaces into one
+    name = name.replace(Regex("[ ]+"), " ").trim()
+    name = name.replace(Regex("[_]+"), "_").trim()
 
     // Prevent names like ".hidden" by stripping leading dots
     name = name.trim('.')

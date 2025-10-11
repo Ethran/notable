@@ -37,7 +37,6 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.Log
-import kotlinx.coroutines.CoroutineScope
 
 
 @OptIn(ExperimentalComposeUiApi::class)

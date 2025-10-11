@@ -107,6 +107,16 @@ class AppRepository(val context: Context) {
         return BackgroundType.Companion.fromKey(book.defaultBackgroundType) == BackgroundType.AutoPdf
     }
 
+    /**
+     * Retrieves the 0-based index of a page within a notebook.
+     *
+     * @param notebookId The ID of the notebook containing the page. Can be null.
+     * @param pageId The ID of the page to find.
+     * @return The 0-based index of the page within the notebook's page list.
+     *         Returns -1 if the page is not found in the notebook.
+     *         Returns -2 if the `notebookId` is null.
+     *         Returns -3 if the notebook with the given `notebookId` is not found.
+     */
     fun getPageNumber(
         notebookId: String?, pageId: String
     ): Int {

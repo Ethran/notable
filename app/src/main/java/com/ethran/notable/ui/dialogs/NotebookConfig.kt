@@ -57,7 +57,6 @@ import com.ethran.notable.TAG
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.getLinkedFilesDir
-import com.ethran.notable.io.sanitizeFileName
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
