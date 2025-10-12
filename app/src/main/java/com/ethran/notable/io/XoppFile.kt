@@ -13,12 +13,9 @@ import androidx.core.net.toUri
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.A4_WIDTH
-import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Image
-import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
@@ -29,6 +26,7 @@ import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.ensureNotMainThread
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.w3c.dom.Document
@@ -60,11 +58,10 @@ private const val PRESSURE_FACTOR = 0.5f
 class XoppFile(
     private val context: Context,
     private val pageRepo: PageRepository = PageRepository(context),
-    private val bookRepo: BookRepository = BookRepository(context)
 ) {
+    private val log = ShipBook.getLogger("XoppFile")
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
     private val maxPressure = EpdController.getMaxTouchPressure()
-
 
     fun writeToXoppStream(target: ExportTarget, output: OutputStream) {
         // Build a temporary plain-XML file using existing writePage(), then gzip it into 'output'
@@ -192,13 +189,13 @@ class XoppFile(
             val bytes = inputStream?.readBytes() ?: return ""
             Base64.encodeToString(bytes, Base64.DEFAULT)
         } catch (e: SecurityException) {
-            Log.Companion.e("convertImageToBase64", "Permission denied: ${e.message}")
+            log.e("convertImageToBase64:" + "Permission denied: ${e.message}")
             ""
         } catch (e: FileNotFoundException) {
-            Log.Companion.e("convertImageToBase64", "File not found: ${e.message}")
+            log.e("convertImageToBase64:" + "File not found: ${e.message}")
             ""
         } catch (e: IOException) {
-            Log.Companion.e("convertImageToBase64", "I/O error: ${e.message}")
+            log.e("convertImageToBase64:" + "I/O error: ${e.message}")
             ""
         }
     }
@@ -230,37 +227,24 @@ class XoppFile(
      * @param context The application context.
      * @param uri The URI of the `.xopp` file to import.
      */
-    fun importBook(uri: Uri, parentFolderId: String?) {
-        Log.Companion.v(TAG, "Importing book from $uri, into $parentFolderId")
+    fun importBook(uri: Uri, savePageToDatabase: (PageContent) -> Unit) {
+        log.v("Importing book from $uri")
         ensureNotMainThread("xoppImportBook")
         val inputStream = context.contentResolver.openInputStream(uri) ?: return
         val xmlContent = extractXmlFromXopp(inputStream) ?: return
 
         val document = parseXml(xmlContent) ?: return
-        val bookTitle = getBookTitle(uri)
-
-        val book = Notebook(
-            title = bookTitle,
-            parentFolderId = parentFolderId,
-            defaultBackground = "blank",
-            defaultBackgroundType = "native"
-        )
-        bookRepo.createEmpty(book)
 
         val pages = document.getElementsByTagName("page")
 
         for (i in 0 until pages.length) {
             val pageElement = pages.item(i) as Element
-            val page = Page(notebookId = book.id)
-            pageRepo.create(page)
-            parseStrokes(context, pageElement, page)
-            parseImages(context, pageElement, page)
-
-            bookRepo.addPage(book.id, page.id)
+            val page = Page()
+            val strokes = parseStrokes(pageElement, page)
+            val images = parseImages(pageElement, page)
+            savePageToDatabase(PageContent(page, strokes, images))
         }
-        Log.Companion.i(
-            TAG, "Successfully imported book '${book.title}' with ${pages.length} pages."
-        )
+        log.i("Successfully imported book with ${pages.length} pages.")
     }
 
     /**
@@ -271,7 +255,7 @@ class XoppFile(
             GzipCompressorInputStream(BufferedInputStream(inputStream)).bufferedReader()
                 .use { it.readText() }
         } catch (e: IOException) {
-            Log.Companion.e(TAG, "Error extracting XML from .xopp file: ${e.message}")
+            log.e("Error extracting XML from .xopp file: ${e.message}")
             null
         }
     }
@@ -286,7 +270,7 @@ class XoppFile(
             val builder = factory.newDocumentBuilder()
             builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
         } catch (e: Exception) {
-            Log.Companion.e(TAG, "Error parsing XML: ${e.message}")
+            log.e("Error parsing XML: ${e.message}")
             null
         }
     }
@@ -294,8 +278,7 @@ class XoppFile(
     /**
      * Extracts strokes from a page element and saves them.
      */
-    private fun parseStrokes(context: Context, pageElement: Element, page: Page) {
-        val strokeRepo = AppDatabase.Companion.getDatabase(context).strokeDao()
+    private fun parseStrokes(pageElement: Element, page: Page): List<Stroke> {
         val strokeNodes = pageElement.getElementsByTagName("stroke")
         val strokes = mutableListOf<Stroke>()
 
@@ -332,7 +315,7 @@ class XoppFile(
                         tiltY = 0,
                     )
                 } catch (e: Exception) {
-                    Log.Companion.e(TAG, "Error parsing stroke point: ${e.message}")
+                    log.e("Error parsing stroke point: ${e.message}")
                     null
                 }
             }
@@ -370,17 +353,14 @@ class XoppFile(
             )
             strokes.add(stroke)
         }
-        strokeRepo.create(strokes)
+        return strokes
     }
 
 
     /**
      * Extracts images from a page element and saves them.
      */
-    private fun parseImages(
-        context: Context, pageElement: Element, page: Page
-    ) {
-        val imageRepo = AppDatabase.Companion.getDatabase(context).ImageDao()
+    private fun parseImages(pageElement: Element, page: Page): List<Image> {
         val imageNodes = pageElement.getElementsByTagName("image")
         val images = mutableListOf<Image>()
 
@@ -416,14 +396,10 @@ class XoppFile(
                 images.add(image)
 
             } catch (e: Exception) {
-                Log.Companion.e("ImageProcessing", "Error parsing image: ${e.message}")
+                log.e("ImageProcessing: Error parsing image: ${e.message}")
             }
         }
-
-        // Save images in the repository
-        if (images.isNotEmpty()) {
-            imageRepo.create(images)
-        }
+        return images
     }
 
     /**
@@ -451,18 +427,11 @@ class XoppFile(
             // Return the file URI
             Uri.fromFile(outputFile)
         } catch (e: IOException) {
-            Log.Companion.e(TAG, "Error decoding and saving image: ${e.message}")
+            log.e("Error decoding and saving image: ${e.message}")
             null
         }
     }
 
-    /**
-     * Extracts the book title from a file URI.
-     */
-    private fun getBookTitle(uri: Uri): String {
-        return uri.lastPathSegment?.substringAfterLast("/")?.removeSuffix(".xopp")
-            ?: "Imported Book"
-    }
 
     /**
      * Parses an Xournal++ color string to a Compose Color.
@@ -481,7 +450,7 @@ class XoppFile(
                     ("#" + colorString.substring(7, 9) + colorString.substring(1, 7)).toColorInt()
                 )
                 else {
-                    Log.Companion.e(TAG, "Unknown color: $colorString")
+                    log.e("Unknown color: $colorString")
                     Color.Companion.Black
                 }
             }
@@ -514,6 +483,21 @@ class XoppFile(
                     (argb shr 24) and 0xFF  // Alpha
                 )
             }
+        }
+    }
+
+    companion object {
+        // Helper functions to determine file type
+        fun isXoppFile(mimeType: String?, fileName: String?): Boolean {
+            val isXoppFile = mimeType in listOf(
+                "application/x-xopp",
+                "application/gzip",
+                "application/octet-stream"
+            ) ||
+                    fileName?.endsWith(".xopp", ignoreCase = true) == true
+
+            Log.d("XoppFile", "isXoppFile($isXoppFile): $mimeType, $fileName")
+            return isXoppFile
         }
     }
 }

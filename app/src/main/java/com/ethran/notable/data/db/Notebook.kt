@@ -116,11 +116,11 @@ class BookRepository(context: Context) {
         db.setOpenPageId(id, pageId)
     }
 
-    fun addPage(id: String, pageId: String, index: Int? = null) {
-        val pageIds = (db.getById(id) ?: return).pageIds.toMutableList()
+    fun addPage(bookId: String, pageId: String, index: Int? = null) {
+        val pageIds = (db.getById(bookId) ?: return).pageIds.toMutableList()
         if (index != null) pageIds.add(index, pageId)
         else pageIds.add(pageId)
-        db.setPageIds(id, pageIds)
+        db.setPageIds(bookId, pageIds)
     }
 
     fun removePage(id: String, pageId: String) {

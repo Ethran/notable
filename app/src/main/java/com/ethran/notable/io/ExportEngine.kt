@@ -28,6 +28,7 @@ import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.Log
@@ -769,6 +770,13 @@ class ExportEngine(
         parts.filter { it.isNotBlank() }
 
     // Retrieves the 0-based page number of a specific page within a book.
-    fun getPageNumber(bookId: String?, id: String): Int? =
-        AppRepository(context).getPageNumber(bookId, id)
+    fun getPageNumber(bookId: String?, id: String): Int? {
+        return try {
+            AppRepository(context).getPageNumber(bookId, id)
+        }catch (e: Exception){
+            logAndShowError("getPageNumber", "${e.message}")
+            0
+        }
+    }
+
 }

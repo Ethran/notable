@@ -53,13 +53,16 @@ class SnackState {
     // this does work, but I have doubts if it is a proper way for doing it
     // Register Observers for Global Actions
     companion object {
-        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 5)
-        val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 5)
-        suspend fun logAndShowError(reason: String, message: String) {
+        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 10)
+        val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 10)
+        fun logAndShowError(reason: String, message: String) {
             Log.e(reason, message)
-            globalSnackFlow.emit(SnackConf(text = message, duration = 3000))
+            // It will succeed if the buffer is not full.
+            val emitted = globalSnackFlow.tryEmit(SnackConf(text = message, duration = 3000))
+            if (!emitted) {
+                Log.e("SnackState", "Failed to emit snackbar, buffer is full.")
+            }
         }
-
     }
 
     fun registerGlobalSnackObserver() {

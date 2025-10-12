@@ -57,8 +57,8 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.ui.PageMenu
 import com.ethran.notable.editor.ui.toolbar.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
-import com.ethran.notable.io.XoppFile
-import com.ethran.notable.io.handlePdfImport
+import com.ethran.notable.io.ImportEngine
+import com.ethran.notable.io.ImportOptions
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
@@ -340,8 +340,6 @@ fun NotebookGrid(
     bookRepository: BookRepository,
     folderId: String?
 ) {
-    val snackManager = LocalSnackContext.current
-
     var importInProgress = false
 
     Text(text = "Notebooks")
@@ -354,42 +352,11 @@ fun NotebookGrid(
     ) {
         item {
             NotebookImportPanel(
-                onPdfFile = { uri, copy ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        val snackText = if (copy) {
-                            "Importing PDF background (copy)"
-                        } else {
-                            "Setting up observer for PDF"
-                        }
-
-                        importInProgress = true
-                        snackManager.showSnackDuring(snackText) {
-                            handlePdfImport(
-                                context, folderId, uri, copy
-                            )
-                        }
-                        importInProgress = false
-                    }
-                },
                 context = context,
-                onXoppFile = { uri ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        importInProgress = true
-                        snackManager.showSnackDuring("importing from xopp file") {
-                            XoppFile(context).importBook(uri, folderId)
-                        }
-                        importInProgress = false
-                    }
-                },
-                onCreateNew = {
-                    bookRepository.create(
-                        Notebook(
-                            parentFolderId = folderId,
-                            defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
-                            defaultBackgroundType = BackgroundType.Native.key
-                        )
-                    )
-                },
+                bookRepository = bookRepository,
+                parentFolderId = folderId,
+                onStartImport = { importInProgress = true },
+                onEndImport = { importInProgress = false }
             )
         }
         if (books?.isNotEmpty() == true) {
@@ -422,11 +389,58 @@ fun NotebookGrid(
 @Composable
 fun NotebookImportPanel(
     context: Context,
-    onPdfFile: (Uri, Boolean) -> Unit,
-    onXoppFile: (Uri) -> Unit,
-    onCreateNew: () -> Unit,
+    bookRepository: BookRepository,
+    parentFolderId: String?,
+    onStartImport: () -> Unit,
+    onEndImport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val snackManager = LocalSnackContext.current
+
+    fun onCreateNew() {
+        bookRepository.create(
+            Notebook(
+                parentFolderId = parentFolderId,
+                defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
+                defaultBackgroundType = BackgroundType.Native.key
+            )
+        )
+    }
+
+    fun onPdfFile(uri: Uri, copy: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val snackText = if (copy) {
+                "Importing PDF background (copy)"
+            } else {
+                "Setting up observer for PDF"
+            }
+            onStartImport()
+            snackManager.runWithSnack(snackText) {
+                ImportEngine(context).import(
+                    uri,
+                    ImportOptions(folderId = parentFolderId, linkToExternalFile = copy)
+                )
+            }
+            onEndImport()
+        }
+    }
+
+    fun onXoppFile(uri: Uri) {
+        CoroutineScope(Dispatchers.IO).launch {
+            onStartImport
+            snackManager.showSnackDuring("importing from xopp file") {
+                ImportEngine(context).import(
+                    uri,
+                    ImportOptions(folderId = parentFolderId)
+                )
+            }
+            onEndImport()
+        }
+    }
+
+
+
+
 
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
 
@@ -485,6 +499,7 @@ fun NotebookImportPanel(
                     return@rememberLauncherForActivityResult
                 }
                 try {
+
                     val mimeType = context.contentResolver.getType(uri)
                     Log.d(TAG, "Selected file mimeType: $mimeType, uri: $uri")
                     if (mimeType == "application/pdf" || uri.toString()

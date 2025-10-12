@@ -34,6 +34,8 @@ import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
 import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.ui.LocalSnackContext
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.Log
@@ -54,7 +56,13 @@ fun EditorView(
     if (appRepository.pageRepository.getById(pageId) == null) {
         if (bookId != null) {
             // clean the book
-            Log.i(TAG, "Cleaning book")
+            Log.i(TAG, "Could not find page, Cleaning book")
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    text = "Could not find page, cleaning book",
+                    duration = 4000
+                )
+            )
             appRepository.bookRepository.removePage(bookId, pageId)
         }
         navController.navigate("library")
