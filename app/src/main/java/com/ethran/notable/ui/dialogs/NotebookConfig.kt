@@ -48,19 +48,21 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.net.toUri
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
-
 
 @ExperimentalComposeUiApi
 @Composable
@@ -204,6 +206,8 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+
+                    /* -------------- Title Field -----------*/
                     Row {
                         Text(
                             text = "Title:",
@@ -243,7 +247,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
 
                         )
                     }
-
+                    /* -------------- Template selection -----------*/
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -284,6 +288,21 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                         }
                     }
 
+                    /* -------------- Linking to external files -----------*/
+
+
+                    val defaultPath = getLinkedFilesDir().toUri().toString()
+                    NotebookLinkRow(
+                        isLinkedInit = book!!.linkedExternalUri != null,
+                        linkedUriInit = book!!.linkedExternalUri,
+                        defaultPath = defaultPath,
+                        onLinkChanged = { newUri ->
+                            val updated = book!!.copy(linkedExternalUri = newUri)
+                            bookRepository.update(updated)
+                        }
+                    )
+
+                    /* -------------- Other book info -----------*/
                     Text("Pages: ${book!!.pageIds.size}")
                     Text("Size: TODO!")
                     Row {
@@ -337,5 +356,57 @@ fun ActionButton(text: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Text(text, fontWeight = FontWeight.Bold)
+    }
+}
+
+
+@Composable
+fun NotebookLinkRow(
+    isLinkedInit: Boolean,
+    linkedUriInit: String?,
+    defaultPath: String,
+    onLinkChanged: (String?) -> Unit
+) {
+    var isLinked by remember { mutableStateOf(isLinkedInit) }
+
+    val linkText = linkedUriInit?.let {
+        if (it.length > 32) "${it.take(5)}...${it.takeLast(7)}/\${bookTitle}" else it
+    } ?: "none"
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Linked to: $linkText",
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (isLinked) {
+            Button(
+                onClick = {
+                    isLinked = false
+                    onLinkChanged(null)
+                },
+                modifier = Modifier
+                    .weight(0.3f, fill = false)
+            ) {
+                Text("Unlink")
+            }
+        } else {
+            Button(
+                onClick = {
+                    isLinked = true
+                    onLinkChanged(defaultPath)
+                },
+                modifier = Modifier
+                    .weight(0.3f, fill = false)
+            ) {
+                Text("Link")
+            }
+        }
     }
 }

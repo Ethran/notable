@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -52,8 +53,16 @@ class SnackState {
     // this does work, but I have doubts if it is a proper way for doing it
     // Register Observers for Global Actions
     companion object {
-        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 5)
-        val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 5)
+        val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 10)
+        val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 10)
+        fun logAndShowError(reason: String, message: String) {
+            Log.e(reason, message)
+            // It will succeed if the buffer is not full.
+            val emitted = globalSnackFlow.tryEmit(SnackConf(text = message, duration = 3000))
+            if (!emitted) {
+                Log.e("SnackState", "Failed to emit snackbar, buffer is full.")
+            }
+        }
     }
 
     fun registerGlobalSnackObserver() {

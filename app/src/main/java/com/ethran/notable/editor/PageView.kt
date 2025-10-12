@@ -38,6 +38,7 @@ import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.onyx.android.sdk.extension.isNotNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -130,7 +131,16 @@ class PageView(
     private var dbImages = AppDatabase.getDatabase(context).ImageDao()
 
     val currentPageNumber: Int
-        get() = appRepository.getPageNumber(pageFromDb?.notebookId, id)
+        get() = try {
+            appRepository.getPageNumber(pageFromDb?.notebookId, id)
+        } catch (e: Exception) {
+            logAndShowError(
+                "PageView.currentPageNumber",
+                "Error getting page number: ${e.message}"
+            )
+            -1
+        }
+
 
     /*
         If pageNumber is -1, its assumed that the background is image type.

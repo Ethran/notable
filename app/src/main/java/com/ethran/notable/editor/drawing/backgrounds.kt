@@ -372,7 +372,7 @@ fun drawBg(
         is BackgroundType.AutoPdf -> {
             if (page == null) return
             val pageNumber = page.currentPageNumber
-            if (pageNumber < getPdfPageCount(background)) drawPdfPage(
+            if (0 <= pageNumber && pageNumber < getPdfPageCount(background)) drawPdfPage(
                 canvas, background, pageNumber, scroll, page, scale
             )
             else {

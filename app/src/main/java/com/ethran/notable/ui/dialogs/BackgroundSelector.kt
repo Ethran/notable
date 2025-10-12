@@ -769,7 +769,7 @@ fun PageNumberSelector(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(name)
-                        Log.e(TAG, "PageNumberSelector: $isSelected, $currentBackgroundType")
+                        Log.d(TAG, "PageNumberSelector: $isSelected, $currentBackgroundType")
                     }
                 }
             }

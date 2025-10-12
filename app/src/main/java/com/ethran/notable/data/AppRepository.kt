@@ -107,11 +107,25 @@ class AppRepository(val context: Context) {
         return BackgroundType.Companion.fromKey(book.defaultBackgroundType) == BackgroundType.AutoPdf
     }
 
-    fun getPageNumber(
-        notebookId: String?, pageId: String
-    ): Int {
-        if (notebookId == null) return -2
-        val book = bookRepository.getById(notebookId = notebookId) ?: return -3
+    /**
+     * Retrieves the 0-based index of a page within a notebook.
+     *
+     * @param notebookId The ID of the notebook containing the page.
+     * @param pageId The ID of the page to find.
+     * @return The 0-based index of the page within the notebook's page list. Returns -1 if the page is not found.
+     * @throws IllegalArgumentException if the `notebookId` is null.
+     * @throws NoSuchElementException if the notebook with the given `notebookId` is not found.
+     */
+    fun getPageNumber(notebookId: String?, pageId: String): Int {
+        // Validate that notebookId is not null.
+        requireNotNull(notebookId) { "Notebook ID cannot be null." }
+
+        // Fetch the book or throw an exception if it doesn't exist.
+        val book = bookRepository.getById(notebookId)
+            ?: throw NoSuchElementException("Notebook with ID '$notebookId' not found.")
+
+        // Return the index of the page. indexOf() returns -1 if the element is not found, which is a standard convention.
         return book.pageIds.indexOf(pageId)
     }
+
 }
