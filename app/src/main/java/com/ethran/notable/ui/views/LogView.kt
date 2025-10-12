@@ -33,7 +33,6 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
-import androidx.compose.material.Switch
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -408,7 +407,7 @@ fun BugReportScreen(navController: NavController) {
         Spacer(Modifier.height(8.dp))
         // Include logs toggle
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(
+            Checkbox(
                 checked = includeLogs,
                 onCheckedChange = { includeLogs = it }
             )
