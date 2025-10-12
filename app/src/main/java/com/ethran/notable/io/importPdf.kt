@@ -14,8 +14,7 @@ import java.io.File
 
 fun isPdfFile(mimeType: String?, fileName: String?): Boolean {
     return mimeType == "application/pdf" || fileName?.endsWith(
-        ".pdf",
-        ignoreCase = true
+        ".pdf", ignoreCase = true
     ) == true
 }
 
@@ -49,7 +48,8 @@ fun importPdf(
         val page = Page(
             notebookId = options.saveToBookId,
             background = fileToSave.toString(),
-            backgroundType = if (options.linkToExternalFile) BackgroundType.Pdf(i).key else BackgroundType.AutoPdf.key
+            backgroundType = if (options.linkToExternalFile) BackgroundType.AutoPdf.key
+            else BackgroundType.Pdf(i).key
         )
         savePageToDatabase(PageContent(page, emptyList(), emptyList()))
     }

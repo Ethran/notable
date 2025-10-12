@@ -418,7 +418,7 @@ fun NotebookImportPanel(
             snackManager.runWithSnack(snackText) {
                 ImportEngine(context).import(
                     uri,
-                    ImportOptions(folderId = parentFolderId, linkToExternalFile = copy)
+                    ImportOptions(folderId = parentFolderId, linkToExternalFile = !copy)
                 )
             }
             onEndImport()
@@ -427,7 +427,7 @@ fun NotebookImportPanel(
 
     fun onXoppFile(uri: Uri) {
         CoroutineScope(Dispatchers.IO).launch {
-            onStartImport
+            onStartImport()
             snackManager.showSnackDuring("importing from xopp file") {
                 ImportEngine(context).import(
                     uri,
@@ -439,13 +439,11 @@ fun NotebookImportPanel(
     }
 
 
-
-
-
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
 
     showPdfImportChoiceDialog?.let { uri ->
-        PdfImportChoiceDialog(uri = uri, onCopy = { uri ->
+        PdfImportChoiceDialog(
+            uri = uri, onCopy = { uri ->
             showPdfImportChoiceDialog = null
             onPdfFile(uri, /* copy= */ true)
         }, onObserve = { uri ->

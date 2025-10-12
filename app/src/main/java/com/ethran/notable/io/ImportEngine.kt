@@ -152,8 +152,6 @@ class ImportEngine(
             defaultBackgroundType = BackgroundType.AutoPdf.key
         )
         bookRepo.createEmpty(book)
-        log.e("notebookId: ${book.id}")
-
 
         val strokeRepo = AppDatabase.Companion.getDatabase(context).strokeDao()
         val imageRepo = AppDatabase.Companion.getDatabase(context).ImageDao()

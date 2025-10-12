@@ -773,7 +773,7 @@ class ExportEngine(
     fun getPageNumber(bookId: String?, id: String): Int? {
         return try {
             AppRepository(context).getPageNumber(bookId, id)
-        }catch (e: Exception){
+        } catch (e: Exception) {
             logAndShowError("getPageNumber", "${e.message}")
             0
         }
