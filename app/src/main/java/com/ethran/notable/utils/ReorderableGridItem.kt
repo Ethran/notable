@@ -69,6 +69,7 @@ fun ReorderableGridItem(
     itemId: String,
     index: Int,
     gridState: LazyGridState,
+    isEnabled: Boolean = true, // This is the parameter we will use
     state: ReorderableGridState,
     onDrop: (fromIndex: Int, toInsertionIndex: Int, itemId: String) -> Unit,
     content: @Composable (Modifier) -> Unit
@@ -79,7 +80,8 @@ fun ReorderableGridItem(
     var lastItemOriginInRoot: IntOffset? by remember { mutableStateOf(null) }
     var lastItemSize: IntSize? by remember { mutableStateOf(null) }
 
-    val gestureMod = Modifier
+    // This modifier will always be applied to get the item's position.
+    val positioningModifier = Modifier
         .onGloballyPositioned { coords ->
             val b = coords.boundsInRoot()
             val origin = IntOffset(b.left.roundToInt(), b.top.roundToInt())
@@ -88,13 +90,16 @@ fun ReorderableGridItem(
             lastItemOriginInRoot = origin
             lastItemSize = size
         }
-        .pointerInput(itemId) {
+
+    // The gesture modifier will only be applied if isEnabled is true.
+    val gestureModifier = if (isEnabled) {
+        Modifier.pointerInput(Unit) { // Use Unit as the key if it doesn't need to be re-evaluated
             detectDragGesturesAfterLongPress(
                 onDragStart = {
                     state.draggingId = itemId
                     state.fromIndex = index
                     state.dragDelta = IntOffset.Zero
-                    state.hoverInsertionIndex = index // Start with bar before this
+                    state.hoverInsertionIndex = index
                     setAnimationMode(true)
                 },
                 onDragCancel = {
@@ -135,8 +140,12 @@ fun ReorderableGridItem(
                 }
             }
         }
+    } else {
+        Modifier // Return an empty modifier if not enabled.
+    }
 
-    content(gestureMod)
+    // Chain the positioning and gesture modifiers together.
+    content(positioningModifier.then(gestureModifier))
 }
 
 /**
