@@ -116,6 +116,7 @@ class AppRepository(val context: Context) {
      * @throws IllegalArgumentException if the `notebookId` is null.
      * @throws NoSuchElementException if the notebook with the given `notebookId` is not found.
      */
+    // TODO: Improve handling errors. current function is not easily usable
     fun getPageNumber(notebookId: String?, pageId: String): Int {
         // Validate that notebookId is not null.
         requireNotNull(notebookId) { "Notebook ID cannot be null." }

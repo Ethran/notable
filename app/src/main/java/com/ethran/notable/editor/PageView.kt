@@ -261,7 +261,8 @@ class PageView(
                     DrawCanvas.forceUpdate.emit(null)
                 }
                 logCache.d("Loaded page from persistent layer $id")
-                PageDataManager.isPageLoaded(id)
+                if (!PageDataManager.isPageLoaded(id))
+                    logCache.e("Page should be loaded, but it is not. $id")
                 coroutineScope.launch(Dispatchers.Default) {
                     delay(10)
                     PageDataManager.reduceCache(20)
@@ -483,8 +484,7 @@ class PageView(
         val width = windowedBitmap.width
         val height = windowedBitmap.height
         // Shift the existing bitmap content
-        val shiftedBitmap =
-            createBitmap(width, height, windowedBitmap.config!!)
+        val shiftedBitmap = createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
         shiftedCanvas.drawColor(Color.RED) //for debugging.
         shiftedCanvas.drawBitmap(windowedBitmap, -movement.x, -movement.y, null)
@@ -669,8 +669,7 @@ class PageView(
         zoomLevel.value = newZoom
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
-        if (scaleFactor < 1f)
-            redrawOutsideRect(dstRect.toRect(), screenW, screenH)
+        if (scaleFactor < 1f) redrawOutsideRect(dstRect.toRect(), screenW, screenH)
 
         persistBitmapDebounced()
         saveToPersistLayer()
@@ -699,10 +698,7 @@ class PageView(
         // Uncovered bottom band
         if (dstRect.bottom < screenH) {
             val r = Rect(
-                0,
-                (dstRect.bottom - scaledOverlap).coerceAtLeast(0),
-                screenW,
-                screenH
+                0, (dstRect.bottom - scaledOverlap).coerceAtLeast(0), screenW, screenH
             )
             if (!r.isEmpty) drawAreaScreenCoordinates(r)
         }

@@ -18,10 +18,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -79,6 +81,8 @@ fun PagesView(navController: NavController, bookId: String) {
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
+    // --- 1. State for Edit Mode ---
+    var isEditMode by rememberSaveable { mutableStateOf(false) }
 
     val reorderState = rememberReorderableGridState()
     val density = LocalDensity.current
@@ -119,6 +123,11 @@ fun PagesView(navController: NavController, bookId: String) {
                     navController.navigate("library" + if (it == null) "" else "?folderId=$it")
                 }
                 Spacer(modifier = Modifier.weight(1f))
+
+                // --- 2. Add EditModeSwitch and control visibility of Jump pill ---
+                EditModeSwitch(isEditMode = isEditMode, onToggle = { isEditMode = it })
+                Spacer(modifier = Modifier.width(10.dp))
+
                 val openId = openPageId
                 if (openId != null) {
                     JumpToCurrentPill {
@@ -164,6 +173,8 @@ fun PagesView(navController: NavController, bookId: String) {
                         index = pageIndex,
                         gridState = gridState,
                         state = reorderState,
+                        // --- 3. Disable reordering when not in edit mode ---
+                        isEnabled = isEditMode,
                         onDrop = { _, to, id ->
                             appRepository.bookRepository.changePageIndex(bookId, id, to)
                         }
@@ -172,6 +183,8 @@ fun PagesView(navController: NavController, bookId: String) {
                             pageId = pageId,
                             pageIndex = pageIndex,
                             isOpen = isOpen,
+                            // --- 4. Pass edit mode state to PageCard ---
+                            isEditMode = isEditMode,
                             isReorderDragging = reorderState.draggingId == null,
                             touchModifier = touchMod,
                             onOpen = { navController.navigate("books/$bookId/pages/$pageId") },
@@ -298,5 +311,34 @@ private fun JumpToCurrentPill(onClick: () -> Unit) {
             ) { onClick() }
     ) {
         Text("Jump to current", color = Color.White)
+    }
+}
+
+/**
+ * A simple switch for toggling edit mode.
+ */
+@Composable
+private fun EditModeSwitch(
+    isEditMode: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (isEditMode) Color.Black else Color.White)
+            .border(1.dp, Color.Black, RoundedCornerShape(16.dp))
+            .clickable { onToggle(!isEditMode) }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Text("Edit Mode", color = if (isEditMode) Color.White else Color.Black)
+        Spacer(Modifier.width(8.dp))
+        // Simple visual indicator for the switch state
+        Box(
+            Modifier
+                .size(16.dp)
+                .background(if (isEditMode) Color.Green else Color.White, CircleShape)
+                .border(1.dp, Color.Black, CircleShape)
+        )
     }
 }

@@ -36,6 +36,7 @@ fun PageCard(
     pageId: String,
     pageIndex: Int,
     isOpen: Boolean,
+    isEditMode: Boolean,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     onDuplicate: () -> Unit,
@@ -82,25 +83,26 @@ fun PageCard(
                 color = Color.White
             )
         }
-
-        // Bottom-right actions
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconPill(icon = FeatherIcons.Trash, contentDesc = "Delete page") {
-                onDelete()
-            }
-            IconPill(icon = FeatherIcons.Copy, contentDesc = "Duplicate page") {
-                onDuplicate()
-            }
-            IconPill(
-                icon = FeatherIcons.PlusCircle, contentDesc = "Add page after"
+        if (isEditMode) {
+            // Bottom-right actions
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                onAddAfter()
+                IconPill(icon = FeatherIcons.Trash, contentDesc = "Delete page") {
+                    onDelete()
+                }
+                IconPill(icon = FeatherIcons.Copy, contentDesc = "Duplicate page") {
+                    onDuplicate()
+                }
+                IconPill(
+                    icon = FeatherIcons.PlusCircle, contentDesc = "Add page after"
+                ) {
+                    onAddAfter()
+                }
             }
         }
     }
