@@ -71,6 +71,8 @@ class ExportEngine(
     ): String {
         // prepare file name and folder
         val (folderUri, baseFileName) = createFileNameAndFolder(target, format, options)
+        // TODO: Retrieve all necessary data from the target, so that specific format exporter does not need to handle reading from db.
+        //       For book it should be done page by page.
         return when (format) {
             ExportFormat.PDF -> exportAsPdf(target, folderUri, baseFileName, options)
             ExportFormat.PNG, ExportFormat.JPEG -> exportAsImages(
