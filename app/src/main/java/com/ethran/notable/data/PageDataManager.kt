@@ -12,6 +12,11 @@ import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.getBackgroundType
+import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
+import com.ethran.notable.data.model.BackgroundType.CoverImage
+import com.ethran.notable.data.model.BackgroundType.ImageRepeating
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
@@ -231,12 +236,36 @@ object PageDataManager {
         }
     }
 
+    private fun preLoadBackground(appRepository: AppRepository, pageId: String) {
+        val pageFromDb = appRepository.pageRepository.getById(pageId) ?: return
+        val backgroundType = pageFromDb.getBackgroundType()
+        val background = pageFromDb.background
+        val pageNumber = when (backgroundType) {
+            is BackgroundType.Pdf -> backgroundType.page
+            is BackgroundType.AutoPdf -> backgroundType.getPage(
+                appRepository, pageFromDb.notebookId, pageId
+            ) ?: return
+
+            BackgroundType.Native -> return
+            BackgroundType.Image, ImageRepeating, CoverImage -> -1
+        }
+        val value = CachedBackground(background, pageNumber, 1f)
+        log.i("Preloaded background: $value")
+        val observeBg = appRepository.isObservable(pageFromDb.notebookId)
+        setBackground(pageId, value, observeBg)
+    }
+
     private suspend fun loadPageFromDb(
         appRepository: AppRepository, coroutineScope: CoroutineScope, pageId: String
     ) {
         try {
             log.d("Loading page $pageId")
 //            sleep(5000)
+            coroutineScope.launch {
+                log.d("Preloading background for page $pageId")
+                preLoadBackground(appRepository, pageId)
+            }
+
             val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
             // What will happened if page isn't in repository?
             cacheStrokes(pageId, pageWithStrokes.strokes)
@@ -517,10 +546,23 @@ object PageDataManager {
         }
     }
 
+    /**
+     * Retrieves the cached background for a specific page.
+     *
+     * If a background is associated with the page and is present in the cache, it returns the
+     * [CachedBackground] object.
+     *
+     * If no background is found for the given `pageId`, it returns a default, empty
+     * [CachedBackground] object to prevent null pointer exceptions downstream.
+     *
+     * @param pageId The unique identifier of the page for which to retrieve the background.
+     * @return The [CachedBackground] associated with the page, or a default empty instance if not found.
+     */
     fun getBackground(pageId: String): CachedBackground {
         return synchronized(accessLock) {
             val key = pageToBackgroundKey[pageId]
             val bg = if (key != null) backgroundCache[key] else null
+            log.d("Background for page $pageId: $bg")
             bg ?: CachedBackground("", 0, 1.0f)
         }
     }

@@ -1,6 +1,8 @@
 package com.ethran.notable.data.model
 
 import com.ethran.notable.TAG
+import com.ethran.notable.data.AppRepository
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import io.shipbook.shipbooksdk.Log
 
 sealed class BackgroundType(val key: String, val folderName: String) {
@@ -16,7 +18,17 @@ sealed class BackgroundType(val key: String, val folderName: String) {
     // Static page of pdf
     data class Pdf(val page: Int) : BackgroundType("pdf$page", "pdfs")
 
-
+    fun AutoPdf.getPage(appRepository: AppRepository, bookId: String?, pageId: String): Int? {
+        if (bookId == null) return 0
+        return try {
+            appRepository.getPageNumber(bookId, pageId)
+        } catch (e: Exception) {
+            logAndShowError(
+                "PageView.currentPageNumber", "Error getting page number: ${e.message}"
+            )
+            null
+        }
+    }
     companion object {
         fun fromKey(key: String): BackgroundType = when {
             key == Image.key -> Image
