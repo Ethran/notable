@@ -108,7 +108,7 @@ class PageView(
             PageDataManager.setPageScroll(id, value)
         }
 
-    val scrollable: Boolean
+    val isTransformationAllowed: Boolean
         get() = when (pageFromDb?.backgroundType) {
             "native", null -> true
             "coverImage" -> false
