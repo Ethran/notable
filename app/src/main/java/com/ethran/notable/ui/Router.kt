@@ -90,32 +90,39 @@ fun Router() {
         composable(
             route = "books/{bookId}/pages/{pageId}",
             arguments = listOf(
-                navArgument("bookId") {
-                    /* configuring arguments for navigation */
-                    type = NavType.StringType
-                },
-                navArgument("pageId") {
-                    type = NavType.StringType
-                },
+                navArgument("bookId") { type = NavType.StringType },
+                navArgument("pageId") { type = NavType.StringType },
             ),
-        ) {
+        ) { backStackEntry ->
+            val bookId = backStackEntry.arguments?.getString("bookId")!!
+            // read last pageId saved in savedStateHandle or start argument
+            val initialPageId = backStackEntry.savedStateHandle.get<String>("pageId")
+                ?: backStackEntry.arguments?.getString("pageId")!!
+
+            // make sure savedStateHandle has something set (on first access)
+            backStackEntry.savedStateHandle["pageId"] = initialPageId
+
             EditorView(
                 navController = navController,
-                bookId = it.arguments?.getString("bookId")!!,
-                pageId = it.arguments?.getString("pageId")!!,
-            )
+                bookId = bookId,
+                pageId = initialPageId,
+                onPageChange = { newPageId ->
+                    // SAVE new pageId in savedStateHandle - do not call navigate
+                    backStackEntry.savedStateHandle["pageId"] = newPageId
+                    logRouter.d("Editor changed page -> saved pageId=$newPageId (no navigate, no recreate)")
+                })
         }
         composable(
             route = "pages/{pageId}",
             arguments = listOf(navArgument("pageId") {
                 type = NavType.StringType
             }),
-        ) {
+        ) { backStackEntry ->
             EditorView(
                 navController = navController,
                 bookId = null,
-                pageId = it.arguments?.getString("pageId")!!,
-            )
+                pageId = backStackEntry.arguments?.getString("pageId")!!,
+                onPageChange = { logRouter.e("onPageChange for quickPages! $it") })
         }
         composable(
             route = "books/{bookId}/pages",
@@ -162,9 +169,7 @@ fun Router() {
                     detectTapGestures(
                         onDoubleTap = {
                             isQuickNavOpen = true
-                        }
-                    )
-                }
-        )
+                        })
+                })
     }
 }

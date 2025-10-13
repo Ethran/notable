@@ -58,7 +58,8 @@ fun FloatingEditorView(
                             EditorView(
                                 navController = navController,
                                 bookId = null,
-                                pageId = pageId
+                                pageId = pageId,
+                                onPageChange = { TODO() }
                             )
                         } else if (bookId != null) {
                             // get first page of notebook and use it as pageId
@@ -76,13 +77,15 @@ fun FloatingEditorView(
                                 EditorView(
                                     navController = navController,
                                     bookId = bookId,
-                                    pageId = page.id
+                                    pageId = page.id,
+                                    onPageChange = { TODO() }
                                 )
                             } else {
                                 EditorView(
                                     navController = navController,
                                     bookId = bookId,
-                                    pageId = firstPageId
+                                    pageId = firstPageId,
+                                    onPageChange = { TODO() }
                                 )
                             }
 
