@@ -539,6 +539,7 @@ class DrawCanvas(
 
         coroutineScope.launch {
             clearPageSignal.collect {
+                require(!state.isDrawing) {"Cannot clear page in drawing mode"}
                 logCanvasObserver.v("Clear page signal!")
                 cleanAllStrokes(page, history)
             }
