@@ -141,7 +141,7 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-compat'
     }
     // newest: 1.5.0.4, can't update, as onyxsdk-geometry is not available.
-    implementation('com.onyx.android.sdk:onyxsdk-pen:1.4.12') {
+    implementation('com.onyx.android.sdk:onyxsdk-pen:1.4.12.1') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
     }

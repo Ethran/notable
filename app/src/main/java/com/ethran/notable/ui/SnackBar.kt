@@ -23,9 +23,11 @@ import androidx.compose.ui.unit.dp
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -45,6 +47,7 @@ class SnackState {
     suspend fun displaySnack(conf: SnackConf): suspend () -> Unit {
         snackFlow.emit(conf)
         return suspend {
+            Log.d("SnackState", "Removing snack ${conf.id}")
             removeSnack(conf.id)
         }
     }
@@ -103,11 +106,17 @@ class SnackState {
             dismissSnack()
             result
         } catch (e: CancellationException) {
-            dismissSnack()
+            Log.d("showSnackDuring", "Task cancelled")
+            withContext(NonCancellable) {
+                dismissSnack()
+            }
             throw e
         } catch (e: Exception) {
-            dismissSnack()
-            displaySnack(SnackConf(text = "Error: ${e.message}", duration = 3000))
+            Log.e("showSnackDuring", "Task failed", e)
+            withContext(NonCancellable) {
+                dismissSnack()
+                displaySnack(SnackConf(text = "Error: ${e.message}", duration = 3000))
+            }
             throw e
         }
     }

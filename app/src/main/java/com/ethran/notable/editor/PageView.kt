@@ -47,6 +47,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
@@ -108,7 +109,7 @@ class PageView(
             PageDataManager.setPageScroll(id, value)
         }
 
-    val scrollable: Boolean
+    val isTransformationAllowed: Boolean
         get() = when (pageFromDb?.backgroundType) {
             "native", null -> true
             "coverImage" -> false
@@ -226,6 +227,7 @@ class PageView(
         Cancel loading strokes, and save bitmap to disk
     */
     fun disposeOldPage() {
+        log.d("Dispose old page")
         updateOnExit(id)
         persistBitmapDebounced(id)
         cleanJob()
@@ -246,7 +248,6 @@ class PageView(
         val bookId = pageFromDb?.notebookId
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
             try {
-                // Set duration as safety guard: in 60 s all strokes should be loaded
                 snackManager.showSnackDuring(text = "Loading strokes...") {
                     val timeToLoad = measureTimeMillis {
                         PageDataManager.requestPageLoadJoin(appRepository, id, bookId)
@@ -254,14 +255,13 @@ class PageView(
                     }
                     logCache.d("All strokes loaded in $timeToLoad ms")
                 }
-            } finally {
                 // TODO: If we put it in loadPage(…) sometimes it will try to refresh
                 //  without seeing strokes, I have no idea why.
                 coroutineScope.launch(Dispatchers.Main.immediate) {
                     DrawCanvas.forceUpdate.emit(null)
                 }
                 logCache.d("Loaded page from persistent layer $id")
-                if (!PageDataManager.isPageLoaded(id))
+                if (!PageDataManager.validatePageDataLoaded(id))
                     logCache.e("Page should be loaded, but it is not. $id")
                 coroutineScope.launch(Dispatchers.Default) {
                     delay(10)
@@ -269,6 +269,12 @@ class PageView(
                     if (bookId.isNotNull())
                         cacheNeighbors(appRepository, id, bookId)
                 }
+            } catch (_: CancellationException) {
+                val dataStatus = PageDataManager.validatePageDataLoaded(id)
+                logCache.d("Page loading cancelled, data was loaded correctly: $dataStatus")
+            } catch (e: Exception) {
+                val dataStatus = PageDataManager.validatePageDataLoaded(id)
+                logCache.e("Page loading cancelled, data was loaded correctly: $dataStatus", e)
             }
         }
     }

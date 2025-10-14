@@ -33,6 +33,7 @@ import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
+import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
@@ -154,6 +155,9 @@ class DrawCanvas(
         var addImageByUri = MutableStateFlow<Uri?>(null)
         var rectangleToSelectByGesture = MutableStateFlow<Rect?>(null)
         var drawingInProgress = Mutex()
+
+        // For cleaning whole page, activated from toolbar menu
+        var clearPageSignal = MutableSharedFlow<Unit>()
 
         private suspend fun waitForDrawing() {
             Log.d(
@@ -530,6 +534,14 @@ class DrawCanvas(
                     logCanvasObserver.v("Area to Select (screen): $it")
                     selectRectangle(it)
                 }
+            }
+        }
+
+        coroutineScope.launch {
+            clearPageSignal.collect {
+                require(!state.isDrawing) {"Cannot clear page in drawing mode"}
+                logCanvasObserver.v("Clear page signal!")
+                cleanAllStrokes(page, history)
             }
         }
 

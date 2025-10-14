@@ -175,3 +175,20 @@ fun handleErase(
     page.drawAreaScreenCoordinates(screenArea = effectedArea)
     return effectedArea
 }
+
+
+// points is in page coordinates, returns effected area.
+fun cleanAllStrokes(
+    page: PageView, history: History
+): Rect? {
+    val deletedStrokes = page.strokes
+    val deletedStrokeIds = deletedStrokes.map { it.id }
+    if (deletedStrokes.isEmpty()) return null
+
+    page.removeStrokes(deletedStrokeIds)
+    history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
+
+    val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
+    page.drawAreaScreenCoordinates(screenArea = effectedArea)
+    return effectedArea
+}

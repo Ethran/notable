@@ -45,7 +45,7 @@ import io.shipbook.shipbooksdk.Log
 @Composable
 @ExperimentalFoundationApi
 fun EditorView(
-    navController: NavController, bookId: String?, pageId: String
+    navController: NavController, bookId: String?, pageId: String, onPageChange: (String) -> Unit
 ) {
     val context = LocalContext.current
     val snackManager = LocalSnackContext.current
@@ -100,6 +100,9 @@ fun EditorView(
         LaunchedEffect(currentPageId) {
             if (bookId != null) {
                 appRepository.bookRepository.setOpenPageId(bookId, currentPageId)
+            }
+            if (currentPageId != pageId) {
+                onPageChange(currentPageId)
             }
         }
 

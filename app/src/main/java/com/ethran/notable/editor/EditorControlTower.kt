@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
@@ -13,6 +12,7 @@ import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.offsetStroke
+import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.ui.showHint
 import kotlinx.coroutines.CoroutineScope
@@ -38,7 +38,7 @@ class EditorControlTower(
     // this ensures that smooth scroll works reliably even if rendering takes to long
     fun processScroll(delta: Offset): Offset {
         if (delta == Offset.Zero) return Offset.Zero
-        if (!page.scrollable) return Offset.Zero
+        if (!page.isTransformationAllowed) return Offset.Zero
         if (scrollInProgress.isLocked) {
             Log.w(TAG, "Scroll in progress -- skipping")
             return delta
@@ -69,6 +69,7 @@ class EditorControlTower(
     }
 
     fun onPinchToZoom(delta: Float, center: Offset?) {
+        if (!page.isTransformationAllowed) return
         if (state.mode == Mode.Select)
             return
         scope.launch {

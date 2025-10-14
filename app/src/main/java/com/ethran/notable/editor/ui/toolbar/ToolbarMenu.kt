@@ -23,11 +23,13 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.editor.DrawCanvas.Companion.clearPageSignal
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.LocalSnackContext
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.noRippleClickable
 import kotlinx.coroutines.CoroutineScope
@@ -158,6 +160,20 @@ fun ToolbarMenu(
                 }
                 DividerCentered()
             }
+
+            MenuItem("Clean all strokes") {
+                scope.launch {
+                    clearPageSignal.emit(Unit)
+                    snackManager.displaySnack(
+                        SnackConf(
+                            text = "Cleared all strokes",
+                            duration = 3000
+                        )
+                    )
+                }
+                onClose()
+            }
+            DividerCentered()
 
             MenuItem("Change Background") {
                 onBackgroundSelectorModalOpen()
