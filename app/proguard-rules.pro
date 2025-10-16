@@ -19,3 +19,7 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Ignore optional dependencies used by libraries
+-dontwarn org.joda.convert.FromString
+-dontwarn org.joda.convert.ToString
