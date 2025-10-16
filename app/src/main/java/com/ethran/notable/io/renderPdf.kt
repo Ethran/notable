@@ -1,6 +1,7 @@
 package com.ethran.notable.io
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -12,6 +13,7 @@ import com.artifex.mupdf.fitz.android.AndroidDrawDevice
 import com.ethran.notable.TAG
 import io.shipbook.shipbooksdk.Log
 import java.io.File
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /* -----------------------------------------------------------------------
@@ -41,7 +43,7 @@ fun renderPdfPageAndroid(
     file: File,
     pageIndex: Int,
     targetWidthPx: Int,
-    resolutionModifier: Float = 1.4f,
+    resolutionModifier: Float = 1.2f,
     clipOut: Rect? = null
 ): Bitmap? {
     if (!file.exists()) {
@@ -101,7 +103,6 @@ fun renderPdfPageAndroid(
     }
     return null
 }
-
 /* ---------------------------- MuPDF Path ----------------------------- */
 
 @WorkerThread
@@ -109,7 +110,7 @@ fun renderPdfPageMuPdf(
     path: String,
     pageIndex: Int,
     targetWidthPx: Int,
-    resolutionModifier: Float = 1.0f,
+    resolutionModifier: Float = 1.2f,
     clipOut: Rect? = null
 ): Bitmap? {
     val file = File(path)
