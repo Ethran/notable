@@ -76,9 +76,9 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
     timer.step("start android Pdf")
     log.d("Rendering using ${if (GlobalAppSettings.current.muPdfRendering) "MuPdf" else "Android Pdf"}")
     val newBitmap: Bitmap? = if (GlobalAppSettings.current.muPdfRendering)
-        renderPdfPageMuPdf(filePath, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
+        renderPdfPageMuPdf(filePath, pageNumber, targetWidth.toInt(), resolutionModifier = 1.5f)
     else
-        renderPdfPageAndroid(file, pageNumber, targetWidth.toInt(), resolutionModifier = 1f)
+        renderPdfPageAndroid(file, pageNumber, targetWidth.toInt(), resolutionModifier = 1.2f)
     timer.end("loaded background")
     return newBitmap
 }
