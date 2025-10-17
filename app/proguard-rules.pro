@@ -21,5 +21,5 @@
 #-renamesourcefileattribute SourceFile
 
 # Ignore optional dependencies used by libraries
--dontwarn org.joda.convert.FromString
--dontwarn org.joda.convert.ToString
+#-dontwarn org.joda.convert.FromString
+#-dontwarn org.joda.convert.ToString
