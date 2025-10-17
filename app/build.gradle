@@ -84,7 +84,8 @@ android {
         }
         release {
             minifyEnabled true       // Enables R8 shrinking
-            shrinkResources true     // Removes unused resources (XML/vector icons, etc.)            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            shrinkResources true     // Removes unused resources (XML/vector icons, etc.)
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField("boolean", "IS_NEXT", IS_NEXT)
             buildConfigField "String", "SHIPBOOK_APP_ID", "\"${System.getenv("SHIPBOOK_APP_ID") ?: "default-secret"}\""
             buildConfigField "String", "SHIPBOOK_APP_KEY", "\"${System.getenv("SHIPBOOK_APP_KEY") ?: "default-secret2"}\""
@@ -203,9 +204,14 @@ dependencies {
     // for PDF support:
     implementation("com.artifex.mupdf:fitz:1.26.10")
 
-    // SLF4J backend: provides a simple logger so ShipBook can output logs.
+    // Added so that R8 optimization don't fail
+    // SLF4J backend: provides a simple logger so (probably) ShipBook can output logs.
     // Needed because SLF4J is just an API; without a binding, logging calls are ignored.
     implementation 'org.slf4j:slf4j-simple:2.0.17'
+
+    // implementation 'org.joda:joda-convert:3.0.1'
+    // optional dependency of joda-convert:
+    // implementation 'org.threeten:threetenbp:1.7.2'
 }
 
 tasks.register('printVersionName') {
