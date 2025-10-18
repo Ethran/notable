@@ -134,7 +134,7 @@ fun WelcomeView(navController: NavController) {
             ContinueButton(context, navController, filePermissionGranted.value)
 
             // Extra spacer to ensure button is not flush with bottom edge
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
