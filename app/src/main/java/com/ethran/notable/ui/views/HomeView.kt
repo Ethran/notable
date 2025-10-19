@@ -108,42 +108,6 @@ fun Library(navController: NavController, folderId: String? = null) {
         }
     })
 
-    /* ------------------------------------------------------*/
-//           I do not know what the idea behind it was
-
-//    var showFloatingEditor by remember { mutableStateOf(false) }
-//    var floatingEditorPageId by remember { mutableStateOf<String?>(null) }
-//    // Add the new "Floating Editor" button here
-//    Text(
-//        text = "Floating Editor",
-//        textAlign = TextAlign.Center,
-//        modifier = Modifier
-//            .noRippleClickable {
-//                val page = Page(
-//                    notebookId = null,
-//                    parentFolderId = folderId,
-//                    nativeTemplate = appRepository.kvProxy.get(
-//                        APP_SETTINGS_KEY, AppSettings.serializer()
-//                    )?.defaultNativeTemplate ?: "blank"
-//                )
-//                appRepository.pageRepository.create(page)
-//                floatingEditorPageId = page.id
-//                showFloatingEditor = true
-//            }
-//            .padding(10.dp))
-//
-//    if (showFloatingEditor && floatingEditorPageId != null) {
-//        FloatingEditorView(
-//            navController = navController,
-//            pageId = floatingEditorPageId!!,
-//            onDismissRequest = {
-//                showFloatingEditor = false
-//                floatingEditorPageId = null
-//            }
-//        )
-//    }
-    /* ------------------------------------------------------*/
-
 
     Column(
         Modifier.fillMaxSize()
