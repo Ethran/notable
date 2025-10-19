@@ -165,7 +165,7 @@ fun Router() {
 }
 
 /**
- * Detects a three-finger touch (simultaneous finger contacts) to open QuickNav..
+ * Detects a three-finger touch (simultaneous finger contacts) to open QuickNav.
  *
  */
 private fun Modifier.detectThreeFingerTouchToOpenQuickNav(

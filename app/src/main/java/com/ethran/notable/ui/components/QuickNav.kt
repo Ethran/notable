@@ -122,8 +122,10 @@ fun QuickNav(
                         )
                     })
             }
+
+
             ShowPagesRow(
-                favorites.mapNotNull { appRepository.pageRepository.getById(it) },
+                appRepository.pageRepository.getByIds(favorites),
                 navController,
                 appRepository,
                 folderId = folderId,
