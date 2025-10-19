@@ -79,6 +79,7 @@ fun Router() {
                     navController = navController,
                     folderId = it.arguments?.getString("folderId"),
                 )
+                currentPageId = null
             }
             composable(
                 route = "welcome",
@@ -86,6 +87,7 @@ fun Router() {
                 WelcomeView(
                     navController = navController,
                 )
+                currentPageId = null
             }
             composable(
                 route = "books/{bookId}/pages/{pageId}",
@@ -142,11 +144,13 @@ fun Router() {
                 route = "settings",
             ) {
                 SettingsView(navController = navController)
+                currentPageId = null
             }
             composable(
                 route = "bugReport",
             ) {
                 BugReportScreen(navController = navController)
+                currentPageId = null
             }
         }
         if (isQuickNavOpen) {
