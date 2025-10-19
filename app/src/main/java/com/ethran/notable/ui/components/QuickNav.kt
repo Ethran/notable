@@ -27,7 +27,6 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.noRippleClickable
-import com.ethran.notable.ui.views.QuickPagesSection
 import io.shipbook.shipbooksdk.ShipBook
 
 private val logQuickNav = ShipBook.getLogger("QuickNav")
@@ -123,7 +122,7 @@ fun QuickNav(
                         )
                     })
             }
-            QuickPagesSection(
+            ShowPagesRow(
                 favorites.asReversed().mapNotNull { appRepository.pageRepository.getById(it) },
                 navController,
                 appRepository,

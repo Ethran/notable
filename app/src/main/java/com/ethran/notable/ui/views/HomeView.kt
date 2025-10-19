@@ -65,6 +65,7 @@ import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.NotebookCard
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.ui.components.ShowPagesRow
 import com.ethran.notable.ui.dialogs.EmptyBookWarningHandler
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
 import com.ethran.notable.ui.dialogs.NotebookConfigDialog
@@ -148,7 +149,7 @@ fun Library(navController: NavController, folderId: String? = null) {
             FolderList(folders, navController, appRepository, folderId)
 
             Spacer(Modifier.height(10.dp))
-            QuickPagesSection(singlePages, navController, appRepository, folderId)
+            ShowPagesRow(singlePages, navController, appRepository, folderId)
 
             Spacer(Modifier.height(10.dp))
             NotebookGrid(context, books, navController, bookRepository, folderId)
@@ -225,82 +226,6 @@ fun FolderList(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun QuickPagesSection(
-    singlePages: List<Page>?,
-    navController: NavController,
-    appRepository: AppRepository,
-    folderId: String?,
-    showAddQuickPage: Boolean = true,
-    title: String? = "Quick Pages"
-) {
-    if (title != null) {
-        Text(text = title)
-        Spacer(Modifier.height(10.dp))
-    }
-
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .autoEInkAnimationOnScroll()
-    ) {
-        // Add the "Add quick page" button
-        if (showAddQuickPage) {
-            item {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .width(100.dp)
-                        .aspectRatio(3f / 4f)
-                        .border(1.dp, Color.Gray, RectangleShape)
-                        .noRippleClickable {
-                            val page = Page(
-                                notebookId = null,
-                                background = GlobalAppSettings.current.defaultNativeTemplate,
-                                backgroundType = BackgroundType.Native.key,
-                                parentFolderId = folderId
-                            )
-                            appRepository.pageRepository.create(page)
-                            navController.navigate("pages/${page.id}")
-                        }) {
-                    Icon(
-                        imageVector = FeatherIcons.FilePlus,
-                        contentDescription = "Add Quick Page",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(40.dp),
-                    )
-                }
-            }
-        }
-        // Render existing pages
-        if (!singlePages.isNullOrEmpty()) {
-            items(singlePages.reversed()) { page ->
-                val pageId = page.id
-                var isPageSelected by remember { mutableStateOf(false) }
-                Box {
-                    PagePreview(
-                        modifier = Modifier
-                            .combinedClickable(
-                                onClick = {
-                                    navController.navigate("pages/$pageId")
-                                },
-                                onLongClick = {
-                                    isPageSelected = true
-                                },
-                            )
-                            .width(100.dp)
-                            .aspectRatio(3f / 4f)
-                            .border(1.dp, Color.Black, RectangleShape), pageId = pageId
-                    )
-                    if (isPageSelected) PageMenu(
-                        pageId = pageId, canDelete = true, onClose = { isPageSelected = false })
-                }
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
