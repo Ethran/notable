@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.ui.convertDpToPixel
@@ -66,6 +69,7 @@ fun StrokeMenu(
             modifier = columnModifier
                 .width(IntrinsicSize.Min) // match the widest child (ColorPicker Row)
                 .padding(horizontal = 10.dp, vertical = 8.dp)
+                .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
         ) {
 
             val listOfColors = if (GlobalAppSettings.current.monochromeMode) listOf(
@@ -76,43 +80,47 @@ fun StrokeMenu(
             )
             else colorOptions
 
+            val widthOfPicker = (35 * listOfColors.size.coerceAtLeast(5))
+            val heightOfPicker = 40
 
-            ColorPicker(
-                value = value,
-                onChange = onChange,
-                colorOptions = listOfColors,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            val isBottom =
+                GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Bottom
 
-            Spacer(Modifier.height(6.dp))
+            if (isBottom) {
+                // Show size first, then colors
+                StrokeSizePicker(
+                    value = value,
+                    onChange = onChange,
+                    sizeOptions = sizeOptions,
+                    widthOfPicker = widthOfPicker,
+                    heightOfPicker = heightOfPicker
+                )
 
-            if (!GlobalAppSettings.current.continuousStrokeSlider) {
-                ThicknessPicker(
-                    value,
-                    onChange,
-                    sizeOptions,
+                Spacer(Modifier.height(6.dp))
+
+                ColorPicker(
+                    value = value,
+                    onChange = onChange,
+                    colorOptions = listOfColors,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             } else {
-                val sizes = sizeOptions.map { it.second }
+                // Original order: colors first, then size
+                ColorPicker(
+                    value = value,
+                    onChange = onChange,
+                    colorOptions = listOfColors,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
 
-                val widthOfPicker = (35 * listOfColors.size.coerceAtLeast(5)).dp
-                val heightOfPicker = 40.dp
-                DiscreteThicknessSlider(
-                    value = value.strokeSize,
-                    onValueChange = { newSize ->
-                        onChange(
-                            PenSetting(
-                                strokeSize = newSize, color = value.color
-                            )
-                        )
-                    },
-                    values = sizes,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .width(widthOfPicker)   // shorter than full width
-                        .height(heightOfPicker)   // compact height
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                Spacer(Modifier.height(6.dp))
+
+                StrokeSizePicker(
+                    value = value,
+                    onChange = onChange,
+                    sizeOptions = sizeOptions,
+                    widthOfPicker = widthOfPicker,
+                    heightOfPicker = heightOfPicker
                 )
             }
         }
@@ -120,6 +128,44 @@ fun StrokeMenu(
 
     }
 }
+
+@Composable
+fun ColumnScope.StrokeSizePicker(
+    value: PenSetting,
+    onChange: (setting: PenSetting) -> Unit,
+    sizeOptions: List<Pair<String, Float>>,
+    widthOfPicker: Int,
+    heightOfPicker: Int = 40
+) {
+
+    if (!GlobalAppSettings.current.continuousStrokeSlider) {
+        ThicknessPicker(
+            value,
+            onChange,
+            sizeOptions,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+    } else {
+        val sizes = sizeOptions.map { it.second }
+        DiscreteThicknessSlider(
+            value = value.strokeSize,
+            onValueChange = { newSize ->
+                onChange(
+                    PenSetting(
+                        strokeSize = newSize, color = value.color
+                    )
+                )
+            },
+            values = sizes,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .width(widthOfPicker.dp)   // shorter than full width
+                .height(heightOfPicker.dp)   // compact height
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+        )
+    }
+}
+
 
 @Composable
 private fun ColorPicker(

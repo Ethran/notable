@@ -76,6 +76,7 @@ fun EraserToolbarButton(
             ) {
                 Column(
                     modifier = Modifier
+                        .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
                         .background(Color.White)
                         .border(1.dp, Color.Black)
                         .height(IntrinsicSize.Max)

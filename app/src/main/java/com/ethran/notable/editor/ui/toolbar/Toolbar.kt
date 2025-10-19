@@ -193,8 +193,8 @@ fun Toolbar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height((BUTTON_SIZE + 51).dp)
-                .padding(bottom = 50.dp) // TODO: fix this
+                .height((BUTTON_SIZE + 2).dp)
+                .padding(bottom = 1.dp)
         ) {
             if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Bottom) {
                 Box(
@@ -511,6 +511,7 @@ fun Toolbar(
             )
         }
     } else {
+        // Button to show Toolbar
         ToolbarButton(
             onSelect = { state.isToolbarOpen = true },
             iconId = presentlyUsedToolIcon(state.mode, state.pen),
@@ -521,8 +522,8 @@ fun Toolbar(
             } else null,
             contentDescription = "open toolbar",
             modifier = Modifier
-                .height((BUTTON_SIZE + 51).dp)
-                .padding(bottom = 50.dp)
+                .height((BUTTON_SIZE + 1).dp)
+                .padding(bottom = 1.dp)
         )
     }
 }
