@@ -56,7 +56,7 @@ data class PageWithImages(
 @Dao
 interface PageDao {
     @Query("SELECT * FROM page WHERE id IN (:ids)")
-    fun getMany(ids: List<String>): List<Page>
+    fun getByIds(ids: List<String>): List<Page>
 
     @Query("SELECT * FROM page WHERE id = (:pageId)")
     fun getById(pageId: String): Page?
@@ -102,6 +102,10 @@ class PageRepository(context: Context) {
 
     fun getById(pageId: String): Page? {
         return db.getById(pageId)
+    }
+
+    fun getByIds(ids: List<String>): List<Page> {
+        return db.getByIds(ids)
     }
 
     fun getWithStrokeById(pageId: String): PageWithStrokes {

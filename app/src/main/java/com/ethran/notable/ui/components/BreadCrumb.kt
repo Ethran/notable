@@ -44,6 +44,7 @@ fun BreadCrumb(
                 .padding(end = 2.dp)
                 .noRippleClickable { onSelectFolderId(null) }
         )
+//        ToolbarButton(iconId = R.drawable.home, onSelect = { onSelectFolderId(null) })
 
         if (folderId != null) {
             val folders: List<Folder> = getFolderList(context, folderId).reversed()

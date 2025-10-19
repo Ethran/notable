@@ -1,28 +1,22 @@
 package com.ethran.notable.ui.components
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -30,39 +24,57 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.noRippleClickable
-import compose.icons.FeatherIcons
-import compose.icons.feathericons.Home
-import compose.icons.feathericons.Plus
+import io.shipbook.shipbooksdk.ShipBook
 
-@SuppressLint("SuspiciousIndentation")
+private val logQuickNav = ShipBook.getLogger("QuickNav")
+
+
 @Composable
-fun QuickNav(navController: NavController, onClose: () -> Unit) {
+fun QuickNav(
+    navController: NavController,
+    currentPageId: String?,
+    onClose: () -> Unit,
+) {
     val context = LocalContext.current
-    val appRepository = AppRepository(context)
-
-    val currentBackStackEntry = navController.currentBackStackEntry
-    val pageId = currentBackStackEntry?.arguments?.getString("pageId")
+    val appRepository = remember { AppRepository(context) }
+    val pageRepository = remember { PageRepository(context) }
     val kv = appRepository.kvProxy
 
+    // Read current settings once, but keep a local state list for responsiveness
     val settings = remember { GlobalAppSettings.current }
+    var favorites by remember { mutableStateOf(settings.quickNavPages) }
 
+    // Load current page (if pageId exists) and derive folderId
+    val pageFromDb = remember(currentPageId) {
+        runCatching { currentPageId?.let { pageRepository.getById(it) } }.onFailure {
+            logQuickNav.w(
+                "failed to load page for pageId=$currentPageId", it
+            )
+        }.getOrNull()
+    }
+    val folderId = pageFromDb?.parentFolderId
 
-    val pages = settings?.quickNavPages ?: listOf()
-
-    if (settings == null) return
+    logQuickNav.d("currentPageId = $currentPageId, folderId=$folderId, favoritesCount=${favorites.size}")
 
     Column(
         Modifier
             .fillMaxWidth()
             .fillMaxHeight()
     ) {
+        // Tap outside to dismiss
         Spacer(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .noRippleClickable { onClose() })
+                .noRippleClickable {
+                    logQuickNav.d("outside tap -> close")
+                    onClose()
+                })
+
+        // Top divider above the sheet
         Box(
             modifier = Modifier
                 .height(1.dp)
@@ -76,72 +88,52 @@ fun QuickNav(navController: NavController, onClose: () -> Unit) {
                 .background(Color.White)
                 .padding(10.dp)
         ) {
+            // Header row: Breadcrumb on the left, Favorite toggle on the right
+            Row(modifier = Modifier.fillMaxWidth()) {
+                logQuickNav.d("header row, folderId=$folderId")
 
-            Row {
-
-                ToolbarButton(
-                    imageVector = FeatherIcons.Home, onSelect = {
-                        val parentFolder =
-                            if (pageId != null) appRepository.pageRepository.getById(pageId)?.parentFolderId else null
-                        navController.navigate(
-                            route = if (parentFolder != null) "library?folderId=${parentFolder}" else "library"
-                        )
-                        onClose()
-                    })
-
-
-                if (pageId != null && !pages.contains(pageId)) {
-                    Spacer(modifier = Modifier.width(5.dp))
-                    ToolbarButton(
-                        imageVector = FeatherIcons.Plus, onSelect = {
-                            if (settings == null) return@ToolbarButton
-                            if (settings!!.quickNavPages.contains(pageId)) return@ToolbarButton
-                            kv.setAppSettings(settings!!.copy(quickNavPages = pages + pageId))
-                        })
+                BreadCrumb(
+                    folderId = folderId, fontSize = 16
+                ) { targetFolderId ->
+                    val route =
+                        "library" + if (targetFolderId == null) "" else "?folderId=$targetFolderId"
+                    logQuickNav.d("breadcrumb navigate -> $route")
+                    navController.navigate(route)
                 }
-            }
 
-            if (pages.isNotEmpty()) Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
-            Row {
-                LazyVerticalGrid(
-                    modifier = Modifier.fillMaxWidth(),
-                    columns = GridCells.Adaptive(minSize = 80.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    content = {
-
-                        items(pages.reversed()) { thisPageId ->
-                            key(thisPageId) {
-                                PagePreview(
-                                    modifier = Modifier
-                                        .border(1.dp, Color.Black)
-                                        .fillMaxWidth()
-                                        .aspectRatio(3f / 4f)
-                                        .noRippleClickable {
-                                            val bookId =
-                                                appRepository.pageRepository.getById(thisPageId)?.notebookId
-                                            val url =
-                                                if (bookId == null) "pages/${thisPageId}" else "books/${bookId}/pages/${thisPageId}"
-                                            navController.navigate(url)
-                                            onClose()
-                                        }
-                                        .draggable(
-                                            orientation = Orientation.Vertical,
-                                            onDragStopped = {
-                                                if (settings == null) return@draggable
-                                                kv.setAppSettings(settings!!.copy(quickNavPages = pages.filterNot { it == thisPageId }))
-                                            },
-                                            state = rememberDraggableState(onDelta = {})
-                                        ), pageId = thisPageId
-                                )
-                            }
+                // Favorite toggle for the current page (right side)
+                val isFavorite = currentPageId != null && favorites.contains(currentPageId)
+                ToolbarButton(
+                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    onSelect = {
+                        if (currentPageId == null) {
+                            logQuickNav.w("favorite toggle ignored, pageId=null")
+                            return@ToolbarButton
                         }
-
+                        val newList = if (isFavorite) favorites.filterNot { it == currentPageId }
+                        else favorites + currentPageId
+                        favorites = newList
+                        // Persist immediately
+                        kv.setAppSettings(settings.copy(quickNavPages = newList))
+                        logQuickNav.d(
+                            "toggled favorite for pageId=$currentPageId, nowFavorite=${!isFavorite}, total=${newList.size}"
+                        )
                     })
             }
+
+
+            ShowPagesRow(
+                appRepository.pageRepository.getByIds(favorites),
+                navController,
+                appRepository,
+                folderId = folderId,
+                showAddQuickPage = false,
+                currentPageId = currentPageId,
+                title = "Favorite pages"
+            )
         }
     }
 
 }
-

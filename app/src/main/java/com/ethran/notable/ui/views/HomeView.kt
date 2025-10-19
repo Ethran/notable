@@ -65,12 +65,14 @@ import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.NotebookCard
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.ui.components.ShowPagesRow
 import com.ethran.notable.ui.dialogs.EmptyBookWarningHandler
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
 import com.ethran.notable.ui.dialogs.NotebookConfigDialog
 import com.ethran.notable.ui.dialogs.PdfImportChoiceDialog
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.utils.isLatestVersion
+import com.onyx.android.sdk.extension.isNullOrEmpty
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
 import compose.icons.feathericons.Folder
@@ -107,42 +109,6 @@ fun Library(navController: NavController, folderId: String? = null) {
             isLatestVersion = isLatestVersion(context, true)
         }
     })
-
-    /* ------------------------------------------------------*/
-//           I do not know what the idea behind it was
-
-//    var showFloatingEditor by remember { mutableStateOf(false) }
-//    var floatingEditorPageId by remember { mutableStateOf<String?>(null) }
-//    // Add the new "Floating Editor" button here
-//    Text(
-//        text = "Floating Editor",
-//        textAlign = TextAlign.Center,
-//        modifier = Modifier
-//            .noRippleClickable {
-//                val page = Page(
-//                    notebookId = null,
-//                    parentFolderId = folderId,
-//                    nativeTemplate = appRepository.kvProxy.get(
-//                        APP_SETTINGS_KEY, AppSettings.serializer()
-//                    )?.defaultNativeTemplate ?: "blank"
-//                )
-//                appRepository.pageRepository.create(page)
-//                floatingEditorPageId = page.id
-//                showFloatingEditor = true
-//            }
-//            .padding(10.dp))
-//
-//    if (showFloatingEditor && floatingEditorPageId != null) {
-//        FloatingEditorView(
-//            navController = navController,
-//            pageId = floatingEditorPageId!!,
-//            onDismissRequest = {
-//                showFloatingEditor = false
-//                floatingEditorPageId = null
-//            }
-//        )
-//    }
-    /* ------------------------------------------------------*/
 
 
     Column(
@@ -183,7 +149,7 @@ fun Library(navController: NavController, folderId: String? = null) {
             FolderList(folders, navController, appRepository, folderId)
 
             Spacer(Modifier.height(10.dp))
-            QuickPagesSection(singlePages, navController, appRepository, folderId)
+            ShowPagesRow(singlePages, navController, appRepository, folderId)
 
             Spacer(Modifier.height(10.dp))
             NotebookGrid(context, books, navController, bookRepository, folderId)
@@ -226,8 +192,8 @@ fun FolderList(
                 Text(text = "Add new folder")
             }
         }
-        if (folders?.isNotEmpty() == true) {
-            items(folders!!) { folder ->
+        if (!folders.isNullOrEmpty()) {
+            items(folders) { folder ->
                 var isFolderSettingsOpen by remember { mutableStateOf(false) }
                 if (isFolderSettingsOpen) FolderConfigDialog(
                     folderId = folder.id, onClose = {
@@ -260,76 +226,6 @@ fun FolderList(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun QuickPagesSection(
-    singlePages: List<Page>?,
-    navController: NavController,
-    appRepository: AppRepository,
-    folderId: String?
-) {
-    Text(text = "Quick pages")
-    Spacer(Modifier.height(10.dp))
-
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .autoEInkAnimationOnScroll()
-    ) {
-        // Add the "Add quick page" button
-        item {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .width(100.dp)
-                    .aspectRatio(3f / 4f)
-                    .border(1.dp, Color.Gray, RectangleShape)
-                    .noRippleClickable {
-                        val page = Page(
-                            notebookId = null,
-                            background = GlobalAppSettings.current.defaultNativeTemplate,
-                            backgroundType = BackgroundType.Native.key,
-                            parentFolderId = folderId
-                        )
-                        appRepository.pageRepository.create(page)
-                        navController.navigate("pages/${page.id}")
-                    }) {
-                Icon(
-                    imageVector = FeatherIcons.FilePlus,
-                    contentDescription = "Add Quick Page",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(40.dp),
-                )
-            }
-        }
-        // Render existing pages
-        if (singlePages?.isNotEmpty() == true) {
-            items(singlePages!!.reversed()) { page ->
-                val pageId = page.id
-                var isPageSelected by remember { mutableStateOf(false) }
-                Box {
-                    PagePreview(
-                        modifier = Modifier
-                            .combinedClickable(
-                                onClick = {
-                                    navController.navigate("pages/$pageId")
-                                },
-                                onLongClick = {
-                                    isPageSelected = true
-                                },
-                            )
-                            .width(100.dp)
-                            .aspectRatio(3f / 4f)
-                            .border(1.dp, Color.Black, RectangleShape), pageId = pageId
-                    )
-                    if (isPageSelected) PageMenu(
-                        pageId = pageId, canDelete = true, onClose = { isPageSelected = false })
-                }
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -356,11 +252,10 @@ fun NotebookGrid(
                 bookRepository = bookRepository,
                 parentFolderId = folderId,
                 onStartImport = { importInProgress = true },
-                onEndImport = { importInProgress = false }
-            )
+                onEndImport = { importInProgress = false })
         }
-        if (books?.isNotEmpty() == true) {
-            items(books!!.reversed()) { book ->
+        if (!books.isNullOrEmpty()) {
+            items(books.reversed()) { book ->
                 if (book.pageIds.isEmpty()) {
                     if (!importInProgress) {
                         EmptyBookWarningHandler(emptyBook = book, onDelete = {
@@ -430,8 +325,7 @@ fun NotebookImportPanel(
             onStartImport()
             snackManager.showSnackDuring("importing from xopp file") {
                 ImportEngine(context).import(
-                    uri,
-                    ImportOptions(folderId = parentFolderId)
+                    uri, ImportOptions(folderId = parentFolderId)
                 )
             }
             onEndImport()
@@ -442,18 +336,15 @@ fun NotebookImportPanel(
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
 
     showPdfImportChoiceDialog?.let { uri ->
-        PdfImportChoiceDialog(
-            uri = uri, onCopy = { uri ->
+        PdfImportChoiceDialog(uri = uri, onCopy = { uri ->
             showPdfImportChoiceDialog = null
             onPdfFile(uri, /* copy= */ true)
         }, onObserve = { uri ->
             showPdfImportChoiceDialog = null
             onPdfFile(uri, /* copy= */ false)
-        },
-            onDismiss = {
-                showPdfImportChoiceDialog = null
-            }
-        )
+        }, onDismiss = {
+            showPdfImportChoiceDialog = null
+        })
     }
 
 
