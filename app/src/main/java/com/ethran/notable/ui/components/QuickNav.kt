@@ -1,26 +1,19 @@
 package com.ethran.notable.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,6 +27,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.noRippleClickable
+import com.ethran.notable.ui.views.QuickPagesSection
 import io.shipbook.shipbooksdk.ShipBook
 
 private val logQuickNav = ShipBook.getLogger("QuickNav")
@@ -129,51 +123,14 @@ fun QuickNav(
                         )
                     })
             }
-
-            if (favorites.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-
-            // Grid of favorite pages
-            Row {
-                LazyVerticalGrid(
-                    modifier = Modifier.fillMaxWidth(),
-                    columns = GridCells.Adaptive(minSize = 80.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    content = {
-                        items(favorites.reversed()) { thisPageId ->
-                            key(thisPageId) {
-                                PagePreview(
-                                    modifier = Modifier
-                                        .border(1.dp, Color.Black)
-                                        .fillMaxWidth()
-                                        .aspectRatio(3f / 4f)
-                                        .noRippleClickable {
-                                            // Navigate to selected page
-                                            val bookId = runCatching {
-                                                appRepository.pageRepository.getById(thisPageId)?.notebookId
-                                            }.onFailure {
-                                                logQuickNav.d(
-                                                    "failed to resolve bookId for $thisPageId",
-                                                    it
-                                                )
-                                            }.getOrNull()
-
-                                            val url = if (bookId == null) {
-                                                "pages/$thisPageId"
-                                            } else {
-                                                "books/$bookId/pages/$thisPageId"
-                                            }
-                                            logQuickNav.d("navigate -> $url")
-                                            navController.navigate(url)
-                                            onClose()
-                                        }, pageId = thisPageId
-                                )
-                            }
-                        }
-                    })
-            }
+            QuickPagesSection(
+                favorites.asReversed().mapNotNull { appRepository.pageRepository.getById(it) },
+                navController,
+                appRepository,
+                folderId = folderId,
+                showAddQuickPage = false,
+                title = "Favorite pages"
+            )
         }
     }
 

@@ -231,10 +231,14 @@ fun QuickPagesSection(
     singlePages: List<Page>?,
     navController: NavController,
     appRepository: AppRepository,
-    folderId: String?
+    folderId: String?,
+    showAddQuickPage: Boolean = true,
+    title: String? = "Quick Pages"
 ) {
-    Text(text = "Quick pages")
-    Spacer(Modifier.height(10.dp))
+    if (title != null) {
+        Text(text = title)
+        Spacer(Modifier.height(10.dp))
+    }
 
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -243,29 +247,31 @@ fun QuickPagesSection(
             .autoEInkAnimationOnScroll()
     ) {
         // Add the "Add quick page" button
-        item {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .width(100.dp)
-                    .aspectRatio(3f / 4f)
-                    .border(1.dp, Color.Gray, RectangleShape)
-                    .noRippleClickable {
-                        val page = Page(
-                            notebookId = null,
-                            background = GlobalAppSettings.current.defaultNativeTemplate,
-                            backgroundType = BackgroundType.Native.key,
-                            parentFolderId = folderId
-                        )
-                        appRepository.pageRepository.create(page)
-                        navController.navigate("pages/${page.id}")
-                    }) {
-                Icon(
-                    imageVector = FeatherIcons.FilePlus,
-                    contentDescription = "Add Quick Page",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(40.dp),
-                )
+        if (showAddQuickPage) {
+            item {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .width(100.dp)
+                        .aspectRatio(3f / 4f)
+                        .border(1.dp, Color.Gray, RectangleShape)
+                        .noRippleClickable {
+                            val page = Page(
+                                notebookId = null,
+                                background = GlobalAppSettings.current.defaultNativeTemplate,
+                                backgroundType = BackgroundType.Native.key,
+                                parentFolderId = folderId
+                            )
+                            appRepository.pageRepository.create(page)
+                            navController.navigate("pages/${page.id}")
+                        }) {
+                    Icon(
+                        imageVector = FeatherIcons.FilePlus,
+                        contentDescription = "Add Quick Page",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
             }
         }
         // Render existing pages
