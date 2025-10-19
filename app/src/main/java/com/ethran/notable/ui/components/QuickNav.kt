@@ -123,11 +123,12 @@ fun QuickNav(
                     })
             }
             ShowPagesRow(
-                favorites.asReversed().mapNotNull { appRepository.pageRepository.getById(it) },
+                favorites.mapNotNull { appRepository.pageRepository.getById(it) },
                 navController,
                 appRepository,
                 folderId = folderId,
                 showAddQuickPage = false,
+                currentPageId = currentPageId,
                 title = "Favorite pages"
             )
         }

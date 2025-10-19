@@ -46,6 +46,7 @@ fun ShowPagesRow(
     appRepository: AppRepository,
     folderId: String?,
     showAddQuickPage: Boolean = true,
+    currentPageId: String? = null,
     title: String? = "Quick Pages"
 ) {
     if (title != null) {
@@ -105,7 +106,12 @@ fun ShowPagesRow(
                             )
                             .width(100.dp)
                             .aspectRatio(3f / 4f)
-                            .border(1.dp, Color.Black, RectangleShape), pageId = pageId
+                            .border(
+                                if (currentPageId == pageId) 4.dp else 1.dp,
+                                Color.Black,
+                                RectangleShape
+                            ),
+                        pageId = pageId
                     )
                     if (isPageSelected) PageMenu(
                         pageId = pageId, canDelete = true, onClose = { isPageSelected = false })
