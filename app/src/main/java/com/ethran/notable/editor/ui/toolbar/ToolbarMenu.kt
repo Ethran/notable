@@ -23,6 +23,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.editor.DrawCanvas.Companion.clearPageSignal
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.io.ExportEngine
@@ -55,12 +56,16 @@ fun ToolbarMenu(
     else page.parentFolderId
 
     Popup(
-        alignment = Alignment.TopEnd, onDismissRequest = { onClose() }, offset = IntOffset(
+        alignment = Alignment.TopEnd,
+        onDismissRequest = { onClose() },
+        offset = IntOffset(
             convertDpToPixel((-10).dp, context).toInt(), convertDpToPixel(50.dp, context).toInt()
-        ), properties = PopupProperties(focusable = true)
+        ),
+        properties = PopupProperties(focusable = true),
     ) {
         Column(
             Modifier
+                .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
                 .border(1.dp, Color.Black, RectangleShape)
                 .background(Color.White)
                 .width(IntrinsicSize.Max)
