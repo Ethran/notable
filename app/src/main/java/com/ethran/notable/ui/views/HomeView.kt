@@ -71,6 +71,7 @@ import com.ethran.notable.ui.dialogs.NotebookConfigDialog
 import com.ethran.notable.ui.dialogs.PdfImportChoiceDialog
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.utils.isLatestVersion
+import com.onyx.android.sdk.extension.isNullOrEmpty
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
 import compose.icons.feathericons.Folder
@@ -190,8 +191,8 @@ fun FolderList(
                 Text(text = "Add new folder")
             }
         }
-        if (folders?.isNotEmpty() == true) {
-            items(folders!!) { folder ->
+        if (!folders.isNullOrEmpty()) {
+            items(folders) { folder ->
                 var isFolderSettingsOpen by remember { mutableStateOf(false) }
                 if (isFolderSettingsOpen) FolderConfigDialog(
                     folderId = folder.id, onClose = {
@@ -268,8 +269,8 @@ fun QuickPagesSection(
             }
         }
         // Render existing pages
-        if (singlePages?.isNotEmpty() == true) {
-            items(singlePages!!.reversed()) { page ->
+        if (!singlePages.isNullOrEmpty()) {
+            items(singlePages.reversed()) { page ->
                 val pageId = page.id
                 var isPageSelected by remember { mutableStateOf(false) }
                 Box {
@@ -320,11 +321,10 @@ fun NotebookGrid(
                 bookRepository = bookRepository,
                 parentFolderId = folderId,
                 onStartImport = { importInProgress = true },
-                onEndImport = { importInProgress = false }
-            )
+                onEndImport = { importInProgress = false })
         }
-        if (books?.isNotEmpty() == true) {
-            items(books!!.reversed()) { book ->
+        if (!books.isNullOrEmpty()) {
+            items(books.reversed()) { book ->
                 if (book.pageIds.isEmpty()) {
                     if (!importInProgress) {
                         EmptyBookWarningHandler(emptyBook = book, onDelete = {
@@ -394,8 +394,7 @@ fun NotebookImportPanel(
             onStartImport()
             snackManager.showSnackDuring("importing from xopp file") {
                 ImportEngine(context).import(
-                    uri,
-                    ImportOptions(folderId = parentFolderId)
+                    uri, ImportOptions(folderId = parentFolderId)
                 )
             }
             onEndImport()
@@ -406,18 +405,15 @@ fun NotebookImportPanel(
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
 
     showPdfImportChoiceDialog?.let { uri ->
-        PdfImportChoiceDialog(
-            uri = uri, onCopy = { uri ->
+        PdfImportChoiceDialog(uri = uri, onCopy = { uri ->
             showPdfImportChoiceDialog = null
             onPdfFile(uri, /* copy= */ true)
         }, onObserve = { uri ->
             showPdfImportChoiceDialog = null
             onPdfFile(uri, /* copy= */ false)
-        },
-            onDismiss = {
-                showPdfImportChoiceDialog = null
-            }
-        )
+        }, onDismiss = {
+            showPdfImportChoiceDialog = null
+        })
     }
 
 
