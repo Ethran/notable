@@ -36,7 +36,9 @@ import com.ethran.notable.ui.noRippleClickable
 import com.onyx.android.sdk.extension.isNullOrEmpty
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
+import io.shipbook.shipbooksdk.ShipBook
 
+private val logPagesRow = ShipBook.getLogger("QuickNav")
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -49,6 +51,27 @@ fun ShowPagesRow(
     currentPageId: String? = null,
     title: String? = "Quick Pages"
 ) {
+
+    fun onSelectPage(pageId: String) {
+        // Navigate to selected page
+        val bookId = runCatching {
+            appRepository.pageRepository.getById(pageId)?.notebookId
+        }.onFailure {
+            logPagesRow.d(
+                "failed to resolve bookId for $pageId",
+                it
+            )
+        }.getOrNull()
+
+        val url = if (bookId == null) {
+            "pages/$pageId"
+        } else {
+            "books/$bookId/pages/$pageId"
+        }
+        logPagesRow.d("navigate -> $url")
+        navController.navigate(url)
+    }
+
     if (title != null) {
         Text(text = title)
         Spacer(Modifier.height(10.dp))
@@ -98,7 +121,7 @@ fun ShowPagesRow(
                         modifier = Modifier
                             .combinedClickable(
                                 onClick = {
-                                    navController.navigate("pages/$pageId")
+                                    onSelectPage(pageId)
                                 },
                                 onLongClick = {
                                     isPageSelected = true
