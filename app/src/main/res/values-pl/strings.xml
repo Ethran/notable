@@ -1,7 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="home__quick_pages">Szybkie notatki</string>
-    <string name="home__notebooks">Zeszyty</string>
-    <string name="home__add_new_folder">Dodaj nowy folder</string>
-    <string name="home__new_folder">Nowy Folder</string>
+    <string name="home_quick_pages">Szybkie notatki</string>
+    <string name="home_notebooks">Zeszyty</string>
+    <string name="home_add_new_folder">Dodaj nowy folder</string>
+    <string name="home_new_folder">Nowy Folder</string>
+    <string name="home_view_name">Biblioteka</string>
+    <string name="settings_title">Ustawienia</string>
+    <string name="settings_tab_general_name">Główne</string>
+    <string name="settings_tab_gestures_name">Gesty</string>
+    <string name="default_page_background_template">Domyślne tło</string>
+    <string name="blank_page">Czysta strona</string>
+    <string name="dot_grid">W kropki</string>
+    <string name="lines">W linie</string>
+    <string name="small_squares_grid">W kratkę</string>
+    <string name="hexagon_grid">W sześciokąty</string>
+    <string name="use_onyx_neotools_may_cause_crashes">Używaj \'NeoTools\', może powodować nieporządane działanie</string>
+    <string name="enable_scribble_to_erase">Włącz zamarz aby usunąc</string>
+    <string name="enable_smooth_scrolling">Włącz płynne skrolowanie</string>
+    <string name="continuous_zoom">Włącz płynne przybliżanie</string>
+    <string name="continuous_stroke_slider">Płynny dobór grubości mazaka</string>
+    <string name="monochrome_mode">Tryb czarno-biały</string>
+    <string name="paginate_pdf">Podziel strony przy eksporcie</string>
+    <string name="preview_pdf_pagination">Podgląd podziału stron</string>
+    <string name="app_new_version">Wygląda na to, że nowa wersja Notable jest dostępna na Githubie!</string>
+    <string name="app_see_release">Sprawdz nową wersję w przeglądarce</string>
+    <string name="app_lastest_version">Aplikacja jest aktualna.</string>
+    <string name="app_check_updates">Sprawdz dostępność aktualizacji</string>
+    <string name="gestures_double_tap_action">podwójne kliknięcie</string>
+    <string name="gestures_two_finger_tap_action">Dotknięcie dwoma palcami</string>
+    <string name="gestures_swipe_left_action">Przeciągnięcie w lewo</string>
+    <string name="gestures_swipe_right_action">Przeciągnięcie w prawo</string>
+    <string name="gestures_two_finger_swipe_left_action">Przeciągnięcie w lewo dwoma palcami</string>
+    <string name="gestures_two_finger_swipe_right_action">Przeciągnięcie w prawo dwoma palcami</string>
+    <string name="work_in_progress">(w trakcie implementacji)</string>
+    <string name="toolbar_position_top">Góra</string>
+    <string name="toolbar_position_bottom">Dół</string>
+    <string name="sponsor_button_text">Wesprzyj</string>
 </resources>

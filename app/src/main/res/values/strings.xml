@@ -1,7 +1,40 @@
 <resources>
     <string name="app_name" translatable="false">Notable</string>
-    <string name="home__quick_pages">Quick pages</string>
-    <string name="home__notebooks">Notebooks</string>
-    <string name="home__add_new_folder">Add new folder</string>
-    <string name="home__new_folder">New Folder</string>
+    <string name="home_quick_pages">Quick pages</string>
+    <string name="home_notebooks">Notebooks</string>
+    <string name="home_add_new_folder">Add new folder</string>
+    <string name="home_new_folder">New Folder</string>
+    <string name="home_view_name">Library</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_tab_general_name">General</string>
+    <string name="settings_tab_gestures_name">Gestures</string>
+    <string name="settings_tab_debug_name" translatable="false">Debug</string>
+    <string name="default_page_background_template">Default Page Background Template</string>
+    <string name="blank_page">Blank page</string>
+    <string name="dot_grid">Dot grid</string>
+    <string name="lines">Lines</string>
+    <string name="small_squares_grid">Small squares grid</string>
+    <string name="hexagon_grid">Hexagon grid</string>
+    <string name="use_onyx_neotools_may_cause_crashes">Use Onyx NeoTools (may cause crashes)</string>
+    <string name="enable_scribble_to_erase">Enable scribble-to-erase (scribble out your mistakes to erase them)</string>
+    <string name="enable_smooth_scrolling">Enable smooth scrolling</string>
+    <string name="continuous_zoom">Continuous Zoom</string>
+    <string name="continuous_stroke_slider">Continuous Stroke Slider</string>
+    <string name="monochrome_mode">Monochrome mode</string>
+    <string name="paginate_pdf">Paginate PDF</string>
+    <string name="preview_pdf_pagination">Preview PDF Pagination</string>
+    <string name="app_new_version">It seems a new version of Notable is available on GitHub!</string>
+    <string name="app_see_release">See release in browser</string>
+    <string name="app_lastest_version">You are on the latest version.</string>
+    <string name="app_check_updates">Check for newer version</string>
+    <string name="gestures_double_tap_action">Double Tap Action</string>
+    <string name="gestures_two_finger_tap_action">Two Finger Tap Action</string>
+    <string name="gestures_swipe_left_action">Swipe Left Action</string>
+    <string name="gestures_swipe_right_action">Swipe Right Action</string>
+    <string name="gestures_two_finger_swipe_left_action">Two Finger Swipe Left Action</string>
+    <string name="gestures_two_finger_swipe_right_action">Two Finger Swipe Right Action</string>
+    <string name="work_in_progress">(work in progress)</string>
+    <string name="toolbar_position_top">Top</string>
+    <string name="toolbar_position_bottom">Bottom</string>
+    <string name="sponsor_button_text">Sponsor</string>
 </resources>

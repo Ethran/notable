@@ -152,7 +152,7 @@ fun Library(navController: NavController, folderId: String? = null) {
                 navController,
                 appRepository,
                 folderId,
-                title = context.getString(R.string.home__quick_pages)
+                title = context.getString(R.string.home_quick_pages)
             )
 
             Spacer(Modifier.height(10.dp))
@@ -194,7 +194,7 @@ fun FolderList(
                     Modifier.height(20.dp)
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(text = context.getString(R.string.home__add_new_folder))
+                Text(text = context.getString(R.string.home_add_new_folder))
             }
         }
         if (!folders.isNullOrEmpty()) {
@@ -243,7 +243,7 @@ fun NotebookGrid(
 ) {
     var importInProgress = false
 
-    Text(text = context.getString(R.string.home__notebooks))
+    Text(text = context.getString(R.string.home_notebooks))
     Spacer(Modifier.height(10.dp))
     LazyVerticalGrid(
         columns = GridCells.Adaptive(100.dp),
