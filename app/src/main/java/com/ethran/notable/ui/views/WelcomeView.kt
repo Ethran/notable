@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -50,6 +51,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.ethran.notable.PACKAGE_NAME
+import com.ethran.notable.R
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.utils.getCurRefreshModeString
@@ -96,12 +98,12 @@ fun WelcomeView(navController: NavController) {
                 modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
             ) {
                 Text(
-                    "Welcome to Notable",
+                    stringResource(R.string.welcome_view_title),
                     style = MaterialTheme.typography.h4,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Text(
-                    "For optimal experience, please complete these setup steps:",
+                    stringResource(R.string.welcome_view_subtitle),
                     style = MaterialTheme.typography.body1,
                     textAlign = TextAlign.Center
                 )
@@ -159,10 +161,12 @@ fun PermissionsRow(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             PermissionItem(
-                title = "File Access",
-                description = "Required for saving and loading your notes",
+                title = stringResource(R.string.welcome_view_file_access),
+                description = stringResource(R.string.welcome_view_file_access_explanation),
                 isGranted = filePermissionGranted.value,
-                buttonText = if (filePermissionGranted.value) "Granted ✓" else "Grant Permission",
+                buttonText = if (filePermissionGranted.value) stringResource(R.string.welcome_view_permissions_granted) else stringResource(
+                    R.string.welcome_view_permissions_button
+                ),
                 onClick = {
                     if (!filePermissionGranted.value) {
                         requestPermissions(context)
@@ -180,13 +184,15 @@ fun PermissionsRow(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             PermissionItem(
-                title = "Set Recommended Refresh Mode",
-                description = "It's recommended to use HD mode or Regal mode",
+                title = stringResource(R.string.welcome_view_refresh_mode),
+                description = stringResource(R.string.welcome_view_refresh_mode_details),
                 isGranted = recommendedRefreshMode.value,
-                buttonText = if (recommendedRefreshMode.value)
-                    "Applied (${refreshModeString.value})"
-                else
-                    "Set HD Mode (currently in ${refreshModeString.value})",
+                buttonText = if (recommendedRefreshMode.value) stringResource(
+                    R.string.welcome_view_refresh_mode_applied, refreshModeString.value
+                )
+                else stringResource(
+                    R.string.welcome_view_refresh_mode_set_hd_mode, refreshModeString.value
+                ),
                 onClick = {
                     setRecommendedMode()
                 },
@@ -210,7 +216,11 @@ fun ContinueButton(context: Context, navController: NavController, filePermissio
             .fillMaxWidth(0.8f)
             .padding(top = 24.dp)
     ) {
-        Text(if (filePermissionGranted) "Continue" else "Complete Setup First")
+        Text(
+            if (filePermissionGranted) stringResource(R.string.welcome_view_continue) else stringResource(
+                R.string.welcome_view_complete_setup_first
+            )
+        )
     }
 }
 
@@ -231,38 +241,35 @@ fun OnyxUnfreezeInstruction() {
             horizontalAlignment = Alignment.Start
         ) {
             Text(
-                text = "⚠️ Prevent Notable from Being Frozen (Onyx Devices)",
+                text = stringResource(R.string.welcome_view_prevent_frozen),
                 style = MaterialTheme.typography.h6,
                 color = MaterialTheme.colors.onSurface,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Onyx devices may automatically freeze (kill) apps in the background to save battery. " +
-                        "If you do not disable this feature, Notable will be constantly closed when in the background, " +
-                        "which can be very annoying and may cause loss of work or interruptions.",
+                text = stringResource(R.string.welcome_view_prevent_frozen_details),
                 style = MaterialTheme.typography.body2,
                 color = MaterialTheme.colors.onSurface,
                 lineHeight = 18.sp
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "How to prevent freezing:",
+                text = stringResource(R.string.welcome_view_prevent_frozen_instructions_title),
                 style = MaterialTheme.typography.subtitle2,
                 color = MaterialTheme.colors.onSurface,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "1. Long press the Notable app icon on the Onyx launcher (home screen).\n" +
-                        "2. Select \"Unfreeze app\" from the menu.",
+                text = stringResource(R.string.welcome_view_prevent_frozen_instructions),
                 style = MaterialTheme.typography.body2,
                 color = MaterialTheme.colors.onSurface,
                 lineHeight = 18.sp
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "This step is highly recommended for a smooth experience.",
+                text = stringResource(R.string.welcome_view_prevent_frozen_recommended),
                 style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colors.onSurface
             )
@@ -287,7 +294,7 @@ fun ShowInstructions() {
             horizontalAlignment = Alignment.Start
         ) {
             Text(
-                text = "📖 Quick Start & Gestures Guide",
+                text = stringResource(R.string.welcome_view_quick_start_title),
                 style = MaterialTheme.typography.h6,
                 color = MaterialTheme.colors.onSurface,
                 fontWeight = FontWeight.Bold
@@ -298,34 +305,26 @@ fun ShowInstructions() {
                 // First column: navigation, editing, selection
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Navigation",
+                        text = stringResource(R.string.welcome_view_quick_start_navigation),
                         style = MaterialTheme.typography.subtitle2,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colors.onSurface
                     )
                     Text(
-                        text = "• Swipe up/down: Scroll page\n" +
-                                "• Swipe left/right: Previous/next page\n" +
-                                "• Pinch with 2 fingers: Zoom\n" +
-                                "• Tap page number: Quick jump\n" +
-                                "• Two-finger swipe left/right: Show/hide toolbar",
+                        text = stringResource(R.string.welcome_view_quick_start_navigation_details),
                         style = MaterialTheme.typography.body2,
                         color = MaterialTheme.colors.onSurface,
                         lineHeight = 18.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Selection & Editing",
+                        text = stringResource(R.string.welcome_view_quick_start_selection_editing_title),
                         style = MaterialTheme.typography.subtitle2,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colors.onSurface
                     )
                     Text(
-                        text = "• Hold & drag: Select items\n" +
-                                "• Double tap: Undo\n" +
-                                "• Double tap on selection: Copy\n" +
-                                "• Drag selection: Move\n" +
-                                "• Scribble to erase (if enabled)",
+                        text = stringResource(R.string.welcome_view_quick_start_selection_editing_details),
                         style = MaterialTheme.typography.body2,
                         color = MaterialTheme.colors.onSurface,
                         lineHeight = 18.sp
@@ -335,18 +334,13 @@ fun ShowInstructions() {
                 // Second column: extra features
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Tips",
+                        text = stringResource(R.string.welcome_view_quick_start_tips_title),
                         style = MaterialTheme.typography.subtitle2,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colors.onSurface
                     )
                     Text(
-                        text = "• Use 'Selection Export' to quickly share images.\n" +
-                                "• Tap the page number to quickly jump between pages.\n" +
-                                "• Try enabling 'Scribble to Erase' in Settings for natural erasing.\n" +
-                                "• Double tap to undo, or on a selection to copy it.\n" +
-                                "• You can use Notable as a live PDF viewer for LaTeX—see README.\n" +
-                                "• You can customize gesture actions in Settings.",
+                        text = stringResource(R.string.welcome_view_quick_start_tips_details),
                         style = MaterialTheme.typography.body2,
                         color = MaterialTheme.colors.onSurface,
                         lineHeight = 18.sp
@@ -433,8 +427,7 @@ fun hasFilePermission(context: Context): Boolean {
         Environment.isExternalStorageManager()
     } else {
         ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
+            context, Manifest.permission.WRITE_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
     }
 }

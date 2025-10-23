@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.BuildConfig
+import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
@@ -70,7 +72,11 @@ fun SettingsView(navController: NavController) {
     val settings = GlobalAppSettings.current
 
     // Tab titles
-    val tabs = listOf("General", "Gestures", "Debug")
+    val tabs = listOf(
+        context.getString(R.string.settings_tab_general_name),
+        context.getString(R.string.settings_tab_gestures_name),
+        context.getString(R.string.settings_tab_debug_name)
+    )
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Surface(
@@ -81,7 +87,7 @@ fun SettingsView(navController: NavController) {
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            TitleBar(navController)
+            TitleBar(context, navController)
             // Tabs
             TabRow(
                 selectedTabIndex = selectedTab,
@@ -126,7 +132,7 @@ fun SettingsView(navController: NavController) {
             ) {
                 when (selectedTab) {
                     0 -> GeneralSettings(kv, settings)
-                    1 -> EditGestures(kv, settings)
+                    1 -> EditGestures(context, kv, settings)
                     2 -> DebugSettings(kv, settings)
                 }
 
@@ -161,18 +167,21 @@ fun SettingsView(navController: NavController) {
 fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
     Column {
         SelectorRow(
-            label = "Default Page Background Template", options = listOf(
-                "blank" to "Blank page",
-                "dotted" to "Dot grid",
-                "lined" to "Lines",
-                "squared" to "Small squares grid",
-                "hexed" to "Hexagon grid",
+            label = stringResource(R.string.default_page_background_template), options = listOf(
+                "blank" to stringResource(R.string.blank_page),
+                "dotted" to stringResource(R.string.dot_grid),
+                "lined" to stringResource(R.string.lines),
+                "squared" to stringResource(R.string.small_squares_grid),
+                "hexed" to stringResource(R.string.hexagon_grid),
             ), value = settings.defaultNativeTemplate, onValueChange = {
                 kv.setAppSettings(settings.copy(defaultNativeTemplate = it))
             })
         SelectorRow(
             label = "Toolbar Position", options = listOf(
-                AppSettings.Position.Top to "Top", AppSettings.Position.Bottom to "Bottom"
+                AppSettings.Position.Top to stringResource(R.string.toolbar_position_top),
+                AppSettings.Position.Bottom to stringResource(
+                    R.string.toolbar_position_bottom
+                )
             ), value = settings.toolbarPosition, onValueChange = { newPosition ->
                 settings.let {
                     kv.setAppSettings(it.copy(toolbarPosition = newPosition))
@@ -180,52 +189,54 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             })
 
         SettingToggleRow(
-            label = "Use Onyx NeoTools (may cause crashes)",
+            label = stringResource(R.string.use_onyx_neotools_may_cause_crashes),
             value = settings.neoTools,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(neoTools = isChecked))
             })
 
         SettingToggleRow(
-            label = "Enable scribble-to-erase (scribble out your mistakes to erase them)",
+            label = stringResource(R.string.enable_scribble_to_erase),
             value = settings.scribbleToEraseEnabled,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(scribbleToEraseEnabled = isChecked))
             })
 
         SettingToggleRow(
-            label = "Enable smooth scrolling",
+            label = stringResource(R.string.enable_smooth_scrolling),
             value = settings.smoothScroll,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(smoothScroll = isChecked))
             })
 
         SettingToggleRow(
-            label = "Continuous Zoom",
+            label = stringResource(R.string.continuous_zoom),
             value = settings.continuousZoom,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(continuousZoom = isChecked))
             })
         SettingToggleRow(
-            label = "Continuous Stroke Slider",
+            label = stringResource(R.string.continuous_stroke_slider),
             value = settings.continuousStrokeSlider,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(continuousStrokeSlider = isChecked))
             })
         SettingToggleRow(
-            label = "Monochrome mode (Work in progress)",
+            label = stringResource(R.string.monochrome_mode) + " " + stringResource(R.string.work_in_progress),
             value = settings.monochromeMode,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(monochromeMode = isChecked))
             })
 
         SettingToggleRow(
-            label = "Paginate PDF", value = settings.paginatePdf, onToggle = { isChecked ->
+            label = stringResource(R.string.paginate_pdf),
+            value = settings.paginatePdf,
+            onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(paginatePdf = isChecked))
             })
 
         SettingToggleRow(
-            label = "Preview PDF Pagination",
+            label = stringResource(R.string.preview_pdf_pagination),
             value = settings.visualizePdfPagination,
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(visualizePdfPagination = isChecked))
@@ -235,9 +246,7 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
 
 @Composable
 fun SettingToggleRow(
-    label: String,
-    value: Boolean,
-    onToggle: (Boolean) -> Unit
+    label: String, value: Boolean, onToggle: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -263,7 +272,7 @@ fun SettingToggleRow(
 
 
 @Composable
-fun TitleBar(navController: NavController) {
+fun TitleBar(context: Context, navController: NavController) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -282,7 +291,7 @@ fun TitleBar(navController: NavController) {
         }
 
         Text(
-            text = "Settings",
+            text = context.getString(R.string.settings_title),
             style = MaterialTheme.typography.h5,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center
@@ -339,12 +348,12 @@ fun GestureSelectorRow(
     SelectorRow(
         label = title, options = listOf(
             null to "None",
-            AppSettings.GestureAction.Undo to "Undo",
-            AppSettings.GestureAction.Redo to "Redo",
-            AppSettings.GestureAction.PreviousPage to "Previous Page",
-            AppSettings.GestureAction.NextPage to "Next Page",
-            AppSettings.GestureAction.ChangeTool to "Toggle Pen / Eraser",
-            AppSettings.GestureAction.ToggleZen to "Toggle Zen Mode",
+            AppSettings.GestureAction.Undo to stringResource(R.string.gesture_action_undo),
+            AppSettings.GestureAction.Redo to stringResource(R.string.gesture_action_redo),
+            AppSettings.GestureAction.PreviousPage to stringResource(R.string.gesture_action_previous_page),
+            AppSettings.GestureAction.NextPage to stringResource(R.string.gesture_action_next_page),
+            AppSettings.GestureAction.ChangeTool to stringResource(R.string.gesture_action_toggle_pen_eraser),
+            AppSettings.GestureAction.ToggleZen to stringResource(R.string.gesture_action_toggle_zen_mode),
         ), value = if (settings != null) override(settings) else default, onValueChange = {
             if (settings != null) {
                 val updated = update(it)
@@ -388,7 +397,7 @@ fun GitHubSponsorButton(modifier: Modifier = Modifier) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Sponsor",
+                    text = stringResource(R.string.sponsor_button_text),
                     color = Color.White,
                     style = MaterialTheme.typography.button.copy(
                         fontWeight = FontWeight.Bold, fontSize = 16.sp
@@ -408,7 +417,7 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
     if (!isLatestVersion) {
         Column(modifier = modifier) {
             Text(
-                text = "It seems a new version of Notable is available on GitHub.",
+                text = stringResource(R.string.app_new_version),
                 fontStyle = FontStyle.Italic,
                 style = MaterialTheme.typography.h6,
             )
@@ -425,7 +434,7 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
             ) {
                 Icon(Icons.Default.Upgrade, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "See release in browser")
+                Text(text = stringResource(R.string.app_see_release))
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -436,7 +445,7 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
                     isLatestVersion = isLatestVersion(context, true)
                     if (isLatestVersion) {
                         showHint(
-                            "You are on the latest version.", duration = 1000
+                            context.getString(R.string.app_latest_version), duration = 1000
                         )
                     }
                 }
@@ -444,14 +453,14 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
         ) {
             Icon(Icons.Default.Update, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Check for newer version")
+            Text(text = stringResource(R.string.app_check_updates))
         }
     }
 }
 
 
 @Composable
-fun EditGestures(kv: KvProxy, settings: AppSettings?) {
+fun EditGestures(context: Context, kv: KvProxy, settings: AppSettings?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -459,32 +468,32 @@ fun EditGestures(kv: KvProxy, settings: AppSettings?) {
     ) {
         val gestures = listOf(
             Triple(
-                "Double Tap Action",
+                stringResource(R.string.gestures_double_tap_action),
                 AppSettings.defaultDoubleTapAction,
                 AppSettings::doubleTapAction
             ),
             Triple(
-                "Two Finger Tap Action",
+                stringResource(R.string.gestures_two_finger_tap_action),
                 AppSettings.defaultTwoFingerTapAction,
                 AppSettings::twoFingerTapAction
             ),
             Triple(
-                "Swipe Left Action",
+                stringResource(R.string.gestures_swipe_left_action),
                 AppSettings.defaultSwipeLeftAction,
                 AppSettings::swipeLeftAction
             ),
             Triple(
-                "Swipe Right Action",
+                stringResource(R.string.gestures_swipe_right_action),
                 AppSettings.defaultSwipeRightAction,
                 AppSettings::swipeRightAction
             ),
             Triple(
-                "Two Finger Swipe Left Action",
+                stringResource(R.string.gestures_two_finger_swipe_left_action),
                 AppSettings.defaultTwoFingerSwipeLeftAction,
                 AppSettings::twoFingerSwipeLeftAction
             ),
             Triple(
-                "Two Finger Swipe Right Action",
+                stringResource(R.string.gestures_two_finger_swipe_right_action),
                 AppSettings.defaultTwoFingerSwipeRightAction,
                 AppSettings::twoFingerSwipeRightAction
             ),
@@ -494,12 +503,30 @@ fun EditGestures(kv: KvProxy, settings: AppSettings?) {
             GestureSelectorRow(
                 title = title, kv = kv, settings = settings, update = { action ->
                     when (title) {
-                        "Double Tap Action" -> settings?.copy(doubleTapAction = action)
-                        "Two Finger Tap Action" -> settings?.copy(twoFingerTapAction = action)
-                        "Swipe Left Action" -> settings?.copy(swipeLeftAction = action)
-                        "Swipe Right Action" -> settings?.copy(swipeRightAction = action)
-                        "Two Finger Swipe Left Action" -> settings?.copy(twoFingerSwipeLeftAction = action)
-                        "Two Finger Swipe Right Action" -> settings?.copy(twoFingerSwipeRightAction = action)
+                        context.getString(R.string.gestures_double_tap_action) -> settings?.copy(
+                            doubleTapAction = action
+                        )
+
+                        context.getString(R.string.gestures_two_finger_tap_action) -> settings?.copy(
+                            twoFingerTapAction = action
+                        )
+
+                        context.getString(R.string.gestures_swipe_left_action) -> settings?.copy(
+                            swipeLeftAction = action
+                        )
+
+                        context.getString(R.string.gestures_swipe_right_action) -> settings?.copy(
+                            swipeRightAction = action
+                        )
+
+                        context.getString(R.string.gestures_two_finger_swipe_left_action) -> settings?.copy(
+                            twoFingerSwipeLeftAction = action
+                        )
+
+                        context.getString(R.string.gestures_two_finger_swipe_right_action) -> settings?.copy(
+                            twoFingerSwipeRightAction = action
+                        )
+
                         else -> settings
                     } ?: settings
                 }, default = default, override = override

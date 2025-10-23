@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
@@ -52,9 +53,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.ui.PageMenu
 import com.ethran.notable.editor.ui.toolbar.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.ImportEngine
@@ -64,7 +63,6 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.NotebookCard
-import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.ShowPagesRow
 import com.ethran.notable.ui.dialogs.EmptyBookWarningHandler
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
@@ -146,10 +144,16 @@ fun Library(navController: NavController, folderId: String? = null) {
             Modifier.padding(10.dp)
         ) {
             Spacer(Modifier.height(10.dp))
-            FolderList(folders, navController, appRepository, folderId)
+            FolderList(context, folders, navController, appRepository, folderId)
 
             Spacer(Modifier.height(10.dp))
-            ShowPagesRow(singlePages, navController, appRepository, folderId)
+            ShowPagesRow(
+                singlePages,
+                navController,
+                appRepository,
+                folderId,
+                title = context.getString(R.string.home_quick_pages)
+            )
 
             Spacer(Modifier.height(10.dp))
             NotebookGrid(context, books, navController, bookRepository, folderId)
@@ -162,6 +166,7 @@ fun Library(navController: NavController, folderId: String? = null) {
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun FolderList(
+    context: Context,
     folders: List<Folder>?,
     navController: NavController,
     appRepository: AppRepository,
@@ -189,7 +194,7 @@ fun FolderList(
                     Modifier.height(20.dp)
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(text = "Add new folder")
+                Text(text = context.getString(R.string.home_add_new_folder))
             }
         }
         if (!folders.isNullOrEmpty()) {
@@ -238,7 +243,7 @@ fun NotebookGrid(
 ) {
     var importInProgress = false
 
-    Text(text = "Notebooks")
+    Text(text = context.getString(R.string.home_notebooks))
     Spacer(Modifier.height(10.dp))
     LazyVerticalGrid(
         columns = GridCells.Adaptive(100.dp),

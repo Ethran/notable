@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_quick_pages">Szybkie notatki</string>
+    <string name="home_notebooks">Zeszyty</string>
+    <string name="home_add_new_folder">Dodaj nowy folder</string>
+    <string name="home_new_folder">Nowy folder</string>
+    <string name="home_view_name">Biblioteka</string>
+    <string name="settings_title">Ustawienia</string>
+    <string name="settings_tab_general_name">Główne</string>
+    <string name="settings_tab_gestures_name">Gesty</string>
+    <string name="default_page_background_template">Domyślny szablon tła</string>
+    <string name="blank_page">Czysta strona</string>
+    <string name="dot_grid">W kropki</string>
+    <string name="lines">W linie</string>
+    <string name="small_squares_grid">W kratkę</string>
+    <string name="hexagon_grid">W sześciokąty</string>
+
+    <string name="use_onyx_neotools_may_cause_crashes">Używaj Onyx NeoTools (może powodować awarie)</string>
+    <string name="enable_scribble_to_erase">Włącz funkcję szkicowania do wymazywania</string>
+    <string name="enable_smooth_scrolling">Włącz płynne przewijanie</string>
+    <string name="continuous_zoom">Włącz płynne przybliżanie</string>
+    <string name="continuous_stroke_slider">Płynny regulator grubości kreski</string>
+    <string name="monochrome_mode">Tryb czarno-biały</string>
+    <string name="paginate_pdf">Podziel strony przy eksporcie</string>
+    <string name="preview_pdf_pagination">Podgląd podziału stron</string>
+
+    <string name="app_new_version">Wygląda na to, że nowa wersja Notable jest dostępna na GitHubie!</string>
+    <string name="app_see_release">Zobacz wersję w przeglądarce</string>
+    <string name="app_latest_version">Aplikacja jest aktualna.</string>
+    <string name="app_check_updates">Sprawdź dostępność aktualizacji</string>
+
+    <string name="gestures_double_tap_action">Podwójne stuknięcie</string>
+    <string name="gestures_two_finger_tap_action">Stuknięcie dwoma palcami</string>
+    <string name="gestures_swipe_left_action">Przeciągnięcie w lewo</string>
+    <string name="gestures_swipe_right_action">Przeciągnięcie w prawo</string>
+    <string name="gestures_two_finger_swipe_left_action">Przeciągnięcie dwoma palcami w lewo</string>
+    <string name="gestures_two_finger_swipe_right_action">Przeciągnięcie dwoma palcami w prawo</string>
+
+    <string name="gesture_action_undo">Cofnij</string>
+    <string name="gesture_action_redo">Ponów</string>
+    <string name="gesture_action_previous_page">Poprzednia strona</string>
+    <string name="gesture_action_next_page">Następna strona</string>
+    <string name="gesture_action_toggle_pen_eraser">Przełącz pióro/gumkę</string>
+    <string name="gesture_action_toggle_zen_mode">Przełącz tryb Zen</string>
+
+    <string name="work_in_progress">(w trakcie implementacji)</string>
+    <string name="toolbar_position_top">Góra</string>
+    <string name="toolbar_position_bottom">Dół</string>
+    <string name="sponsor_button_text">Wesprzyj</string>
+
+    <!-- Notebook details -->
+    <string name="details_notebook_title">Tytuł:</string>
+    <string name="details_notebook_default_background_template">Domyślny szablon tła</string>
+    <string name="details_notebook_pages">Strony: %1$d</string>
+    <string name="details_notebook_in_folder">W folderze: </string>
+    <string name="details_notebook_created">Utworzono: %1$s</string>
+    <string name="details_notebook_last_updated">Ostatnia aktualizacja: %1$s</string>
+    <string name="details_notebook_buttons_delete">Usuń</string>
+    <string name="details_notebook_buttons_move">Przenieś</string>
+    <string name="details_notebook_buttons_export">Eksportuj</string>
+    <string name="details_notebook_buttons_copy">Kopiuj</string>
+    <string name="details_notebook_linked_to">Powiązane z: %1$s</string>
+
+
+    <!-- Welcome / guide strings -->
+    <string name="welcome_view_title">Witaj w Notable!</string>
+    <string name="welcome_view_subtitle">Aby uzyskać najlepsze wrażenia, wykonaj kroki konfiguracji:</string>
+    <string name="welcome_view_file_access">Dostęp do plików</string>
+    <string name="welcome_view_file_access_explanation">Wymagane do zapisywania i ładowania notatek</string>
+    <string name="welcome_view_refresh_mode">Ustaw zalecany tryb odświeżania</string>
+    <string name="welcome_view_refresh_mode_details">Zalecane jest używanie trybu HD lub Regal</string>
+    <string name="welcome_view_refresh_mode_applied">Zastosowano (%1$s)</string>
+    <string name="welcome_view_refresh_mode_set_hd_mode">Ustaw tryb HD (obecnie: %1$s)</string>
+    <string name="welcome_view_permissions_granted">Przyznano ✓</string>
+    <string name="welcome_view_permissions_button">Przyznaj uprawnienia</string>
+    <string name="welcome_view_continue">Kontynuuj</string>
+    <string name="welcome_view_complete_setup_first">Najpierw zakończ konfigurację</string>
+
+    <string name="welcome_view_prevent_frozen">⚠️ Zapobiegaj zamrażaniu Notable (urządzenia Onyx)</string>
+    <string name="welcome_view_prevent_frozen_details">Urządzenia Onyx mogą automatycznie zamrażać (zamykać) aplikacje działające w tle, aby oszczędzać baterię. Jeśli nie wyłączysz tej funkcji, Notable będzie ciągle zamykany w tle, co może powodować utratę pracy lub przerwania.</string>
+    <string name="welcome_view_prevent_frozen_instructions_title">Jak zapobiec zamrażaniu:</string>
+    <string name="welcome_view_prevent_frozen_instructions">1. Przytrzymaj ikonę Notable na launcherze Onyx (ekran główny).\n2. Wybierz &quot;Odblokuj aplikację&quot; z menu.</string>
+    <string name="welcome_view_prevent_frozen_recommended">Ten krok jest wysoce zalecany dla płynnego działania.</string>
+
+    <string name="welcome_view_quick_start_title"><![CDATA[📖 Szybki start i przewodnik gestów]]></string>
+    <string name="welcome_view_quick_start_navigation">Nawigacja</string>
+    <string name="welcome_view_quick_start_navigation_details">• Przeciągnij w górę/w dół: Przewijaj stronę\n• Przeciągnij w lewo/w prawo: Poprzednia/następna strona\n• Uszczypnij dwoma palcami: Przybliż/oddal\n• Stuknij numer strony: Szybkie przejście\n• Przeciągnięcie dwoma palcami w lewo/w prawo: Pokaż/ukryj pasek narzędzi</string>
+
+    <string name="welcome_view_quick_start_selection_editing_title"><![CDATA[Zaznaczanie i edycja]]></string>
+    <string name="welcome_view_quick_start_selection_editing_details"><![CDATA[• Przytrzymaj i przeciągnij: Zaznacz elementy\n• Podwójne stuknięcie: Cofnij\n• Podwójne stuknięcie na zaznaczeniu: Kopiuj\n• Przeciągnij zaznaczenie: Przenieś\n• Szkicuj, aby wymazać (jeśli włączone)]]></string>
+
+    <string name="welcome_view_quick_start_tips_title">Wskazówki</string>
+    <string name="welcome_view_quick_start_tips_details">• Użyj  \'Selection Export \', aby szybko udostępniać obrazy.\n• Stuknij numer strony, aby szybko przejść do wybranej strony.\n• Spróbuj włączyć  \'Scribble to Erase\' w Ustawieniach, aby naturalnie wymazywać.\n• Podwójne stuknięcie cofa, a podwójne stuknięcie na zaznaczeniu kopiuje je.\n• Możesz używać Notable jako podglądu PDF w czasie rzeczywistym dla LaTeX — zobacz README.\n• Możesz dostosować akcje gestów w Ustawieniach.</string>
+
+    <string name="export_page_to">Eksportuj stronę do %1$s</string>
+    <string name="exporting_the_page_to">Eksportowanie strony do %1$s…</string>
+
+    <string name="export_book_to">Eksportuj zeszyt do %1$s</string>
+    <string name="exporting_the_book_to">Eksportowanie zeszytu do %1$s…</string>
+    <string name="clean_all_strokes">Wyczyść wszystkie kreski</string>
+    <string name="cleared_all_strokes">Wyczyszczono wszystkie kreski</string>
+    <string name="change_background">Zmień tło</string>
+    <string name="bug_report">Zgłoś błąd</string>
+
+    <string name="choose_pdf_background">Wybierz tło PDF</string>
+    <plurals name="pdf_has_pages">
+        <item quantity="one">PDF ma %1$d stronę</item>
+        <item quantity="few">PDF ma %1$d strony</item>
+        <item quantity="many">PDF ma %1$d stron</item>
+        <item quantity="other">PDF ma %1$d stron</item>
+    </plurals>
+    <string name="repeat_background">Powtarzaj tło</string>
+    <string name="choose_native_template">Wybierz szablon natywny</string>
+    <string name="select_pdf_page">Wybierz stronę PDF</string>
+    <string name="page_number">Numer strony</string>
+    <string name="observe_pdf">Podgląd PDF</string>
+    <string name="current_page">Bieżąca strona</string>
+
+    <string name="toolbar_scribble_to_erase_two_lined_short">Zamaż\n→usuń</string>
+
+</resources>

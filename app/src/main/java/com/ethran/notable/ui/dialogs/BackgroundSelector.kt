@@ -64,6 +64,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -83,6 +85,7 @@ import com.ethran.notable.editor.drawing.drawDottedBg
 import com.ethran.notable.editor.drawing.drawHexedBg
 import com.ethran.notable.editor.drawing.drawLinedBg
 import com.ethran.notable.editor.drawing.drawSquaredBg
+import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.getPdfPageCount
 import com.ethran.notable.ui.components.OnOffSwitch
 import compose.icons.FeatherIcons
@@ -274,7 +277,7 @@ fun BackgroundSelector(
                             Spacer(Modifier.height(10.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Repeat background")
+                                Text(stringResource(R.string.repeat_background))
                                 Spacer(Modifier.width(10.dp))
                                 OnOffSwitch(
                                     checked = pageBackgroundType == BackgroundType.ImageRepeating,
@@ -365,11 +368,11 @@ fun ShowNativeOption(
     onBackgroundChange: (String, BackgroundType) -> Unit
 ) {
     val nativeOptions = listOf(
-        "blank" to "Blank page",
-        "dotted" to "Dot grid",
-        "lined" to "Lines",
-        "squared" to "Small squares grid",
-        "hexed" to "Hexagon grid"
+        "blank" to stringResource(R.string.blank_page),
+        "dotted" to stringResource(R.string.dot_grid),
+        "lined" to stringResource(R.string.lines),
+        "squared" to stringResource(R.string.small_squares_grid),
+        "hexed" to stringResource(R.string.hexagon_grid)
     )
 
     val context = LocalContext.current
@@ -410,7 +413,11 @@ fun ShowNativeOption(
         }
     }
 
-    Text("Choose Native Template", fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+    Text(
+        stringResource(R.string.choose_native_template),
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(8.dp)
+    )
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(120.dp),
@@ -591,7 +598,7 @@ fun ShowPdfOption(
     onBackgroundChange: (BackgroundType, String) -> Unit,
     onRequestFilePicker: () -> Unit,
 ) {
-    Text("Choose PDF background", fontWeight = FontWeight.Bold)
+    Text(stringResource(R.string.choose_pdf_background), fontWeight = FontWeight.Bold)
 
     val folderName = currentBackgroundType.folderName
     val folder = File(ensureBackgroundsFolder(), folderName)
@@ -671,7 +678,7 @@ fun PageNumberSelector(
     ) {
         Column {
             Spacer(Modifier.height(10.dp))
-            Text("Select PDF Page", fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.select_pdf_page), fontWeight = FontWeight.SemiBold)
 
             var pageText by remember {
                 mutableStateOf(
@@ -684,6 +691,7 @@ fun PageNumberSelector(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .autoEInkAnimationOnScroll()
                     .padding(horizontal = 100.dp)
             ) {
                 IconButton(
@@ -715,7 +723,7 @@ fun PageNumberSelector(
                             pageText = it
                         }
                     },
-                    label = { Text("Page number") },
+                    label = { Text(stringResource(R.string.page_number)) },
                     keyboardOptions = KeyboardOptions.Default.copy(
                         keyboardType = KeyboardType.Number, imeAction = ImeAction.Done
                     ),
@@ -761,7 +769,10 @@ fun PageNumberSelector(
                             contentColor = Color.Black
                         )
                     ) {
-                        val name = if (isNotebookBgSelector) "Observe PDF" else "Current Page"
+                        val name =
+                            if (isNotebookBgSelector) stringResource(R.string.observe_pdf) else stringResource(
+                                R.string.current_page
+                            )
                         Icon(
                             imageVector = Icons.Default.Autorenew,
                             contentDescription = name,
@@ -775,7 +786,11 @@ fun PageNumberSelector(
             }
 
             Text(
-                "PDF has $maxPages pages",
+                pluralStringResource(
+                    R.plurals.pdf_has_pages,
+                    maxPages ?: 0,
+                    maxPages ?: 0
+                ),
                 fontSize = 12.sp,
                 color = Color.Gray,
                 modifier = Modifier
