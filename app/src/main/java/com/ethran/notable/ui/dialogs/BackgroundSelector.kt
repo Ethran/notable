@@ -788,8 +788,8 @@ fun PageNumberSelector(
             Text(
                 pluralStringResource(
                     R.plurals.pdf_has_pages,
-                    maxPages ?: 0,  // liczba stron (może być 0)
-                    maxPages ?: 0   // parametr do wstawienia w %1$d
+                    maxPages ?: 0,
+                    maxPages ?: 0
                 ),
                 fontSize = 12.sp,
                 color = Color.Gray,

@@ -25,7 +25,7 @@
     <string name="preview_pdf_pagination">Preview PDF Pagination</string>
     <string name="app_new_version">It seems a new version of Notable is available on GitHub!</string>
     <string name="app_see_release">See release in browser</string>
-    <string name="app_lastest_version">You are on the latest version.</string>
+    <string name="app_latest_version">You are on the latest version.</string>
     <string name="app_check_updates">Check for newer version</string>
     <string name="gestures_double_tap_action">Double Tap Action</string>
     <string name="gestures_two_finger_tap_action">Two Finger Tap Action</string>
@@ -67,7 +67,7 @@
     <string name="welcome_view_continue">Continue</string>
     <string name="welcome_view_complete_setup_first">Complete Setup First</string>
     <string name="welcome_view_prevent_frozen">⚠️ Prevent Notable from Being Frozen (Onyx Devices)</string>
-    <string name="welcome_view_prevent_frozen_details">"Onyx devices may automatically freeze (kill) apps in the background to save battery. If you do not disable this feature, Notable will be constantly closed when in the background,which can be very annoying and may cause loss of work or interruptions. "</string>
+    <string name="welcome_view_prevent_frozen_details">"Onyx devices may automatically freeze (kill) apps in the background to save battery. If you do not disable this feature, Notable will be constantly closed when in the background, which can be very annoying and may cause loss of work or interruptions. "</string>
     <string name="welcome_view_prevent_frozen_instructions_title">How to prevent freezing:</string>
     <string name="welcome_view_prevent_frozen_instructions">1. Long press the Notable app icon on the Onyx launcher (home screen).\n2. Select \"Unfreeze app\" from the menu.</string>
     <string name="welcome_view_prevent_frozen_recommended">This step is highly recommended for a smooth experience.</string>

@@ -187,16 +187,12 @@ fun PermissionsRow(
                 title = stringResource(R.string.welcome_view_refresh_mode),
                 description = stringResource(R.string.welcome_view_refresh_mode_details),
                 isGranted = recommendedRefreshMode.value,
-                buttonText = if (recommendedRefreshMode.value)
-                    stringResource(
-                        R.string.welcome_view_refresh_mode_applied,
-                        refreshModeString.value
-                    )
-                else
-                    stringResource(
-                        R.string.welcome_view_refresh_mode_set_hd_mode,
-                        refreshModeString.value
-                    ),
+                buttonText = if (recommendedRefreshMode.value) stringResource(
+                    R.string.welcome_view_refresh_mode_applied, refreshModeString.value
+                )
+                else stringResource(
+                    R.string.welcome_view_refresh_mode_set_hd_mode, refreshModeString.value
+                ),
                 onClick = {
                     setRecommendedMode()
                 },
@@ -431,8 +427,7 @@ fun hasFilePermission(context: Context): Boolean {
         Environment.isExternalStorageManager()
     } else {
         ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
+            context, Manifest.permission.WRITE_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
     }
 }

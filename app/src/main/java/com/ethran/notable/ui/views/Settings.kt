@@ -178,7 +178,8 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             })
         SelectorRow(
             label = "Toolbar Position", options = listOf(
-                AppSettings.Position.Top to stringResource(R.string.toolbar_position_top), AppSettings.Position.Bottom to stringResource(
+                AppSettings.Position.Top to stringResource(R.string.toolbar_position_top),
+                AppSettings.Position.Bottom to stringResource(
                     R.string.toolbar_position_bottom
                 )
             ), value = settings.toolbarPosition, onValueChange = { newPosition ->
@@ -245,9 +246,7 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
 
 @Composable
 fun SettingToggleRow(
-    label: String,
-    value: Boolean,
-    onToggle: (Boolean) -> Unit
+    label: String, value: Boolean, onToggle: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -292,7 +291,7 @@ fun TitleBar(context: Context, navController: NavController) {
         }
 
         Text(
-            text = context.getString(R.string.app_name),
+            text = context.getString(R.string.settings_title),
             style = MaterialTheme.typography.h5,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center
@@ -446,7 +445,7 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
                     isLatestVersion = isLatestVersion(context, true)
                     if (isLatestVersion) {
                         showHint(
-                            context.getString(R.string.app_lastest_version), duration = 1000
+                            context.getString(R.string.app_latest_version), duration = 1000
                         )
                     }
                 }
@@ -527,6 +526,7 @@ fun EditGestures(context: Context, kv: KvProxy, settings: AppSettings?) {
                         context.getString(R.string.gestures_two_finger_swipe_right_action) -> settings?.copy(
                             twoFingerSwipeRightAction = action
                         )
+
                         else -> settings
                     } ?: settings
                 }, default = default, override = override

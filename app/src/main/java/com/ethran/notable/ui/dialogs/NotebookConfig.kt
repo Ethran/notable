@@ -80,10 +80,8 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
     var bookTitle by remember {
         mutableStateOf(book!!.title)
     }
-    val formattedCreatedAt =
-        remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.createdAt) }
-    val formattedUpdatedAt =
-        remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.updatedAt) }
+    val formattedCreatedAt = remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.createdAt) }
+    val formattedUpdatedAt = remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.updatedAt) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -114,8 +112,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     )
                     bookRepository.update(updatedBook)
                 }
-            }
-        ) {
+            }) {
             showBackgroundSelector = false
         }
     }
@@ -131,8 +128,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
             },
             onCancel = {
                 showDeleteDialog = false
-            }
-        )
+            })
         return
     }
     // Confirmation Dialog for Deletion
@@ -147,8 +143,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
             },
             onCancel = {
                 showExportDialog = false
-            }
-        )
+            })
         return
     }
     // Folder Selection Dialog
@@ -169,15 +164,13 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     // be careful, not to cause race condition.
                     bookRepository.update(updatedBook)
                 }
-            }
-        )
+            })
     }
 
     Dialog(
         onDismissRequest = {
             onClose()
-        }
-    ) {
+        }) {
         val focusManager = LocalFocusManager.current
 
         Column(
@@ -226,8 +219,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                             ),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Text,
-                                imeAction = ImeAction.Done
+                                keyboardType = KeyboardType.Text, imeAction = ImeAction.Done
                             ),
                             onValueChange = { bookTitle = it },
                             keyboardActions = KeyboardActions(onDone = {
@@ -249,11 +241,11 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
 
                         )
                     }
+
                     /* -------------- Template selection -----------*/
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = stringResource(R.string.details_notebook_default_background_template),
@@ -301,8 +293,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                         onLinkChanged = { newUri ->
                             val updated = book!!.copy(linkedExternalUri = newUri)
                             bookRepository.update(updated)
-                        }
-                    )
+                        })
 
                     /* -------------- Other book info -----------*/
                     Text(stringResource(R.string.details_notebook_pages, book!!.pageIds.size))
@@ -393,8 +384,7 @@ fun NotebookLinkRow(
                     isLinked = false
                     onLinkChanged(null)
                 },
-                modifier = Modifier
-                    .weight(0.3f, fill = false)
+                modifier = Modifier.weight(0.3f, fill = false)
             ) {
                 Text("Unlink")
             }
@@ -404,8 +394,7 @@ fun NotebookLinkRow(
                     isLinked = true
                     onLinkChanged(defaultPath)
                 },
-                modifier = Modifier
-                    .weight(0.3f, fill = false)
+                modifier = Modifier.weight(0.3f, fill = false)
             ) {
                 Text("Link")
             }

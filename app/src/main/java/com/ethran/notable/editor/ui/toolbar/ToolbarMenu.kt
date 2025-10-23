@@ -86,8 +86,7 @@ fun ToolbarMenu(
                 scope.launch {
                     snackManager.runWithSnack(
                         context.getString(
-                            R.string.exporting_the_page_to,
-                            "PDF"
+                            R.string.exporting_the_page_to, "PDF"
                         )
                     ) {
                         ExportEngine(context).export(
@@ -102,8 +101,7 @@ fun ToolbarMenu(
                 scope.launch {
                     snackManager.runWithSnack(
                         context.getString(
-                            R.string.exporting_the_page_to,
-                            "PNG"
+                            R.string.exporting_the_page_to, "PNG"
                         )
                     ) {
                         withContext(Dispatchers.IO) {
@@ -120,8 +118,7 @@ fun ToolbarMenu(
                 scope.launch {
                     snackManager.runWithSnack(
                         context.getString(
-                            R.string.exporting_the_page_to,
-                            "JPG"
+                            R.string.exporting_the_page_to, "JPG"
                         )
                     ) {
                         ExportEngine(context).export(
@@ -136,8 +133,7 @@ fun ToolbarMenu(
                 scope.launch {
                     snackManager.runWithSnack(
                         context.getString(
-                            R.string.exporting_the_page_to,
-                            "xopp"
+                            R.string.exporting_the_page_to, "xopp"
                         )
                     ) {
                         ExportEngine(context).export(
@@ -156,8 +152,7 @@ fun ToolbarMenu(
                     scope.launch {
                         snackManager.runWithSnack(
                             context.getString(
-                                R.string.exporting_the_book_to,
-                                "PDF"
+                                R.string.exporting_the_book_to, "PDF"
                             )
                         ) {
                             ExportEngine(context).export(
@@ -172,8 +167,7 @@ fun ToolbarMenu(
                     scope.launch {
                         snackManager.runWithSnack(
                             context.getString(
-                                R.string.exporting_the_book_to,
-                                "PNG"
+                                R.string.exporting_the_book_to, "PNG"
                             )
                         ) {
                             ExportEngine(context).export(
@@ -188,8 +182,7 @@ fun ToolbarMenu(
                     scope.launch {
                         snackManager.runWithSnack(
                             context.getString(
-                                R.string.exporting_the_book_to,
-                                "xopp"
+                                R.string.exporting_the_book_to, "xopp"
                             )
                         ) {
                             ExportEngine(context).export(
@@ -208,8 +201,7 @@ fun ToolbarMenu(
                     clearPageSignal.emit(Unit)
                     snackManager.displaySnack(
                         SnackConf(
-                            text = context.getString(R.string.cleared_all_strokes),
-                            duration = 3000
+                            text = context.getString(R.string.cleared_all_strokes), duration = 3000
                         )
                     )
                 }
@@ -232,14 +224,13 @@ fun ToolbarMenu(
 
 @Composable
 private fun MenuItem(
-    label: String,
-    onClick: () -> Unit
+    label: String, onClick: () -> Unit
 ) {
     Box(
         Modifier
-            .fillMaxWidth()                 // occupy the menu's width
-            .noRippleClickable { onClick() } // click covers entire box
-            .padding(horizontal = 10.dp, vertical = 8.dp) // inner spacing
+            .fillMaxWidth()                                 // occupy the menu's width
+            .noRippleClickable { onClick() }                // click covers entire box
+            .padding(horizontal = 10.dp, vertical = 8.dp)   // inner spacing
     ) {
         Text(
             text = label,

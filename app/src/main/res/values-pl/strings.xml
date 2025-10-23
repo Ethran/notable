@@ -26,7 +26,7 @@
 
     <string name="app_new_version">Wygląda na to, że nowa wersja Notable jest dostępna na GitHubie!</string>
     <string name="app_see_release">Zobacz wersję w przeglądarce</string>
-    <string name="app_lastest_version">Aplikacja jest aktualna.</string>
+    <string name="app_latest_version">Aplikacja jest aktualna.</string>
     <string name="app_check_updates">Sprawdź dostępność aktualizacji</string>
 
     <string name="gestures_double_tap_action">Podwójne stuknięcie</string>
