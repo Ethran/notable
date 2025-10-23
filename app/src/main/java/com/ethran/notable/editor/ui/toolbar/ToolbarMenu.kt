@@ -17,11 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.navigation.NavController
+import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.editor.DrawCanvas.Companion.clearPageSignal
@@ -71,7 +73,7 @@ fun ToolbarMenu(
                 .width(IntrinsicSize.Max)
         ) {
             // Library
-            MenuItem("Library") {
+            MenuItem(stringResource(R.string.home_view_name)) {
                 navController.navigate(
                     if (parentFolder != null) "library?folderId=$parentFolder" else "library"
                 )
@@ -80,9 +82,14 @@ fun ToolbarMenu(
             DividerCentered()
 
             // Page exports
-            MenuItem("Export page to PDF") {
+            MenuItem(context.getString(R.string.export_page_to, "PDF")) {
                 scope.launch {
-                    snackManager.runWithSnack("Exporting the page to PDF...") {
+                    snackManager.runWithSnack(
+                        context.getString(
+                            R.string.exporting_the_page_to,
+                            "PDF"
+                        )
+                    ) {
                         ExportEngine(context).export(
                             target = ExportTarget.Page(pageId = state.pageId),
                             format = ExportFormat.PDF
@@ -91,9 +98,14 @@ fun ToolbarMenu(
                 }
                 onClose()
             }
-            MenuItem("Export page to PNG") {
+            MenuItem(context.getString(R.string.export_page_to, "PNG")) {
                 scope.launch {
-                    snackManager.runWithSnack("Exporting the page to PNG...") {
+                    snackManager.runWithSnack(
+                        context.getString(
+                            R.string.exporting_the_page_to,
+                            "PNG"
+                        )
+                    ) {
                         withContext(Dispatchers.IO) {
                             ExportEngine(context).export(
                                 target = ExportTarget.Page(pageId = state.pageId),
@@ -104,9 +116,14 @@ fun ToolbarMenu(
                 }
                 onClose()
             }
-            MenuItem("Export page to JPEG") {
+            MenuItem(context.getString(R.string.export_page_to, "JPEG")) {
                 scope.launch {
-                    snackManager.runWithSnack("Exporting the page to JPEG...") {
+                    snackManager.runWithSnack(
+                        context.getString(
+                            R.string.exporting_the_page_to,
+                            "JPG"
+                        )
+                    ) {
                         ExportEngine(context).export(
                             target = ExportTarget.Page(pageId = state.pageId),
                             format = ExportFormat.JPEG
@@ -115,9 +132,14 @@ fun ToolbarMenu(
                 }
                 onClose()
             }
-            MenuItem("Export page to xopp") {
+            MenuItem(context.getString(R.string.export_page_to, "xopp")) {
                 scope.launch {
-                    snackManager.runWithSnack("Exporting the page to xopp") {
+                    snackManager.runWithSnack(
+                        context.getString(
+                            R.string.exporting_the_page_to,
+                            "xopp"
+                        )
+                    ) {
                         ExportEngine(context).export(
                             target = ExportTarget.Page(pageId = state.pageId),
                             format = ExportFormat.XOPP
@@ -130,9 +152,14 @@ fun ToolbarMenu(
 
             // Book exports
             if (state.bookId != null && book != null) {
-                MenuItem("Export book to PDF") {
+                MenuItem(context.getString(R.string.export_book_to, "PDF")) {
                     scope.launch {
-                        snackManager.runWithSnack("Exporting the book to PDF...") {
+                        snackManager.runWithSnack(
+                            context.getString(
+                                R.string.exporting_the_book_to,
+                                "PDF"
+                            )
+                        ) {
                             ExportEngine(context).export(
                                 target = ExportTarget.Book(bookId = state.bookId),
                                 format = ExportFormat.PDF
@@ -141,9 +168,14 @@ fun ToolbarMenu(
                     }
                     onClose()
                 }
-                MenuItem("Export book to PNG") {
+                MenuItem(context.getString(R.string.export_book_to, "PNG")) {
                     scope.launch {
-                        snackManager.runWithSnack("Exporting the book to PNG...") {
+                        snackManager.runWithSnack(
+                            context.getString(
+                                R.string.exporting_the_book_to,
+                                "PNG"
+                            )
+                        ) {
                             ExportEngine(context).export(
                                 target = ExportTarget.Book(bookId = state.bookId),
                                 format = ExportFormat.PNG
@@ -152,9 +184,14 @@ fun ToolbarMenu(
                     }
                     onClose()
                 }
-                MenuItem("Export book to xopp") {
+                MenuItem(context.getString(R.string.export_book_to, "xopp")) {
                     scope.launch {
-                        snackManager.runWithSnack("Exporting the book to xopp") {
+                        snackManager.runWithSnack(
+                            context.getString(
+                                R.string.exporting_the_book_to,
+                                "xopp"
+                            )
+                        ) {
                             ExportEngine(context).export(
                                 target = ExportTarget.Book(bookId = state.bookId),
                                 format = ExportFormat.XOPP
@@ -166,12 +203,12 @@ fun ToolbarMenu(
                 DividerCentered()
             }
 
-            MenuItem("Clean all strokes") {
+            MenuItem(stringResource(R.string.clean_all_strokes)) {
                 scope.launch {
                     clearPageSignal.emit(Unit)
                     snackManager.displaySnack(
                         SnackConf(
-                            text = "Cleared all strokes",
+                            text = context.getString(R.string.cleared_all_strokes),
                             duration = 3000
                         )
                     )
@@ -180,12 +217,12 @@ fun ToolbarMenu(
             }
             DividerCentered()
 
-            MenuItem("Change Background") {
+            MenuItem(stringResource(R.string.change_background)) {
                 onBackgroundSelectorModalOpen()
                 onClose()
             }
 
-            MenuItem("Bug Report") {
+            MenuItem(stringResource(R.string.bug_report)) {
                 navController.navigate("bugReport")
                 onClose()
             }

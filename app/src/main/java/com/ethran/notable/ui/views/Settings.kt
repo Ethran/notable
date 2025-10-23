@@ -349,12 +349,12 @@ fun GestureSelectorRow(
     SelectorRow(
         label = title, options = listOf(
             null to "None",
-            AppSettings.GestureAction.Undo to "Undo",
-            AppSettings.GestureAction.Redo to "Redo",
-            AppSettings.GestureAction.PreviousPage to "Previous Page",
-            AppSettings.GestureAction.NextPage to "Next Page",
-            AppSettings.GestureAction.ChangeTool to "Toggle Pen / Eraser",
-            AppSettings.GestureAction.ToggleZen to "Toggle Zen Mode",
+            AppSettings.GestureAction.Undo to stringResource(R.string.gesture_action_undo),
+            AppSettings.GestureAction.Redo to stringResource(R.string.gesture_action_redo),
+            AppSettings.GestureAction.PreviousPage to stringResource(R.string.gesture_action_previous_page),
+            AppSettings.GestureAction.NextPage to stringResource(R.string.gesture_action_next_page),
+            AppSettings.GestureAction.ChangeTool to stringResource(R.string.gesture_action_toggle_pen_eraser),
+            AppSettings.GestureAction.ToggleZen to stringResource(R.string.gesture_action_toggle_zen_mode),
         ), value = if (settings != null) override(settings) else default, onValueChange = {
             if (settings != null) {
                 val updated = update(it)

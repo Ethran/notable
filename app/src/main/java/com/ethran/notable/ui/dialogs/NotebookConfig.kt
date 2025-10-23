@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
+import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.model.BackgroundType
@@ -210,7 +212,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     /* -------------- Title Field -----------*/
                     Row {
                         Text(
-                            text = "Title:",
+                            text = stringResource(R.string.details_notebook_title),
                             fontWeight = FontWeight.Bold,
                             fontSize = 24.sp
                         )
@@ -254,7 +256,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                             .fillMaxWidth()
                     ) {
                         Text(
-                            text = "Default Background Template",
+                            text = stringResource(R.string.details_notebook_default_background_template),
                         )
                         Spacer(modifier = Modifier.width(40.dp))
                         Button(
@@ -303,14 +305,14 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     )
 
                     /* -------------- Other book info -----------*/
-                    Text("Pages: ${book!!.pageIds.size}")
+                    Text(stringResource(R.string.details_notebook_pages, book!!.pageIds.size))
                     Text("Size: TODO!")
                     Row {
-                        Text("In Folder: ")
+                        Text(stringResource(R.string.details_notebook_in_folder))
                         BreadCrumb(folderId = bookFolder, fontSize = 16) { }
                     }
-                    Text("Created: $formattedCreatedAt")
-                    Text("Last Updated: $formattedUpdatedAt")
+                    Text(stringResource(R.string.details_notebook_created, formattedCreatedAt))
+                    Text(stringResource(R.string.details_notebook_last_updated, formattedUpdatedAt))
                 }
             }
 
@@ -321,16 +323,16 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
-                ActionButton("Delete") {
+                ActionButton(stringResource(R.string.details_notebook_buttons_delete)) {
                     showDeleteDialog = true
                 }
-                ActionButton("Move") {
+                ActionButton(stringResource(R.string.details_notebook_buttons_move)) {
                     showMoveDialog = true
                 }
-                ActionButton("Export") {
+                ActionButton(stringResource(R.string.details_notebook_buttons_export)) {
                     showExportDialog = true
                 }
-                ActionButton("Copy") {
+                ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
                     scope.launch {
                         snackManager.displaySnack(
                             SnackConf(text = "Not implemented!", duration = 2000)
@@ -380,7 +382,7 @@ fun NotebookLinkRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Linked to: $linkText",
+            text = stringResource(R.string.details_notebook_linked_to, linkText),
             modifier = Modifier.weight(1f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
