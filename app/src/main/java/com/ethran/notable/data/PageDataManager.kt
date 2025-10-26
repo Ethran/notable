@@ -130,6 +130,7 @@ object PageDataManager {
     private suspend fun getOrStartLoadingJob(
         appRepository: AppRepository, pageId: String, bookId: String?
     ): Job {
+        log.d("getOrStartLoadingJob($pageId)")
         //             PageDataManager.ensureMemoryAvailable(15)
         return jobLock.withLock {
             val existing = dataLoadingJobs[pageId]
@@ -168,6 +169,7 @@ object PageDataManager {
     suspend fun requestPageLoadJoin(
         appRepository: AppRepository, pageId: String, bookId: String?
     ) {
+        log.d("requestPageLoadJoin($pageId)")
         getOrStartLoadingJob(appRepository, pageId, bookId).join()
     }
 
@@ -176,6 +178,7 @@ object PageDataManager {
         pageId: String,
         bookId: String
     ) {
+        log.d("Canceling unnecessary loading of the Page($pageId)")
         val nextPageId =
             appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
         val prevPageId =
@@ -726,11 +729,24 @@ object PageDataManager {
 
 
     /**
-     * Cancels and removes all currently loading pages.
+     * Cancels and removes currently loading page, given by [pageId].
+     */
+    fun cancelLoadingPage(pageId: String) {
+        dataLoadingScope.launch {
+            log.d("Cancelling loading page: pageId=$pageId")
+            jobLock.withLock {
+                removePage(pageId)
+            }
+        }
+    }
+
+
+    /**
+     * Cancels and removes all currently loading pages, optionally ignoring a specified list of pages -- [ignoredPageIds].
      */
     fun cancelLoadingPages(ignoredPageIds: List<String> = listOf()) {
         dataLoadingScope.launch {
-            log.d("Cancelling loading pages")
+            log.d("Cancelling loading pages, ignoring: $ignoredPageIds")
             val toCancel: List<String>
             jobLock.withLock {
                 // Collect all pageIds with jobs that are not finished
@@ -740,6 +756,7 @@ object PageDataManager {
                 // Cancel and remove pages outside the lock
                 for (pageId in toCancel) {
                     if (ignoredPageIds.contains(pageId)) continue
+                    log.d("Cancelling page $pageId")
                     removePage(pageId)
                 }
             }
@@ -770,6 +787,7 @@ object PageDataManager {
     }
 
     fun reduceCache(maxPages: Int) {
+        log.d("reduceCache($maxPages)")
         synchronized(accessLock) {
             while (strokes.size > maxPages) {
                 val oldestPage = strokes.iterator().next().key
@@ -846,6 +864,7 @@ object PageDataManager {
     }
 
     private fun freeMemory(cacheSizeLimit: Int): Boolean {
+        log.d("freeMemory($cacheSizeLimit)")
         synchronized(accessLock) {
             val pagesToRemove = strokes.keys.filter { it != currentPage }
             for (pageId in pagesToRemove) {
