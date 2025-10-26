@@ -16,7 +16,7 @@
     <string name="hexagon_grid">W sześciokąty</string>
 
     <string name="use_onyx_neotools_may_cause_crashes">Używaj Onyx NeoTools (może powodować awarie)</string>
-    <string name="enable_scribble_to_erase">Włącz funkcję szkicowania do wymazywania</string>
+    <string name="enable_scribble_to_erase">Zamaż aby usunąć</string>
     <string name="enable_smooth_scrolling">Włącz płynne przewijanie</string>
     <string name="continuous_zoom">Włącz płynne przybliżanie</string>
     <string name="continuous_stroke_slider">Płynny regulator grubości kreski</string>
