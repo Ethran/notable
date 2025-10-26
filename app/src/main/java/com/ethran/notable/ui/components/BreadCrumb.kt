@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ethran.notable.R
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.ui.noRippleClickable
@@ -35,7 +36,7 @@ fun BreadCrumb(
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
-            text = "Library",
+            text = context.getString(R.string.home_view_name),
             fontSize = fontSize.sp,
             textDecoration = TextDecoration.Underline,
             maxLines = 1,

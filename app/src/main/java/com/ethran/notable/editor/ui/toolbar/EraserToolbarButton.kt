@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -108,7 +109,7 @@ fun EraserToolbarButton(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         BasicText(
-                            text = "Scribble\nto Erase",
+                            text = stringResource(R.string.toolbar_scribble_to_erase_two_lined_short),
                             modifier = Modifier.padding(end = 6.dp),
                             style = TextStyle(color = Color.Black, fontSize = 13.sp)
                         )
