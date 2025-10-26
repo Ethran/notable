@@ -56,6 +56,10 @@ import kotlin.system.measureTimeMillis
 
 const val OVERLAP = 2
 
+/**
+ * Manages the state and rendering of a single page within the editor.
+ * @param [id] Id of page assigned to it.
+ */
 class PageView(
     val context: Context,
     val coroutineScope: CoroutineScope,
@@ -250,8 +254,9 @@ class PageView(
             try {
                 snackManager.showSnackDuring(text = "Loading strokes...") {
                     val timeToLoad = measureTimeMillis {
+                        logCache.d("Start page, id $id")
                         PageDataManager.requestPageLoadJoin(appRepository, id, bookId)
-                        logCache.d("got page data. id $id")
+                        logCache.d("Got page data (PageView.loadPage). id $id")
                     }
                     logCache.d("All strokes loaded in $timeToLoad ms")
                 }
@@ -390,7 +395,7 @@ class PageView(
     private fun cleanJob() {
         //ensure that snack is canceled, even on dispose of the page.
         CoroutineScope(Dispatchers.IO).launch {
-            PageDataManager.cancelLoadingPages()
+            PageDataManager.cancelLoadingPage(pageId = id)
         }
         loadingJob?.cancel()
         if (loadingJob?.isActive == true) {
