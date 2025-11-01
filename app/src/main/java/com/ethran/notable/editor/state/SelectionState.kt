@@ -189,8 +189,8 @@ class SelectionState {
             page.addStrokes(displacedStrokes)
 
 
-            if (offset.x > 0 || offset.y > 0) {
-                // A displacement happened, we can create a history for this
+            if (offset.x > 0 || offset.y > 0 || placementMode == PlacementMode.Paste) {
+                // A displacement happened or this is a paste commit - create history for this
                 operationList += Operation.DeleteStroke(displacedStrokes.map { it.id })
                 // in case we are on a move operation, this history point re-adds the original strokes
                 if (placementMode == PlacementMode.Move)
@@ -208,9 +208,9 @@ class SelectionState {
 
             page.addImage(displacedImages)
 
-            if (offset.x != 0 || offset.y != 0) {
+            if (offset.x != 0 || offset.y != 0 || placementMode == PlacementMode.Paste) {
                 // TODO: find why sometimes we add two times same operation.
-                // A displacement happened, we can create a history for this
+                // A displacement happened or this is a paste commit - create history for this
                 // To undo changes we first remove image
                 operationList += Operation.DeleteImage(displacedImages.map { it.id })
                 // then add the original images, only if we intended to move it.
