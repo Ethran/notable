@@ -24,9 +24,12 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.noRippleClickable
+import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 
 private val logQuickNav = ShipBook.getLogger("QuickNav")
@@ -41,6 +44,7 @@ fun QuickNav(
     val context = LocalContext.current
     val appRepository = remember { AppRepository(context) }
     val pageRepository = remember { PageRepository(context) }
+    val bookRepository = remember { BookRepository(context) }
     val kv = appRepository.kvProxy
 
     // Read current settings once, but keep a local state list for responsiveness
@@ -56,6 +60,7 @@ fun QuickNav(
         }.getOrNull()
     }
     val folderId = pageFromDb?.parentFolderId
+    val bookId = pageFromDb?.notebookId
 
     logQuickNav.d("currentPageId = $currentPageId, folderId=$folderId, favoritesCount=${favorites.size}")
 
@@ -133,6 +138,47 @@ fun QuickNav(
                 currentPageId = currentPageId,
                 title = "Favorite pages"
             )
+
+            if (bookId != null && currentPageId != null) {
+
+                val book = bookRepository.getById(bookId) ?: return@Column
+                if (book.pageIds.size < 2) return@Column
+
+
+                fun getPageIdFromIndex(index: Int): String {
+                    return book.pageIds[index]
+                }
+
+
+                // Spacer before the page scrubber area
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Page scrubber placed at the bottom of this dialog (UI only for now)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    PageHorizontalSliderWithReturn(
+                        pageCount = book.pageIds.size,
+                        // Assuming getPageNumber is zero-based; adjust if it returns 1-based
+                        currentIndex = appRepository.getPageNumber(bookId, currentPageId),
+                        onDragStart = {
+                            // Persist current so preview can load from disk
+                            DrawCanvas.saveCurrent.tryEmit(Unit)
+                        },
+                        onPreviewIndexChanged = { idx ->
+                            // Live preview of persisted snapshot (or “No preview available”)
+                            Log.e("QuickNav", "onPreviewIndexChanged: $idx")
+                            DrawCanvas.previewPage.tryEmit(getPageIdFromIndex(idx))
+                        },
+                        onDragEnd = { idx ->
+                            // Commit: switch PageView to the chosen page
+                            DrawCanvas.commitPage.tryEmit(getPageIdFromIndex(idx))
+                        },
+                        onReturnClick = {
+                            // Go back to the page where QuickNav was opened
+                            DrawCanvas.commitPage.tryEmit(currentPageId)
+                        }
+                    )
+                }
+            }
         }
     }
 

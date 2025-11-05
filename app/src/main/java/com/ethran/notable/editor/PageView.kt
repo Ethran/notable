@@ -29,6 +29,7 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.drawing.drawBg
+import com.ethran.notable.editor.drawing.drawCenteredLabelBox
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.state.ZOOM_SNAP_THRESHOLD
 import com.ethran.notable.editor.utils.div
@@ -224,7 +225,7 @@ class PageView(
     private fun recreateCanvas() {
         windowedBitmap = createBitmap(viewWidth, viewHeight)
         windowedCanvas = Canvas(windowedBitmap)
-        loadInitialBitmap()
+        loadBitmapFromStorage()
     }
 
     /*
@@ -366,8 +367,8 @@ class PageView(
     }
 
     // load background, fast, if it is accurate enough.
-    private fun loadInitialBitmap(): Boolean {
-        val bitmapFromDisc = loadPersistBitmap(context, id, scroll, zoomLevel.value)
+    fun loadBitmapFromStorage(pageIdToLoad: String = id, textIfFailed: String? = null, requireExactMatch: Boolean = true): Boolean {
+        val bitmapFromDisc = loadPersistBitmap(context, pageIdToLoad, scroll, zoomLevel.value, requireExactMatch)
         if (bitmapFromDisc != null) {
             // let's control that the last preview fits the present orientation. Otherwise we'll ask for a redraw.
             if (bitmapFromDisc.height == windowedCanvas.height && bitmapFromDisc.width == windowedCanvas.width) {
@@ -388,6 +389,8 @@ class PageView(
             )
         else
             windowedCanvas.drawColor(Color.WHITE)
+        if (textIfFailed != null)
+            drawCenteredLabelBox(windowedCanvas, textIfFailed)
         return false
     }
 

@@ -77,10 +77,12 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -132,9 +134,7 @@ class DrawCanvas(
         var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
         var refreshUi = MutableSharedFlow<Unit>()
         var refreshUiImmediately = MutableSharedFlow<Unit>(
-            replay = 1,
-            extraBufferCapacity = 1,
-            onBufferOverflow = BufferOverflow.DROP_OLDEST
+            replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
         )
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
@@ -158,6 +158,14 @@ class DrawCanvas(
 
         // For cleaning whole page, activated from toolbar menu
         var clearPageSignal = MutableSharedFlow<Unit>()
+
+
+        // For QuickNav scrolling with previews
+        val saveCurrent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val previewPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+        val commitPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+        val restoreCanvas = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
 
         private suspend fun waitForDrawing() {
             Log.d(
@@ -191,9 +199,9 @@ class DrawCanvas(
         suspend fun waitForDrawingWithSnack() {
             if (drawingInProgress.isLocked) {
                 val snack = SnackConf(text = "Waiting for drawing to finish…", duration = 60000)
-                SnackState.Companion.globalSnackFlow.emit(snack)
+                SnackState.globalSnackFlow.emit(snack)
                 waitForDrawing()
-                SnackState.Companion.cancelGlobalSnack.emit(snack.id)
+                SnackState.cancelGlobalSnack.emit(snack.id)
             }
         }
     }
@@ -347,7 +355,7 @@ class DrawCanvas(
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             if (GlobalAppSettings.current.openGLRendering) {
-            prepareForPartialUpdate(this@DrawCanvas, touchHelper)
+                prepareForPartialUpdate(this@DrawCanvas, touchHelper)
                 log.d("Eraser Mode")
             }
             isErasing = true
@@ -355,7 +363,7 @@ class DrawCanvas(
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
             if (GlobalAppSettings.current.openGLRendering) {
-            restoreDefaults(this@DrawCanvas)
+                restoreDefaults(this@DrawCanvas)
                 glRenderer.clearPointBuffer()
             }
             glRenderer.frontBufferRenderer?.cancel()
@@ -455,6 +463,7 @@ class DrawCanvas(
 
     }
 
+    @OptIn(FlowPreview::class)
     fun registerObservers() {
 
         coroutineScope.launch {
@@ -539,7 +548,7 @@ class DrawCanvas(
 
         coroutineScope.launch {
             clearPageSignal.collect {
-                require(!state.isDrawing) {"Cannot clear page in drawing mode"}
+                require(!state.isDrawing) { "Cannot clear page in drawing mode" }
                 logCanvasObserver.v("Clear page signal!")
                 cleanAllStrokes(page, history)
             }
@@ -641,6 +650,39 @@ class DrawCanvas(
             }
         }
 
+
+        coroutineScope.launch {
+            saveCurrent.collect {
+                // Push current bitmap to persist layer so preview has something to load
+                PageDataManager.cacheBitmap(page.id, page.windowedBitmap)
+                PageDataManager.saveTopic.tryEmit(page.id)
+            }
+        }
+
+        coroutineScope.launch {
+            previewPage.debounce(75).collectLatest { pageId ->
+                page.loadBitmapFromStorage(pageId, "No Preview Available", false)
+                Log.e("QuickNav", "Previewing page: $pageId")
+                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
+                restoreCanvas(zoneToRedraw)
+            }
+        }
+
+        coroutineScope.launch {
+            commitPage.collect { pageId ->
+                page.changePage(pageId)
+            }
+        }
+
+        // Return to the page QuickNav was opened on
+        coroutineScope.launch {
+            restoreCanvas.collect {
+                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
+                page.drawAreaScreenCoordinates(zoneToRedraw)
+                restoreCanvas(zoneToRedraw)
+            }
+        }
+
     }
 
     /**
@@ -657,14 +699,14 @@ class DrawCanvas(
                 selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
             } else {
                 setAnimationMode(false)
-                SnackState.Companion.globalSnackFlow.emit(
+                SnackState.globalSnackFlow.emit(
                     SnackConf(
                         text = "There isn't anything.",
                         duration = 3000,
                     )
                 )
             }
-        } else SnackState.Companion.globalSnackFlow.emit(
+        } else SnackState.globalSnackFlow.emit(
             SnackConf(
                 text = "Page is empty!",
                 duration = 3000,

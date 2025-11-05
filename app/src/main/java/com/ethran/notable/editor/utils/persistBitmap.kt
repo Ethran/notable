@@ -116,24 +116,59 @@ fun persistBitmapFull(
  * - Backward compatibility: if encoded file not found and scrollY != 0, attempt legacy filename (without suffix)
  */
 fun loadPersistBitmap(
-    context: Context, pageID: String, scroll: Offset?, zoom: Float?,  requireExactMatch: Boolean
+    context: Context, pageID: String, scroll: Offset?, zoom: Float?, requireExactMatch: Boolean
 ): Bitmap? {
-    if (!checkZoomAndScroll(scroll, zoom)) return null
-
-    val scrollYInt = scroll!!.y.roundToInt()
     val dir = ensurePreviewsFullFolder(context)
-    val encodedFile = File(dir, buildPreviewFileName(pageID, scrollYInt))
 
-    val candidateFiles = listOf(encodedFile, File(dir, pageID), File(dir, "$pageID.png"))
+    // Exact match path: enforce zoom/scroll checks and precise encoded filename
+    if (requireExactMatch) {
+        if (!checkZoomAndScroll(scroll, zoom)) return null
+        val scrollYInt = scroll!!.y.roundToInt()
+        val encodedFile = File(dir, buildPreviewFileName(pageID, scrollYInt))
+        val candidateFiles = listOf(
+            encodedFile, File(dir, pageID),          // legacy (no suffix)
+            File(dir, "$pageID.png")    // legacy .png
+        )
 
-    val targetFile = candidateFiles.firstOrNull { it.exists() }
+        val targetFile = candidateFiles.firstOrNull { it.exists() }
+        if (targetFile == null) {
+            log.i("loadPersistBitmap: no exact-match cache (expected ${encodedFile.name})")
+            return null
+        }
+        return decodePreview(targetFile, encodedFile.name)
+    }
 
-    if (targetFile == null) {
-        log.i("loadPersistBitmap: no cache file (expected ${encodedFile.name})")
+    // Non-exact path: accept any zoom/scroll and pick the best matching cached file for this page
+    // Prefer the newest file among all files starting with pageID (including legacy and encoded variants)
+    val allMatches: List<File> =
+        dir.listFiles { f -> f.isFile && f.name.startsWith(pageID) }?.toList().orEmpty()
+
+    // Also include legacy fallbacks explicitly (in case listFiles filtering changes)
+    val legacyExtras = listOf(
+        File(dir, pageID), File(dir, "$pageID.png")
+    )
+
+    // If we do have a scroll, include its encoded name as a candidate too (may help if it's present)
+    val encodedFromProvidedScroll = scroll?.let {
+        File(dir, buildPreviewFileName(pageID, it.y.roundToInt()))
+    }
+
+    // Merge and deduplicate by name
+    val candidates =
+        (listOfNotNull(encodedFromProvidedScroll) + legacyExtras + allMatches).distinctBy { it.name }
+            .filter { it.exists() }
+
+    if (candidates.isEmpty()) {
+        log.i("loadPersistBitmap: no cache file for pageID=$pageID (non-exact)")
         return null
     }
 
-    return decodePreview(targetFile, encodedFile.name)
+    // Pick newest by lastModified
+    val newest = candidates.maxByOrNull { it.lastModified() } ?: candidates.first()
+
+    // For logging, try to compute the "exact" encoded filename if we had a scroll; otherwise pass the actual name
+    val expectedName = encodedFromProvidedScroll?.name ?: newest.name
+    return decodePreview(newest, expectedName)
 }
 
 private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
@@ -141,9 +176,9 @@ private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
         val imgBitmap = BitmapFactory.decodeFile(file.absolutePath)
         if (imgBitmap != null) {
             if (file.name != expectedNameForLog) {
-                log.d("loadPersistBitmap: loaded cached (non-exact or legacy) preview (${file.name})")
+                log.d("loadPersistBitmap: loaded cached preview (non-exact or legacy) '${file.name}'")
             } else {
-                log.d("loadPersistBitmap: loaded cached preview (${file.name})")
+                log.d("loadPersistBitmap: loaded cached preview '${file.name}'")
             }
             imgBitmap
         } else {
