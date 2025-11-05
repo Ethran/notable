@@ -116,7 +116,7 @@ fun persistBitmapFull(
  * - Backward compatibility: if encoded file not found and scrollY != 0, attempt legacy filename (without suffix)
  */
 fun loadPersistBitmap(
-    context: Context, pageID: String, scroll: Offset?, zoom: Float?
+    context: Context, pageID: String, scroll: Offset?, zoom: Float?,  requireExactMatch: Boolean
 ): Bitmap? {
     if (!checkZoomAndScroll(scroll, zoom)) return null
 
@@ -133,17 +133,21 @@ fun loadPersistBitmap(
         return null
     }
 
+    return decodePreview(targetFile, encodedFile.name)
+}
+
+private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
     return try {
-        val imgBitmap = BitmapFactory.decodeFile(targetFile.absolutePath)
+        val imgBitmap = BitmapFactory.decodeFile(file.absolutePath)
         if (imgBitmap != null) {
-            if (targetFile.name != encodedFile.name) {
-                log.d("loadPersistBitmap: loaded legacy cached preview (${targetFile.name})")
+            if (file.name != expectedNameForLog) {
+                log.d("loadPersistBitmap: loaded cached (non-exact or legacy) preview (${file.name})")
             } else {
-                log.d("loadPersistBitmap: loaded cached preview (${targetFile.name}) for scrollY=${scroll.y}")
+                log.d("loadPersistBitmap: loaded cached preview (${file.name})")
             }
             imgBitmap
         } else {
-            log.w("loadPersistBitmap: failed to decode bitmap from ${targetFile.name}")
+            log.w("loadPersistBitmap: failed to decode bitmap from ${file.name}")
             null
         }
     } catch (e: Exception) {
