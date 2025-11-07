@@ -62,6 +62,14 @@ class EditorControlTower(
         return Offset.Zero // All handled
     }
 
+    /**
+     * Switches the currently active page.
+     *
+     * This function updates the editor state, clears the undo/redo history,
+     * and instructs the page view to load and display the content of the new page.
+     *
+     * @param id The unique identifier of the page to switch to.
+     */
     fun switchPage(id: String) {
         state.changePage(id)
         history.cleanHistory()
