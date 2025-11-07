@@ -164,7 +164,6 @@ class DrawCanvas(
         // For QuickNav scrolling with previews
         val saveCurrent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val previewPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
-        val commitPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
         val restoreCanvas = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
 
@@ -670,13 +669,7 @@ class DrawCanvas(
             }
         }
 
-        coroutineScope.launch {
-            commitPage.collect { pageId ->
-                page.changePage(pageId)
-            }
-        }
 
-        // Return to the page QuickNav was opened on
         coroutineScope.launch {
             restoreCanvas.collect {
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)

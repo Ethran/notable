@@ -27,6 +27,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.noRippleClickable
 import io.shipbook.shipbooksdk.Log
@@ -170,11 +171,11 @@ fun QuickNav(
                         },
                         onDragEnd = { idx ->
                             // Commit: switch PageView to the chosen page
-                            DrawCanvas.commitPage.tryEmit(getPageIdFromIndex(idx))
+                            EditorControlTower.changePage.tryEmit(getPageIdFromIndex(idx))
                         },
                         onReturnClick = {
                             // Go back to the page where QuickNav was opened
-                            DrawCanvas.commitPage.tryEmit(currentPageId)
+                            EditorControlTower.changePage.tryEmit(currentPageId)
                         }
                     )
                 }

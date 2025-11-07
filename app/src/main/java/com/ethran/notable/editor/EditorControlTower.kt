@@ -12,12 +12,14 @@ import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.offsetStroke
+import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.ui.showHint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,6 +35,22 @@ class EditorControlTower(
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
 
+
+    companion object {
+        val changePage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+    }
+
+    fun registerObservers() {
+        scope.launch {
+            changePage.collect { pageId ->
+                switchPage(pageId)
+                Log.e("QuickNav", "Change to page $pageId")
+                page.changePage(pageId)
+                refreshScreen()
+            }
+        }
+    }
 
     // returns delta if could not scroll, to be added to next request,
     // this ensures that smooth scroll works reliably even if rendering takes to long
