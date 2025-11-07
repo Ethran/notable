@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
@@ -661,7 +662,8 @@ class DrawCanvas(
 
         coroutineScope.launch {
             previewPage.debounce(75).collectLatest { pageId ->
-                page.loadBitmapFromStorage(pageId, "No Preview Available", false)
+                val pageNumber =  AppRepository(context).getPageNumber(page.pageFromDb?.notebookId, pageId)
+                page.loadBitmapFromStorage(pageId, "Page ${pageNumber}, No Preview Available", false)
                 Log.e("QuickNav", "Previewing page: $pageId")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 restoreCanvas(zoneToRedraw)
