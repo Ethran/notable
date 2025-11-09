@@ -1,9 +1,9 @@
 package com.ethran.notable.editor
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.TAG
+import io.shipbook.shipbooksdk.Log
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -146,6 +146,9 @@ class EditorControlTower(
     }
 
     fun deleteSelection() {
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
+
         val operationList = state.selectionState.deleteSelection(page)
         history.addOperationsToHistory(operationList)
         state.isDrawing = true
@@ -166,6 +169,9 @@ class EditorControlTower(
     }
 
     fun duplicateSelection() {
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
+
         // finish ongoing movement
         applySelectionDisplace()
         state.selectionState.duplicateSelection()
@@ -173,12 +179,18 @@ class EditorControlTower(
     }
 
     fun cutSelectionToClipboard(context: Context) {
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
+
         state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
         deleteSelection()
         showHint("Content cut to clipboard", scope)
     }
 
     fun copySelectionToClipboard(context: Context) {
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
+
         state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
     }
 
@@ -229,6 +241,72 @@ class EditorControlTower(
         state.selectionState.placementMode = PlacementMode.Paste
 
         showHint("Pasted content from clipboard", scope)
+    }
+
+    /**
+     * Clears all pending smart lasso data when user commits to a selection action
+     */
+    private fun clearPendingSmartLassoData() {
+        state.selectionState.pendingSmartLassoStroke = null
+        state.selectionState.pendingSmartLassoPen = null
+        state.selectionState.pendingSmartLassoStrokeSize = null
+        state.selectionState.pendingSmartLassoColor = null
+    }
+
+    /**
+     * Dismisses the current selection. If the selection was from smart lasso,
+     * draws the original stroke with its original pen settings instead.
+     */
+    fun dismissSelection() {
+        val pendingStroke = state.selectionState.pendingSmartLassoStroke
+        val pendingPen = state.selectionState.pendingSmartLassoPen
+        val pendingStrokeSize = state.selectionState.pendingSmartLassoStrokeSize
+        val pendingColor = state.selectionState.pendingSmartLassoColor
+
+        if (pendingStroke != null && pendingPen != null && pendingStrokeSize != null && pendingColor != null) {
+            Log.i("SmartLasso", "User dismissed smart lasso selection, drawing the original stroke with original pen settings")
+            // User dismissed without using the panel, so draw the original stroke with original settings
+            // Save the pending data before reset clears it
+            val strokeToDrawCopy = pendingStroke.toList()
+            val penCopy = pendingPen
+            val strokeSizeCopy = pendingStrokeSize
+            val colorCopy = pendingColor
+
+            // Reset the selection
+            state.selectionState.reset()
+
+            // Now draw the pending stroke with its original pen settings
+            val strokeHistoryBatch = mutableListOf<String>()
+            com.ethran.notable.editor.utils.handleDraw(
+                page,
+                strokeHistoryBatch,
+                strokeSizeCopy,
+                colorCopy,
+                penCopy,
+                strokeToDrawCopy
+            )
+
+            // Add to history
+            if (strokeHistoryBatch.isNotEmpty()) {
+                history.addOperationsToHistory(
+                    operations = listOf(
+                        Operation.DeleteStroke(strokeHistoryBatch)
+                    )
+                )
+            }
+
+            state.isDrawing = true
+
+            // Refresh UI
+            scope.launch {
+                DrawCanvas.refreshUi.emit(Unit)
+            }
+        } else {
+            // Normal selection dismissal
+            applySelectionDisplace()
+            state.selectionState.reset()
+            state.isDrawing = true
+        }
     }
 }
 

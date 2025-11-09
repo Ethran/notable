@@ -73,18 +73,21 @@ class KvRepository(context: Context) {
 class KvProxy(context: Context) {
     private val kvRepository = KvRepository(context)
 
+    // Configure JSON to ignore unknown keys for backward compatibility
+    private val json = Json { ignoreUnknownKeys = true }
+
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
         return kvRepository.getLive(key).map {
             if (it == null) return@map default
             val jsonValue = it.value
-            Json.decodeFromString(serializer, jsonValue)
+            json.decodeFromString(serializer, jsonValue)
         }
     }
 
     fun <T> get(key: String, serializer: KSerializer<T>): T? {
         val kv = kvRepository.get(key) ?: return null //returns null when there is no database
         val jsonValue = kv.value
-        return Json.decodeFromString(serializer, jsonValue)
+        return json.decodeFromString(serializer, jsonValue)
     }
 
 

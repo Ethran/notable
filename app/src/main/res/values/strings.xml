@@ -17,6 +17,7 @@
     <string name="hexagon_grid">Hexagon grid</string>
     <string name="use_onyx_neotools_may_cause_crashes">Use Onyx NeoTools (may cause crashes)</string>
     <string name="enable_scribble_to_erase">Enable scribble-to-erase (scribble out your mistakes to erase them)</string>
+    <string name="enable_smart_lasso">Enable smart lasso selection (draw a closed loop to select content)</string>
     <string name="enable_smooth_scrolling">Enable smooth scrolling</string>
     <string name="continuous_zoom">Continuous Zoom</string>
     <string name="continuous_stroke_slider">Continuous Stroke Slider</string>
