@@ -167,8 +167,11 @@ fun handleSmartLasso(
 
     Log.i("SmartLasso", "Smart lasso triggered! Selected ${selectedStrokes.size} strokes and ${selectedImages.size} images")
 
-    // Store the original stroke points so they can be drawn if user dismisses without using panel
+    // Store the original stroke data (points + pen settings) so they can be drawn if user dismisses without using panel
     editorState.selectionState.pendingSmartLassoStroke = touchPoints
+    editorState.selectionState.pendingSmartLassoPen = editorState.pen
+    editorState.selectionState.pendingSmartLassoStrokeSize = editorState.penSettings[editorState.pen.penName]?.strokeSize
+    editorState.selectionState.pendingSmartLassoColor = editorState.penSettings[editorState.pen.penName]?.color
 
     // Trigger selection
     selectImagesAndStrokes(scope, page, editorState, selectedImages, selectedStrokes)

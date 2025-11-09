@@ -1,9 +1,9 @@
 package com.ethran.notable.editor
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.TAG
+import io.shipbook.shipbooksdk.Log
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -146,8 +146,8 @@ class EditorControlTower(
     }
 
     fun deleteSelection() {
-        // Clear pending smart lasso stroke since user has committed to the selection action
-        state.selectionState.pendingSmartLassoStroke = null
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
 
         val operationList = state.selectionState.deleteSelection(page)
         history.addOperationsToHistory(operationList)
@@ -169,8 +169,8 @@ class EditorControlTower(
     }
 
     fun duplicateSelection() {
-        // Clear pending smart lasso stroke since user has committed to the selection action
-        state.selectionState.pendingSmartLassoStroke = null
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
 
         // finish ongoing movement
         applySelectionDisplace()
@@ -179,8 +179,8 @@ class EditorControlTower(
     }
 
     fun cutSelectionToClipboard(context: Context) {
-        // Clear pending smart lasso stroke since user has committed to the selection action
-        state.selectionState.pendingSmartLassoStroke = null
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
 
         state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
         deleteSelection()
@@ -188,8 +188,8 @@ class EditorControlTower(
     }
 
     fun copySelectionToClipboard(context: Context) {
-        // Clear pending smart lasso stroke since user has committed to the selection action
-        state.selectionState.pendingSmartLassoStroke = null
+        // Clear pending smart lasso data since user has committed to the selection action
+        clearPendingSmartLassoData()
 
         state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
     }
@@ -244,28 +244,45 @@ class EditorControlTower(
     }
 
     /**
+     * Clears all pending smart lasso data when user commits to a selection action
+     */
+    private fun clearPendingSmartLassoData() {
+        state.selectionState.pendingSmartLassoStroke = null
+        state.selectionState.pendingSmartLassoPen = null
+        state.selectionState.pendingSmartLassoStrokeSize = null
+        state.selectionState.pendingSmartLassoColor = null
+    }
+
+    /**
      * Dismisses the current selection. If the selection was from smart lasso,
-     * draws the original stroke instead.
+     * draws the original stroke with its original pen settings instead.
      */
     fun dismissSelection() {
         val pendingStroke = state.selectionState.pendingSmartLassoStroke
-        if (pendingStroke != null) {
-            Log.i("SmartLasso", "User dismissed smart lasso selection, drawing the original stroke")
-            // User dismissed without using the panel, so draw the original stroke
-            // Save the pending stroke before reset clears it
+        val pendingPen = state.selectionState.pendingSmartLassoPen
+        val pendingStrokeSize = state.selectionState.pendingSmartLassoStrokeSize
+        val pendingColor = state.selectionState.pendingSmartLassoColor
+
+        if (pendingStroke != null && pendingPen != null && pendingStrokeSize != null && pendingColor != null) {
+            Log.i("SmartLasso", "User dismissed smart lasso selection, drawing the original stroke with original pen settings")
+            // User dismissed without using the panel, so draw the original stroke with original settings
+            // Save the pending data before reset clears it
             val strokeToDrawCopy = pendingStroke.toList()
+            val penCopy = pendingPen
+            val strokeSizeCopy = pendingStrokeSize
+            val colorCopy = pendingColor
 
             // Reset the selection
             state.selectionState.reset()
 
-            // Now draw the pending stroke
+            // Now draw the pending stroke with its original pen settings
             val strokeHistoryBatch = mutableListOf<String>()
             com.ethran.notable.editor.utils.handleDraw(
                 page,
                 strokeHistoryBatch,
-                state.penSettings[state.pen.penName]!!.strokeSize,
-                state.penSettings[state.pen.penName]!!.color,
-                state.pen,
+                strokeSizeCopy,
+                colorCopy,
+                penCopy,
                 strokeToDrawCopy
             )
 
@@ -273,7 +290,7 @@ class EditorControlTower(
             if (strokeHistoryBatch.isNotEmpty()) {
                 history.addOperationsToHistory(
                     operations = listOf(
-                        Operation.DeleteStroke(strokeHistoryBatch.map { it })
+                        Operation.DeleteStroke(strokeHistoryBatch)
                     )
                 )
             }

@@ -18,6 +18,7 @@ import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.drawImage
+import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.offsetImage
 import com.ethran.notable.editor.utils.offsetStroke
@@ -36,9 +37,12 @@ class SelectionState {
     var selectedStrokes by mutableStateOf<List<Stroke>?>(null)
     var selectedImages by mutableStateOf<List<Image>?>(null)
 
-    // Smart lasso: stores the original stroke points if selection was made via smart lasso
+    // Smart lasso: stores the original stroke data if selection was made via smart lasso
     // This allows fallback to drawing the stroke if user dismisses without using the panel
     var pendingSmartLassoStroke by mutableStateOf<List<StrokePoint>?>(null)
+    var pendingSmartLassoPen by mutableStateOf<Pen?>(null)
+    var pendingSmartLassoStrokeSize by mutableStateOf<Float?>(null)
+    var pendingSmartLassoColor by mutableStateOf<Int?>(null)
 
     // TODO: Bitmap should be change, if scale changes.
     var selectedBitmap by mutableStateOf<Bitmap?>(null)
@@ -59,6 +63,9 @@ class SelectionState {
         selectionDisplaceOffset = null
         placementMode = null
         pendingSmartLassoStroke = null
+        pendingSmartLassoPen = null
+        pendingSmartLassoStrokeSize = null
+        pendingSmartLassoColor = null
         setAnimationMode(false)
     }
 
