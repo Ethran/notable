@@ -68,9 +68,8 @@ fun SelectedBitmap(
         Modifier
             .fillMaxSize()
             .noRippleClickable {
-                controlTower.applySelectionDisplace()
-                selectionState.reset()
-                editorState.isDrawing = true
+                // Delegate dismissal logic to control tower
+                controlTower.dismissSelection()
             }) {
         Image(
             bitmap = selectionState.selectedBitmap!!.asImageBitmap(),

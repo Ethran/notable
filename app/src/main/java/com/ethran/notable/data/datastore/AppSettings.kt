@@ -37,6 +37,7 @@ data class AppSettings(
     val visualizePdfPagination: Boolean = false,
     val paginatePdf: Boolean = true,
     val scribbleToEraseEnabled: Boolean = false,
+    val smartLassoEnabled: Boolean = false,
     val simpleRendering: Boolean = false,
     val openGLRendering: Boolean = true,
     val muPdfRendering: Boolean = true,

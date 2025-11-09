@@ -14,6 +14,7 @@ import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.drawImage
@@ -35,6 +36,10 @@ class SelectionState {
     var selectedStrokes by mutableStateOf<List<Stroke>?>(null)
     var selectedImages by mutableStateOf<List<Image>?>(null)
 
+    // Smart lasso: stores the original stroke points if selection was made via smart lasso
+    // This allows fallback to drawing the stroke if user dismisses without using the panel
+    var pendingSmartLassoStroke by mutableStateOf<List<StrokePoint>?>(null)
+
     // TODO: Bitmap should be change, if scale changes.
     var selectedBitmap by mutableStateOf<Bitmap?>(null)
 
@@ -53,6 +58,7 @@ class SelectionState {
         selectionStartOffset = null
         selectionDisplaceOffset = null
         placementMode = null
+        pendingSmartLassoStroke = null
         setAnimationMode(false)
     }
 

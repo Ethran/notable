@@ -146,6 +146,9 @@ class EditorControlTower(
     }
 
     fun deleteSelection() {
+        // Clear pending smart lasso stroke since user has committed to the selection action
+        state.selectionState.pendingSmartLassoStroke = null
+
         val operationList = state.selectionState.deleteSelection(page)
         history.addOperationsToHistory(operationList)
         state.isDrawing = true
@@ -166,6 +169,9 @@ class EditorControlTower(
     }
 
     fun duplicateSelection() {
+        // Clear pending smart lasso stroke since user has committed to the selection action
+        state.selectionState.pendingSmartLassoStroke = null
+
         // finish ongoing movement
         applySelectionDisplace()
         state.selectionState.duplicateSelection()
@@ -173,12 +179,18 @@ class EditorControlTower(
     }
 
     fun cutSelectionToClipboard(context: Context) {
+        // Clear pending smart lasso stroke since user has committed to the selection action
+        state.selectionState.pendingSmartLassoStroke = null
+
         state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
         deleteSelection()
         showHint("Content cut to clipboard", scope)
     }
 
     fun copySelectionToClipboard(context: Context) {
+        // Clear pending smart lasso stroke since user has committed to the selection action
+        state.selectionState.pendingSmartLassoStroke = null
+
         state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
     }
 
@@ -229,6 +241,55 @@ class EditorControlTower(
         state.selectionState.placementMode = PlacementMode.Paste
 
         showHint("Pasted content from clipboard", scope)
+    }
+
+    /**
+     * Dismisses the current selection. If the selection was from smart lasso,
+     * draws the original stroke instead.
+     */
+    fun dismissSelection() {
+        val pendingStroke = state.selectionState.pendingSmartLassoStroke
+        if (pendingStroke != null) {
+            Log.i("SmartLasso", "User dismissed smart lasso selection, drawing the original stroke")
+            // User dismissed without using the panel, so draw the original stroke
+            // Save the pending stroke before reset clears it
+            val strokeToDrawCopy = pendingStroke.toList()
+
+            // Reset the selection
+            state.selectionState.reset()
+
+            // Now draw the pending stroke
+            val strokeHistoryBatch = mutableListOf<String>()
+            com.ethran.notable.editor.utils.handleDraw(
+                page,
+                strokeHistoryBatch,
+                state.penSettings[state.pen.penName]!!.strokeSize,
+                state.penSettings[state.pen.penName]!!.color,
+                state.pen,
+                strokeToDrawCopy
+            )
+
+            // Add to history
+            if (strokeHistoryBatch.isNotEmpty()) {
+                history.addOperationsToHistory(
+                    operations = listOf(
+                        Operation.DeleteStroke(strokeHistoryBatch.map { it })
+                    )
+                )
+            }
+
+            state.isDrawing = true
+
+            // Refresh UI
+            scope.launch {
+                DrawCanvas.refreshUi.emit(Unit)
+            }
+        } else {
+            // Normal selection dismissal
+            applySelectionDisplace()
+            state.selectionState.reset()
+            state.isDrawing = true
+        }
     }
 }
 

@@ -203,6 +203,13 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
             })
 
         SettingToggleRow(
+            label = stringResource(R.string.enable_smart_lasso),
+            value = settings.smartLassoEnabled,
+            onToggle = { isChecked ->
+                kv.setAppSettings(settings.copy(smartLassoEnabled = isChecked))
+            })
+
+        SettingToggleRow(
             label = stringResource(R.string.enable_smooth_scrolling),
             value = settings.smoothScroll,
             onToggle = { isChecked ->
