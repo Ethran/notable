@@ -515,7 +515,7 @@ class DrawCanvas(
         coroutineScope.launch {
             page.zoomLevel.drop(1).collect {
                 logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
-                PageDataManager.setPageZoom(page.id, page.zoomLevel.value)
+                PageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
                 updatePenAndStroke()
             }
         }
@@ -654,8 +654,8 @@ class DrawCanvas(
         coroutineScope.launch {
             saveCurrent.collect {
                 // Push current bitmap to persist layer so preview has something to load
-                PageDataManager.cacheBitmap(page.id, page.windowedBitmap)
-                PageDataManager.saveTopic.tryEmit(page.id)
+                PageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
+                PageDataManager.saveTopic.tryEmit(page.currentPageId)
             }
         }
 
@@ -686,8 +686,8 @@ class DrawCanvas(
     private suspend fun selectRectangle(rectToSelect: Rect) {
         val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
 
-        val imagesToSelect = PageDataManager.getImagesInRectangle(inPageCoordinates, page.id)
-        val strokesToSelect = PageDataManager.getStrokesInRectangle(inPageCoordinates, page.id)
+        val imagesToSelect = PageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)
+        val strokesToSelect = PageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
         if (imagesToSelect.isNotNull() && strokesToSelect.isNotNull()) {
             rectangleToSelectByGesture.value = null
             if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
@@ -783,7 +783,7 @@ class DrawCanvas(
                 height = imageHeight,
                 width = imageWidth,
                 uri = imageUri.toString(),
-                pageId = page.id
+                pageId = page.currentPageId
             )
             drawImage(
                 context, page.windowedCanvas, imageToSave, -page.scroll

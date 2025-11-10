@@ -79,7 +79,7 @@ fun EditorView(
             PageView(
                 context = context,
                 coroutineScope = scope,
-                id = currentPageId,
+                currentPageId = pageId,
                 viewWidth = width,
                 viewHeight = height,
                 snackManager = snackManager

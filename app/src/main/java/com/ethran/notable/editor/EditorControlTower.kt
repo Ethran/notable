@@ -226,7 +226,7 @@ class EditorControlTower(
                     .toString(),
                 createdAt = now,
                 // set the pageId to the current page
-                pageId = this.page.id
+                pageId = this.page.currentPageId
             )
         }
 
@@ -240,7 +240,7 @@ class EditorControlTower(
                 y = it.y + scrollPos.y.toInt(),
                 createdAt = now,
                 // set the pageId to the current page
-                pageId = this.page.id
+                pageId = this.page.currentPageId
             )
         }
 
