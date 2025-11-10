@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.Eraser
@@ -32,9 +33,50 @@ class MenuStates {
 }
 
 
-class EditorState(val bookId: String? = null, pageId: String, val pageView: PageView) {
-    var pageId by mutableStateOf(pageId)
+class EditorState(
+    val bookId: String? = null,
+    val pageId: String,
+    val pageView: PageView,
+    val appRepository: AppRepository,
+    val onPageChange: (String) -> Unit
+) {
+    var currentPageId by mutableStateOf(pageId)
         private set
+
+
+    fun getNextPage(): String? {
+        return if (bookId != null) {
+            val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
+                pageId = currentPageId, notebookId = bookId
+            )
+            currentPageId = newPageId
+            newPageId
+        } else null
+    }
+
+    fun getPreviousPage(): String? {
+        return if (bookId != null) {
+            val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
+                pageId = currentPageId, notebookId = bookId
+            )
+            if (newPageId != null) currentPageId = newPageId
+            newPageId
+        } else null
+    }
+
+
+    fun updateOpenedPage(newPageId: String) {
+        if (bookId != null) {
+            appRepository.bookRepository.setOpenPageId(bookId, newPageId)
+        }
+        if (newPageId != currentPageId) {
+            io.shipbook.shipbooksdk.Log.e("EditorView", "Page changed")
+            onPageChange(newPageId)
+        }
+        currentPageId = newPageId
+    }
+
+
 
     private val log = ShipBook.getLogger("EditorState")
     private val persistedEditorSettings = EditorSettingCacheManager.getEditorSettings()
@@ -95,8 +137,8 @@ class EditorState(val bookId: String? = null, pageId: String, val pageView: Page
     }
 
     fun changePage(id: String) {
-        log.d("Changing page to $id, from $pageId")
-        pageId = id
+        log.d("Changing page to $id, from $currentPageId")
+        updateOpenedPage(id)
         closeAllMenus()
         selectionState.reset()
         isDrawing = true

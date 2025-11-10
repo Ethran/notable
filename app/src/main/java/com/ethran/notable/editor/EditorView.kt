@@ -10,11 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -68,7 +65,6 @@ fun EditorView(
         navController.navigate("library")
         return
     }
-    var currentPageId by remember { mutableStateOf(pageId) }
 
     BoxWithConstraints {
         val height = convertDpToPixel(this.maxHeight, context).toInt()
@@ -87,24 +83,23 @@ fun EditorView(
         }
 
         val editorState =
-            remember { EditorState(bookId = bookId, pageId = currentPageId, pageView = page) }
+            remember {
+                EditorState(
+                    bookId = bookId,
+                    pageId = pageId,
+                    pageView = page,
+                    appRepository,
+                    onPageChange
+                )
+            }
 
         val history = remember {
-            History(scope, page)
+            History(page)
         }
         val editorControlTower = remember {
             EditorControlTower(scope, page, history, editorState).apply { registerObservers() }
         }
 
-        // update opened page
-        LaunchedEffect(currentPageId) {
-            if (bookId != null) {
-                appRepository.bookRepository.setOpenPageId(bookId, currentPageId)
-            }
-            if (currentPageId != pageId) {
-                onPageChange(currentPageId)
-            }
-        }
 
         DisposableEffect(Unit) {
             onDispose {
@@ -136,49 +131,23 @@ fun EditorView(
             )
         }
 
-        fun goToNextPage(): String? {
-            return if (bookId != null) {
-                val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
-                    pageId = currentPageId, notebookId = bookId
-                )
-                currentPageId = newPageId
-                newPageId
-            } else
-                null
-        }
 
-        fun goToPreviousPage(): String? {
-            return if (bookId != null) {
-                val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
-                    pageId = currentPageId, notebookId = bookId
-                )
-                if (newPageId != null)
-                    currentPageId = newPageId
-                newPageId
-            } else null
-        }
 
         InkaTheme {
             EditorSurface(
                 state = editorState, page = page, history = history
             )
-            EditorGestureReceiver(
-                goToNextPage = ::goToNextPage,
-                goToPreviousPage = ::goToPreviousPage,
-                controlTower = editorControlTower,
-                state = editorState
-            )
+            EditorGestureReceiver(controlTower = editorControlTower)
             SelectedBitmap(
                 context = context,
-                editorState = editorState,
                 controlTower = editorControlTower
             )
-            Row(
+            Row( //Calling a androidx.compose.ui.UiComposable composable function where a UI Composable composable was expected
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
             ) {
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.weight(1f)) // Calling a androidx.compose.ui.UiComposable composable function where a UI Composable composable was expected
                 ScrollIndicator(state = editorState)
             }
             PositionedToolbar(navController, editorState, editorControlTower)

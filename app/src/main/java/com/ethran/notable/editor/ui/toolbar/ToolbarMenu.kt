@@ -51,7 +51,7 @@ fun ToolbarMenu(
     val scope = CoroutineScope(Dispatchers.IO)
     val snackManager = LocalSnackContext.current
     val appRepository = AppRepository(context)
-    val page = appRepository.pageRepository.getById(state.pageId)!!
+    val page = appRepository.pageRepository.getById(state.currentPageId)!!
     val book =
         if (page.notebookId != null) appRepository.bookRepository.getById(page.notebookId) else null
     val parentFolder = if (book != null) book.parentFolderId
@@ -90,7 +90,7 @@ fun ToolbarMenu(
                         )
                     ) {
                         ExportEngine(context).export(
-                            target = ExportTarget.Page(pageId = state.pageId),
+                            target = ExportTarget.Page(pageId = state.currentPageId),
                             format = ExportFormat.PDF
                         )
                     }
@@ -106,7 +106,7 @@ fun ToolbarMenu(
                     ) {
                         withContext(Dispatchers.IO) {
                             ExportEngine(context).export(
-                                target = ExportTarget.Page(pageId = state.pageId),
+                                target = ExportTarget.Page(pageId = state.currentPageId),
                                 format = ExportFormat.PNG
                             )
                         }
@@ -122,7 +122,7 @@ fun ToolbarMenu(
                         )
                     ) {
                         ExportEngine(context).export(
-                            target = ExportTarget.Page(pageId = state.pageId),
+                            target = ExportTarget.Page(pageId = state.currentPageId),
                             format = ExportFormat.JPEG
                         )
                     }
@@ -137,7 +137,7 @@ fun ToolbarMenu(
                         )
                     ) {
                         ExportEngine(context).export(
-                            target = ExportTarget.Page(pageId = state.pageId),
+                            target = ExportTarget.Page(pageId = state.currentPageId),
                             format = ExportFormat.XOPP
                         )
                     }

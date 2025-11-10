@@ -33,15 +33,11 @@ import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.DOUBLE_TAP_MIN_MS
 import com.ethran.notable.editor.state.DOUBLE_TAP_TIMEOUT_MS
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.GestureMode
 import com.ethran.notable.editor.state.GestureState
 import com.ethran.notable.editor.state.HOLD_THRESHOLD_MS
-import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.PINCH_ZOOM_THRESHOLD
 import com.ethran.notable.editor.state.SWIPE_THRESHOLD
-import com.ethran.notable.editor.state.UndoRedoType
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -56,10 +52,7 @@ private val log = ShipBook.getLogger("GestureReceiver")
 @Composable
 @ExperimentalComposeUiApi
 fun EditorGestureReceiver(
-    goToNextPage: () -> String?,
-    goToPreviousPage: () -> String?,
     controlTower: EditorControlTower,
-    state: EditorState
 ) {
 
     val coroutineScope = rememberCoroutineScope()
@@ -137,8 +130,7 @@ fun EditorGestureReceiver(
                                         crossPosition = null
                                         rectangleBounds = null
                                         gestureState.gestureMode = GestureMode.Normal
-                                        if (!state.isDrawing)
-                                            state.isDrawing = true
+                                        controlTower.setIsDrawing(true)
                                     }
                                     return@awaitEachGesture
                                 }
@@ -161,7 +153,7 @@ fun EditorGestureReceiver(
                                 // set selection mode
                                 if (gestureState.isHoldingOneFinger()) {
                                     gestureState.gestureMode = GestureMode.Selection
-                                    state.isDrawing = false // unfreeze the screen
+                                    controlTower.setIsDrawing(false) // unfreeze the screen
                                     crossPosition = gestureState.getLastPositionIO()
                                     rectangleBounds = gestureState.calculateRectangleBounds()
                                     showHint("Selection mode!", coroutineScope, 1500)
@@ -197,18 +189,14 @@ fun EditorGestureReceiver(
                                     settings = appSettings,
                                     default = AppSettings.defaultHoldAction,
                                     override = AppSettings::holdAction,
-                                    state = state,
                                     scope = coroutineScope,
-                                    previousPage = goToPreviousPage,
-                                    nextPage = goToNextPage,
                                     rectangle = rectangleBounds!!,
                                     controlTower = controlTower
                                 )
                                 crossPosition = null
                                 rectangleBounds = null
                                 gestureState.gestureMode = GestureMode.Normal
-                                if (!state.isDrawing)
-                                    state.isDrawing = true
+                                controlTower.setIsDrawing(true)
                                 return@awaitEachGesture
                             }
 
@@ -261,10 +249,7 @@ fun EditorGestureReceiver(
                                             settings = appSettings,
                                             default = AppSettings.defaultDoubleTapAction,
                                             override = AppSettings::doubleTapAction,
-                                            state = state,
                                             scope = coroutineScope,
-                                            previousPage = goToPreviousPage,
-                                            nextPage = goToNextPage,
                                             controlTower = controlTower
                                         )
 
@@ -278,10 +263,7 @@ fun EditorGestureReceiver(
                                     settings = appSettings,
                                     default = AppSettings.defaultTwoFingerTapAction,
                                     override = AppSettings::twoFingerTapAction,
-                                    state = state,
                                     scope = coroutineScope,
-                                    previousPage = goToPreviousPage,
-                                    nextPage = goToNextPage,
                                     controlTower = controlTower
                                 )
                             }
@@ -305,10 +287,7 @@ fun EditorGestureReceiver(
                                     settings = appSettings,
                                     default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeLeftAction else AppSettings.defaultTwoFingerSwipeLeftAction,
                                     override = if (gestureState.getInputCount() == 1) AppSettings::swipeLeftAction else AppSettings::twoFingerSwipeLeftAction,
-                                    state = state,
                                     scope = coroutineScope,
-                                    previousPage = goToPreviousPage,
-                                    nextPage = goToNextPage,
                                     controlTower = controlTower
                                 )
                             else if (horizontalDrag > SWIPE_THRESHOLD)
@@ -316,10 +295,7 @@ fun EditorGestureReceiver(
                                     settings = appSettings,
                                     default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeRightAction else AppSettings.defaultTwoFingerSwipeRightAction,
                                     override = if (gestureState.getInputCount() == 1) AppSettings::swipeRightAction else AppSettings::twoFingerSwipeRightAction,
-                                    state = state,
                                     scope = coroutineScope,
-                                    previousPage = goToPreviousPage,
-                                    nextPage = goToNextPage,
                                     controlTower = controlTower
                                 )
                         }
@@ -402,51 +378,23 @@ private fun resolveGesture(
     settings: AppSettings?,
     default: AppSettings.GestureAction,
     override: AppSettings.() -> AppSettings.GestureAction?,
-    state: EditorState,
     scope: CoroutineScope,
-    previousPage: () -> String?,
-    nextPage: () -> String?,
     rectangle: Rect = Rect(),
     controlTower: EditorControlTower
 ) {
     when (if (settings != null) override(settings) else default) {
         null -> log.i("No Action")
-        AppSettings.GestureAction.PreviousPage -> {
-            val previous = previousPage()
-            if (previous != null) {
-                controlTower.switchPage(previous)
-            }
-        }
+        AppSettings.GestureAction.PreviousPage -> controlTower.goToPreviousPage()
 
-        AppSettings.GestureAction.NextPage -> {
-            val next = nextPage()
-            if (next != null) {
-                controlTower.switchPage(next)
-            }
-        }
+        AppSettings.GestureAction.NextPage -> controlTower.goToNextPage()
 
-        AppSettings.GestureAction.ChangeTool ->
-            state.mode = if (state.mode == Mode.Draw) Mode.Erase else Mode.Draw
+        AppSettings.GestureAction.ChangeTool -> controlTower.toggleTool()
 
-        AppSettings.GestureAction.ToggleZen ->
-            state.isToolbarOpen = !state.isToolbarOpen
+        AppSettings.GestureAction.ToggleZen -> controlTower.toggleZen()
 
-        AppSettings.GestureAction.Undo -> {
-            log.i("Undo")
-            scope.launch {
-                History.moveHistory(UndoRedoType.Undo)
-//                moved to history operation - avoids unnecessary refresh, and ensures that it will be done after drawing.
-//                DrawCanvas.refreshUi.emit(Unit)
-            }
-        }
+        AppSettings.GestureAction.Undo -> controlTower.undo()
 
-        AppSettings.GestureAction.Redo -> {
-            log.i("Redo")
-            scope.launch {
-                History.moveHistory(UndoRedoType.Redo)
-//                DrawCanvas.refreshUi.emit(Unit)
-            }
-        }
+        AppSettings.GestureAction.Redo -> controlTower.redo()
 
         AppSettings.GestureAction.Select -> {
             log.i("select")
