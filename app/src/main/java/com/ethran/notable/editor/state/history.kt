@@ -40,7 +40,6 @@ class History(pageView: PageView) {
     private val pageModel = pageView
 
     suspend fun handleHistoryBusActions(actions: HistoryBusActions) {
-        @Suppress("REDUNDANT_ELSE_IN_WHEN")
         when (actions) {
             is HistoryBusActions.MoveHistory -> {
                 // Wait for commit to history to complete
@@ -68,9 +67,6 @@ class History(pageView: PageView) {
                 addOperationsToHistory(actions.operationBlock)
             }
 
-            else -> {
-                throw (Error("Unhandled history action"))
-            }
         }
     }
 
@@ -81,7 +77,6 @@ class History(pageView: PageView) {
     }
 
     private fun treatOperation(operation: Operation): Pair<Operation, Rect> {
-        @Suppress("REDUNDANT_ELSE_IN_WHEN")
         when (operation) {
             is Operation.AddStroke -> {
                 pageModel.addStrokes(operation.strokes)
@@ -107,10 +102,6 @@ class History(pageView: PageView) {
                 val images = pageModel.getImages(operation.imageIds).filterNotNull()
                 pageModel.removeImages(operation.imageIds)
                 return Operation.AddImage(images = images) to imageBoundsInt(images)
-            }
-
-            else -> {
-                throw (Error("Unhandled history operation"))
             }
         }
     }

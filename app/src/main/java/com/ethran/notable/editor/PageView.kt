@@ -193,7 +193,7 @@ class PageView(
      * This function handles the entire process of transitioning from the current page to a new one specified by `newPageId`.
      * It performs the following steps:
      * 1.  Saves the state of the old page, including persisting its bitmap representation to disk.
-     * 2.  Updates the internal `id` to `newPageId`.
+     * 2.  Updates the internal `currentPageId` to `newPageId`.
      * 3.  Fetches the new page's data from the repository.
      * 4.  Updates the `PageDataManager` to the new page context.
      * 5.  Restores the zoom level for the new page.
