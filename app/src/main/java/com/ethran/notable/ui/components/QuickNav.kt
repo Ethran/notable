@@ -97,8 +97,6 @@ fun QuickNav(
                 .padding(10.dp)
         ) {
             // Header row: Breadcrumb on the left, Favorite toggle on the right
-
-
             QuickNavHeaderRow(
                 folderId = folderId,
                 navController = navController,
@@ -108,42 +106,6 @@ fun QuickNav(
                 kv = kv,
                 settings = settings
             )
-
-
-            Row(modifier = Modifier.fillMaxWidth()) {
-                logQuickNav.d("header row, folderId=$folderId")
-
-                BreadCrumb(
-                    folderId = folderId, fontSize = 16
-                ) { targetFolderId ->
-                    val route =
-                        "library" + if (targetFolderId == null) "" else "?folderId=$targetFolderId"
-                    logQuickNav.d("breadcrumb navigate -> $route")
-                    navController.navigate(route)
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Favorite toggle for the current page (right side)
-                val isFavorite = currentPageId != null && favorites.contains(currentPageId)
-                ToolbarButton(
-                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    onSelect = {
-                        if (currentPageId == null) {
-                            logQuickNav.w("favorite toggle ignored, pageId=null")
-                            return@ToolbarButton
-                        }
-                        val newList = if (isFavorite) favorites.filterNot { it == currentPageId }
-                        else favorites + currentPageId
-                        favorites = newList
-                        // Persist immediately
-                        kv.setAppSettings(settings.copy(quickNavPages = newList))
-                        logQuickNav.d(
-                            "toggled favorite for pageId=$currentPageId, nowFavorite=${!isFavorite}, total=${newList.size}"
-                        )
-                    })
-            }
-
 
             ShowPagesRow(
                 appRepository.pageRepository.getByIds(favorites),
