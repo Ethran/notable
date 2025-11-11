@@ -23,8 +23,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
@@ -95,6 +97,19 @@ fun QuickNav(
                 .padding(10.dp)
         ) {
             // Header row: Breadcrumb on the left, Favorite toggle on the right
+
+
+            QuickNavHeaderRow(
+                folderId = folderId,
+                navController = navController,
+                currentPageId = currentPageId,
+                favorites = favorites,
+                onFavoritesChange = { newList -> favorites = newList },
+                kv = kv,
+                settings = settings
+            )
+
+
             Row(modifier = Modifier.fillMaxWidth()) {
                 logQuickNav.d("header row, folderId=$folderId")
 
@@ -141,46 +156,104 @@ fun QuickNav(
             )
 
             if (bookId != null && currentPageId != null) {
-
-                val book = bookRepository.getById(bookId) ?: return@Column
-                if (book.pageIds.size < 2) return@Column
-
-
-                fun getPageIdFromIndex(index: Int): String {
-                    return book.pageIds[index]
-                }
-
-
-                // Spacer before the page scrubber area
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Page scrubber placed at the bottom of this dialog (UI only for now)
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    PageHorizontalSliderWithReturn(
-                        pageCount = book.pageIds.size,
-                        // Assuming getPageNumber is zero-based; adjust if it returns 1-based
-                        currentIndex = appRepository.getPageNumber(bookId, currentPageId),
-                        onDragStart = {
-                            // Persist current so preview can load from disk
-                            DrawCanvas.saveCurrent.tryEmit(Unit)
-                        },
-                        onPreviewIndexChanged = { idx ->
-                            // Live preview of persisted snapshot (or “No preview available”)
-                            Log.e("QuickNav", "onPreviewIndexChanged: $idx")
-                            DrawCanvas.previewPage.tryEmit(getPageIdFromIndex(idx))
-                        },
-                        onDragEnd = { idx ->
-                            // Commit: switch PageView to the chosen page
-                            EditorControlTower.changePage.tryEmit(getPageIdFromIndex(idx))
-                        },
-                        onReturnClick = {
-                            // Go back to the page where QuickNav was opened
-                            EditorControlTower.changePage.tryEmit(currentPageId)
-                        }
-                    )
-                }
+                BookScrubberBlock(
+                    bookId = bookId,
+                    currentPageId = currentPageId,
+                    bookRepository = bookRepository,
+                    appRepository = appRepository
+                )
             }
         }
+    }
+
+}
+
+
+@Composable
+private fun QuickNavHeaderRow(
+    folderId: String?,
+    navController: NavController,
+    currentPageId: String?,
+    favorites: List<String>,
+    onFavoritesChange: (List<String>) -> Unit,
+    kv: KvProxy,
+    settings: AppSettings
+) {
+    // Header row: Breadcrumb on the left, Favorite toggle on the right
+    Row(modifier = Modifier.fillMaxWidth()) {
+        logQuickNav.d("header row, folderId=$folderId")
+
+        BreadCrumb(
+            folderId = folderId, fontSize = 16
+        ) { targetFolderId ->
+            val route = "library" + if (targetFolderId == null) "" else "?folderId=$targetFolderId"
+            logQuickNav.d("breadcrumb navigate -> $route")
+            navController.navigate(route)
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Favorite toggle for the current page (right side)
+        val isFavorite = currentPageId != null && favorites.contains(currentPageId)
+        ToolbarButton(
+            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            onSelect = {
+                if (currentPageId == null) {
+                    logQuickNav.w("favorite toggle ignored, pageId=null")
+                    return@ToolbarButton
+                }
+                // TODO: Here we create unnecessary copy of the list
+                val newList = if (isFavorite) favorites.filterNot { it == currentPageId }
+                else favorites + currentPageId
+                onFavoritesChange(newList)
+                // Persist immediately
+                kv.setAppSettings(settings.copy(quickNavPages = newList))
+                logQuickNav.d(
+                    "toggled favorite for pageId=$currentPageId, nowFavorite=${!isFavorite}, total=${newList.size}"
+                )
+            })
+    }
+}
+
+
+@Composable
+private fun BookScrubberBlock(
+    bookId: String,
+    currentPageId: String,
+    bookRepository: BookRepository,
+    appRepository: AppRepository
+) {
+    val book = bookRepository.getById(bookId) ?: return
+    if (book.pageIds.size < 2) return
+
+
+    fun getPageIdFromIndex(index: Int): String {
+        return book.pageIds[index]
+    }
+
+
+    // Spacer before the page scrubber area
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Page scrubber placed at the bottom of this dialog (UI only for now)
+    Row(modifier = Modifier.fillMaxWidth()) {
+        PageHorizontalSliderWithReturn(
+            pageCount = book.pageIds.size,
+            // Assuming getPageNumber is zero-based; adjust if it returns 1-based
+            currentIndex = appRepository.getPageNumber(bookId, currentPageId), onDragStart = {
+                // Persist current so preview can load from disk
+                DrawCanvas.saveCurrent.tryEmit(Unit)
+            }, onPreviewIndexChanged = { idx ->
+                // Live preview of persisted snapshot (or “No preview available”)
+                Log.e("QuickNav", "onPreviewIndexChanged: $idx")
+                DrawCanvas.previewPage.tryEmit(getPageIdFromIndex(idx))
+            }, onDragEnd = { idx ->
+                // Commit: switch PageView to the chosen page
+                EditorControlTower.changePage.tryEmit(getPageIdFromIndex(idx))
+            }, onReturnClick = {
+                // Go back to the page where QuickNav was opened
+                EditorControlTower.changePage.tryEmit(currentPageId)
+            })
     }
 
 }
