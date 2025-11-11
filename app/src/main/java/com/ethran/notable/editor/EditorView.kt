@@ -142,12 +142,12 @@ fun EditorView(
                 context = context,
                 controlTower = editorControlTower
             )
-            Row( //Calling a androidx.compose.ui.UiComposable composable function where a UI Composable composable was expected
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
             ) {
-                Spacer(modifier = Modifier.weight(1f)) // Calling a androidx.compose.ui.UiComposable composable function where a UI Composable composable was expected
+                Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(state = editorState)
             }
             PositionedToolbar(navController, editorState, editorControlTower)
