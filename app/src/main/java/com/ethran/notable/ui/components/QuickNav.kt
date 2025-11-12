@@ -119,10 +119,11 @@ fun QuickNav(
 
             if (bookId != null && currentPageId != null) {
                 BookScrubberBlock(
+                    appRepository = appRepository,
+                    bookRepository = bookRepository,
+                    favorites = favorites,
                     bookId = bookId,
                     currentPageId = currentPageId,
-                    bookRepository = bookRepository,
-                    appRepository = appRepository
                 )
             }
         }
@@ -180,14 +181,17 @@ private fun QuickNavHeaderRow(
 
 @Composable
 private fun BookScrubberBlock(
-    bookId: String,
-    currentPageId: String,
+    appRepository: AppRepository,
     bookRepository: BookRepository,
-    appRepository: AppRepository
+    favorites: List<String>,
+    bookId: String,
+    currentPageId: String
 ) {
     val book = bookRepository.getById(bookId) ?: return
     if (book.pageIds.size < 2) return
 
+    val favoriteIndexesInBook: List<Int> = book.pageIds
+        .mapIndexedNotNull { idx, id -> if (favorites.contains(id)) idx else null }
 
     fun getPageIdFromIndex(index: Int): String {
         return book.pageIds[index]
@@ -205,14 +209,18 @@ private fun BookScrubberBlock(
             currentIndex = appRepository.getPageNumber(bookId, currentPageId), onDragStart = {
                 // Persist current so preview can load from disk
                 DrawCanvas.saveCurrent.tryEmit(Unit)
-            }, onPreviewIndexChanged = { idx ->
+            },
+            favIndexes = favoriteIndexesInBook,
+            onPreviewIndexChanged = { idx ->
                 // Live preview of persisted snapshot (or “No preview available”)
                 Log.e("QuickNav", "onPreviewIndexChanged: $idx")
                 DrawCanvas.previewPage.tryEmit(getPageIdFromIndex(idx))
-            }, onDragEnd = { idx ->
+            },
+            onDragEnd = { idx ->
                 // Commit: switch PageView to the chosen page
                 EditorControlTower.changePage.tryEmit(getPageIdFromIndex(idx))
-            }, onReturnClick = {
+            },
+            onReturnClick = {
                 // Go back to the page where QuickNav was opened
                 EditorControlTower.changePage.tryEmit(currentPageId)
             })
