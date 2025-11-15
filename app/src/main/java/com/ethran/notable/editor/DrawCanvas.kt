@@ -892,42 +892,21 @@ class DrawCanvas(
         }
     }
 
-    fun restoreCanvas(dirtyRect: Rect) {
-        post {
-            val holder = this@DrawCanvas.holder
-            var surfaceCanvas: Canvas? = null
-            try {
-                // 2. Then: draw the bitmap onto the visible surface
-                surfaceCanvas = holder.lockCanvas(dirtyRect)
-                surfaceCanvas.drawBitmap(page.windowedBitmap, dirtyRect, dirtyRect, null)
-            } catch (e: Exception) {
-                Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
-            } finally {
-                if (surfaceCanvas != null) {
-                    holder.unlockCanvasAndPost(surfaceCanvas)
-                }
-                // 3. Trigger partial refresh
-                refreshScreenRegion(this@DrawCanvas, dirtyRect)
-            }
-        }
-    }
-
-    // Draw the preview directly to the Surface without touching page.windowedBitmap
-    fun restoreCanvas(dirtyRect: Rect, bitmap: Bitmap) {
+    private fun restoreCanvas(dirtyRect: Rect, bitmap: Bitmap = page.windowedBitmap) {
         post {
             val holder = this@DrawCanvas.holder
             var surfaceCanvas: Canvas? = null
             try {
                 surfaceCanvas = holder.lockCanvas(dirtyRect)
                 // Draw the preview bitmap scaled to fit the dirty rect
-                surfaceCanvas.drawBitmap(bitmap, null, dirtyRect, null)
+                surfaceCanvas.drawBitmap(bitmap, dirtyRect, dirtyRect, null)
             } catch (e: Exception) {
                 Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
             } finally {
                 if (surfaceCanvas != null) {
                     holder.unlockCanvasAndPost(surfaceCanvas)
                 }
-                // Trigger partial refresh (e.g., for e-ink)
+                // Trigger partial refresh
                 refreshScreenRegion(this@DrawCanvas, dirtyRect)
             }
         }

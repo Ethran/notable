@@ -210,37 +210,11 @@ suspend fun loadPreview(
             log.i(
                 "Preview size mismatch (${bitmapFromDisk.width}x${bitmapFromDisk.height}) -> " + "scaling to ${expectedWidth}x${expectedHeight}"
             )
-            bitmapFromDisk.scaleToFitLetterboxed(expectedWidth, expectedHeight)
+            bitmapFromDisk
         }
     }
 
     prepared
-}
-
-// Maintain aspect ratio; letterbox into an ARGB_8888 bitmap of target size.
-private fun Bitmap.scaleToFitLetterboxed(targetWidth: Int, targetHeight: Int): Bitmap {
-    if (targetWidth <= 0 || targetHeight <= 0) {
-        return this
-    }
-
-    val scale = min(
-        targetWidth / this.width.toFloat(), targetHeight / this.height.toFloat()
-    )
-    val scaledW = (this.width * scale).roundToInt().coerceAtLeast(1)
-    val scaledH = (this.height * scale).roundToInt().coerceAtLeast(1)
-
-    val scaled = if (scaledW == this.width && scaledH == this.height) this
-    else Bitmap.createScaledBitmap(this, scaledW, scaledH, true)
-
-    val output = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(output)
-    canvas.drawColor(Color.WHITE)
-
-    val left = ((targetWidth - scaledW) / 2f)
-    val top = ((targetHeight - scaledH) / 2f)
-    canvas.drawBitmap(scaled, left, top, null)
-
-    return output
 }
 
 
