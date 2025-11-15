@@ -11,6 +11,7 @@ import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
+import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 
 enum class Mode {
@@ -70,7 +71,7 @@ class EditorState(
             appRepository.bookRepository.setOpenPageId(bookId, newPageId)
         }
         if (newPageId != currentPageId) {
-            io.shipbook.shipbooksdk.Log.e("EditorView", "Page changed")
+          Log.d("EditorView", "Page changed")
             onPageChange(newPageId)
         }
         currentPageId = newPageId

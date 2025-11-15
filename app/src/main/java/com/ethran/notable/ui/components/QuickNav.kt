@@ -219,7 +219,7 @@ private fun BookScrubberBlock(
             favIndexes = favoriteIndexesInBook,
             onPreviewIndexChanged = { idx ->
                 // Live preview of persisted snapshot (or “No preview available”)
-                Log.e("QuickNav", "onPreviewIndexChanged: $idx")
+                Log.d("QuickNav", "onPreviewIndexChanged: $idx")
                 DrawCanvas.previewPage.tryEmit(getPageIdFromIndex(idx))
             },
             onDragEnd = { idx ->

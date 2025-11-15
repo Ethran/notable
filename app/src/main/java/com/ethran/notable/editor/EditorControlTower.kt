@@ -49,7 +49,7 @@ class EditorControlTower(
         scope.launch {
             changePage.collect { pageId ->
                 switchPage(pageId, false)
-                logEditorControlTower.e("Change to page $pageId")
+                logEditorControlTower.d("Change to page $pageId")
                 page.changePage(pageId)
                 refreshScreen()
             }
