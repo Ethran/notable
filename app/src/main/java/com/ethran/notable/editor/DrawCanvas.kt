@@ -679,7 +679,7 @@ class DrawCanvas(
 
                 Log.d("QuickNav", "Previewing page: $pageId")
 
-                if (previewBitmap == null || previewBitmap.isRecycled) {
+                if (previewBitmap.isRecycled) {
                     Log.e("QuickNav", "Failed to preview page for $pageId, skipping draw")
                     return@collectLatest
                 }

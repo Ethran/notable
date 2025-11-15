@@ -93,9 +93,9 @@ class EditorControlTower(
      * @param id The unique identifier of the page to switch to.
      * @param switchDrawing Whether we should enable drawing.
      * If quickNav is open, then we should not enable drawing.
-     * It will be enabled when we exist of quickNav.
+     * It will be enabled when we exit of quickNav.
      */
-    fun switchPage(id: String, switchDrawing: Boolean = true) {
+    fun switchPage(id: String, switchDrawing: Boolean = false) {
         // I'm not sure if we need to change isDrawing, it might be unnecessary
         state.changePage(id, switchDrawing)
         history.cleanHistory()
@@ -145,7 +145,7 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Undo called")
             history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
-            DrawCanvas.refreshUi.emit(Unit)
+//            DrawCanvas.refreshUi.emit(Unit)
         }
     }
 
@@ -153,7 +153,7 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Redo called")
             history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
-            DrawCanvas.refreshUi.emit(Unit)
+//            DrawCanvas.refreshUi.emit(Unit)
         }
     }
 

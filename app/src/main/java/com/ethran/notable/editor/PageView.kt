@@ -58,7 +58,7 @@ const val OVERLAP = 2
 
 /**
  * Manages the state and rendering of a single page within the editor.
- * @param [currentPageId] Id of page assigned to it.
+ * @param currentPageId Id of page assigned to it.
  */
 class PageView(
     val context: Context,
