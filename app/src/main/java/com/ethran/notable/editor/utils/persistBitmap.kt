@@ -179,7 +179,6 @@ fun loadPersistBitmap(
 
 
 // Load preview fast, without touching any windowed canvas.
-// Returns a bitmap that fits expectedWidth x expectedHeight (letterboxed if needed), or a placeholder.
 suspend fun loadPreview(
     context: Context,
     pageIdToLoad: String,

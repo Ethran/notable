@@ -48,8 +48,8 @@ class EditorControlTower(
     fun registerObservers() {
         scope.launch {
             changePage.collect { pageId ->
-                switchPage(pageId)
                 logEditorControlTower.d("Change to page $pageId")
+                switchPage(pageId)
                 page.changePage(pageId)
                 refreshScreen()
             }

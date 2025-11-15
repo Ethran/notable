@@ -665,7 +665,7 @@ class DrawCanvas(
             previewPage.debounce(50).collectLatest { pageId ->
                 val pageNumber =
                     AppRepository(context).getPageNumber(page.pageFromDb?.notebookId, pageId)
-
+                Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
                 // Load and prepare a preview bitmap sized for the visible view area (IO thread)
                 val previewBitmap = withContext(Dispatchers.IO) {
                     loadPreview(
@@ -676,8 +676,6 @@ class DrawCanvas(
                         pageNumber = pageNumber
                     )
                 }
-
-                Log.d("QuickNav", "Previewing page: $pageId")
 
                 if (previewBitmap.isRecycled) {
                     Log.e("QuickNav", "Failed to preview page for $pageId, skipping draw")
