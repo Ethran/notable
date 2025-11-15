@@ -27,6 +27,7 @@ import androidx.navigation.navArgument
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorView
+import com.ethran.notable.ui.components.Anchor
 import com.ethran.notable.ui.components.QuickNav
 import com.ethran.notable.ui.views.BugReportScreen
 import com.ethran.notable.ui.views.Library
@@ -61,7 +62,14 @@ fun Router() {
     Box(
         Modifier
             .fillMaxSize()
-            .detectThreeFingerTouchToOpenQuickNav { isQuickNavOpen = true }) {
+            .detectThreeFingerTouchToOpenQuickNav {
+                // Save the page on which QuickNav was opened
+                navController.currentBackStackEntry?.savedStateHandle?.set(
+                    "quickNavSourcePageId",
+                    currentPageId
+                )
+                isQuickNavOpen = true
+            }) {
         NavHost(
             navController = navController,
             startDestination = startDestination,
@@ -157,9 +165,18 @@ fun Router() {
             QuickNav(
                 navController = navController,
                 currentPageId = currentPageId,
+                quickNavSourcePageId =
+                    navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId"),
                 onClose = { isQuickNavOpen = false },
             )
         }
+        Anchor(
+            navController = navController,
+            currentPageId = currentPageId,
+            quickNavSourcePageId =
+                navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId"),
+            onClose = { isQuickNavOpen = false },
+        )
     }
 
 }

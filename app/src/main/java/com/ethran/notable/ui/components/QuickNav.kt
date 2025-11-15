@@ -31,6 +31,8 @@ import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.noRippleClickable
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
@@ -42,6 +44,7 @@ private val logQuickNav = ShipBook.getLogger("QuickNav")
 fun QuickNav(
     navController: NavController,
     currentPageId: String?,
+    quickNavSourcePageId: String?,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -124,6 +127,7 @@ fun QuickNav(
                     favorites = favorites,
                     bookId = bookId,
                     currentPageId = currentPageId,
+                    quickNavSourcePageId = quickNavSourcePageId
                 )
             }
         }
@@ -185,7 +189,8 @@ private fun BookScrubberBlock(
     bookRepository: BookRepository,
     favorites: List<String>,
     bookId: String,
-    currentPageId: String
+    currentPageId: String,
+    quickNavSourcePageId: String?
 ) {
     val book = bookRepository.getById(bookId) ?: return
     if (book.pageIds.size < 2) return
@@ -224,8 +229,16 @@ private fun BookScrubberBlock(
                 EditorControlTower.changePage.tryEmit(getPageIdFromIndex(idx))
             },
             onReturnClick = {
+                if (quickNavSourcePageId == null)
+                    SnackState.globalSnackFlow.tryEmit(
+                        SnackConf(
+                            text = "Can't go back, no QuickNav source page",
+                            duration = 4000
+                        )
+                    )
+                else
                 // Go back to the page where QuickNav was opened
-                EditorControlTower.changePage.tryEmit(currentPageId)
+                    EditorControlTower.changePage.tryEmit(quickNavSourcePageId)
             })
     }
 
