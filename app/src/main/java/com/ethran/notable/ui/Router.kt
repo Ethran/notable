@@ -119,6 +119,12 @@ fun Router() {
                     onPageChange = { newPageId ->
                         // SAVE new pageId in savedStateHandle - do not call navigate
                         backStackEntry.savedStateHandle["pageId"] = newPageId
+                        if (backStackEntry.savedStateHandle.get<Int>("pageChangesSinceJump") == 2) {
+                            backStackEntry.savedStateHandle["pageChangesSinceJump"] = 1
+                        } else if (backStackEntry.savedStateHandle.get<Int>("pageChangesSinceJump") == 1) {
+                            backStackEntry.savedStateHandle.remove<Int>("pageChangesSinceJump")
+                            backStackEntry.savedStateHandle.remove<String>("quickNavSourcePageId")
+                        }
                         currentPageId = newPageId
                         logRouter.d("Editor changed page -> saved pageId=$newPageId (no navigate, no recreate)")
                     })
@@ -161,14 +167,25 @@ fun Router() {
                 currentPageId = null
             }
         }
+        val quickNavSourcePageId =
+            navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId")
         if (isQuickNavOpen) {
             QuickNav(
                 navController = navController,
                 currentPageId = currentPageId,
-                quickNavSourcePageId =
-                    navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId"),
+                quickNavSourcePageId = quickNavSourcePageId,
                 onClose = {
                     isQuickNavOpen = false
+                    if (quickNavSourcePageId == currentPageId)
+                    // User didn't use the QuickNav, so remove the savedStateHandle
+                        navController.currentBackStackEntry?.savedStateHandle?.remove<String>("quickNavSourcePageId")
+                    else
+                    // user did change page with QuickNav, start counting page changes
+                        navController.currentBackStackEntry?.savedStateHandle?.set(
+                            "pageChangesSinceJump",
+                            2
+                        )
+
                     refreshScreen()
                 },
             )
@@ -176,8 +193,7 @@ fun Router() {
         Anchor(
             navController = navController,
             currentPageId = currentPageId,
-            quickNavSourcePageId =
-                navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId"),
+            quickNavSourcePageId = quickNavSourcePageId,
             onClose = { isQuickNavOpen = false },
         )
     }
