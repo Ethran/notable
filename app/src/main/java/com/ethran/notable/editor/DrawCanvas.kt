@@ -42,6 +42,7 @@ import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.handleSelect
+import com.ethran.notable.editor.utils.loadPreview
 import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
 import com.ethran.notable.editor.utils.onSurfaceInit
@@ -89,6 +90,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.thread
 import kotlin.math.max
@@ -660,20 +662,36 @@ class DrawCanvas(
         }
 
         coroutineScope.launch {
-            previewPage.debounce(75).collectLatest { pageId ->
-                val pageNumber =  AppRepository(context).getPageNumber(page.pageFromDb?.notebookId, pageId)
-                page.loadBitmapFromStorage(pageId, "Page ${pageNumber}, No Preview Available", false)
-                Log.e("QuickNav", "Previewing page: $pageId")
+            previewPage.debounce(50).collectLatest { pageId ->
+                val pageNumber =
+                    AppRepository(context).getPageNumber(page.pageFromDb?.notebookId, pageId)
+
+                // Load and prepare a preview bitmap sized for the visible view area (IO thread)
+                val previewBitmap = withContext(Dispatchers.IO) {
+                    loadPreview(
+                        context = context,
+                        pageIdToLoad = pageId,
+                        expectedWidth = page.viewWidth,
+                        expectedHeight = page.viewHeight,
+                        pageNumber = pageNumber
+                    )
+                }
+
+                Log.d("QuickNav", "Previewing page: $pageId")
+
+                if (previewBitmap == null || previewBitmap.isRecycled) {
+                    Log.e("QuickNav", "Failed to preview page for $pageId, skipping draw")
+                    return@collectLatest
+                }
+
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                restoreCanvas(zoneToRedraw)
+                restoreCanvas(zoneToRedraw, previewBitmap)
             }
         }
-
 
         coroutineScope.launch {
             restoreCanvas.collect {
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                page.drawAreaScreenCoordinates(zoneToRedraw)
                 restoreCanvas(zoneToRedraw)
             }
         }
@@ -889,6 +907,27 @@ class DrawCanvas(
                     holder.unlockCanvasAndPost(surfaceCanvas)
                 }
                 // 3. Trigger partial refresh
+                refreshScreenRegion(this@DrawCanvas, dirtyRect)
+            }
+        }
+    }
+
+    // Draw the preview directly to the Surface without touching page.windowedBitmap
+    fun restoreCanvas(dirtyRect: Rect, bitmap: Bitmap) {
+        post {
+            val holder = this@DrawCanvas.holder
+            var surfaceCanvas: Canvas? = null
+            try {
+                surfaceCanvas = holder.lockCanvas(dirtyRect)
+                // Draw the preview bitmap scaled to fit the dirty rect
+                surfaceCanvas.drawBitmap(bitmap, null, dirtyRect, null)
+            } catch (e: Exception) {
+                Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
+            } finally {
+                if (surfaceCanvas != null) {
+                    holder.unlockCanvasAndPost(surfaceCanvas)
+                }
+                // Trigger partial refresh (e.g., for e-ink)
                 refreshScreenRegion(this@DrawCanvas, dirtyRect)
             }
         }

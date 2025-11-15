@@ -358,38 +358,38 @@ object PageDataManager {
     ) {
         scope.launch(Dispatchers.IO) {
             saveTopic.buffer(10).chunked(1000).collect { pageIdBatch ->
-                    // 3. Take only the unique page IDs from the batch.
-                    val uniquePageIds = pageIdBatch.distinct()
+                // 3. Take only the unique page IDs from the batch.
+                val uniquePageIds = pageIdBatch.distinct()
 
-                    if (uniquePageIds.isEmpty()) return@collect
+                if (uniquePageIds.isEmpty()) return@collect
 
-                    log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
+                log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
 
-                    // 4. Process each unique ID.
-                    for (pageId in uniquePageIds) {
-                        val ref = bitmapCache[pageId]
-                        val currentZoomLevel = pageZoom[pageId]
-                        val currentScroll = pageScroll[pageId]
-                        val bitmap = ref?.get()
+                // 4. Process each unique ID.
+                for (pageId in uniquePageIds) {
+                    val ref = bitmapCache[pageId]
+                    val currentZoomLevel = pageZoom[pageId]
+                    val currentScroll = pageScroll[pageId]
+                    val bitmap = ref?.get()
 
 
-                        if (bitmap == null || bitmap.isRecycled) {
-                            log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
-                            continue // Skip to the next ID in the batch
-                        }
+                    if (bitmap == null || bitmap.isRecycled) {
+                        log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
+                        continue // Skip to the next ID in the batch
+                    }
 
-                        scope.launch(Dispatchers.IO) {
-                            persistBitmapFull(
-                                context,
-                                bitmap,
-                                pageId,
-                                currentScroll,
-                                currentZoomLevel
-                            )
-                            persistBitmapThumbnail(context, bitmap, pageId)
-                        }
+                    scope.launch(Dispatchers.IO) {
+                        persistBitmapFull(
+                            context,
+                            bitmap,
+                            pageId,
+                            currentScroll,
+                            currentZoomLevel
+                        )
+                        persistBitmapThumbnail(context, bitmap, pageId)
                     }
                 }
+            }
         }
     }
 

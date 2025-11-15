@@ -220,7 +220,7 @@ fun drawBackgroundImages(
     }
 }
 
-fun drawTitleBox(canvas: Canvas): RectF  {
+fun drawTitleBox(canvas: Canvas) {
 
     // Draw label-like area in center
     val paint = Paint().apply {
@@ -254,7 +254,6 @@ fun drawTitleBox(canvas: Canvas): RectF  {
 
     canvas.drawRoundRect(rectF, cornerRadius, cornerRadius, paint)
     canvas.drawRoundRect(rectF, cornerRadius, cornerRadius, borderPaint)
-    return rectF
 }
 
 
@@ -458,44 +457,4 @@ fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
         yPos += pageHeight
         pageNum++
     }
-}
-
-/**
- * Draws a minimal, centered rounded rectangle "label" with large text inside.
- * - Text size is 1/5 of the canvas height (scaled down to fit width if needed).
- * - Simple white fill with subtle dark border.
- */
-fun drawCenteredLabelBox(
-    canvas: Canvas,
-    text: String
-) {
-    val rect = drawTitleBox(canvas)
-
-    val canvasH = canvas.height.toFloat()
-    val desiredTextSize = canvasH / 5f
-
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.BLACK
-        style = Paint.Style.FILL
-        textSize = desiredTextSize
-    }
-
-    // Fit text within the box width with padding
-    val horizontalPadding = rect.width() * 0.06f
-    val maxTextWidth = rect.width() - 2f * horizontalPadding
-    val rawWidth = textPaint.measureText(text)
-    if (rawWidth > maxTextWidth && rawWidth > 0f) {
-        val scale = maxTextWidth / rawWidth
-        textPaint.textSize = desiredTextSize * scale
-    }
-
-    val fm = textPaint.fontMetrics
-    val textWidth = textPaint.measureText(text)
-    val textHeight = fm.bottom - fm.top
-
-    // Center baseline within the rect
-    val textX = rect.left + (rect.width() - textWidth) / 2f
-    val textY = rect.top + (rect.height() - textHeight) / 2f - fm.top
-
-    canvas.drawText(text, textX, textY, textPaint)
 }

@@ -3,6 +3,9 @@ package com.ethran.notable.editor.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
 import androidx.core.graphics.scale
@@ -10,8 +13,11 @@ import com.ethran.notable.R
 import com.ethran.notable.data.ensurePreviewsFullFolder
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private val log = ShipBook.getLogger("bitmapUtils")
@@ -169,6 +175,101 @@ fun loadPersistBitmap(
     // For logging, try to compute the "exact" encoded filename if we had a scroll; otherwise pass the actual name
     val expectedName = encodedFromProvidedScroll?.name ?: newest.name
     return decodePreview(newest, expectedName)
+}
+
+
+// Load preview fast, without touching any windowed canvas.
+// Returns a bitmap that fits expectedWidth x expectedHeight (letterboxed if needed), or a placeholder.
+suspend fun loadPreview(
+    context: Context,
+    pageIdToLoad: String,
+    expectedWidth: Int,
+    expectedHeight: Int,
+    pageNumber: Int?
+): Bitmap = withContext(Dispatchers.IO) {
+    // Load from disk
+    val bitmapFromDisk: Bitmap? = try {
+        loadPersistBitmap(context, pageIdToLoad, null, null, false)
+    } catch (t: Throwable) {
+        log.e("Failed to load persisted bitmap: ${t.message}")
+        null
+    }
+
+    val prepared = when {
+        bitmapFromDisk == null -> {
+            log.d("No persisted preview for $pageIdToLoad. Creating placeholder.")
+            createPlaceholderPreview(expectedWidth, expectedHeight, pageNumber)
+        }
+
+        bitmapFromDisk.width == expectedWidth && bitmapFromDisk.height == expectedHeight -> {
+            log.d("Loaded preview for page $pageIdToLoad (fits view).")
+            bitmapFromDisk
+        }
+
+        else -> {
+            log.i(
+                "Preview size mismatch (${bitmapFromDisk.width}x${bitmapFromDisk.height}) -> " + "scaling to ${expectedWidth}x${expectedHeight}"
+            )
+            bitmapFromDisk.scaleToFitLetterboxed(expectedWidth, expectedHeight)
+        }
+    }
+
+    prepared
+}
+
+// Maintain aspect ratio; letterbox into an ARGB_8888 bitmap of target size.
+private fun Bitmap.scaleToFitLetterboxed(targetWidth: Int, targetHeight: Int): Bitmap {
+    if (targetWidth <= 0 || targetHeight <= 0) {
+        return this
+    }
+
+    val scale = min(
+        targetWidth / this.width.toFloat(), targetHeight / this.height.toFloat()
+    )
+    val scaledW = (this.width * scale).roundToInt().coerceAtLeast(1)
+    val scaledH = (this.height * scale).roundToInt().coerceAtLeast(1)
+
+    val scaled = if (scaledW == this.width && scaledH == this.height) this
+    else Bitmap.createScaledBitmap(this, scaledW, scaledH, true)
+
+    val output = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(output)
+    canvas.drawColor(Color.WHITE)
+
+    val left = ((targetWidth - scaledW) / 2f)
+    val top = ((targetHeight - scaledH) / 2f)
+    canvas.drawBitmap(scaled, left, top, null)
+
+    return output
+}
+
+
+private fun createPlaceholderPreview(
+    width: Int,
+    height: Int,
+    pageNumber: Int?
+): Bitmap {
+    val bmp = Bitmap.createBitmap(
+        width.coerceAtLeast(1),
+        height.coerceAtLeast(1),
+        Bitmap.Config.ARGB_8888
+    )
+    val canvas = Canvas(bmp)
+    canvas.drawColor(Color.WHITE)
+
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.DKGRAY
+        textAlign = Paint.Align.CENTER
+        textSize = (min(width, height) * 0.05f).coerceAtLeast(16f)
+    }
+    val msg = pageNumber?.let { "Page $it — No Preview" } ?: "No Preview"
+
+    val fm = paint.fontMetrics
+    val x = width / 2f
+    val y = height / 2f - (fm.ascent + fm.descent) / 2f
+    canvas.drawText(msg, x, y, paint)
+
+    return bmp
 }
 
 private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {

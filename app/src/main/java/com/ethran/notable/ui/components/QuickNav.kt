@@ -206,7 +206,8 @@ private fun BookScrubberBlock(
         PageHorizontalSliderWithReturn(
             pageCount = book.pageIds.size,
             // Assuming getPageNumber is zero-based; adjust if it returns 1-based
-            currentIndex = appRepository.getPageNumber(bookId, currentPageId), onDragStart = {
+            currentIndex = appRepository.getPageNumber(bookId, currentPageId),
+            onDragStart = {
                 // Persist current so preview can load from disk
                 DrawCanvas.saveCurrent.tryEmit(Unit)
             },
@@ -217,6 +218,8 @@ private fun BookScrubberBlock(
                 DrawCanvas.previewPage.tryEmit(getPageIdFromIndex(idx))
             },
             onDragEnd = { idx ->
+                // Restore canvas to correct state
+                DrawCanvas.restoreCanvas.tryEmit(Unit)
                 // Commit: switch PageView to the chosen page
                 EditorControlTower.changePage.tryEmit(getPageIdFromIndex(idx))
             },
