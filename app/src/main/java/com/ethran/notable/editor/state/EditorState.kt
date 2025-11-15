@@ -136,12 +136,20 @@ class EditorState(
         }
     }
 
-    fun changePage(id: String) {
+    /**
+     * Changes the current page to the one with the specified [id].
+     *
+     * @param id The unique identifier of the page to switch to.
+     * @param switchDrawing Whether the pen should draw on the page.
+     */
+    fun changePage(id: String, switchDrawing: Boolean) {
         log.d("Changing page to $id, from $currentPageId")
         updateOpenedPage(id)
         closeAllMenus()
         selectionState.reset()
-        isDrawing = true
+        if (isDrawing != switchDrawing) {
+            isDrawing = true
+        }
     }
 }
 
