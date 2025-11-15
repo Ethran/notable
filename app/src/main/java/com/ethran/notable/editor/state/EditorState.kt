@@ -11,6 +11,8 @@ import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 
@@ -50,7 +52,6 @@ class EditorState(
             val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
                 pageId = currentPageId, notebookId = bookId
             )
-            currentPageId = newPageId
             newPageId
         } else null
     }
@@ -60,21 +61,26 @@ class EditorState(
             val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
                 pageId = currentPageId, notebookId = bookId
             )
-            if (newPageId != null) currentPageId = newPageId
             newPageId
         } else null
     }
 
 
     fun updateOpenedPage(newPageId: String) {
+        Log.e("EditorView", "Update open page to $newPageId")
         if (bookId != null) {
             appRepository.bookRepository.setOpenPageId(bookId, newPageId)
         }
         if (newPageId != currentPageId) {
-          Log.d("EditorView", "Page changed")
+            Log.d("EditorView", "Page changed")
             onPageChange(newPageId)
+            currentPageId = newPageId
+        } else {
+            Log.e("EditorView", "Tried to change to same page!")
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(text = "Tried to change to same page!", duration = 3000)
+            )
         }
-        currentPageId = newPageId
     }
 
 
@@ -141,16 +147,12 @@ class EditorState(
      * Changes the current page to the one with the specified [id].
      *
      * @param id The unique identifier of the page to switch to.
-     * @param switchDrawing Whether the pen should draw on the page.
      */
-    fun changePage(id: String, switchDrawing: Boolean) {
+    fun changePage(id: String) {
         log.d("Changing page to $id, from $currentPageId")
         updateOpenedPage(id)
         closeAllMenus()
         selectionState.reset()
-        if (isDrawing != switchDrawing) {
-            isDrawing = true
-        }
     }
 }
 

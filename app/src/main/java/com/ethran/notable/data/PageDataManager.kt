@@ -704,7 +704,16 @@ object PageDataManager {
 
     fun removePage(pageId: String) {
         log.d("Removing page $pageId")
-        if (pageId == currentPage) log.w("Removing current page!")
+        if (pageId == currentPage) {
+            log.e("Removing current page!")
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    text = "Cannot remove current page, there is a bug in code",
+                    duration = 3000
+                )
+            )
+            return
+        }
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
@@ -735,7 +744,10 @@ object PageDataManager {
         dataLoadingScope.launch {
             log.d("Cancelling loading page: pageId=$pageId")
             jobLock.withLock {
-                removePage(pageId)
+                if (dataLoadingJobs[pageId]?.isActive == true) {
+                    dataLoadingJobs[pageId]?.cancel()
+                    removePage(pageId)
+                }
             }
         }
     }
@@ -756,6 +768,11 @@ object PageDataManager {
                 // Cancel and remove pages outside the lock
                 for (pageId in toCancel) {
                     if (ignoredPageIds.contains(pageId)) continue
+                    val job = jobLock.withLock { dataLoadingJobs[pageId] }
+                    if (job != null && job.isActive) {
+                        job.cancel()
+                        log.d("Cancelled job for page $pageId")
+                    }
                     log.d("Cancelling page $pageId")
                     removePage(pageId)
                 }

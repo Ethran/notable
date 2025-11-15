@@ -48,7 +48,7 @@ class EditorControlTower(
     fun registerObservers() {
         scope.launch {
             changePage.collect { pageId ->
-                switchPage(pageId, false)
+                switchPage(pageId)
                 logEditorControlTower.d("Change to page $pageId")
                 page.changePage(pageId)
                 refreshScreen()
@@ -91,13 +91,9 @@ class EditorControlTower(
      * and instructs the page view to load and display the content of the new page.
      *
      * @param id The unique identifier of the page to switch to.
-     * @param switchDrawing Whether we should enable drawing.
-     * If quickNav is open, then we should not enable drawing.
-     * It will be enabled when we exit of quickNav.
      */
-    fun switchPage(id: String, switchDrawing: Boolean = false) {
-        // I'm not sure if we need to change isDrawing, it might be unnecessary
-        state.changePage(id, switchDrawing)
+    private fun switchPage(id: String) {
+        state.changePage(id)
         history.cleanHistory()
         page.changePage(id)
     }
