@@ -1,23 +1,28 @@
 package com.ethran.notable.editor
 
 import android.content.Context
-import android.util.Log
+import android.graphics.Bitmap
 import androidx.compose.ui.geometry.Offset
-import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.state.HistoryBusActions
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.PlacementMode
+import com.ethran.notable.editor.state.SelectionState
+import com.ethran.notable.editor.state.UndoRedoType
 import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.offsetStroke
+import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.ui.showHint
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,11 +33,28 @@ class EditorControlTower(
     private val scope: CoroutineScope,
     val page: PageView,
     private var history: History,
-    val state: EditorState
+    private val state: EditorState
 ) {
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
+    private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
 
+
+    companion object {
+        val changePage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+    }
+
+    fun registerObservers() {
+        scope.launch {
+            changePage.collect { pageId ->
+                logEditorControlTower.d("Change to page $pageId")
+                switchPage(pageId)
+                page.changePage(pageId)
+                refreshScreen()
+            }
+        }
+    }
 
     // returns delta if could not scroll, to be added to next request,
     // this ensures that smooth scroll works reliably even if rendering takes to long
@@ -40,7 +62,7 @@ class EditorControlTower(
         if (delta == Offset.Zero) return Offset.Zero
         if (!page.isTransformationAllowed) return Offset.Zero
         if (scrollInProgress.isLocked) {
-            Log.w(TAG, "Scroll in progress -- skipping")
+            logEditorControlTower.w("Scroll in progress -- skipping")
             return delta
         } // Return unhandled part
 
@@ -62,10 +84,73 @@ class EditorControlTower(
         return Offset.Zero // All handled
     }
 
-    fun switchPage(id: String) {
+    /**
+     * Switches the currently active page.
+     *
+     * This function updates the editor state, clears the undo/redo history,
+     * and instructs the page view to load and display the content of the new page.
+     *
+     * @param id The unique identifier of the page to switch to.
+     */
+    private fun switchPage(id: String) {
         state.changePage(id)
         history.cleanHistory()
         page.changePage(id)
+    }
+
+    fun setIsDrawing(value: Boolean) {
+        if (state.isDrawing == value) {
+            logEditorControlTower.w("IsDrawing already set to $value")
+            return
+        }
+        state.isDrawing = value
+    }
+
+    fun toggleTool() {
+        state.mode = if (state.mode == Mode.Draw) Mode.Erase else Mode.Draw
+    }
+
+    fun toggleZen() {
+        state.isToolbarOpen = !state.isToolbarOpen
+    }
+
+    fun getSnapshotOfSelectionState(): SelectionState {
+        return state.selectionState
+    }
+
+    fun getSelectedBitmap(): Bitmap {
+        return state.selectionState.selectedBitmap!!
+    }
+
+    fun goToNextPage() {
+        logEditorControlTower.i("Going to next page")
+        val next = state.getNextPage()
+        if (next != null)
+            switchPage(next)
+
+    }
+
+    fun goToPreviousPage() {
+        logEditorControlTower.i("Going to previous page")
+        val previous = state.getPreviousPage()
+        if (previous != null)
+            switchPage(previous)
+    }
+
+    fun undo() {
+        scope.launch {
+            logEditorControlTower.i("Undo called")
+            history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
+//            DrawCanvas.refreshUi.emit(Unit)
+        }
+    }
+
+    fun redo() {
+        scope.launch {
+            logEditorControlTower.i("Redo called")
+            history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
+//            DrawCanvas.refreshUi.emit(Unit)
+        }
     }
 
     fun onPinchToZoom(delta: Float, center: Offset?) {
@@ -200,7 +285,7 @@ class EditorControlTower(
                     .toString(),
                 createdAt = now,
                 // set the pageId to the current page
-                pageId = this.page.id
+                pageId = this.page.currentPageId
             )
         }
 
@@ -214,7 +299,7 @@ class EditorControlTower(
                 y = it.y + scrollPos.y.toInt(),
                 createdAt = now,
                 // set the pageId to the current page
-                pageId = this.page.id
+                pageId = this.page.currentPageId
             )
         }
 

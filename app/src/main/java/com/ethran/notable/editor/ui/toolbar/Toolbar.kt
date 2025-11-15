@@ -41,9 +41,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.EditorState
-import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
-import com.ethran.notable.editor.state.UndoRedoType
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.ui.dialogs.BackgroundSelector
@@ -416,8 +414,7 @@ fun Toolbar(
                 ToolbarButton(
                     onSelect = {
                         scope.launch {
-                            History.moveHistory(UndoRedoType.Undo)
-                            DrawCanvas.refreshUi.emit(Unit)
+                            controlTower.undo()
                         }
                     },
                     iconId = R.drawable.undo,
@@ -427,8 +424,7 @@ fun Toolbar(
                 ToolbarButton(
                     onSelect = {
                         scope.launch {
-                            History.moveHistory(UndoRedoType.Redo)
-                            DrawCanvas.refreshUi.emit(Unit)
+                            controlTower.redo()
                         }
                     },
                     iconId = R.drawable.redo,
@@ -447,7 +443,7 @@ fun Toolbar(
 
                     // TODO maybe have generic utils for this ?
                     val pageNumber =
-                        remember(state.pageId) { book!!.pageIds.indexOf(state.pageId) + 1 }
+                        remember(state.currentPageId) { book!!.pageIds.indexOf(state.currentPageId) + 1 }
                     val totalPageNumber = book!!.pageIds.size
 
                     Box(

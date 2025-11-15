@@ -5,11 +5,15 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
+import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 
 enum class Mode {
@@ -32,9 +36,54 @@ class MenuStates {
 }
 
 
-class EditorState(val bookId: String? = null, pageId: String, val pageView: PageView) {
-    var pageId by mutableStateOf(pageId)
+class EditorState(
+    val bookId: String? = null,
+    val pageId: String,
+    val pageView: PageView,
+    val appRepository: AppRepository,
+    val onPageChange: (String) -> Unit
+) {
+    var currentPageId by mutableStateOf(pageId)
         private set
+
+
+    fun getNextPage(): String? {
+        return if (bookId != null) {
+            val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
+                pageId = currentPageId, notebookId = bookId
+            )
+            newPageId
+        } else null
+    }
+
+    fun getPreviousPage(): String? {
+        return if (bookId != null) {
+            val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
+                pageId = currentPageId, notebookId = bookId
+            )
+            newPageId
+        } else null
+    }
+
+
+    fun updateOpenedPage(newPageId: String) {
+        Log.e("EditorView", "Update open page to $newPageId")
+        if (bookId != null) {
+            appRepository.bookRepository.setOpenPageId(bookId, newPageId)
+        }
+        if (newPageId != currentPageId) {
+            Log.d("EditorView", "Page changed")
+            onPageChange(newPageId)
+            currentPageId = newPageId
+        } else {
+            Log.e("EditorView", "Tried to change to same page!")
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(text = "Tried to change to same page!", duration = 3000)
+            )
+        }
+    }
+
+
 
     private val log = ShipBook.getLogger("EditorState")
     private val persistedEditorSettings = EditorSettingCacheManager.getEditorSettings()
@@ -94,12 +143,16 @@ class EditorState(val bookId: String? = null, pageId: String, val pageView: Page
         }
     }
 
+    /**
+     * Changes the current page to the one with the specified [id].
+     *
+     * @param id The unique identifier of the page to switch to.
+     */
     fun changePage(id: String) {
-        log.d("Changing page to $id, from $pageId")
-        pageId = id
+        log.d("Changing page to $id, from $currentPageId")
+        updateOpenedPage(id)
         closeAllMenus()
         selectionState.reset()
-        isDrawing = true
     }
 }
 

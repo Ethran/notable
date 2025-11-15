@@ -358,38 +358,38 @@ object PageDataManager {
     ) {
         scope.launch(Dispatchers.IO) {
             saveTopic.buffer(10).chunked(1000).collect { pageIdBatch ->
-                    // 3. Take only the unique page IDs from the batch.
-                    val uniquePageIds = pageIdBatch.distinct()
+                // 3. Take only the unique page IDs from the batch.
+                val uniquePageIds = pageIdBatch.distinct()
 
-                    if (uniquePageIds.isEmpty()) return@collect
+                if (uniquePageIds.isEmpty()) return@collect
 
-                    log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
+                log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
 
-                    // 4. Process each unique ID.
-                    for (pageId in uniquePageIds) {
-                        val ref = bitmapCache[pageId]
-                        val currentZoomLevel = pageZoom[pageId]
-                        val currentScroll = pageScroll[pageId]
-                        val bitmap = ref?.get()
+                // 4. Process each unique ID.
+                for (pageId in uniquePageIds) {
+                    val ref = bitmapCache[pageId]
+                    val currentZoomLevel = pageZoom[pageId]
+                    val currentScroll = pageScroll[pageId]
+                    val bitmap = ref?.get()
 
 
-                        if (bitmap == null || bitmap.isRecycled) {
-                            log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
-                            continue // Skip to the next ID in the batch
-                        }
+                    if (bitmap == null || bitmap.isRecycled) {
+                        log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
+                        continue // Skip to the next ID in the batch
+                    }
 
-                        scope.launch(Dispatchers.IO) {
-                            persistBitmapFull(
-                                context,
-                                bitmap,
-                                pageId,
-                                currentScroll,
-                                currentZoomLevel
-                            )
-                            persistBitmapThumbnail(context, bitmap, pageId)
-                        }
+                    scope.launch(Dispatchers.IO) {
+                        persistBitmapFull(
+                            context,
+                            bitmap,
+                            pageId,
+                            currentScroll,
+                            currentZoomLevel
+                        )
+                        persistBitmapThumbnail(context, bitmap, pageId)
                     }
                 }
+            }
         }
     }
 
@@ -704,7 +704,16 @@ object PageDataManager {
 
     fun removePage(pageId: String) {
         log.d("Removing page $pageId")
-        if (pageId == currentPage) log.w("Removing current page!")
+        if (pageId == currentPage) {
+            log.e("Removing current page!")
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    text = "Cannot remove current page, there is a bug in code",
+                    duration = 3000
+                )
+            )
+            return
+        }
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
@@ -735,7 +744,10 @@ object PageDataManager {
         dataLoadingScope.launch {
             log.d("Cancelling loading page: pageId=$pageId")
             jobLock.withLock {
-                removePage(pageId)
+                if (dataLoadingJobs[pageId]?.isActive == true) {
+                    dataLoadingJobs[pageId]?.cancel()
+                    removePage(pageId)
+                }
             }
         }
     }
@@ -756,6 +768,11 @@ object PageDataManager {
                 // Cancel and remove pages outside the lock
                 for (pageId in toCancel) {
                     if (ignoredPageIds.contains(pageId)) continue
+                    val job = jobLock.withLock { dataLoadingJobs[pageId] }
+                    if (job != null && job.isActive) {
+                        job.cancel()
+                        log.d("Cancelled job for page $pageId")
+                    }
                     log.d("Cancelling page $pageId")
                     removePage(pageId)
                 }

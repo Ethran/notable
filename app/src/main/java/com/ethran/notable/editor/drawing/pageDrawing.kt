@@ -154,7 +154,7 @@ fun drawOnCanvasFromPage(
 
             }
         } catch (e: Exception) {
-            pageDrawingLog.e("PageView.kt(${page.id}): Drawing images failed: ${e.message}", e)
+            pageDrawingLog.e("PageView.kt(${page.currentPageId}): Drawing images failed: ${e.message}", e)
 
             val errorMessage = if (e.message?.contains("does not have permission") == true) {
                 "Permission error: Unable to access image."

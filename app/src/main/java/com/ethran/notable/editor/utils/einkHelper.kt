@@ -297,6 +297,15 @@ fun refreshScreenRegion(view: View, dirtyRect: Rect) {
 //    EpdController.handwritingRepaint(view, dirtyRect)
 }
 
+//https://github.com/onyx-intl/OnyxAndroidDemo/blob/d3a1ffd3af231fe4de60a2a0da692c17cb35ce31/doc/EPD-Screen-Update.md
+fun refreshScreen() {
+    // TODO: It does nothing, I have no idea why.
+    EpdController.repaintEveryThing(UpdateMode.REGAL_PLUS)
+//    EpdController.refreshScreen(view, UpdateMode.ANIMATION_MONO)
+}
+
+
+
 fun restoreDefaults(view: View) {
 //    EpdController.resetViewUpdateMode(view)
     EpdController.setDisplayScheme(SCHEME_NORMAL)

@@ -27,7 +27,7 @@ fun handleDraw(
         val stroke = Stroke(
             size = strokeSize,
             pen = pen,
-            pageId = page.id,
+            pageId = page.currentPageId,
             top = boundingBox.top,
             bottom = boundingBox.bottom,
             left = boundingBox.left,

@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.round
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.editor.EditorControlTower
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.io.shareBitmap
 import com.ethran.notable.ui.noRippleClickable
@@ -50,18 +49,17 @@ val strokeStyle = Stroke(
 @ExperimentalFoundationApi
 fun SelectedBitmap(
     context: Context,
-    editorState: EditorState,
     controlTower: EditorControlTower
 ) {
-    val selectionState = editorState.selectionState
+    val selectionState = controlTower.getSnapshotOfSelectionState()
     if (selectionState.selectedBitmap == null) return
 
     var selectionDisplaceOffset =
-        editorState.pageView.applyZoom(selectionState.selectionDisplaceOffset ?: return)
+        controlTower.page.applyZoom(selectionState.selectionDisplaceOffset ?: return)
     val selectionRect =
-        editorState.pageView.toScreenCoordinates(selectionState.selectionRect ?: return)
+        controlTower.page.toScreenCoordinates(selectionState.selectionRect ?: return)
     val selectionStartOffset =
-        editorState.pageView.applyZoom(selectionState.selectionStartOffset ?: IntOffset(0, 0))
+        controlTower.page.applyZoom(selectionState.selectionStartOffset ?: IntOffset(0, 0))
 
 
     Box(
@@ -70,7 +68,7 @@ fun SelectedBitmap(
             .noRippleClickable {
                 controlTower.applySelectionDisplace()
                 selectionState.reset()
-                editorState.isDrawing = true
+                controlTower.setIsDrawing(true)
             }) {
         Image(
             bitmap = selectionState.selectedBitmap!!.asImageBitmap(),
@@ -89,11 +87,11 @@ fun SelectedBitmap(
                     detectDragGestures { change, dragAmount ->
                         change.consume()
                         selectionState.selectionDisplaceOffset =
-                            editorState.pageView.removeZoom(
+                            controlTower.page.removeZoom(
                                 selectionDisplaceOffset + dragAmount.round()
                             )
                         selectionDisplaceOffset =
-                            editorState.pageView.applyZoom(
+                            controlTower.page.applyZoom(
                                 selectionState.selectionDisplaceOffset ?: return@detectDragGestures
                             )
                     }
@@ -130,7 +128,7 @@ fun SelectedBitmap(
                         vectorIcon = FeatherIcons.Share2,
                         isSelected = false,
                         onSelect = {
-                            shareBitmap(context, editorState.selectionState.selectedBitmap!!)
+                            shareBitmap(context, controlTower.getSelectedBitmap())
                         },
                         modifier = Modifier.height(BUTTON_SIZE.dp)
                     )

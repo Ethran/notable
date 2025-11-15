@@ -3,6 +3,9 @@ package com.ethran.notable.editor.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
 import androidx.core.graphics.scale
@@ -10,8 +13,11 @@ import com.ethran.notable.R
 import com.ethran.notable.data.ensurePreviewsFullFolder
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private val log = ShipBook.getLogger("bitmapUtils")
@@ -116,34 +122,141 @@ fun persistBitmapFull(
  * - Backward compatibility: if encoded file not found and scrollY != 0, attempt legacy filename (without suffix)
  */
 fun loadPersistBitmap(
-    context: Context, pageID: String, scroll: Offset?, zoom: Float?
+    context: Context, pageID: String, scroll: Offset?, zoom: Float?, requireExactMatch: Boolean
 ): Bitmap? {
-    if (!checkZoomAndScroll(scroll, zoom)) return null
-
-    val scrollYInt = scroll!!.y.roundToInt()
     val dir = ensurePreviewsFullFolder(context)
-    val encodedFile = File(dir, buildPreviewFileName(pageID, scrollYInt))
 
-    val candidateFiles = listOf(encodedFile, File(dir, pageID), File(dir, "$pageID.png"))
+    // Exact match path: enforce zoom/scroll checks and precise encoded filename
+    if (requireExactMatch) {
+        if (!checkZoomAndScroll(scroll, zoom)) return null
+        val scrollYInt = scroll!!.y.roundToInt()
+        val encodedFile = File(dir, buildPreviewFileName(pageID, scrollYInt))
+        val candidateFiles = listOf(
+            encodedFile, File(dir, pageID),          // legacy (no suffix)
+            File(dir, "$pageID.png")    // legacy .png
+        )
 
-    val targetFile = candidateFiles.firstOrNull { it.exists() }
+        val targetFile = candidateFiles.firstOrNull { it.exists() }
+        if (targetFile == null) {
+            log.i("loadPersistBitmap: no exact-match cache (expected ${encodedFile.name})")
+            return null
+        }
+        return decodePreview(targetFile, encodedFile.name)
+    }
 
-    if (targetFile == null) {
-        log.i("loadPersistBitmap: no cache file (expected ${encodedFile.name})")
+    // Non-exact path: accept any zoom/scroll and pick the best matching cached file for this page
+    // Prefer the newest file among all files starting with pageID (including legacy and encoded variants)
+    val allMatches: List<File> =
+        dir.listFiles { f -> f.isFile && f.name.startsWith(pageID) }?.toList().orEmpty()
+
+    // Also include legacy fallbacks explicitly (in case listFiles filtering changes)
+    val legacyExtras = listOf(
+        File(dir, pageID), File(dir, "$pageID.png")
+    )
+
+    // If we do have a scroll, include its encoded name as a candidate too (may help if it's present)
+    val encodedFromProvidedScroll = scroll?.let {
+        File(dir, buildPreviewFileName(pageID, it.y.roundToInt()))
+    }
+
+    // Merge and deduplicate by name
+    val candidates =
+        (listOfNotNull(encodedFromProvidedScroll) + legacyExtras + allMatches).distinctBy { it.name }
+            .filter { it.exists() }
+
+    if (candidates.isEmpty()) {
+        log.i("loadPersistBitmap: no cache file for pageID=$pageID (non-exact)")
         return null
     }
 
+    // Pick newest by lastModified
+    val newest = candidates.maxByOrNull { it.lastModified() } ?: candidates.first()
+
+    // For logging, try to compute the "exact" encoded filename if we had a scroll; otherwise pass the actual name
+    val expectedName = encodedFromProvidedScroll?.name ?: newest.name
+    return decodePreview(newest, expectedName)
+}
+
+
+// Load preview fast, without touching any windowed canvas.
+suspend fun loadPreview(
+    context: Context,
+    pageIdToLoad: String,
+    expectedWidth: Int,
+    expectedHeight: Int,
+    pageNumber: Int?
+): Bitmap = withContext(Dispatchers.IO) {
+    // Load from disk
+    val bitmapFromDisk: Bitmap? = try {
+        loadPersistBitmap(context, pageIdToLoad, null, null, false)
+    } catch (t: Throwable) {
+        log.e("Failed to load persisted bitmap: ${t.message}")
+        null
+    }
+
+    val prepared = when {
+        bitmapFromDisk == null -> {
+            log.d("No persisted preview for $pageIdToLoad. Creating placeholder.")
+            createPlaceholderPreview(expectedWidth, expectedHeight, pageNumber)
+        }
+
+        bitmapFromDisk.width == expectedWidth && bitmapFromDisk.height == expectedHeight -> {
+            log.d("Loaded preview for page $pageIdToLoad (fits view).")
+            bitmapFromDisk
+        }
+
+        else -> {
+            log.i(
+                "Preview size mismatch (${bitmapFromDisk.width}x${bitmapFromDisk.height}) -> " + "scaling to ${expectedWidth}x${expectedHeight}"
+            )
+            bitmapFromDisk
+        }
+    }
+
+    prepared
+}
+
+
+private fun createPlaceholderPreview(
+    width: Int,
+    height: Int,
+    pageNumber: Int?
+): Bitmap {
+    val bmp = Bitmap.createBitmap(
+        width.coerceAtLeast(1),
+        height.coerceAtLeast(1),
+        Bitmap.Config.ARGB_8888
+    )
+    val canvas = Canvas(bmp)
+    canvas.drawColor(Color.WHITE)
+
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.DKGRAY
+        textAlign = Paint.Align.CENTER
+        textSize = (min(width, height) * 0.05f).coerceAtLeast(16f)
+    }
+    val msg = pageNumber?.let { "Page $it — No Preview" } ?: "No Preview"
+
+    val fm = paint.fontMetrics
+    val x = width / 2f
+    val y = height / 2f - (fm.ascent + fm.descent) / 2f
+    canvas.drawText(msg, x, y, paint)
+
+    return bmp
+}
+
+private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
     return try {
-        val imgBitmap = BitmapFactory.decodeFile(targetFile.absolutePath)
+        val imgBitmap = BitmapFactory.decodeFile(file.absolutePath)
         if (imgBitmap != null) {
-            if (targetFile.name != encodedFile.name) {
-                log.d("loadPersistBitmap: loaded legacy cached preview (${targetFile.name})")
+            if (file.name != expectedNameForLog) {
+                log.d("loadPersistBitmap: loaded cached preview (non-exact or legacy) '${file.name}'")
             } else {
-                log.d("loadPersistBitmap: loaded cached preview (${targetFile.name}) for scrollY=${scroll.y}")
+                log.d("loadPersistBitmap: loaded cached preview '${file.name}'")
             }
             imgBitmap
         } else {
-            log.w("loadPersistBitmap: failed to decode bitmap from ${targetFile.name}")
+            log.w("loadPersistBitmap: failed to decode bitmap from ${file.name}")
             null
         }
     } catch (e: Exception) {
