@@ -27,6 +27,7 @@ import androidx.navigation.navArgument
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorView
+import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.ui.components.Anchor
 import com.ethran.notable.ui.components.QuickNav
 import com.ethran.notable.ui.views.BugReportScreen
@@ -65,8 +66,7 @@ fun Router() {
             .detectThreeFingerTouchToOpenQuickNav {
                 // Save the page on which QuickNav was opened
                 navController.currentBackStackEntry?.savedStateHandle?.set(
-                    "quickNavSourcePageId",
-                    currentPageId
+                    "quickNavSourcePageId", currentPageId
                 )
                 isQuickNavOpen = true
             }) {
@@ -167,7 +167,10 @@ fun Router() {
                 currentPageId = currentPageId,
                 quickNavSourcePageId =
                     navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId"),
-                onClose = { isQuickNavOpen = false },
+                onClose = {
+                    isQuickNavOpen = false
+                    refreshScreen()
+                },
             )
         }
         Anchor(
