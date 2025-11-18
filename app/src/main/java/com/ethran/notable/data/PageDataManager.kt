@@ -702,7 +702,7 @@ object PageDataManager {
     @Volatile
     private var currentCacheSizeMB = 0
 
-    fun removePage(pageId: String) {
+    fun removePage(pageId: String): Boolean {
         log.d("Removing page $pageId")
         if (pageId == currentPage) {
             log.e("Removing current page!")
@@ -712,7 +712,7 @@ object PageDataManager {
                     duration = 3000
                 )
             )
-            return
+            return false
         }
         synchronized(accessLock) {
             strokes.remove(pageId)
@@ -734,6 +734,7 @@ object PageDataManager {
             }
             stopObservingBackground(pageId)
         }
+        return true
     }
 
 
@@ -785,7 +786,8 @@ object PageDataManager {
             log.d("Clearing loaded pages")
             jobLock.withLock {
                 // Collect all pageIds with jobs that are not finished
-                dataLoadingJobs.forEach { id, _ ->
+                dataLoadingJobs.forEach { (id, _) ->
+                    log.d("Clearing page $id, requested by clearAllPages")
                     removePage(id)
                 }
             }
@@ -808,7 +810,13 @@ object PageDataManager {
         synchronized(accessLock) {
             while (strokes.size > maxPages) {
                 val oldestPage = strokes.iterator().next().key
-                removePage(oldestPage)
+                if (oldestPage == currentPage)
+                    continue
+                log.d("Clearing page (oldest) $oldestPage, requested by reduceCache")
+                if(!removePage(oldestPage)) {
+                    log.e("Illegal state: Could not remove page $oldestPage")
+                    break
+                }
             }
         }
     }
@@ -886,7 +894,11 @@ object PageDataManager {
             val pagesToRemove = strokes.keys.filter { it != currentPage }
             for (pageId in pagesToRemove) {
                 if (currentCacheSizeMB <= cacheSizeLimit) break
-                removePage(pageId)
+                log.d("Clearing page (all except current) $pageId, requested by freeMemory")
+                if(!removePage(pageId)) {
+                    log.e("Illegal state: Could not remove page $pageId")
+                    break
+                }
             }
             currentCacheSizeMB = maxOf(0, currentCacheSizeMB)
             return currentCacheSizeMB <= cacheSizeLimit
