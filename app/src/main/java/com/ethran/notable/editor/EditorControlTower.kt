@@ -303,13 +303,6 @@ class EditorControlTower(
             )
         }
 
-        history.addOperationsToHistory(
-            operations = listOf(
-                Operation.DeleteImage(pastedImages.map { it.id }),
-                Operation.DeleteStroke(pastedStrokes.map { it.id }),
-            )
-        )
-
         selectImagesAndStrokes(scope, page, state, pastedImages, pastedStrokes)
         state.selectionState.placementMode = PlacementMode.Paste
 
