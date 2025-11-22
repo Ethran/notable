@@ -78,15 +78,16 @@ fun sanitizeFileName(raw: String, maxLen: Int = 80): String {
     name = name.trim('.')
 
     // Enforce max length and fallback name
-    if (name.length > maxLen) { // TODO: this doe not work.
+    if (name.length > maxLen) {
         val dot = name.lastIndexOf('.')
         if (dot <= 0 || dot >= name.length - 1)
         // No usable extension found, fall back to simple truncation
             name = name.take(maxLen).trimEnd()
-        val ext = name.substring(dot)
-        val baseName = name.take(dot)
-        name = baseName.take(maxLen - ext.length).trimEnd().trimEnd('.') + ext
-
+        else {
+            val ext = name.substring(dot)
+            val baseName = name.take(dot)
+            name = baseName.take(maxLen - ext.length).trimEnd().trimEnd('.') + ext
+        }
     }
     if (name.isBlank()) {
         name = "notable-export"
