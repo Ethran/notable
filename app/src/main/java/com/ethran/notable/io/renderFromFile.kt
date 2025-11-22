@@ -65,7 +65,7 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
             timer.step("decode bitmap image")
             val result = BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
             if (result == null)
-                log.e("loadBackgroundBitmap: result is null, couldn't decode image")
+                log.e("loadBackgroundBitmap: result is null, couldn't decode image, file name ends with ${filePath.takeLast(4)}")
             timer.end("loaded background")
             return result?.asAndroidBitmap()
         } catch (e: Exception) {

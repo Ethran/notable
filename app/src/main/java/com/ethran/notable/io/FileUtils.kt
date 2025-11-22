@@ -62,7 +62,7 @@ fun createFileFromContentUri(context: Context, fileUri: Uri, outputDir: File): F
     return outputFile
 }
 
-fun sanitizeFileName(raw: String, maxLen: Int = 100): String {
+fun sanitizeFileName(raw: String, maxLen: Int = 80): String {
     // Normalize accents → é → e, Ł → L, etc.
     var name = Normalizer.normalize(raw, Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "") // remove diacritics
@@ -79,7 +79,15 @@ fun sanitizeFileName(raw: String, maxLen: Int = 100): String {
 
     // Enforce max length and fallback name
     if (name.length > maxLen) {
-        name = name.take(maxLen).trimEnd()
+        val dot = name.lastIndexOf('.')
+        if (dot <= 0 || dot >= name.length - 1)
+        // No usable extension found, fall back to simple truncation
+            name = name.take(maxLen).trimEnd()
+        else {
+            val ext = name.substring(dot)
+            val baseName = name.take(dot)
+            name = baseName.take(maxLen - ext.length).trimEnd().trimEnd('.') + ext
+        }
     }
     if (name.isBlank()) {
         name = "notable-export"
