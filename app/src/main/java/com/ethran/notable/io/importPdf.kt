@@ -8,6 +8,7 @@ import com.ethran.notable.TAG
 import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.Log
 import java.io.File
@@ -18,29 +19,39 @@ fun isPdfFile(mimeType: String?, fileName: String?): Boolean {
     ) == true
 }
 
+
 @WorkerThread
-fun importPdf(
+fun handleFileSaving(
     context: Context,
     uri: Uri,
     options: ImportOptions,
-    savePageToDatabase: (PageContent) -> Unit
-): String {
-    Log.v(TAG, "Importing PDF from $uri")
+): File? {
     ensureNotMainThread("Importing")
 
     //copy file:
     val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
     context.contentResolver.takePersistableUriPermission(uri, flag)
     val subfolder = BackgroundType.Pdf(0).folderName
-    val fileToSave =
-        if (!options.linkToExternalFile) copyBackgroundToDatabase(context, uri, subfolder)
-        else {
-            val fileName = getFilePathFromUri(context, uri)
-            if (fileName == null) {
-                Log.e(TAG, "File name is null")
-                return "Couldn't determine file path. Does the app have permission to read external storage?"
-            } else File(fileName)
-        }
+    return if (!options.linkToExternalFile) copyBackgroundToDatabase(context, uri, subfolder)
+    else {
+        val fileName = getFilePathFromUri(context, uri)
+        if (fileName == null) {
+            SnackState.logAndShowError(
+                "copyFileToDatabase",
+                "Couldn't determine file path. Does the app have permission to read external storage?"
+            )
+            return null
+        } else File(fileName)
+    }
+}
+
+@WorkerThread
+fun importPdf(
+    fileToSave: File,
+    options: ImportOptions,
+    savePageToDatabase: (PageContent) -> Unit
+): String {
+    Log.v(TAG, "Importing PDF from")
 
     val numberOfPages = getPdfPageCount(fileToSave.toString())
 

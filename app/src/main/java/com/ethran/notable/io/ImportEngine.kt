@@ -128,8 +128,8 @@ class ImportEngine(
         bookRepo.createEmpty(book)
 
 
-        val strokeRepo = AppDatabase.Companion.getDatabase(context).strokeDao()
-        val imageRepo = AppDatabase.Companion.getDatabase(context).ImageDao()
+        val strokeRepo = AppDatabase.getDatabase(context).strokeDao()
+        val imageRepo = AppDatabase.getDatabase(context).ImageDao()
         XoppFile(context).importBook(uri) { pageData ->
             // TODO: handle conflict with existing pages, make sure that we won't insert the same strokes that already exist.
             pageRepo.create(pageData.page.copy(notebookId = book.id))
@@ -145,17 +145,22 @@ class ImportEngine(
         log.d("Importing Pdf file...")
         require(options.bookTitle != null) { "bookTitle cannot be null when importing Pdf file" }
 
+        val fileToSave = handleFileSaving(context, uri, options)
+            ?: return "Couldn't determine file path. Does the app have permission to read external storage?"
+
+        val filePath = fileToSave.toString()
+
         val book = Notebook(
             title = options.bookTitle,
             parentFolderId = options.folderId,
-            defaultBackground = uri.toString(),
+            defaultBackground = filePath,
             defaultBackgroundType = BackgroundType.AutoPdf.key
         )
         bookRepo.createEmpty(book)
 
-        val strokeRepo = AppDatabase.Companion.getDatabase(context).strokeDao()
-        val imageRepo = AppDatabase.Companion.getDatabase(context).ImageDao()
-        importPdf(context, uri, options) { pageData ->
+        val strokeRepo = AppDatabase.getDatabase(context).strokeDao()
+        val imageRepo = AppDatabase.getDatabase(context).ImageDao()
+        importPdf(fileToSave, options) { pageData ->
             pageRepo.create(pageData.page.copy(notebookId = book.id))
             if (pageData.strokes.isNotEmpty())
                 strokeRepo.create(pageData.strokes)
