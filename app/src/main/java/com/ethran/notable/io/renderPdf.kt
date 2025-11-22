@@ -1,7 +1,6 @@
 package com.ethran.notable.io
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -11,9 +10,9 @@ import com.artifex.mupdf.fitz.Document
 import com.artifex.mupdf.fitz.Matrix
 import com.artifex.mupdf.fitz.android.AndroidDrawDevice
 import com.ethran.notable.TAG
+import com.ethran.notable.ui.SnackState
 import io.shipbook.shipbooksdk.Log
 import java.io.File
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /* -----------------------------------------------------------------------
@@ -115,11 +114,11 @@ fun renderPdfPageMuPdf(
 ): Bitmap? {
     val file = File(path)
     if (!file.exists()) {
-        Log.e(TAG, "MuPdf: file not found: $path")
+        SnackState.logAndShowError("MuPdf", "MuPdf: File not found: $path")
         return null
     }
     if (targetWidthPx <= 0) {
-        Log.e(TAG, "MuPdf: invalid targetWidthPx=$targetWidthPx")
+        SnackState.logAndShowError("MuPdf", "MuPdf: invalid targetWidthPx=$targetWidthPx")
         return null
     }
 
@@ -129,7 +128,11 @@ fun renderPdfPageMuPdf(
         doc = Document.openDocument(file.absolutePath)
         val pageCount = doc.countPages()
         if (pageIndex !in 0 until pageCount) {
-            Log.e(TAG, "MuPdf: invalid pageIndex=$pageIndex (count=$pageCount)")
+            SnackState.logAndShowError(
+                "MuPdf",
+                "MuPdf: invalid pageIndex=${pageIndex + 1} (count=$pageCount)",
+                Log::w
+            )
             return null
         }
 

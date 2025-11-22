@@ -58,12 +58,16 @@ class SnackState {
     companion object {
         val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 10)
         val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 10)
-        fun logAndShowError(reason: String, message: String) {
-            Log.e(reason, message)
+        fun logAndShowError(
+            reason: String,
+            message: String,
+            logger: (String, String) -> Unit = Log::e
+        ) {
+            logger(reason, message)
             // It will succeed if the buffer is not full.
             val emitted = globalSnackFlow.tryEmit(SnackConf(text = message, duration = 3000))
             if (!emitted) {
-                Log.e("SnackState", "Failed to emit snackbar, buffer is full.")
+                logger("SnackState", "Failed to emit snackbar, buffer is full.")
             }
         }
     }
@@ -171,7 +175,7 @@ fun SnackBar(state: SnackState) {
             .fillMaxHeight()
             .padding(3.dp), verticalArrangement = Arrangement.Bottom
     ) {
-        snacks.map {
+        snacks.map { snack ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -184,11 +188,11 @@ fun SnackBar(state: SnackState) {
                         .padding(15.dp, 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (it.text != null) {
+                    if (snack.text != null) {
                         Row {
-                            Text(text = it.text, color = Color.White)
-                            if (it.actions != null && it.actions.isEmpty().not()) {
-                                it.actions.map {
+                            Text(text = snack.text, color = Color.White)
+                            if (snack.actions != null && snack.actions.isEmpty().not()) {
+                                snack.actions.map {
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text(
                                         text = it.first,
@@ -198,7 +202,7 @@ fun SnackBar(state: SnackState) {
                             }
                         }
 
-                    } else it.content?.let { content ->
+                    } else snack.content?.let { content ->
                         content()
                     }
                 }
