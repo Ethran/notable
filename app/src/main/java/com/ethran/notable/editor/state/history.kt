@@ -10,7 +10,6 @@ import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.logCallStack
-import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CompletableDeferred
 
 
