@@ -124,13 +124,13 @@ class SelectionState {
      * @return A list of [Operation]s that can be used to undo the deletion (e.g., re-adding the deleted items).
      */
     fun deleteSelection(page: PageView): List<Operation> {
-        val operationList =  mutableListOf<Operation>()
+        val operationList = mutableListOf<Operation>()
         val selectedImagesToRemove = selectedImages
         if (!selectedImagesToRemove.isNullOrEmpty()) {
             val imageIds: List<String> = selectedImagesToRemove.map { it.id }
             Log.i(TAG, "removing images")
             page.removeImages(imageIds)
-            operationList +=Operation.AddImage(selectedImagesToRemove)
+            operationList += Operation.AddImage(selectedImagesToRemove)
         }
         val selectedStrokesToRemove = selectedStrokes
         if (!selectedStrokesToRemove.isNullOrEmpty()) {
