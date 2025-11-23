@@ -114,20 +114,30 @@ class SelectionState {
         //TODO: implement this
     }
 
+    /**
+     * Deletes the currently selected strokes and images from the page.
+     *
+     * This function identifies the selected images and strokes, removes them from the given [page],
+     * and creates a list of undo [Operation]s. After deletion, it resets the selection state.
+     *
+     * @param page The [PageView] from which the selected items should be removed.
+     * @return A list of [Operation]s that can be used to undo the deletion (e.g., re-adding the deleted items).
+     */
     fun deleteSelection(page: PageView): List<Operation> {
-        val operationList = listOf<Operation>()
+        val operationList =  mutableListOf<Operation>()
         val selectedImagesToRemove = selectedImages
         if (!selectedImagesToRemove.isNullOrEmpty()) {
             val imageIds: List<String> = selectedImagesToRemove.map { it.id }
             Log.i(TAG, "removing images")
             page.removeImages(imageIds)
+            operationList +=Operation.AddImage(selectedImagesToRemove)
         }
         val selectedStrokesToRemove = selectedStrokes
         if (!selectedStrokesToRemove.isNullOrEmpty()) {
             val strokeIds: List<String> = selectedStrokesToRemove.map { it.id }
             Log.i(TAG, "removing strokes")
             page.removeStrokes(strokeIds)
-            operationList.plus(Operation.AddStroke(selectedStrokesToRemove))
+            operationList += Operation.AddStroke(selectedStrokesToRemove)
         }
         reset()
         return operationList
