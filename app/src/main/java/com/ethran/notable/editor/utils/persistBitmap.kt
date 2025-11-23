@@ -16,6 +16,7 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.file.Files.delete
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -67,8 +68,16 @@ private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
                 "$pageID-sy"
             ) && f.name.endsWith(".png")))
         ) {
-            if (f.delete()) log.d("persistBitmapFull: removed old preview ${f.name}")
-            else log.e("persistBitmapFull: failed to delete old preview ${f.name}")
+            try {
+                if (f.delete()) {
+                    log.d("persistBitmapFull: removed old preview ${f.name}")
+                } else {
+                    log.w("persistBitmapFull: failed to delete old preview ${f.name}")
+                    delete(f.toPath())
+                }
+            } catch (t: Throwable) {
+                log.e("persistBitmapFull: failed to delete old preview ${f.name}: ${t::class.simpleName} ${t.message}")
+            }
         }
     }
 }
