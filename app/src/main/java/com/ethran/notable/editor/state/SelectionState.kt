@@ -85,14 +85,14 @@ class SelectionState {
                 x = (image.width * scale / 200),
                 y = (image.height * scale / 200)
             )
-        } ?: IntOffset.Companion.Zero
+        } ?: IntOffset.Zero
 
         val pageBounds = imageBoundsInt(selectedImagesCopy)
         selectionRect = page.toScreenCoordinates(pageBounds)
 
         selectionDisplaceOffset =
             selectionDisplaceOffset?.let { it - sizeChange }
-                ?: IntOffset.Companion.Zero
+                ?: IntOffset.Zero
 
         val selectedBitmapNew = createBitmap(pageBounds.width(), pageBounds.height())
         val selectedCanvas = Canvas(selectedBitmapNew)
@@ -189,7 +189,7 @@ class SelectionState {
             page.addStrokes(displacedStrokes)
 
 
-            if (offset.x > 0 || offset.y > 0 || placementMode == PlacementMode.Paste) {
+            if (offset.x != 0 || offset.y != 0 || placementMode == PlacementMode.Paste) {
                 // A displacement happened or this is a paste commit - create history for this
                 operationList += Operation.DeleteStroke(displacedStrokes.map { it.id })
                 // in case we are on a move operation, this history point re-adds the original strokes
@@ -198,7 +198,7 @@ class SelectionState {
             }
         }
         if (!selectedImagesCopy.isNullOrEmpty()) {
-            Log.Companion.i(TAG, "Commit images to history.")
+            Log.i(TAG, "Commit images to history.")
 
             val displacedImages = selectedImagesCopy.map {
                 offsetImage(it, offset = offset.toOffset())
