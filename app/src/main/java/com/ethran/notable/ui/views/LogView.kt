@@ -53,6 +53,7 @@ import androidx.navigation.NavController
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.getDbDir
+import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.utils.ClipboardUtils.copyToClipboard
 import java.io.BufferedReader
 import java.io.File
@@ -257,9 +258,11 @@ class ReportData(
         val batteryPct = getBatteryPercentage(context)
         val threadCount = Thread.activeCount()
         val buildType = getSignature(context)
+        val deviceName = Device.currentDevice().javaClass.name
 
         return """
         |• Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE},  SDK ${Build.VERSION.SDK_INT})
+        |• Device Name: $deviceName
         |• System: $totalMemory RAM | $totalStorage storage | Battery: $batteryPct% | Threads: $threadCount
         |• Memory: ${pageMemoryMB}MB used by pages | $appUsed used by app | $maxHeap max
         |• Storage: $dbUsed used by app | $freeSpace free
