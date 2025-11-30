@@ -67,7 +67,7 @@ class EditorState(
 
 
     fun updateOpenedPage(newPageId: String) {
-        Log.e("EditorView", "Update open page to $newPageId")
+        Log.d("EditorView", "Update open page to $newPageId")
         if (bookId != null) {
             appRepository.bookRepository.setOpenPageId(bookId, newPageId)
         }
@@ -76,7 +76,7 @@ class EditorState(
             onPageChange(newPageId)
             currentPageId = newPageId
         } else {
-            Log.e("EditorView", "Tried to change to same page!")
+            Log.d("EditorView", "Tried to change to same page!")
             SnackState.globalSnackFlow.tryEmit(
                 SnackConf(text = "Tried to change to same page!", duration = 3000)
             )
