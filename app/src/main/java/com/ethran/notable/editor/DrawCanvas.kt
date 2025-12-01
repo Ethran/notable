@@ -68,6 +68,7 @@ import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.data.note.TouchPoint
+import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.extension.isNotNull
 import com.onyx.android.sdk.extension.isNull
 import com.onyx.android.sdk.extension.isNullOrEmpty
@@ -867,9 +868,18 @@ class DrawCanvas(
                         ?.setStrokeWidth(30f)
                         ?.setStrokeColor(Color.GRAY)
 
-                    Eraser.SELECT -> touchHelper.setStrokeStyle(penToStroke(Pen.BALLPEN))
+                    Eraser.SELECT -> {
+                        val dashStyleID = penToStroke(Pen.DASHED)
+                        touchHelper.setStrokeStyle(dashStyleID)
                         ?.setStrokeWidth(3f)
-                        ?.setStrokeColor(Color.GRAY)
+                            ?.setStrokeColor(Color.BLACK)
+                        val params: FloatArray = FloatArray(4)
+                        params[0] = 5f // thickness
+                        params[1] = 9f // no idea
+                        params[2] = 9f // no idea
+                        params[3] = 0f // no idea
+                        Device.currentDevice().setStrokeParameters(dashStyleID, params)
+                    }
                 }
             }
 

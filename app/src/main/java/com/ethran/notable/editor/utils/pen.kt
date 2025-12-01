@@ -13,7 +13,8 @@ enum class Pen(val penName: String) {
     PENCIL("PENCIL"),
     BRUSH("BRUSH"),
     MARKER("MARKER"),
-    FOUNTAIN("FOUNTAIN");
+    FOUNTAIN("FOUNTAIN"),
+    DASHED("DASHED");
 
     companion object {
         fun fromString(name: String?): Pen {
@@ -32,6 +33,7 @@ fun penToStroke(pen: Pen): Int {
         Pen.BRUSH -> StrokeStyle.NEO_BRUSH
         Pen.MARKER -> StrokeStyle.MARKER
         Pen.FOUNTAIN -> StrokeStyle.FOUNTAIN
+        Pen.DASHED -> StrokeStyle.DASH
     }
 }
 

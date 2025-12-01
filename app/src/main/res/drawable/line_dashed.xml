@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Simulate dashed line with multiple short paths -->
+    <path android:pathData="M10,86 L20,76" android:strokeWidth="4" android:strokeColor="#000000"/>
+    <path android:pathData="M25,71 L35,61" android:strokeWidth="4" android:strokeColor="#000000"/>
+    <path android:pathData="M40,56 L50,46" android:strokeWidth="4" android:strokeColor="#000000"/>
+    <path android:pathData="M55,41 L65,31" android:strokeWidth="4" android:strokeColor="#000000"/>
+    <path android:pathData="M70,26 L80,16" android:strokeWidth="4" android:strokeColor="#000000"/>
+</vector>

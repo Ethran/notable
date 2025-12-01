@@ -49,6 +49,7 @@ import com.ethran.notable.ui.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
+import compose.icons.feathericons.MoreHorizontal
 import compose.icons.feathericons.RefreshCcw
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
@@ -68,6 +69,7 @@ fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
                 Pen.BRUSH -> R.drawable.brush
                 Pen.MARKER -> R.drawable.marker
                 Pen.PENCIL -> R.drawable.pencil
+                Pen.DASHED -> R.drawable.line_dashed
             }
         }
 
