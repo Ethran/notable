@@ -68,6 +68,7 @@ fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
                 Pen.BRUSH -> R.drawable.brush
                 Pen.MARKER -> R.drawable.marker
                 Pen.PENCIL -> R.drawable.pencil
+                Pen.DASHED -> R.drawable.line_dashed
             }
         }
 

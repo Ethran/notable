@@ -34,6 +34,7 @@ import com.ethran.notable.ui.views.BugReportScreen
 import com.ethran.notable.ui.views.Library
 import com.ethran.notable.ui.views.PagesView
 import com.ethran.notable.ui.views.SettingsView
+import com.ethran.notable.ui.views.SystemInformationView
 import com.ethran.notable.ui.views.WelcomeView
 import com.ethran.notable.ui.views.hasFilePermission
 import io.shipbook.shipbooksdk.ShipBook
@@ -93,6 +94,14 @@ fun Router() {
                 route = "welcome",
             ) {
                 WelcomeView(
+                    navController = navController,
+                )
+                currentPageId = null
+            }
+            composable(
+                route = "SystemInformationView",
+            ) {
+                SystemInformationView(
                     navController = navController,
                 )
                 currentPageId = null

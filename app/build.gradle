@@ -17,8 +17,8 @@ android {
         minSdk 29
         targetSdk 35
 
-        versionCode 30
-        versionName '0.1.8'
+        versionCode 31
+        versionName '0.1.9'
         if (project.hasProperty('IS_NEXT') && project.IS_NEXT.toBoolean()) {
             def timestamp = new Date().format('dd.MM.YYYY-HH:mm')
             versionName = "${versionName}-next-${timestamp}"
@@ -139,10 +139,11 @@ dependencies {
     implementation('com.onyx.android.sdk:onyxsdk-device:1.3.1.3') {
         exclude group: 'com.android.support', module: 'support-compat'
     }
-    // newest: 1.5.0.4, can't update, as onyxsdk-geometry is not available.
-    implementation('com.onyx.android.sdk:onyxsdk-pen:1.4.12.1') {
+
+    implementation('com.onyx.android.sdk:onyxsdk-pen:1.5.0.4') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
+        exclude group: "com.onyx.android.sdk", module: "onyxsdk-geometry"
     }
 
     implementation('com.onyx.android.sdk:onyxsdk-base:1.8.2.1') {

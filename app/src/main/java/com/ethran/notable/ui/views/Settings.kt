@@ -133,7 +133,7 @@ fun SettingsView(navController: NavController) {
                 when (selectedTab) {
                     0 -> GeneralSettings(kv, settings)
                     1 -> EditGestures(context, kv, settings)
-                    2 -> DebugSettings(kv, settings)
+                    2 -> DebugSettings(kv, settings, navController)
                 }
 
             }
@@ -537,11 +537,15 @@ fun EditGestures(context: Context, kv: KvProxy, settings: AppSettings?) {
 
 
 @Composable
-fun DebugSettings(kv: KvProxy, settings: AppSettings) {
+fun DebugSettings(kv: KvProxy, settings: AppSettings, navController: NavController) {
     Column {
         SettingToggleRow(
             label = "Show welcome screen", value = settings.showWelcome, onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(showWelcome = isChecked))
+            })
+        SettingToggleRow(
+            label = "Show System Information", value = false, onToggle = {
+                navController.navigate("SystemInformationView")
             })
         SettingToggleRow(
             label = "Debug Mode (show changed area)",

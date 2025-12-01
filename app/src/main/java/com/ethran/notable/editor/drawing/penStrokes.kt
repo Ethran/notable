@@ -3,28 +3,16 @@ package com.ethran.notable.editor.drawing
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
-import androidx.compose.ui.geometry.Offset
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.pressure
-import com.ethran.notable.editor.utils.Pen
-import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.pointsToPath
-import com.ethran.notable.editor.utils.strokeToTouchPoints
-import com.onyx.android.sdk.data.note.ShapeCreateArgs
 import com.onyx.android.sdk.data.note.TouchPoint
-import com.onyx.android.sdk.pen.NeoBrushPen
-import com.onyx.android.sdk.pen.NeoCharcoalPen
-import com.onyx.android.sdk.pen.NeoFountainPen
-import com.onyx.android.sdk.pen.NeoMarkerPen
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.abs
 import kotlin.math.cos
@@ -148,68 +136,6 @@ fun drawFountainPenStroke(
     }
 }
 
-fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
-    //canvas.save()
-    //canvas.translate(offset.x.toFloat(), offset.y.toFloat())
-
-    val paint = Paint().apply {
-        color = stroke.color
-        this.strokeWidth = stroke.size
-    }
-
-    val points = strokeToTouchPoints(offsetStroke(stroke, offset))
-
-    // Trying to find what throws error when drawing quickly
-    try {
-        when (stroke.pen) {
-            Pen.BALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.REDBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.GREENBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.BLUEBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            // TODO: this functions for drawing are slow and unreliable
-            // replace them with something better
-            Pen.PENCIL -> NeoCharcoalPen.drawNormalStroke(
-                null,
-                canvas,
-                paint,
-                points,
-                stroke.color,
-                stroke.size,
-                ShapeCreateArgs(),
-                Matrix(),
-                false
-            )
-
-            Pen.BRUSH -> NeoBrushPen.drawStroke(canvas, paint, points, stroke.size, pressure, false)
-            Pen.MARKER -> {
-                if (GlobalAppSettings.current.neoTools)
-                    NeoMarkerPen.drawStroke(canvas, paint, points, stroke.size, false)
-                else
-                    drawMarkerStroke(canvas, paint, stroke.size, points)
-            }
-
-            Pen.FOUNTAIN -> {
-                if (GlobalAppSettings.current.neoTools)
-                    NeoFountainPen.drawStroke(
-                        canvas,
-                        paint,
-                        points,
-                        1f,
-                        stroke.size,
-                        pressure,
-                        false
-                    )
-                else
-                    drawFountainPenStroke(canvas, paint, stroke.size, points)
-            }
-
-
-        }
-    } catch (e: Exception) {
-        penStrokesLog.e("pageDrawing.kt: Drawing strokes failed: ${e.message}")
-    }
-    //canvas.restore()
-}
 
 
 val selectPaint = Paint().apply {
