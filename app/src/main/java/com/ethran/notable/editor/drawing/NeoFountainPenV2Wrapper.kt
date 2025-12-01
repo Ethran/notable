@@ -23,7 +23,7 @@ object NeoFountainPenV2Wrapper {
     ) {
 
         if (points.size < 2) {
-            logger.e("pageDrawing.kt: Drawing strokes failed: Not enough points")
+            logger.e("Drawing strokes failed: Not enough points")
             return
         }
 
@@ -41,7 +41,7 @@ object NeoFountainPenV2Wrapper {
         }
         val neoPen = NeoFountainPenV2.create(neoPenConfig)
         if (neoPen == null) {
-            logger.e("pageDrawing.kt: Drawing strokes failed: Pen creation failed")
+            logger.e("Drawing strokes failed: Pen creation failed")
             return
         }
 
@@ -85,7 +85,7 @@ object NeoFountainPenV2Wrapper {
     ) {
         val first = result?.first
         if (first !is PenPathResult) {
-            logger.d("pageDrawing.kt: Not Path")
+            logger.d("Expected PenPathResult but got ${first?.javaClass?.simpleName ?: "null"}")
             return
         }
         first.draw(canvas, paint = paint)
