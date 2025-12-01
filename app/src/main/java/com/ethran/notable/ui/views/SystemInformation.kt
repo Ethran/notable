@@ -185,6 +185,8 @@ fun SystemInformationView(navController: NavController) {
                     InfoRow("Max Touch Pressure", info?.maxTouchPressure?.toString())
                     InfoRow("EPD Width", info?.epdWidth?.toString())
                     InfoRow("EPD Height", info?.epdHeight?.toString())
+                    InfoRow("isValidPenState", info?.isValidPenState?.toString())
+
 
                     // Stroke style details (separate function builds this list)
                     DividerMono()
@@ -410,6 +412,7 @@ private data class DeviceSnapshot(
     val maxTouchPressure: Float?,
     val epdWidth: Float?,
     val epdHeight: Float?,
+    val isValidPenState: Boolean?,
 
     // Light
     val hasFrontLightBrightness: Boolean?,
@@ -514,6 +517,8 @@ private fun collectDeviceSnapshot(context: Context, base: BaseDevice): DeviceSna
     val maxTouchPressure = safeNullable("getMaxTouchPressure") { base.getMaxTouchPressure() }
     val epdWidth = safeNullable("getEpdWidth") { base.getEpdWidth() }
     val epdHeight = safeNullable("getEpdHeight") { base.getEpdHeight() }
+    val isValidPenState = safeNullable("isValidPenState") { base.isValidPenState() }
+
 
     // Light
     val hasFL = safeNullable("hasFLBrightness") { base.hasFLBrightness(context) }
@@ -609,6 +614,7 @@ private fun collectDeviceSnapshot(context: Context, base: BaseDevice): DeviceSna
         maxTouchPressure = maxTouchPressure,
         epdWidth = epdWidth,
         epdHeight = epdHeight,
+        isValidPenState = isValidPenState,
 
         hasFrontLightBrightness = hasFL,
         hasCTMBrightness = hasCTM,
@@ -706,9 +712,6 @@ private fun buildStrokeStyleInfo(
             // Without vendor docs, we keep notes minimal.
             if (params != null) {
                 append("Parameters count=${params.size}")
-                if (snapshot?.maxTouchPressure != null) {
-                    append(", TouchPressureMax=${snapshot.maxTouchPressure}")
-                }
             } else {
                 append("No parameters available (SDK returned null or empty).")
             }
