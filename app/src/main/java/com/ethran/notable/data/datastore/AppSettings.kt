@@ -22,6 +22,19 @@ object GlobalAppSettings {
 
 
 @Serializable
+data class SyncSettings(
+    val syncEnabled: Boolean = false,
+    val serverUrl: String = "",
+    val username: String = "",
+    // Note: Password stored separately in EncryptedSharedPreferences for security
+    val autoSync: Boolean = true,
+    val syncInterval: Int = 5,  // minutes
+    val lastSyncTime: String? = null,
+    val syncOnNoteClose: Boolean = true
+)
+
+
+@Serializable
 data class AppSettings(
     val version: Int,
     val monitorBgFiles: Boolean = false,
@@ -49,6 +62,7 @@ data class AppSettings(
     val twoFingerSwipeRightAction: GestureAction? = defaultTwoFingerSwipeRightAction,
     val holdAction: GestureAction? = defaultHoldAction,
     val continuousStrokeSlider: Boolean = false,
+    val syncSettings: SyncSettings = SyncSettings(),
 
     ) {
     companion object {
