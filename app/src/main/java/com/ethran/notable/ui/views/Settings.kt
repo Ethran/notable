@@ -856,9 +856,9 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                                 syncSettings = syncSettings.copy(lastSyncTime = timestamp)
                             )
                         )
-                        showHint(context, "Sync completed successfully")
+                        showHint("Sync completed successfully", scope)
                     } else {
-                        showHint(context, "Sync failed: ${(result as? SyncResult.Failure)?.error}")
+                        showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
                     }
                 }
             },
