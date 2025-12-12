@@ -75,6 +75,7 @@ fun SettingsView(navController: NavController) {
     val tabs = listOf(
         context.getString(R.string.settings_tab_general_name),
         context.getString(R.string.settings_tab_gestures_name),
+        "Sync",  // TODO: Add to strings.xml
         context.getString(R.string.settings_tab_debug_name)
     )
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -133,7 +134,8 @@ fun SettingsView(navController: NavController) {
                 when (selectedTab) {
                     0 -> GeneralSettings(kv, settings)
                     1 -> EditGestures(context, kv, settings)
-                    2 -> DebugSettings(kv, settings, navController)
+                    2 -> SyncSettings(kv, settings, context)
+                    3 -> DebugSettings(kv, settings, navController)
                 }
 
             }
@@ -581,4 +583,47 @@ fun SettingsDivider() {
         thickness = 1.dp,
         modifier = Modifier.padding(top = 0.dp, bottom = 4.dp)
     )
+}
+
+@Composable
+fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
+    val syncSettings = settings.syncSettings
+
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(
+            text = "WebDAV Synchronization",
+            style = MaterialTheme.typography.h6,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // TODO: Implement full sync settings UI
+        // - Enable/disable sync toggle
+        // - Server URL text field
+        // - Username text field
+        // - Password text field (obscured)
+        // - Test connection button
+        // - Auto-sync toggle
+        // - Sync on note close toggle
+        // - Manual sync button
+        // - Last sync time display
+
+        Text(
+            text = "Sync settings UI - TODO",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(16.dp)
+        )
+
+        SettingToggleRow(
+            label = "Enable WebDAV Sync",
+            value = syncSettings.syncEnabled,
+            onToggle = { isChecked ->
+                kv.setAppSettings(
+                    settings.copy(
+                        syncSettings = syncSettings.copy(syncEnabled = isChecked)
+                    )
+                )
+            }
+        )
+    }
 }
