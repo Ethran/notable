@@ -403,6 +403,125 @@ class SyncEngine(private val context: Context) {
     }
 
     /**
+     * Force upload all local data to server (replaces server data).
+     * WARNING: This deletes all data on the server first!
+     */
+    suspend fun forceUploadAll(): SyncResult = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.i(TAG, "FORCE UPLOAD: Replacing all server data with local data")
+
+            val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+                ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+
+            val credentials = credentialManager.getCredentials()
+                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+
+            val webdavClient = WebDAVClient(
+                settings.syncSettings.serverUrl,
+                credentials.first,
+                credentials.second
+            )
+
+            // Delete existing Notable directory on server
+            try {
+                webdavClient.delete("/Notable")
+            } catch (e: Exception) {
+                // Directory might not exist, that's fine
+            }
+
+            // Recreate base structure
+            webdavClient.createCollection("/Notable")
+            webdavClient.createCollection("/Notable/notebooks")
+
+            // Upload all folders
+            val folders = appRepository.folderRepository.getAll()
+            if (folders.isNotEmpty()) {
+                val foldersJson = folderSerializer.serializeFolders(folders)
+                webdavClient.putFile("/Notable/folders.json", foldersJson.toByteArray(), "application/json")
+                Log.i(TAG, "Force uploaded ${folders.size} folders")
+            }
+
+            // Upload all notebooks
+            val notebooks = appRepository.bookRepository.getAll()
+            for (notebook in notebooks) {
+                uploadNotebook(notebook, webdavClient)
+            }
+
+            Log.i(TAG, "FORCE UPLOAD complete: ${notebooks.size} notebooks uploaded")
+            SyncResult.Success
+        } catch (e: Exception) {
+            Log.e(TAG, "Force upload failed: ${e.message}")
+            e.printStackTrace()
+            SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+        }
+    }
+
+    /**
+     * Force download all server data to local (replaces local data).
+     * WARNING: This deletes all local notebooks first!
+     */
+    suspend fun forceDownloadAll(): SyncResult = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.i(TAG, "FORCE DOWNLOAD: Replacing all local data with server data")
+
+            val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+                ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+
+            val credentials = credentialManager.getCredentials()
+                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+
+            val webdavClient = WebDAVClient(
+                settings.syncSettings.serverUrl,
+                credentials.first,
+                credentials.second
+            )
+
+            // Delete all local folders and notebooks
+            val localFolders = appRepository.folderRepository.getAll()
+            for (folder in localFolders) {
+                appRepository.folderRepository.delete(folder.id)
+            }
+
+            val localNotebooks = appRepository.bookRepository.getAll()
+            for (notebook in localNotebooks) {
+                appRepository.bookRepository.delete(notebook.id)
+            }
+            Log.i(TAG, "Deleted ${localFolders.size} folders and ${localNotebooks.size} notebooks locally")
+
+            // Download folders from server
+            if (webdavClient.exists("/Notable/folders.json")) {
+                val foldersJson = webdavClient.getFile("/Notable/folders.json").decodeToString()
+                val folders = folderSerializer.deserializeFolders(foldersJson)
+                for (folder in folders) {
+                    appRepository.folderRepository.create(folder)
+                }
+                Log.i(TAG, "Downloaded ${folders.size} folders")
+            }
+
+            // Download all notebooks from server
+            if (webdavClient.exists("/Notable/notebooks")) {
+                val notebookDirs = webdavClient.listCollection("/Notable/notebooks")
+                for (notebookDir in notebookDirs) {
+                    try {
+                        // Extract notebook ID from directory name
+                        val notebookId = notebookDir.trimEnd('/')
+                        downloadNotebook(notebookId, webdavClient)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to download notebook $notebookDir: ${e.message}")
+                    }
+                }
+            }
+
+            Log.i(TAG, "FORCE DOWNLOAD complete")
+            SyncResult.Success
+        } catch (e: Exception) {
+            Log.e(TAG, "Force download failed: ${e.message}")
+            e.printStackTrace()
+            SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+        }
+    }
+
+    /**
      * Extract filename from a URI or path.
      */
     private fun extractFilename(uri: String): String {

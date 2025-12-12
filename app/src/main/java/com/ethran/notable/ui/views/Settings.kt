@@ -3,6 +3,7 @@ package com.ethran.notable.ui.views
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -898,6 +900,163 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
             )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // CAUTION: Replacement Operations
+        Text(
+            text = "CAUTION: Replacement Operations",
+            style = MaterialTheme.typography.h6,
+            fontWeight = FontWeight.Bold,
+            color = Color(200, 0, 0),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "Use these only when setting up a new device or resetting sync. These operations will delete data!",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+            modifier = Modifier.padding(bottom = 16.dp, start = 4.dp, end = 4.dp)
+        )
+
+        // Force Upload Button
+        var showForceUploadConfirm by remember { mutableStateOf(false) }
+        Button(
+            onClick = { showForceUploadConfirm = true },
+            enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color(200, 100, 0),
+                contentColor = Color.White,
+                disabledBackgroundColor = Color(200, 200, 200),
+                disabledContentColor = Color.Gray
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(48.dp)
+        ) {
+            Text("⚠ Replace Server with Local Data", fontWeight = FontWeight.Bold)
+        }
+
+        if (showForceUploadConfirm) {
+            ConfirmationDialog(
+                title = "Replace Server Data?",
+                message = "This will DELETE all data on the server and replace it with local data from this device. This cannot be undone!\n\nAre you sure?",
+                onConfirm = {
+                    showForceUploadConfirm = false
+                    syncInProgress = true
+                    scope.launch(Dispatchers.IO) {
+                        // TODO: Implement force upload
+                        val result = SyncEngine(context).forceUploadAll()
+                        withContext(Dispatchers.Main) {
+                            syncInProgress = false
+                            showHint(if (result is SyncResult.Success) "Server replaced with local data" else "Force upload failed", scope)
+                        }
+                    }
+                },
+                onDismiss = { showForceUploadConfirm = false }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Force Download Button
+        var showForceDownloadConfirm by remember { mutableStateOf(false) }
+        Button(
+            onClick = { showForceDownloadConfirm = true },
+            enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color(200, 0, 0),
+                contentColor = Color.White,
+                disabledBackgroundColor = Color(200, 200, 200),
+                disabledContentColor = Color.Gray
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(48.dp)
+        ) {
+            Text("⚠ Replace Local with Server Data", fontWeight = FontWeight.Bold)
+        }
+
+        if (showForceDownloadConfirm) {
+            ConfirmationDialog(
+                title = "Replace Local Data?",
+                message = "This will DELETE all local notebooks and replace them with data from the server. This cannot be undone!\n\nAre you sure?",
+                onConfirm = {
+                    showForceDownloadConfirm = false
+                    syncInProgress = true
+                    scope.launch(Dispatchers.IO) {
+                        // TODO: Implement force download
+                        val result = SyncEngine(context).forceDownloadAll()
+                        withContext(Dispatchers.Main) {
+                            syncInProgress = false
+                            showHint(if (result is SyncResult.Success) "Local data replaced with server data" else "Force download failed", scope)
+                        }
+                    }
+                },
+                onDismiss = { showForceDownloadConfirm = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun ConfirmationDialog(
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .background(Color.White)
+                .border(2.dp, Color.Black, RectangleShape)
+                .padding(24.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.h6,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Text(
+                text = message,
+                style = MaterialTheme.typography.body1,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = Color.Gray,
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Cancel")
+                }
+
+                Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = Color(200, 0, 0),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Confirm", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
