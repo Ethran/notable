@@ -3,7 +3,7 @@ package com.ethran.notable.sync
 import android.content.Context
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.KvProxy
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.ensureImagesFolder

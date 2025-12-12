@@ -85,8 +85,8 @@ class WebDAVClient(
             .build()
 
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != HttpURLConnection.HTTP_METHOD_NOT_ALLOWED) {
-                // 405 means collection already exists, which is fine
+            if (!response.isSuccessful && response.code != 405) {
+                // 405 Method Not Allowed means collection already exists, which is fine
                 throw IOException("Failed to create collection: ${response.code} ${response.message}")
             }
         }
