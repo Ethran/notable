@@ -51,6 +51,9 @@ interface NotebookDao {
     @Query("SELECT * FROM notebook WHERE parentFolderId is :folderId")
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>>
 
+    @Query("SELECT * FROM notebook")
+    fun getAll(): List<Notebook>
+
     @Query("SELECT * FROM notebook WHERE id = (:notebookId)")
     fun getByIdLive(notebookId: String): LiveData<Notebook>
 
@@ -76,6 +79,10 @@ interface NotebookDao {
 class BookRepository(context: Context) {
     var db = AppDatabase.getDatabase(context).notebookDao()
     private var pageDb = AppDatabase.getDatabase(context).pageDao()
+
+    fun getAll(): List<Notebook> {
+        return db.getAll()
+    }
 
     fun create(notebook: Notebook) {
         db.create(notebook)

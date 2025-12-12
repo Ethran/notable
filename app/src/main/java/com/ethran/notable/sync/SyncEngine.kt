@@ -3,7 +3,10 @@ package com.ethran.notable.sync
 import android.content.Context
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.ensureImagesFolder
@@ -12,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.util.Date
 
 /**
  * Core sync engine orchestrating WebDAV synchronization.
@@ -31,11 +35,14 @@ class SyncEngine(private val context: Context) {
      */
     suspend fun syncAllNotebooks(): SyncResult = withContext(Dispatchers.IO) {
         return@withContext try {
+            Log.i(TAG, "Starting full sync...")
+
             // Get sync settings and credentials
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
 
             if (!settings.syncSettings.syncEnabled) {
+                Log.i(TAG, "Sync disabled in settings")
                 return@withContext SyncResult.Success
             }
 
@@ -48,19 +55,41 @@ class SyncEngine(private val context: Context) {
                 credentials.second
             )
 
-            // TODO: Implement full sync flow
-            // 1. Sync folders first
-            // 2. Sync all notebooks
-            // 3. Sync quick pages
-            // 4. Update sync metadata
+            // Ensure base directory exists
+            if (!webdavClient.exists("/Notable")) {
+                webdavClient.createCollection("/Notable")
+            }
+            if (!webdavClient.exists("/Notable/notebooks")) {
+                webdavClient.createCollection("/Notable/notebooks")
+            }
 
-            Log.i(TAG, "syncAllNotebooks: Stub implementation")
+            // 1. Sync folders first (they're referenced by notebooks)
+            syncFolders(webdavClient)
+
+            // 2. Sync all notebooks
+            val notebooks = appRepository.bookRepository.getAll()
+            Log.i(TAG, "Syncing ${notebooks.size} notebooks")
+
+            for (notebook in notebooks) {
+                try {
+                    syncNotebook(notebook.id)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to sync notebook ${notebook.id}: ${e.message}")
+                    // Continue with other notebooks even if one fails
+                }
+            }
+
+            // 3. Sync Quick Pages (pages with notebookId = null)
+            // TODO: Implement Quick Pages sync
+
+            Log.i(TAG, "Full sync completed successfully")
             SyncResult.Success
         } catch (e: IOException) {
             Log.e(TAG, "Network error during sync: ${e.message}")
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected error during sync: ${e.message}")
+            e.printStackTrace()
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -72,6 +101,8 @@ class SyncEngine(private val context: Context) {
      */
     suspend fun syncNotebook(notebookId: String): SyncResult = withContext(Dispatchers.IO) {
         return@withContext try {
+            Log.i(TAG, "Syncing notebook: $notebookId")
+
             // Get sync settings and credentials
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
@@ -89,66 +120,302 @@ class SyncEngine(private val context: Context) {
                 credentials.second
             )
 
-            // TODO: Implement single notebook sync
-            // 1. Fetch remote manifest.json
-            // 2. Compare timestamps
-            // 3. Download or upload as needed
-            // 4. Sync images and backgrounds
+            // Get local notebook
+            val localNotebook = appRepository.bookRepository.getById(notebookId)
+                ?: return@withContext SyncResult.Failure(SyncError.UNKNOWN_ERROR)
 
-            Log.i(TAG, "syncNotebook: Stub implementation for notebookId=$notebookId")
+            // Check if remote notebook exists
+            val remotePath = "/Notable/notebooks/$notebookId/manifest.json"
+            val remoteExists = webdavClient.exists(remotePath)
+
+            if (remoteExists) {
+                // Fetch remote manifest and compare timestamps
+                val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
+                val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
+
+                if (remoteUpdatedAt != null && remoteUpdatedAt.after(localNotebook.updatedAt)) {
+                    // Remote is newer - download
+                    Log.i(TAG, "Remote is newer, downloading notebook $notebookId")
+                    downloadNotebook(notebookId, webdavClient)
+                } else {
+                    // Local is newer or equal - upload
+                    Log.i(TAG, "Local is newer, uploading notebook $notebookId")
+                    uploadNotebook(localNotebook, webdavClient)
+                }
+            } else {
+                // Remote doesn't exist - upload
+                Log.i(TAG, "Notebook $notebookId doesn't exist on server, uploading")
+                uploadNotebook(localNotebook, webdavClient)
+            }
+
+            Log.i(TAG, "Notebook $notebookId synced successfully")
             SyncResult.Success
         } catch (e: IOException) {
-            Log.e(TAG, "Network error during sync: ${e.message}")
+            Log.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
-            Log.e(TAG, "Unexpected error during sync: ${e.message}")
+            Log.e(TAG, "Error syncing notebook $notebookId: ${e.message}")
+            e.printStackTrace()
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
 
     /**
      * Sync folder hierarchy with the WebDAV server.
-     * @return SyncResult indicating success or failure
      */
-    private suspend fun syncFolders(webdavClient: WebDAVClient): SyncResult {
-        // TODO: Implement folder sync
-        // 1. Fetch remote folders.json
-        // 2. Compare with local folders
-        // 3. Apply changes (create/update/delete)
-        // 4. Upload local changes if newer
+    private suspend fun syncFolders(webdavClient: WebDAVClient) {
+        Log.i(TAG, "Syncing folders...")
 
-        Log.i(TAG, "syncFolders: Stub implementation")
-        return SyncResult.Success
+        try {
+            // Get local folders
+            val localFolders = appRepository.folderRepository.getAll()
+
+            // Check if remote folders.json exists
+            val remotePath = "/Notable/folders.json"
+            if (webdavClient.exists(remotePath)) {
+                // Download and merge
+                val remoteFoldersJson = webdavClient.getFile(remotePath).decodeToString()
+                val remoteFolders = folderSerializer.deserializeFolders(remoteFoldersJson)
+
+                // Simple merge: take newer version of each folder
+                val folderMap = mutableMapOf<String, Folder>()
+
+                // Add all remote folders
+                remoteFolders.forEach { folderMap[it.id] = it }
+
+                // Merge with local folders (take newer based on updatedAt)
+                localFolders.forEach { local ->
+                    val remote = folderMap[local.id]
+                    if (remote == null || local.updatedAt.after(remote.updatedAt)) {
+                        folderMap[local.id] = local
+                    }
+                }
+
+                // Update local database with merged folders
+                val mergedFolders = folderMap.values.toList()
+                for (folder in mergedFolders) {
+                    try {
+                        appRepository.folderRepository.get(folder.id)
+                        // Folder exists, update it
+                        appRepository.folderRepository.update(folder)
+                    } catch (e: Exception) {
+                        // Folder doesn't exist, create it
+                        appRepository.folderRepository.create(folder)
+                    }
+                }
+
+                // Upload merged folders back to server
+                val updatedFoldersJson = folderSerializer.serializeFolders(mergedFolders)
+                webdavClient.putFile(remotePath, updatedFoldersJson.toByteArray(), "application/json")
+                Log.i(TAG, "Synced ${mergedFolders.size} folders")
+            } else {
+                // Remote doesn't exist - upload local folders
+                if (localFolders.isNotEmpty()) {
+                    val foldersJson = folderSerializer.serializeFolders(localFolders)
+                    webdavClient.putFile(remotePath, foldersJson.toByteArray(), "application/json")
+                    Log.i(TAG, "Uploaded ${localFolders.size} folders to server")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing folders: ${e.message}")
+            throw e
+        }
     }
 
     /**
-     * Upload a file (image or background) to WebDAV server.
-     * @param localFile Local file to upload
-     * @param remotePath Remote path relative to notebook directory
-     * @param webdavClient WebDAV client
+     * Upload a notebook to the WebDAV server.
      */
-    private suspend fun uploadFile(
-        localFile: File,
-        remotePath: String,
-        webdavClient: WebDAVClient
-    ) {
-        // TODO: Implement file upload with retry logic
-        Log.i(TAG, "uploadFile: Stub - would upload ${localFile.name} to $remotePath")
+    private suspend fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
+        val notebookId = notebook.id
+        Log.i(TAG, "Uploading notebook: ${notebook.title} ($notebookId)")
+
+        // Create remote directory structure
+        webdavClient.ensureParentDirectories("/Notable/notebooks/$notebookId/pages/")
+        webdavClient.createCollection("/Notable/notebooks/$notebookId/images")
+        webdavClient.createCollection("/Notable/notebooks/$notebookId/backgrounds")
+
+        // Upload manifest.json
+        val manifestJson = notebookSerializer.serializeManifest(notebook)
+        webdavClient.putFile(
+            "/Notable/notebooks/$notebookId/manifest.json",
+            manifestJson.toByteArray(),
+            "application/json"
+        )
+
+        // Upload each page
+        val pages = appRepository.pageRepository.getByIds(notebook.pageIds)
+        for (page in pages) {
+            uploadPage(page, notebookId, webdavClient)
+        }
+
+        Log.i(TAG, "Uploaded notebook ${notebook.title} with ${pages.size} pages")
     }
 
     /**
-     * Download a file (image or background) from WebDAV server.
-     * @param remotePath Remote path relative to notebook directory
-     * @param localFile Local file to save to
-     * @param webdavClient WebDAV client
+     * Upload a single page with its strokes and images.
      */
-    private suspend fun downloadFile(
-        remotePath: String,
-        localFile: File,
-        webdavClient: WebDAVClient
-    ) {
-        // TODO: Implement file download
-        Log.i(TAG, "downloadFile: Stub - would download $remotePath to ${localFile.name}")
+    private suspend fun uploadPage(page: Page, notebookId: String, webdavClient: WebDAVClient) {
+        // Get strokes and images for this page
+        val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(page.id)
+        val pageWithImages = appRepository.pageRepository.getWithImageById(page.id)
+
+        // Serialize page to JSON
+        val pageJson = notebookSerializer.serializePage(
+            page,
+            pageWithStrokes.strokes,
+            pageWithImages.images
+        )
+
+        // Upload page JSON
+        webdavClient.putFile(
+            "/Notable/notebooks/$notebookId/pages/${page.id}.json",
+            pageJson.toByteArray(),
+            "application/json"
+        )
+
+        // Upload referenced images
+        for (image in pageWithImages.images) {
+            if (image.uri != null) {
+                val localFile = File(image.uri)
+                if (localFile.exists()) {
+                    val remotePath = "/Notable/notebooks/$notebookId/images/${localFile.name}"
+                    if (!webdavClient.exists(remotePath)) {
+                        webdavClient.putFile(remotePath, localFile, detectMimeType(localFile))
+                        Log.i(TAG, "Uploaded image: ${localFile.name}")
+                    }
+                } else {
+                    Log.w(TAG, "Image file not found: ${image.uri}")
+                }
+            }
+        }
+
+        // Upload custom backgrounds (skip native templates)
+        if (page.backgroundType != "native" && page.background != "blank") {
+            val bgFile = File(ensureBackgroundsFolder(context), page.background)
+            if (bgFile.exists()) {
+                val remotePath = "/Notable/notebooks/$notebookId/backgrounds/${bgFile.name}"
+                if (!webdavClient.exists(remotePath)) {
+                    webdavClient.putFile(remotePath, bgFile, detectMimeType(bgFile))
+                    Log.i(TAG, "Uploaded background: ${bgFile.name}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Download a notebook from the WebDAV server.
+     */
+    private suspend fun downloadNotebook(notebookId: String, webdavClient: WebDAVClient) {
+        Log.i(TAG, "Downloading notebook: $notebookId")
+
+        // Download and parse manifest
+        val manifestJson = webdavClient.getFile("/Notable/notebooks/$notebookId/manifest.json").decodeToString()
+        val notebook = notebookSerializer.deserializeManifest(manifestJson)
+
+        // Download each page
+        for (pageId in notebook.pageIds) {
+            try {
+                downloadPage(pageId, notebookId, webdavClient)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to download page $pageId: ${e.message}")
+                // Continue with other pages
+            }
+        }
+
+        // Update or create notebook in local database
+        val existingNotebook = appRepository.bookRepository.getById(notebookId)
+        if (existingNotebook != null) {
+            appRepository.bookRepository.update(notebook)
+        } else {
+            appRepository.bookRepository.createEmpty(notebook)
+        }
+
+        Log.i(TAG, "Downloaded notebook ${notebook.title} with ${notebook.pageIds.size} pages")
+    }
+
+    /**
+     * Download a single page with its strokes and images.
+     */
+    private suspend fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
+        // Download page JSON
+        val pageJson = webdavClient.getFile("/Notable/notebooks/$notebookId/pages/$pageId.json").decodeToString()
+        val (page, strokes, images) = notebookSerializer.deserializePage(pageJson)
+
+        // Download referenced images
+        for (image in images) {
+            if (image.uri.isNotEmpty()) {
+                try {
+                    val filename = extractFilename(image.uri)
+                    val localFile = File(ensureImagesFolder(context), filename)
+
+                    if (!localFile.exists()) {
+                        val remotePath = "/Notable/notebooks/$notebookId/images/$filename"
+                        webdavClient.getFile(remotePath, localFile)
+                        Log.i(TAG, "Downloaded image: $filename")
+                    }
+
+                    // Update image URI to local absolute path
+                    image.uri = localFile.absolutePath
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to download image ${image.uri}: ${e.message}")
+                }
+            }
+        }
+
+        // Download custom backgrounds
+        if (page.backgroundType != "native" && page.background != "blank") {
+            try {
+                val filename = page.background
+                val localFile = File(ensureBackgroundsFolder(context), filename)
+
+                if (!localFile.exists()) {
+                    val remotePath = "/Notable/notebooks/$notebookId/backgrounds/$filename"
+                    webdavClient.getFile(remotePath, localFile)
+                    Log.i(TAG, "Downloaded background: $filename")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to download background ${page.background}: ${e.message}")
+            }
+        }
+
+        // Save to local database
+        val existingPage = appRepository.pageRepository.getById(page.id)
+        if (existingPage != null) {
+            // Page exists - delete old strokes/images and replace
+            val existingStrokes = appRepository.pageRepository.getWithStrokeById(page.id).strokes
+            val existingImages = appRepository.pageRepository.getWithImageById(page.id).images
+
+            appRepository.strokeRepository.deleteAll(existingStrokes.map { it.id })
+            appRepository.imageRepository.deleteAll(existingImages.map { it.id })
+
+            appRepository.pageRepository.update(page)
+        } else {
+            // New page
+            appRepository.pageRepository.create(page)
+        }
+
+        // Create strokes and images
+        appRepository.strokeRepository.create(strokes)
+        appRepository.imageRepository.create(images)
+    }
+
+    /**
+     * Extract filename from a URI or path.
+     */
+    private fun extractFilename(uri: String): String {
+        return uri.substringAfterLast('/')
+    }
+
+    /**
+     * Detect MIME type from file extension.
+     */
+    private fun detectMimeType(file: File): String {
+        return when (file.extension.lowercase()) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "pdf" -> "application/pdf"
+            else -> "application/octet-stream"
+        }
     }
 
     companion object {
