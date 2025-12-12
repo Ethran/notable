@@ -74,7 +74,9 @@ import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.isNext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -765,12 +767,14 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
             onClick = {
                 testingConnection = true
                 connectionStatus = null
-                scope.launch {
+                scope.launch(Dispatchers.IO) {  // Use IO dispatcher for network calls
                     io.shipbook.shipbooksdk.Log.i("SyncSettings", "Testing connection with URL: $serverUrl, User: $username")
                     val result = WebDAVClient.testConnection(serverUrl, username, password)
-                    testingConnection = false
-                    connectionStatus = if (result) "✓ Connected successfully" else "✗ Connection failed"
-                    io.shipbook.shipbooksdk.Log.i("SyncSettings", "Test result: $result")
+                    withContext(Dispatchers.Main) {  // Switch back to main for UI updates
+                        testingConnection = false
+                        connectionStatus = if (result) "✓ Connected successfully" else "✗ Connection failed"
+                        io.shipbook.shipbooksdk.Log.i("SyncSettings", "Test result: $result")
+                    }
                 }
             },
             enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
@@ -846,21 +850,24 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
         Button(
             onClick = {
                 syncInProgress = true
-                scope.launch {
+                scope.launch(Dispatchers.IO) {
                     val result = SyncEngine(context).syncAllNotebooks()
-                    syncInProgress = false
 
-                    if (result is SyncResult.Success) {
-                        // Update last sync time
-                        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                        kv.setAppSettings(
-                            settings.copy(
-                                syncSettings = syncSettings.copy(lastSyncTime = timestamp)
+                    withContext(Dispatchers.Main) {
+                        syncInProgress = false
+
+                        if (result is SyncResult.Success) {
+                            // Update last sync time
+                            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                            kv.setAppSettings(
+                                settings.copy(
+                                    syncSettings = syncSettings.copy(lastSyncTime = timestamp)
+                                )
                             )
-                        )
-                        showHint("Sync completed successfully", scope)
-                    } else {
-                        showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
+                            showHint("Sync completed successfully", scope)
+                        } else {
+                            showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
+                        }
                     }
                 }
             },
