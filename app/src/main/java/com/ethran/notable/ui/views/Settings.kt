@@ -766,9 +766,11 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                 testingConnection = true
                 connectionStatus = null
                 scope.launch {
+                    io.shipbook.shipbooksdk.Log.i("SyncSettings", "Testing connection with URL: $serverUrl, User: $username")
                     val result = WebDAVClient.testConnection(serverUrl, username, password)
                     testingConnection = false
                     connectionStatus = if (result) "✓ Connected successfully" else "✗ Connection failed"
+                    io.shipbook.shipbooksdk.Log.i("SyncSettings", "Test result: $result")
                 }
             },
             enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),

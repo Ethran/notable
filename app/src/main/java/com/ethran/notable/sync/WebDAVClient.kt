@@ -35,6 +35,7 @@ class WebDAVClient(
      */
     fun testConnection(): Boolean {
         return try {
+            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "Testing connection to: $serverUrl")
             val request = Request.Builder()
                 .url(serverUrl)
                 .head()
@@ -42,9 +43,12 @@ class WebDAVClient(
                 .build()
 
             client.newCall(request).execute().use { response ->
+                io.shipbook.shipbooksdk.Log.i("WebDAVClient", "Response code: ${response.code}")
                 response.isSuccessful
             }
         } catch (e: Exception) {
+            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Connection test failed: ${e.message}")
+            e.printStackTrace()
             false
         }
     }
