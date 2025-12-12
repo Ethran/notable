@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# AI assistant context (not for repository)
+.claude-context.md
