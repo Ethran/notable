@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -40,14 +42,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,10 +65,19 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.ui.SelectMenu
+import com.ethran.notable.sync.CredentialManager
+import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncResult
+import com.ethran.notable.sync.SyncScheduler
+import com.ethran.notable.sync.WebDAVClient
 import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.isNext
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.concurrent.thread
 
 @Composable
@@ -588,32 +603,33 @@ fun SettingsDivider() {
 @Composable
 fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
     val syncSettings = settings.syncSettings
+    val credentialManager = remember { CredentialManager(context) }
+    val scope = rememberCoroutineScope()
+
+    var serverUrl by remember { mutableStateOf(syncSettings.serverUrl) }
+    var username by remember { mutableStateOf(syncSettings.username) }
+    var password by remember { mutableStateOf("") }
+    var testingConnection by remember { mutableStateOf(false) }
+    var syncInProgress by remember { mutableStateOf(false) }
+    var connectionStatus by remember { mutableStateOf<String?>(null) }
+
+    // Load password from CredentialManager on first composition
+    LaunchedEffect(Unit) {
+        credentialManager.getCredentials()?.let { (user, pass) ->
+            username = user
+            password = pass
+        }
+    }
 
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
             text = "WebDAV Synchronization",
             style = MaterialTheme.typography.h6,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // TODO: Implement full sync settings UI
-        // - Enable/disable sync toggle
-        // - Server URL text field
-        // - Username text field
-        // - Password text field (obscured)
-        // - Test connection button
-        // - Auto-sync toggle
-        // - Sync on note close toggle
-        // - Manual sync button
-        // - Last sync time display
-
-        Text(
-            text = "Sync settings UI - TODO",
-            style = MaterialTheme.typography.body2,
-            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-            modifier = Modifier.padding(16.dp)
-        )
-
+        // Enable/Disable Sync Toggle
         SettingToggleRow(
             label = "Enable WebDAV Sync",
             value = syncSettings.syncEnabled,
@@ -623,7 +639,256 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                         syncSettings = syncSettings.copy(syncEnabled = isChecked)
                     )
                 )
+                // Enable/disable WorkManager sync
+                if (isChecked && syncSettings.autoSync) {
+                    SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
+                } else {
+                    SyncScheduler.disablePeriodicSync(context)
+                }
             }
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Server URL Field
+        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+            Text(
+                text = "Server URL",
+                style = MaterialTheme.typography.body2,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colors.onSurface,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            BasicTextField(
+                value = serverUrl,
+                onValueChange = {
+                    serverUrl = it
+                    kv.setAppSettings(
+                        settings.copy(
+                            syncSettings = syncSettings.copy(serverUrl = it)
+                        )
+                    )
+                },
+                textStyle = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colors.onSurface
+                ),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(230, 230, 230, 255))
+                    .padding(12.dp),
+                decorationBox = { innerTextField ->
+                    Box {
+                        if (serverUrl.isEmpty()) {
+                            Text(
+                                "https://nextcloud.example.com/remote.php/dav/files/username/",
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 14.sp,
+                                    color = Color.Gray
+                                )
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Username Field
+        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+            Text(
+                text = "Username",
+                style = MaterialTheme.typography.body2,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colors.onSurface,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            BasicTextField(
+                value = username,
+                onValueChange = {
+                    username = it
+                    credentialManager.saveCredentials(it, password)
+                },
+                textStyle = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colors.onSurface
+                ),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(230, 230, 230, 255))
+                    .padding(12.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Password Field
+        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+            Text(
+                text = "Password",
+                style = MaterialTheme.typography.body2,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colors.onSurface,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            BasicTextField(
+                value = password,
+                onValueChange = {
+                    password = it
+                    credentialManager.saveCredentials(username, it)
+                },
+                textStyle = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colors.onSurface
+                ),
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(230, 230, 230, 255))
+                    .padding(12.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Test Connection Button
+        Button(
+            onClick = {
+                testingConnection = true
+                connectionStatus = null
+                scope.launch {
+                    val result = WebDAVClient.testConnection(serverUrl, username, password)
+                    testingConnection = false
+                    connectionStatus = if (result) "✓ Connected successfully" else "✗ Connection failed"
+                }
+            },
+            enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color(80, 80, 80),
+                contentColor = Color.White,
+                disabledBackgroundColor = Color(200, 200, 200),
+                disabledContentColor = Color.Gray
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(48.dp)
+        ) {
+            if (testingConnection) {
+                Text("Testing connection...")
+            } else {
+                Text("Test Connection", fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Connection Status
+        connectionStatus?.let { status ->
+            Text(
+                text = status,
+                style = MaterialTheme.typography.body2,
+                color = if (status.startsWith("✓")) Color(0, 150, 0) else Color(200, 0, 0),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Auto-sync Toggle
+        SettingToggleRow(
+            label = "Automatic sync every ${syncSettings.syncInterval} minutes",
+            value = syncSettings.autoSync,
+            onToggle = { isChecked ->
+                kv.setAppSettings(
+                    settings.copy(
+                        syncSettings = syncSettings.copy(autoSync = isChecked)
+                    )
+                )
+                // Enable/disable periodic sync
+                if (isChecked && syncSettings.syncEnabled) {
+                    SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
+                } else {
+                    SyncScheduler.disablePeriodicSync(context)
+                }
+            }
+        )
+
+        // Sync on Note Close Toggle
+        SettingToggleRow(
+            label = "Sync when closing notes",
+            value = syncSettings.syncOnNoteClose,
+            onToggle = { isChecked ->
+                kv.setAppSettings(
+                    settings.copy(
+                        syncSettings = syncSettings.copy(syncOnNoteClose = isChecked)
+                    )
+                )
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Manual Sync Button
+        Button(
+            onClick = {
+                syncInProgress = true
+                scope.launch {
+                    val result = SyncEngine(context).syncAllNotebooks()
+                    syncInProgress = false
+
+                    if (result is SyncResult.Success) {
+                        // Update last sync time
+                        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                        kv.setAppSettings(
+                            settings.copy(
+                                syncSettings = syncSettings.copy(lastSyncTime = timestamp)
+                            )
+                        )
+                        showHint(context, "Sync completed successfully")
+                    } else {
+                        showHint(context, "Sync failed: ${(result as? SyncResult.Failure)?.error}")
+                    }
+                }
+            },
+            enabled = !syncInProgress && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color(0, 120, 200),
+                contentColor = Color.White,
+                disabledBackgroundColor = Color(200, 200, 200),
+                disabledContentColor = Color.Gray
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(56.dp)
+        ) {
+            if (syncInProgress) {
+                Text("Syncing...", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            } else {
+                Text("Sync Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
+
+        // Last Sync Time
+        syncSettings.lastSyncTime?.let { timestamp ->
+            Text(
+                text = "Last synced: $timestamp",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+            )
+        }
     }
 }
