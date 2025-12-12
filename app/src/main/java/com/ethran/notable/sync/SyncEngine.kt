@@ -291,7 +291,7 @@ class SyncEngine(private val context: Context) {
 
         // Upload custom backgrounds (skip native templates)
         if (page.backgroundType != "native" && page.background != "blank") {
-            val bgFile = File(ensureBackgroundsFolder(context), page.background)
+            val bgFile = File(ensureBackgroundsFolder(), page.background)
             if (bgFile.exists()) {
                 val remotePath = "/Notable/notebooks/$notebookId/backgrounds/${bgFile.name}"
                 if (!webdavClient.exists(remotePath)) {
@@ -341,12 +341,12 @@ class SyncEngine(private val context: Context) {
         val pageJson = webdavClient.getFile("/Notable/notebooks/$notebookId/pages/$pageId.json").decodeToString()
         val (page, strokes, images) = notebookSerializer.deserializePage(pageJson)
 
-        // Download referenced images
-        for (image in images) {
-            if (image.uri.isNotEmpty()) {
+        // Download referenced images and update their URIs to local paths
+        val updatedImages = images.map { image ->
+            if (!image.uri.isNullOrEmpty()) {
                 try {
                     val filename = extractFilename(image.uri)
-                    val localFile = File(ensureImagesFolder(context), filename)
+                    val localFile = File(ensureImagesFolder(), filename)
 
                     if (!localFile.exists()) {
                         val remotePath = "/Notable/notebooks/$notebookId/images/$filename"
@@ -354,11 +354,14 @@ class SyncEngine(private val context: Context) {
                         Log.i(TAG, "Downloaded image: $filename")
                     }
 
-                    // Update image URI to local absolute path
-                    image.uri = localFile.absolutePath
+                    // Return image with updated local URI
+                    image.copy(uri = localFile.absolutePath)
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to download image ${image.uri}: ${e.message}")
+                    image
                 }
+            } else {
+                image
             }
         }
 
@@ -366,7 +369,7 @@ class SyncEngine(private val context: Context) {
         if (page.backgroundType != "native" && page.background != "blank") {
             try {
                 val filename = page.background
-                val localFile = File(ensureBackgroundsFolder(context), filename)
+                val localFile = File(ensureBackgroundsFolder(), filename)
 
                 if (!localFile.exists()) {
                     val remotePath = "/Notable/notebooks/$notebookId/backgrounds/$filename"
@@ -394,9 +397,9 @@ class SyncEngine(private val context: Context) {
             appRepository.pageRepository.create(page)
         }
 
-        // Create strokes and images
+        // Create strokes and images (using updated images with local URIs)
         appRepository.strokeRepository.create(strokes)
-        appRepository.imageRepository.create(images)
+        appRepository.imageRepository.create(updatedImages)
     }
 
     /**
