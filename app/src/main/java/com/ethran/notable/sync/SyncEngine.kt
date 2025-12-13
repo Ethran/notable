@@ -138,28 +138,30 @@ class SyncEngine(private val context: Context) {
                 val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
 
+                val diffMs = remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time } ?: Long.MAX_VALUE
                 SLog.i(TAG, "Remote: $remoteUpdatedAt (${remoteUpdatedAt?.time}ms)")
                 SLog.i(TAG, "Local: ${localNotebook.updatedAt} (${localNotebook.updatedAt.time}ms)")
-                SLog.i(TAG, "Difference: ${remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time } ?: "unknown"}ms")
+                SLog.i(TAG, "Difference: ${diffMs}ms")
 
+                // Use 1-second tolerance to ignore millisecond precision differences
                 when {
                     remoteUpdatedAt == null -> {
                         SLog.i(TAG, "↑ No remote timestamp, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
-                    remoteUpdatedAt.after(localNotebook.updatedAt) -> {
-                        // Remote is newer - download
+                    diffMs < -1000 -> {
+                        // Remote is newer by > 1 second - download
                         SLog.i(TAG, "↓ Remote newer, downloading ${localNotebook.title}")
                         downloadNotebook(notebookId, webdavClient)
                     }
-                    localNotebook.updatedAt.after(remoteUpdatedAt) -> {
-                        // Local is newer - upload
+                    diffMs > 1000 -> {
+                        // Local is newer by > 1 second - upload
                         SLog.i(TAG, "↑ Local newer, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
                     else -> {
-                        // Timestamps equal - no changes needed
-                        SLog.i(TAG, "= No changes, skipping ${localNotebook.title}")
+                        // Within 1 second - no significant change
+                        SLog.i(TAG, "= No changes (within tolerance), skipping ${localNotebook.title}")
                     }
                 }
             } else {
