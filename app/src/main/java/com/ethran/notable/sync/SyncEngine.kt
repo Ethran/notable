@@ -69,23 +69,48 @@ class SyncEngine(private val context: Context) {
             // 1. Sync folders first (they're referenced by notebooks)
             syncFolders(webdavClient)
 
-            // 2. Sync all notebooks
-            val notebooks = appRepository.bookRepository.getAll()
-            SLog.i(TAG, "Found ${notebooks.size} local notebooks to sync")
+            // 2. Sync local notebooks
+            val localNotebooks = appRepository.bookRepository.getAll()
+            SLog.i(TAG, "Found ${localNotebooks.size} local notebooks")
 
-            for (notebook in notebooks) {
+            for (notebook in localNotebooks) {
                 try {
                     syncNotebook(notebook.id)
                 } catch (e: Exception) {
-                    SLog.e(TAG, "Failed to sync notebook ${notebook.title}: ${e.message}")
+                    SLog.e(TAG, "Failed to sync ${notebook.title}: ${e.message}")
                     // Continue with other notebooks even if one fails
                 }
             }
 
-            // 3. Sync Quick Pages (pages with notebookId = null)
+            // 3. Discover and download notebooks from server that don't exist locally
+            SLog.i(TAG, "Checking server for new notebooks...")
+            if (webdavClient.exists("/Notable/notebooks")) {
+                val serverNotebookDirs = webdavClient.listCollection("/Notable/notebooks")
+                val localNotebookIds = localNotebooks.map { it.id }.toSet()
+
+                val newNotebookIds = serverNotebookDirs
+                    .map { it.trimEnd('/') }
+                    .filter { it !in localNotebookIds }
+
+                if (newNotebookIds.isNotEmpty()) {
+                    SLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
+                    for (notebookId in newNotebookIds) {
+                        try {
+                            SLog.i(TAG, "↓ Downloading new notebook from server: $notebookId")
+                            downloadNotebook(notebookId, webdavClient)
+                        } catch (e: Exception) {
+                            SLog.e(TAG, "Failed to download $notebookId: ${e.message}")
+                        }
+                    }
+                } else {
+                    SLog.i(TAG, "No new notebooks on server")
+                }
+            }
+
+            // 4. Sync Quick Pages (pages with notebookId = null)
             // TODO: Implement Quick Pages sync
 
-            SLog.i(TAG, "✓ Full sync completed successfully")
+            SLog.i(TAG, "✓ Full sync completed")
             SyncResult.Success
         } catch (e: IOException) {
             SLog.e(TAG, "Network error during sync: ${e.message}")
