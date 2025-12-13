@@ -232,7 +232,7 @@ class SyncEngine(private val context: Context) {
      */
     private suspend fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
         val notebookId = notebook.id
-        Log.i(TAG, "Uploading notebook: ${notebook.title} ($notebookId)")
+        SLog.i(TAG, "Uploading: ${notebook.title} (${notebook.pageIds.size} pages)")
 
         // Create remote directory structure
         webdavClient.ensureParentDirectories("/Notable/notebooks/$notebookId/pages/")
@@ -253,7 +253,7 @@ class SyncEngine(private val context: Context) {
             uploadPage(page, notebookId, webdavClient)
         }
 
-        Log.i(TAG, "Uploaded notebook ${notebook.title} with ${pages.size} pages")
+        SLog.i(TAG, "✓ Uploaded: ${notebook.title}")
     }
 
     /**
@@ -311,18 +311,20 @@ class SyncEngine(private val context: Context) {
      * Download a notebook from the WebDAV server.
      */
     private suspend fun downloadNotebook(notebookId: String, webdavClient: WebDAVClient) {
-        Log.i(TAG, "Downloading notebook: $notebookId")
+        SLog.i(TAG, "Downloading notebook ID: $notebookId")
 
         // Download and parse manifest
         val manifestJson = webdavClient.getFile("/Notable/notebooks/$notebookId/manifest.json").decodeToString()
         val notebook = notebookSerializer.deserializeManifest(manifestJson)
+
+        SLog.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
 
         // Download each page
         for (pageId in notebook.pageIds) {
             try {
                 downloadPage(pageId, notebookId, webdavClient)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to download page $pageId: ${e.message}")
+                SLog.e(TAG, "Failed to download page $pageId: ${e.message}")
                 // Continue with other pages
             }
         }
@@ -335,7 +337,7 @@ class SyncEngine(private val context: Context) {
             appRepository.bookRepository.createEmpty(notebook)
         }
 
-        Log.i(TAG, "Downloaded notebook ${notebook.title} with ${notebook.pageIds.size} pages")
+        SLog.i(TAG, "✓ Downloaded: ${notebook.title}")
     }
 
     /**
@@ -413,7 +415,7 @@ class SyncEngine(private val context: Context) {
      */
     suspend fun forceUploadAll(): SyncResult = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.i(TAG, "FORCE UPLOAD: Replacing all server data with local data")
+            SLog.i(TAG, "⚠ FORCE UPLOAD: Replacing server with local data")
 
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
@@ -427,35 +429,55 @@ class SyncEngine(private val context: Context) {
                 credentials.second
             )
 
-            // Delete existing Notable directory on server
+            // Delete existing notebooks on server (but keep /Notable structure)
             try {
-                webdavClient.delete("/Notable")
+                if (webdavClient.exists("/Notable/notebooks")) {
+                    val existingNotebooks = webdavClient.listCollection("/Notable/notebooks")
+                    SLog.i(TAG, "Deleting ${existingNotebooks.size} existing notebooks from server")
+                    for (notebookDir in existingNotebooks) {
+                        try {
+                            webdavClient.delete("/Notable/notebooks/$notebookDir")
+                        } catch (e: Exception) {
+                            SLog.w(TAG, "Failed to delete $notebookDir: ${e.message}")
+                        }
+                    }
+                }
             } catch (e: Exception) {
-                // Directory might not exist, that's fine
+                SLog.w(TAG, "Error cleaning server notebooks: ${e.message}")
             }
 
-            // Recreate base structure
-            webdavClient.createCollection("/Notable")
-            webdavClient.createCollection("/Notable/notebooks")
+            // Ensure base structure exists
+            if (!webdavClient.exists("/Notable")) {
+                webdavClient.createCollection("/Notable")
+            }
+            if (!webdavClient.exists("/Notable/notebooks")) {
+                webdavClient.createCollection("/Notable/notebooks")
+            }
 
             // Upload all folders
             val folders = appRepository.folderRepository.getAll()
             if (folders.isNotEmpty()) {
                 val foldersJson = folderSerializer.serializeFolders(folders)
                 webdavClient.putFile("/Notable/folders.json", foldersJson.toByteArray(), "application/json")
-                Log.i(TAG, "Force uploaded ${folders.size} folders")
+                SLog.i(TAG, "Uploaded ${folders.size} folders")
             }
 
             // Upload all notebooks
             val notebooks = appRepository.bookRepository.getAll()
+            SLog.i(TAG, "Uploading ${notebooks.size} local notebooks...")
             for (notebook in notebooks) {
-                uploadNotebook(notebook, webdavClient)
+                try {
+                    uploadNotebook(notebook, webdavClient)
+                    SLog.i(TAG, "✓ Uploaded: ${notebook.title}")
+                } catch (e: Exception) {
+                    SLog.e(TAG, "✗ Failed to upload ${notebook.title}: ${e.message}")
+                }
             }
 
-            Log.i(TAG, "FORCE UPLOAD complete: ${notebooks.size} notebooks uploaded")
+            SLog.i(TAG, "✓ FORCE UPLOAD complete: ${notebooks.size} notebooks")
             SyncResult.Success
         } catch (e: Exception) {
-            Log.e(TAG, "Force upload failed: ${e.message}")
+            SLog.e(TAG, "Force upload failed: ${e.message}")
             e.printStackTrace()
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
@@ -467,7 +489,7 @@ class SyncEngine(private val context: Context) {
      */
     suspend fun forceDownloadAll(): SyncResult = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.i(TAG, "FORCE DOWNLOAD: Replacing all local data with server data")
+            SLog.i(TAG, "⚠ FORCE DOWNLOAD: Replacing local with server data")
 
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
@@ -491,7 +513,7 @@ class SyncEngine(private val context: Context) {
             for (notebook in localNotebooks) {
                 appRepository.bookRepository.delete(notebook.id)
             }
-            Log.i(TAG, "Deleted ${localFolders.size} folders and ${localNotebooks.size} notebooks locally")
+            SLog.i(TAG, "Deleted ${localFolders.size} folders and ${localNotebooks.size} local notebooks")
 
             // Download folders from server
             if (webdavClient.exists("/Notable/folders.json")) {
@@ -500,33 +522,34 @@ class SyncEngine(private val context: Context) {
                 for (folder in folders) {
                     appRepository.folderRepository.create(folder)
                 }
-                Log.i(TAG, "Downloaded ${folders.size} folders")
+                SLog.i(TAG, "Downloaded ${folders.size} folders from server")
             }
 
             // Download all notebooks from server
             if (webdavClient.exists("/Notable/notebooks")) {
                 val notebookDirs = webdavClient.listCollection("/Notable/notebooks")
-                Log.i(TAG, "Found ${notebookDirs.size} notebook directories on server: $notebookDirs")
+                SLog.i(TAG, "Found ${notebookDirs.size} notebook(s) on server")
+                SLog.i(TAG, "Notebook directories: $notebookDirs")
 
                 for (notebookDir in notebookDirs) {
                     try {
                         // Extract notebook ID from directory name
                         val notebookId = notebookDir.trimEnd('/')
-                        Log.i(TAG, "Downloading notebook: $notebookId")
+                        SLog.i(TAG, "Downloading notebook: $notebookId")
                         downloadNotebook(notebookId, webdavClient)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to download notebook $notebookDir: ${e.message}")
+                        SLog.e(TAG, "Failed to download $notebookDir: ${e.message}")
                         e.printStackTrace()
                     }
                 }
             } else {
-                Log.w(TAG, "/Notable/notebooks directory doesn't exist on server")
+                SLog.w(TAG, "/Notable/notebooks doesn't exist on server")
             }
 
-            Log.i(TAG, "FORCE DOWNLOAD complete")
+            SLog.i(TAG, "✓ FORCE DOWNLOAD complete")
             SyncResult.Success
         } catch (e: Exception) {
-            Log.e(TAG, "Force download failed: ${e.message}")
+            SLog.e(TAG, "Force download failed: ${e.message}")
             e.printStackTrace()
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
