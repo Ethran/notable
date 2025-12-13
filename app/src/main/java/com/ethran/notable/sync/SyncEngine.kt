@@ -133,18 +133,20 @@ class SyncEngine(private val context: Context) {
                 val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
 
+                Log.i(TAG, "Remote updatedAt: $remoteUpdatedAt, Local updatedAt: ${localNotebook.updatedAt}")
+
                 if (remoteUpdatedAt != null && remoteUpdatedAt.after(localNotebook.updatedAt)) {
                     // Remote is newer - download
-                    Log.i(TAG, "Remote is newer, downloading notebook $notebookId")
+                    Log.i(TAG, "Remote is newer, downloading notebook $notebookId (${localNotebook.title})")
                     downloadNotebook(notebookId, webdavClient)
                 } else {
                     // Local is newer or equal - upload
-                    Log.i(TAG, "Local is newer, uploading notebook $notebookId")
+                    Log.i(TAG, "Local is newer or equal, uploading notebook $notebookId (${localNotebook.title})")
                     uploadNotebook(localNotebook, webdavClient)
                 }
             } else {
                 // Remote doesn't exist - upload
-                Log.i(TAG, "Notebook $notebookId doesn't exist on server, uploading")
+                Log.i(TAG, "Notebook $notebookId (${localNotebook.title}) doesn't exist on server, uploading")
                 uploadNotebook(localNotebook, webdavClient)
             }
 
@@ -501,15 +503,21 @@ class SyncEngine(private val context: Context) {
             // Download all notebooks from server
             if (webdavClient.exists("/Notable/notebooks")) {
                 val notebookDirs = webdavClient.listCollection("/Notable/notebooks")
+                Log.i(TAG, "Found ${notebookDirs.size} notebook directories on server: $notebookDirs")
+
                 for (notebookDir in notebookDirs) {
                     try {
                         // Extract notebook ID from directory name
                         val notebookId = notebookDir.trimEnd('/')
+                        Log.i(TAG, "Downloading notebook: $notebookId")
                         downloadNotebook(notebookId, webdavClient)
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to download notebook $notebookDir: ${e.message}")
+                        e.printStackTrace()
                     }
                 }
+            } else {
+                Log.w(TAG, "/Notable/notebooks directory doesn't exist on server")
             }
 
             Log.i(TAG, "FORCE DOWNLOAD complete")
