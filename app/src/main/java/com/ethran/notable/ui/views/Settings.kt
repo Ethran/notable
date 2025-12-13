@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +70,7 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.ui.SelectMenu
 import com.ethran.notable.sync.CredentialManager
 import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.sync.SyncResult
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.WebDAVClient
@@ -617,6 +619,9 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
     var syncInProgress by remember { mutableStateOf(false) }
     var connectionStatus by remember { mutableStateOf<String?>(null) }
 
+    // Observe sync logs
+    val syncLogs by SyncLogger.logs.collectAsState()
+
     // Load password from CredentialManager on first composition
     LaunchedEffect(Unit) {
         credentialManager.getCredentials()?.let { (user, pass) ->
@@ -1000,6 +1005,85 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                 },
                 onDismiss = { showForceDownloadConfirm = false }
             )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        SettingsDivider()
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Sync Log Viewer
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Sync Log",
+                style = MaterialTheme.typography.h6,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = { SyncLogger.clear() },
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = Color.Gray,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.height(32.dp)
+            ) {
+                Text("Clear", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .background(Color(250, 250, 250))
+                .border(1.dp, Color.Gray)
+        ) {
+            val scrollState = rememberScrollState()
+
+            // Auto-scroll to bottom when new logs arrive
+            LaunchedEffect(syncLogs.size) {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+
+            if (syncLogs.isEmpty()) {
+                Text(
+                    text = "No sync activity yet",
+                    style = MaterialTheme.typography.body2,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(12.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                        .padding(8.dp)
+                ) {
+                    // Show last 20 logs
+                    syncLogs.takeLast(20).forEach { log ->
+                        val logColor = when (log.level) {
+                            SyncLogger.LogLevel.INFO -> Color(0, 100, 0)
+                            SyncLogger.LogLevel.WARNING -> Color(200, 100, 0)
+                            SyncLogger.LogLevel.ERROR -> Color(200, 0, 0)
+                        }
+
+                        Text(
+                            text = "[${log.timestamp}] ${log.message}",
+                            style = TextStyle(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = logColor
+                            ),
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }

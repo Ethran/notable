@@ -17,6 +17,9 @@ import java.io.File
 import java.io.IOException
 import java.util.Date
 
+// Alias for cleaner code
+private val SLog = SyncLogger
+
 /**
  * Core sync engine orchestrating WebDAV synchronization.
  * Handles bidirectional sync of folders, notebooks, pages, and files.
@@ -35,14 +38,14 @@ class SyncEngine(private val context: Context) {
      */
     suspend fun syncAllNotebooks(): SyncResult = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.i(TAG, "Starting full sync...")
+            SLog.i(TAG, "Starting full sync...")
 
             // Get sync settings and credentials
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
 
             if (!settings.syncSettings.syncEnabled) {
-                Log.i(TAG, "Sync disabled in settings")
+                SLog.i(TAG, "Sync disabled in settings")
                 return@withContext SyncResult.Success
             }
 
@@ -68,13 +71,13 @@ class SyncEngine(private val context: Context) {
 
             // 2. Sync all notebooks
             val notebooks = appRepository.bookRepository.getAll()
-            Log.i(TAG, "Syncing ${notebooks.size} notebooks")
+            SLog.i(TAG, "Found ${notebooks.size} local notebooks to sync")
 
             for (notebook in notebooks) {
                 try {
                     syncNotebook(notebook.id)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync notebook ${notebook.id}: ${e.message}")
+                    SLog.e(TAG, "Failed to sync notebook ${notebook.title}: ${e.message}")
                     // Continue with other notebooks even if one fails
                 }
             }
@@ -82,13 +85,13 @@ class SyncEngine(private val context: Context) {
             // 3. Sync Quick Pages (pages with notebookId = null)
             // TODO: Implement Quick Pages sync
 
-            Log.i(TAG, "Full sync completed successfully")
+            SLog.i(TAG, "✓ Full sync completed successfully")
             SyncResult.Success
         } catch (e: IOException) {
-            Log.e(TAG, "Network error during sync: ${e.message}")
+            SLog.e(TAG, "Network error during sync: ${e.message}")
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
-            Log.e(TAG, "Unexpected error during sync: ${e.message}")
+            SLog.e(TAG, "Unexpected error during sync: ${e.message}")
             e.printStackTrace()
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
@@ -101,7 +104,7 @@ class SyncEngine(private val context: Context) {
      */
     suspend fun syncNotebook(notebookId: String): SyncResult = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.i(TAG, "Syncing notebook: $notebookId")
+            SLog.i(TAG, "Syncing notebook: $notebookId")
 
             // Get sync settings and credentials
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
