@@ -138,7 +138,9 @@ class SyncEngine(private val context: Context) {
                 val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
 
-                SLog.i(TAG, "Remote: $remoteUpdatedAt | Local: ${localNotebook.updatedAt}")
+                SLog.i(TAG, "Remote: $remoteUpdatedAt (${remoteUpdatedAt.time}ms)")
+                SLog.i(TAG, "Local: ${localNotebook.updatedAt} (${localNotebook.updatedAt.time}ms)")
+                SLog.i(TAG, "Difference: ${localNotebook.updatedAt.time - remoteUpdatedAt.time}ms")
 
                 when {
                     remoteUpdatedAt == null -> {
