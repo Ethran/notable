@@ -117,7 +117,8 @@ class EditorControlTower(
         if (pageId == null) return
 
         try {
-            val pageEntity = page.pageRepository.getById(pageId) ?: return
+            val appRepository = com.ethran.notable.data.AppRepository(context)
+            val pageEntity = appRepository.pageRepository.getById(pageId) ?: return
             pageEntity.notebookId?.let { notebookId ->
                 SyncLogger.i("EditorSync", "Auto-syncing on page close")
                 SyncEngine(context).syncNotebook(notebookId)
