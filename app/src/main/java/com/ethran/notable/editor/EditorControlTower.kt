@@ -17,6 +17,8 @@ import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.strokeBounds
+import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +35,8 @@ class EditorControlTower(
     private val scope: CoroutineScope,
     val page: PageView,
     private var history: History,
-    private val state: EditorState
+    private val state: EditorState,
+    private val context: Context
 ) {
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
@@ -93,9 +96,35 @@ class EditorControlTower(
      * @param id The unique identifier of the page to switch to.
      */
     private fun switchPage(id: String) {
+        // Trigger sync on the page we're leaving (if enabled)
+        val settings = GlobalAppSettings.current
+        if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose) {
+            val oldPageId = state.currentPageId
+            scope.launch(Dispatchers.IO) {
+                triggerSyncForPage(oldPageId)
+            }
+        }
+
         state.changePage(id)
         history.cleanHistory()
         page.changePage(id)
+    }
+
+    /**
+     * Trigger sync for a specific page's notebook.
+     */
+    private suspend fun triggerSyncForPage(pageId: String?) {
+        if (pageId == null) return
+
+        try {
+            val pageEntity = page.pageRepository.getById(pageId) ?: return
+            pageEntity.notebookId?.let { notebookId ->
+                SyncLogger.i("EditorSync", "Auto-syncing on page close")
+                SyncEngine(context).syncNotebook(notebookId)
+            }
+        } catch (e: Exception) {
+            SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
+        }
     }
 
     fun setIsDrawing(value: Boolean) {

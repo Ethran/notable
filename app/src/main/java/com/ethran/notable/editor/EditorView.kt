@@ -97,7 +97,7 @@ fun EditorView(
             History(page)
         }
         val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState).apply { registerObservers() }
+            EditorControlTower(scope, page, history, editorState, context).apply { registerObservers() }
         }
 
 
