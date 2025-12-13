@@ -30,12 +30,16 @@ import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
 import com.ethran.notable.io.exportToLinkedFile
+import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -107,6 +111,19 @@ fun EditorView(
                 editorState.selectionState.applySelectionDisplace(page)
                 exportToLinkedFile(context, bookId, appRepository.bookRepository)
                 page.disposeOldPage()
+
+                // Trigger sync on note close if enabled
+                val settings = GlobalAppSettings.current
+                if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose && bookId != null) {
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            SyncLogger.i("EditorSync", "Auto-syncing on editor close")
+                            SyncEngine(context).syncNotebook(bookId)
+                        } catch (e: Exception) {
+                            SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
+                        }
+                    }
+                }
             }
         }
 
