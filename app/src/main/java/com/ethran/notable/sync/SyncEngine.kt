@@ -140,14 +140,25 @@ class SyncEngine(private val context: Context) {
 
                 SLog.i(TAG, "Remote: $remoteUpdatedAt | Local: ${localNotebook.updatedAt}")
 
-                if (remoteUpdatedAt != null && remoteUpdatedAt.after(localNotebook.updatedAt)) {
-                    // Remote is newer - download
-                    SLog.i(TAG, "↓ Remote newer, downloading ${localNotebook.title}")
-                    downloadNotebook(notebookId, webdavClient)
-                } else {
-                    // Local is newer or equal - upload
-                    SLog.i(TAG, "↑ Local newer, uploading ${localNotebook.title}")
-                    uploadNotebook(localNotebook, webdavClient)
+                when {
+                    remoteUpdatedAt == null -> {
+                        SLog.i(TAG, "↑ No remote timestamp, uploading ${localNotebook.title}")
+                        uploadNotebook(localNotebook, webdavClient)
+                    }
+                    remoteUpdatedAt.after(localNotebook.updatedAt) -> {
+                        // Remote is newer - download
+                        SLog.i(TAG, "↓ Remote newer, downloading ${localNotebook.title}")
+                        downloadNotebook(notebookId, webdavClient)
+                    }
+                    localNotebook.updatedAt.after(remoteUpdatedAt) -> {
+                        // Local is newer - upload
+                        SLog.i(TAG, "↑ Local newer, uploading ${localNotebook.title}")
+                        uploadNotebook(localNotebook, webdavClient)
+                    }
+                    else -> {
+                        // Timestamps equal - no changes needed
+                        SLog.i(TAG, "= No changes, skipping ${localNotebook.title}")
+                    }
                 }
             } else {
                 // Remote doesn't exist - upload
