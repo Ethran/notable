@@ -131,29 +131,31 @@ class SyncEngine(private val context: Context) {
             val remotePath = "/Notable/notebooks/$notebookId/manifest.json"
             val remoteExists = webdavClient.exists(remotePath)
 
+            SLog.i(TAG, "Checking: ${localNotebook.title}")
+
             if (remoteExists) {
                 // Fetch remote manifest and compare timestamps
                 val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
 
-                Log.i(TAG, "Remote updatedAt: $remoteUpdatedAt, Local updatedAt: ${localNotebook.updatedAt}")
+                SLog.i(TAG, "Remote: $remoteUpdatedAt | Local: ${localNotebook.updatedAt}")
 
                 if (remoteUpdatedAt != null && remoteUpdatedAt.after(localNotebook.updatedAt)) {
                     // Remote is newer - download
-                    Log.i(TAG, "Remote is newer, downloading notebook $notebookId (${localNotebook.title})")
+                    SLog.i(TAG, "↓ Remote newer, downloading ${localNotebook.title}")
                     downloadNotebook(notebookId, webdavClient)
                 } else {
                     // Local is newer or equal - upload
-                    Log.i(TAG, "Local is newer or equal, uploading notebook $notebookId (${localNotebook.title})")
+                    SLog.i(TAG, "↑ Local newer, uploading ${localNotebook.title}")
                     uploadNotebook(localNotebook, webdavClient)
                 }
             } else {
                 // Remote doesn't exist - upload
-                Log.i(TAG, "Notebook $notebookId (${localNotebook.title}) doesn't exist on server, uploading")
+                SLog.i(TAG, "↑ New on server, uploading ${localNotebook.title}")
                 uploadNotebook(localNotebook, webdavClient)
             }
 
-            Log.i(TAG, "Notebook $notebookId synced successfully")
+            SLog.i(TAG, "✓ Synced: ${localNotebook.title}")
             SyncResult.Success
         } catch (e: IOException) {
             Log.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
