@@ -30,7 +30,9 @@ data class SyncSettings(
     val autoSync: Boolean = true,
     val syncInterval: Int = 5,  // minutes
     val lastSyncTime: String? = null,
-    val syncOnNoteClose: Boolean = true
+    val syncOnNoteClose: Boolean = true,
+    // Track which notebooks we've successfully synced to detect deletions
+    val syncedNotebookIds: Set<String> = emptySet()
 )
 
 

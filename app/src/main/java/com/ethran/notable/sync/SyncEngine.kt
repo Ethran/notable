@@ -69,7 +69,10 @@ class SyncEngine(private val context: Context) {
             // 1. Sync folders first (they're referenced by notebooks)
             syncFolders(webdavClient)
 
-            // 2. Sync local notebooks
+            // 2. Apply remote deletions (delete local notebooks that were deleted on other devices)
+            val deletionsData = applyRemoteDeletions(webdavClient)
+
+            // 3. Upload local notebooks
             val localNotebooks = appRepository.bookRepository.getAll()
             SLog.i(TAG, "Found ${localNotebooks.size} local notebooks")
 
@@ -82,15 +85,21 @@ class SyncEngine(private val context: Context) {
                 }
             }
 
-            // 3. Discover and download notebooks from server that don't exist locally
+            // 4. Discover and download notebooks from server that don't exist locally
+            // IMPORTANT: This must happen BEFORE detecting local deletions to avoid race conditions
             SLog.i(TAG, "Checking server for new notebooks...")
             if (webdavClient.exists("/Notable/notebooks")) {
                 val serverNotebookDirs = webdavClient.listCollection("/Notable/notebooks")
+                SLog.i(TAG, "DEBUG: Server returned ${serverNotebookDirs.size} items: $serverNotebookDirs")
+
                 val localNotebookIds = localNotebooks.map { it.id }.toSet()
+                SLog.i(TAG, "DEBUG: Local notebook IDs: $localNotebookIds")
 
                 val newNotebookIds = serverNotebookDirs
                     .map { it.trimEnd('/') }
                     .filter { it !in localNotebookIds }
+                    .filter { it !in deletionsData.deletedNotebookIds }  // Skip deleted notebooks
+                SLog.i(TAG, "DEBUG: New notebook IDs after filtering: $newNotebookIds")
 
                 if (newNotebookIds.isNotEmpty()) {
                     SLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
@@ -107,8 +116,23 @@ class SyncEngine(private val context: Context) {
                 }
             }
 
-            // 4. Sync Quick Pages (pages with notebookId = null)
+            // 5. Detect local deletions and upload to server
+            // IMPORTANT: This must happen AFTER downloading new notebooks to avoid deleting notebooks
+            // that were just created on other devices but not yet downloaded
+            detectAndUploadLocalDeletions(webdavClient, settings)
+
+            // 6. Sync Quick Pages (pages with notebookId = null)
             // TODO: Implement Quick Pages sync
+
+            // 7. Update synced notebook IDs for next sync
+            val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
+            kvProxy.setAppSettings(
+                settings.copy(
+                    syncSettings = settings.syncSettings.copy(
+                        syncedNotebookIds = currentNotebookIds
+                    )
+                )
+            )
 
             SLog.i(TAG, "✓ Full sync completed")
             SyncResult.Success
@@ -270,6 +294,108 @@ class SyncEngine(private val context: Context) {
     }
 
     /**
+     * Download deletions.json from server and delete any local notebooks that were deleted on other devices.
+     * This should be called EARLY in the sync process, before uploading local notebooks.
+     * @return DeletionsData for filtering discovery
+     */
+    private suspend fun applyRemoteDeletions(webdavClient: WebDAVClient): DeletionsData {
+        SLog.i(TAG, "Applying remote deletions...")
+
+        val remotePath = "/Notable/deletions.json"
+        val deletionsSerializer = DeletionsSerializer
+
+        // Download deletions.json from server (if it exists)
+        val deletionsData = if (webdavClient.exists(remotePath)) {
+            try {
+                val deletionsJson = webdavClient.getFile(remotePath).decodeToString()
+                deletionsSerializer.deserialize(deletionsJson)
+            } catch (e: Exception) {
+                SLog.w(TAG, "Failed to parse deletions.json: ${e.message}")
+                DeletionsData()
+            }
+        } else {
+            DeletionsData()
+        }
+
+        // Delete any local notebooks that are in the server's deletions list
+        if (deletionsData.deletedNotebookIds.isNotEmpty()) {
+            SLog.i(TAG, "Server has ${deletionsData.deletedNotebookIds.size} deleted notebook(s)")
+            val localNotebooks = appRepository.bookRepository.getAll()
+            for (notebook in localNotebooks) {
+                if (notebook.id in deletionsData.deletedNotebookIds) {
+                    try {
+                        SLog.i(TAG, "✗ Deleting locally (deleted on server): ${notebook.title}")
+                        appRepository.bookRepository.delete(notebook.id)
+                    } catch (e: Exception) {
+                        SLog.e(TAG, "Failed to delete ${notebook.title}: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        return deletionsData
+    }
+
+    /**
+     * Detect notebooks that were deleted locally and upload deletions to server.
+     * This should be called LATE in the sync process, AFTER downloading new notebooks from server.
+     * This ensures we don't mistakenly delete notebooks that were just created on other devices.
+     */
+    private suspend fun detectAndUploadLocalDeletions(webdavClient: WebDAVClient, settings: AppSettings) {
+        SLog.i(TAG, "Detecting local deletions...")
+
+        val remotePath = "/Notable/deletions.json"
+        val deletionsSerializer = DeletionsSerializer
+
+        // Get current deletions from server
+        var deletionsData = if (webdavClient.exists(remotePath)) {
+            try {
+                val deletionsJson = webdavClient.getFile(remotePath).decodeToString()
+                deletionsSerializer.deserialize(deletionsJson)
+            } catch (e: Exception) {
+                SLog.w(TAG, "Failed to parse deletions.json: ${e.message}")
+                DeletionsData()
+            }
+        } else {
+            DeletionsData()
+        }
+
+        // Detect local deletions by comparing with previously synced notebook IDs
+        val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
+        val syncedNotebookIds = settings.syncSettings.syncedNotebookIds
+        val deletedLocally = syncedNotebookIds - currentNotebookIds
+
+        if (deletedLocally.isNotEmpty()) {
+            SLog.i(TAG, "Detected ${deletedLocally.size} local deletion(s)")
+
+            // Add local deletions to the deletions list
+            deletionsData = deletionsData.copy(
+                deletedNotebookIds = deletionsData.deletedNotebookIds + deletedLocally
+            )
+
+            // Delete from server
+            for (notebookId in deletedLocally) {
+                try {
+                    val notebookPath = "/Notable/notebooks/$notebookId"
+                    if (webdavClient.exists(notebookPath)) {
+                        SLog.i(TAG, "✗ Deleting from server: $notebookId")
+                        webdavClient.delete(notebookPath)
+                    }
+                } catch (e: Exception) {
+                    SLog.e(TAG, "Failed to delete $notebookId from server: ${e.message}")
+                }
+            }
+
+            // Upload updated deletions.json
+            val deletionsJson = deletionsSerializer.serialize(deletionsData)
+            webdavClient.putFile(remotePath, deletionsJson.toByteArray(), "application/json")
+            SLog.i(TAG, "Updated deletions.json on server with ${deletionsData.deletedNotebookIds.size} total deletion(s)")
+        } else {
+            SLog.i(TAG, "No local deletions detected")
+        }
+    }
+
+    /**
      * Upload a notebook to the WebDAV server.
      */
     private suspend fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
@@ -361,7 +487,15 @@ class SyncEngine(private val context: Context) {
 
         SLog.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
 
-        // Download each page
+        // Create notebook in local database FIRST (pages have foreign key to notebook)
+        val existingNotebook = appRepository.bookRepository.getById(notebookId)
+        if (existingNotebook != null) {
+            appRepository.bookRepository.update(notebook)
+        } else {
+            appRepository.bookRepository.createEmpty(notebook)
+        }
+
+        // Download each page (now that notebook exists)
         for (pageId in notebook.pageIds) {
             try {
                 downloadPage(pageId, notebookId, webdavClient)
@@ -369,14 +503,6 @@ class SyncEngine(private val context: Context) {
                 SLog.e(TAG, "Failed to download page $pageId: ${e.message}")
                 // Continue with other pages
             }
-        }
-
-        // Update or create notebook in local database
-        val existingNotebook = appRepository.bookRepository.getById(notebookId)
-        if (existingNotebook != null) {
-            appRepository.bookRepository.update(notebook)
-        } else {
-            appRepository.bookRepository.createEmpty(notebook)
         }
 
         SLog.i(TAG, "✓ Downloaded: ${notebook.title}")

@@ -250,7 +250,8 @@ class WebDAVClient(
 
             // Simple XML parsing to extract getlastmodified value
             // For MVP, we use a simple regex. For production, consider using a proper XML parser.
-            val lastModifiedRegex = """<D:getlastmodified>([^<]+)</D:getlastmodified>""".toRegex()
+            // Use case-insensitive matching since some servers use <d:> and others use <D:>
+            val lastModifiedRegex = """<[dD]:getlastmodified>([^<]+)</[dD]:getlastmodified>""".toRegex()
             val match = lastModifiedRegex.find(responseBody)
             return match?.groupValues?.get(1)
         }
@@ -289,16 +290,33 @@ class WebDAVClient(
 
             val responseBody = response.body?.string() ?: return emptyList()
 
+            // DEBUG: Log the raw response
+            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "PROPFIND response for $path (first 1500 chars):")
+            io.shipbook.shipbooksdk.Log.i("WebDAVClient", responseBody.take(1500))
+
             // Simple XML parsing to extract href values
             // For MVP, we use regex. For production, consider using a proper XML parser.
-            val hrefRegex = """<D:href>([^<]+)</D:href>""".toRegex()
+            // Use case-insensitive matching since some servers use <d:href> and others use <D:href>
+            val hrefRegex = """<[dD]:href>([^<]+)</[dD]:href>""".toRegex()
             val matches = hrefRegex.findAll(responseBody)
 
-            return matches.map { it.groupValues[1] }
-                .filter { it != path && !it.endsWith("/$path") } // Exclude self
-                .map { href ->
+            val allHrefs = matches.map { it.groupValues[1] }.toList()
+            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "Found ${allHrefs.size} hrefs: $allHrefs")
+
+            val filtered = allHrefs.filter { it != path && !it.endsWith("/$path") }
+            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "After filtering (exclude $path): $filtered")
+
+            return filtered.map { href ->
                     // Extract just the filename/dirname from the full path
                     href.trimEnd('/').substringAfterLast('/')
+                }
+                .filter { filename ->
+                    // Only include valid UUIDs (36 chars with dashes at positions 8, 13, 18, 23)
+                    filename.length == 36 &&
+                    filename[8] == '-' &&
+                    filename[13] == '-' &&
+                    filename[18] == '-' &&
+                    filename[23] == '-'
                 }
                 .toList()
         }

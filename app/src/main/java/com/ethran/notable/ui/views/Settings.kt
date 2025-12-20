@@ -866,10 +866,13 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
 
                         if (result is SyncResult.Success) {
                             // Update last sync time
+                            // IMPORTANT: Read latest settings from GlobalAppSettings to avoid overwriting
+                            // syncedNotebookIds that were just updated by the sync
                             val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                            val latestSettings = GlobalAppSettings.current
                             kv.setAppSettings(
-                                settings.copy(
-                                    syncSettings = syncSettings.copy(lastSyncTime = timestamp)
+                                latestSettings.copy(
+                                    syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
                                 )
                             )
                             showHint("Sync completed successfully", scope)
