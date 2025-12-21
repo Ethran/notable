@@ -72,8 +72,11 @@ class SyncEngine(private val context: Context) {
             // 2. Apply remote deletions (delete local notebooks that were deleted on other devices)
             val deletionsData = applyRemoteDeletions(webdavClient)
 
-            // 3. Upload local notebooks
+            // 3. Snapshot local notebook IDs BEFORE downloading to detect deletions correctly
+            // IMPORTANT: We must capture this BEFORE downloading new notebooks, otherwise we can't
+            // detect which notebooks were deleted locally vs. newly downloaded
             val localNotebooks = appRepository.bookRepository.getAll()
+            val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
             SLog.i(TAG, "Found ${localNotebooks.size} local notebooks")
 
             for (notebook in localNotebooks) {
@@ -86,18 +89,16 @@ class SyncEngine(private val context: Context) {
             }
 
             // 4. Discover and download notebooks from server that don't exist locally
-            // IMPORTANT: This must happen BEFORE detecting local deletions to avoid race conditions
             SLog.i(TAG, "Checking server for new notebooks...")
             if (webdavClient.exists("/Notable/notebooks")) {
                 val serverNotebookDirs = webdavClient.listCollection("/Notable/notebooks")
                 SLog.i(TAG, "DEBUG: Server returned ${serverNotebookDirs.size} items: $serverNotebookDirs")
 
-                val localNotebookIds = localNotebooks.map { it.id }.toSet()
-                SLog.i(TAG, "DEBUG: Local notebook IDs: $localNotebookIds")
+                SLog.i(TAG, "DEBUG: Local notebook IDs (before download): $preDownloadNotebookIds")
 
                 val newNotebookIds = serverNotebookDirs
                     .map { it.trimEnd('/') }
-                    .filter { it !in localNotebookIds }
+                    .filter { it !in preDownloadNotebookIds }
                     .filter { it !in deletionsData.deletedNotebookIds }  // Skip deleted notebooks
                 SLog.i(TAG, "DEBUG: New notebook IDs after filtering: $newNotebookIds")
 
@@ -117,9 +118,8 @@ class SyncEngine(private val context: Context) {
             }
 
             // 5. Detect local deletions and upload to server
-            // IMPORTANT: This must happen AFTER downloading new notebooks to avoid deleting notebooks
-            // that were just created on other devices but not yet downloaded
-            detectAndUploadLocalDeletions(webdavClient, settings)
+            // IMPORTANT: Use the pre-download snapshot to detect deletions, not current state
+            detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
 
             // 6. Sync Quick Pages (pages with notebookId = null)
             // TODO: Implement Quick Pages sync
@@ -338,10 +338,15 @@ class SyncEngine(private val context: Context) {
 
     /**
      * Detect notebooks that were deleted locally and upload deletions to server.
-     * This should be called LATE in the sync process, AFTER downloading new notebooks from server.
-     * This ensures we don't mistakenly delete notebooks that were just created on other devices.
+     * @param preDownloadNotebookIds Snapshot of local notebook IDs BEFORE downloading new notebooks.
+     *        This is critical - if we use current state, we can't tell which notebooks were deleted
+     *        locally vs. just downloaded from server.
      */
-    private suspend fun detectAndUploadLocalDeletions(webdavClient: WebDAVClient, settings: AppSettings) {
+    private suspend fun detectAndUploadLocalDeletions(
+        webdavClient: WebDAVClient,
+        settings: AppSettings,
+        preDownloadNotebookIds: Set<String>
+    ) {
         SLog.i(TAG, "Detecting local deletions...")
 
         val remotePath = "/Notable/deletions.json"
@@ -361,9 +366,9 @@ class SyncEngine(private val context: Context) {
         }
 
         // Detect local deletions by comparing with previously synced notebook IDs
-        val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
+        // IMPORTANT: Use the pre-download snapshot, not current state
         val syncedNotebookIds = settings.syncSettings.syncedNotebookIds
-        val deletedLocally = syncedNotebookIds - currentNotebookIds
+        val deletedLocally = syncedNotebookIds - preDownloadNotebookIds
 
         if (deletedLocally.isNotEmpty()) {
             SLog.i(TAG, "Detected ${deletedLocally.size} local deletion(s)")
