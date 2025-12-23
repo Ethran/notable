@@ -100,6 +100,7 @@ class SyncEngine(private val context: Context) {
                     .map { it.trimEnd('/') }
                     .filter { it !in preDownloadNotebookIds }
                     .filter { it !in deletionsData.deletedNotebookIds }  // Skip deleted notebooks
+                    .filter { it !in settings.syncSettings.syncedNotebookIds }  // Skip previously synced notebooks (they're local deletions, not new)
                 SLog.i(TAG, "DEBUG: New notebook IDs after filtering: $newNotebookIds")
 
                 if (newNotebookIds.isNotEmpty()) {
@@ -495,7 +496,8 @@ class SyncEngine(private val context: Context) {
         // Create notebook in local database FIRST (pages have foreign key to notebook)
         val existingNotebook = appRepository.bookRepository.getById(notebookId)
         if (existingNotebook != null) {
-            appRepository.bookRepository.update(notebook)
+            // Preserve the remote timestamp when updating during sync
+            appRepository.bookRepository.updatePreservingTimestamp(notebook)
         } else {
             appRepository.bookRepository.createEmpty(notebook)
         }

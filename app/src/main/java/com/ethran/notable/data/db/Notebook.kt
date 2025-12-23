@@ -107,6 +107,14 @@ class BookRepository(context: Context) {
         db.update(updatedNotebook)
     }
 
+    /**
+     * Update notebook without modifying the timestamp.
+     * Used during sync when downloading from server to preserve remote timestamp.
+     */
+    fun updatePreservingTimestamp(notebook: Notebook) {
+        db.update(notebook)
+    }
+
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>> {
         return db.getAllInFolder(folderId)
     }
