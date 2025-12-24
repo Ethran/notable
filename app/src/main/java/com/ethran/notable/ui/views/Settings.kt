@@ -640,214 +640,66 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
         )
 
         // Enable/Disable Sync Toggle
-        SettingToggleRow(
-            label = "Enable WebDAV Sync",
-            value = syncSettings.syncEnabled,
-            onToggle = { isChecked ->
-                kv.setAppSettings(
-                    settings.copy(
-                        syncSettings = syncSettings.copy(syncEnabled = isChecked)
-                    )
-                )
-                // Enable/disable WorkManager sync
-                if (isChecked && syncSettings.autoSync) {
-                    SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
-                } else {
-                    SyncScheduler.disablePeriodicSync(context)
-                }
+        SyncEnableToggle(
+            syncSettings = syncSettings,
+            settings = settings,
+            kv = kv,
+            context = context
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Credential Fields
+        SyncCredentialFields(
+            serverUrl = serverUrl,
+            username = username,
+            password = password,
+            onServerUrlChange = {
+                serverUrl = it
+                kv.setAppSettings(settings.copy(syncSettings = syncSettings.copy(serverUrl = it)))
+            },
+            onUsernameChange = {
+                username = it
+                credentialManager.saveCredentials(it, password)
+            },
+            onPasswordChange = {
+                password = it
+                credentialManager.saveCredentials(username, it)
             }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Server URL Field
-        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text(
-                text = "Server URL",
-                style = MaterialTheme.typography.body2,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colors.onSurface,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            BasicTextField(
-                value = serverUrl,
-                onValueChange = {
-                    serverUrl = it
-                    kv.setAppSettings(
-                        settings.copy(
-                            syncSettings = syncSettings.copy(serverUrl = it)
-                        )
-                    )
-                },
-                textStyle = TextStyle(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colors.onSurface
-                ),
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(230, 230, 230, 255))
-                    .padding(12.dp),
-                decorationBox = { innerTextField ->
-                    Box {
-                        if (serverUrl.isEmpty()) {
-                            Text(
-                                "https://nextcloud.example.com/remote.php/dav/files/username/",
-                                style = TextStyle(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 14.sp,
-                                    color = Color.Gray
-                                )
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Username Field
-        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text(
-                text = "Username",
-                style = MaterialTheme.typography.body2,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colors.onSurface,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            BasicTextField(
-                value = username,
-                onValueChange = {
-                    username = it
-                    credentialManager.saveCredentials(it, password)
-                },
-                textStyle = TextStyle(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colors.onSurface
-                ),
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(230, 230, 230, 255))
-                    .padding(12.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Password Field
-        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text(
-                text = "Password",
-                style = MaterialTheme.typography.body2,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colors.onSurface,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            BasicTextField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    credentialManager.saveCredentials(username, it)
-                },
-                textStyle = TextStyle(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colors.onSurface
-                ),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(230, 230, 230, 255))
-                    .padding(12.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Test Connection Button
-        Button(
-            onClick = {
+        // Test Connection Button and Status
+        SyncConnectionTest(
+            serverUrl = serverUrl,
+            username = username,
+            password = password,
+            testingConnection = testingConnection,
+            connectionStatus = connectionStatus,
+            onTestConnection = {
                 testingConnection = true
                 connectionStatus = null
-                scope.launch(Dispatchers.IO) {  // Use IO dispatcher for network calls
-                    io.shipbook.shipbooksdk.Log.i("SyncSettings", "Testing connection with URL: $serverUrl, User: $username")
+                scope.launch(Dispatchers.IO) {
                     val result = WebDAVClient.testConnection(serverUrl, username, password)
-                    withContext(Dispatchers.Main) {  // Switch back to main for UI updates
+                    withContext(Dispatchers.Main) {
                         testingConnection = false
                         connectionStatus = if (result) "✓ Connected successfully" else "✗ Connection failed"
-                        io.shipbook.shipbooksdk.Log.i("SyncSettings", "Test result: $result")
                     }
                 }
-            },
-            enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
-            colors = ButtonDefaults.buttonColors(
-                backgroundColor = Color(80, 80, 80),
-                contentColor = Color.White,
-                disabledBackgroundColor = Color(200, 200, 200),
-                disabledContentColor = Color.Gray
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp)
-                .height(48.dp)
-        ) {
-            if (testingConnection) {
-                Text("Testing connection...")
-            } else {
-                Text("Test Connection", fontWeight = FontWeight.Bold)
             }
-        }
-
-        // Connection Status
-        connectionStatus?.let { status ->
-            Text(
-                text = status,
-                style = MaterialTheme.typography.body2,
-                color = if (status.startsWith("✓")) Color(0, 150, 0) else Color(200, 0, 0),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-            )
-        }
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
         SettingsDivider()
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Auto-sync Toggle
-        SettingToggleRow(
-            label = "Automatic sync every ${syncSettings.syncInterval} minutes",
-            value = syncSettings.autoSync,
-            onToggle = { isChecked ->
-                kv.setAppSettings(
-                    settings.copy(
-                        syncSettings = syncSettings.copy(autoSync = isChecked)
-                    )
-                )
-                // Enable/disable periodic sync
-                if (isChecked && syncSettings.syncEnabled) {
-                    SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
-                } else {
-                    SyncScheduler.disablePeriodicSync(context)
-                }
-            }
-        )
-
-        // Sync on Note Close Toggle
-        SettingToggleRow(
-            label = "Sync when closing notes",
-            value = syncSettings.syncOnNoteClose,
-            onToggle = { isChecked ->
-                kv.setAppSettings(
-                    settings.copy(
-                        syncSettings = syncSettings.copy(syncOnNoteClose = isChecked)
-                    )
-                )
-            }
+        // Sync Controls (auto-sync and sync on close)
+        SyncControlToggles(
+            syncSettings = syncSettings,
+            settings = settings,
+            kv = kv,
+            context = context
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -855,237 +707,469 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
         Spacer(modifier = Modifier.height(16.dp))
 
         // Manual Sync Button
-        Button(
-            onClick = {
-                syncInProgress = true
-                scope.launch(Dispatchers.IO) {
-                    val result = SyncEngine(context).syncAllNotebooks()
-
-                    withContext(Dispatchers.Main) {
-                        syncInProgress = false
-
-                        if (result is SyncResult.Success) {
-                            // Update last sync time
-                            // IMPORTANT: Read latest settings from GlobalAppSettings to avoid overwriting
-                            // syncedNotebookIds that were just updated by the sync
-                            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                            val latestSettings = GlobalAppSettings.current
-                            kv.setAppSettings(
-                                latestSettings.copy(
-                                    syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
-                                )
-                            )
-                            showHint("Sync completed successfully", scope)
-                        } else {
-                            showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
-                        }
-                    }
-                }
-            },
-            enabled = !syncInProgress && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
-            colors = ButtonDefaults.buttonColors(
-                backgroundColor = Color(0, 120, 200),
-                contentColor = Color.White,
-                disabledBackgroundColor = Color(200, 200, 200),
-                disabledContentColor = Color.Gray
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp)
-                .height(56.dp)
-        ) {
-            if (syncInProgress) {
-                Text("Syncing...", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            } else {
-                Text("Sync Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-        }
-
-        // Last Sync Time
-        syncSettings.lastSyncTime?.let { timestamp ->
-            Text(
-                text = "Last synced: $timestamp",
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-            )
-        }
+        ManualSyncButton(
+            syncInProgress = syncInProgress,
+            syncSettings = syncSettings,
+            serverUrl = serverUrl,
+            context = context,
+            kv = kv,
+            scope = scope,
+            onSyncStateChange = { syncInProgress = it }
+        )
 
         Spacer(modifier = Modifier.height(32.dp))
         SettingsDivider()
         Spacer(modifier = Modifier.height(16.dp))
 
-        // CAUTION: Replacement Operations
-        Text(
-            text = "CAUTION: Replacement Operations",
-            style = MaterialTheme.typography.h6,
-            fontWeight = FontWeight.Bold,
-            color = Color(200, 0, 0),
-            modifier = Modifier.padding(bottom = 8.dp)
+        // Danger Zone: Force Operations
+        ForceOperationsSection(
+            syncSettings = syncSettings,
+            serverUrl = serverUrl,
+            context = context,
+            scope = scope,
+            onSyncStateChange = { syncInProgress = it }
         )
-
-        Text(
-            text = "Use these only when setting up a new device or resetting sync. These operations will delete data!",
-            style = MaterialTheme.typography.body2,
-            color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
-            modifier = Modifier.padding(bottom = 16.dp, start = 4.dp, end = 4.dp)
-        )
-
-        // Force Upload Button
-        var showForceUploadConfirm by remember { mutableStateOf(false) }
-        Button(
-            onClick = { showForceUploadConfirm = true },
-            enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
-            colors = ButtonDefaults.buttonColors(
-                backgroundColor = Color(200, 100, 0),
-                contentColor = Color.White,
-                disabledBackgroundColor = Color(200, 200, 200),
-                disabledContentColor = Color.Gray
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp)
-                .height(48.dp)
-        ) {
-            Text("⚠ Replace Server with Local Data", fontWeight = FontWeight.Bold)
-        }
-
-        if (showForceUploadConfirm) {
-            ConfirmationDialog(
-                title = "Replace Server Data?",
-                message = "This will DELETE all data on the server and replace it with local data from this device. This cannot be undone!\n\nAre you sure?",
-                onConfirm = {
-                    showForceUploadConfirm = false
-                    syncInProgress = true
-                    scope.launch(Dispatchers.IO) {
-                        // TODO: Implement force upload
-                        val result = SyncEngine(context).forceUploadAll()
-                        withContext(Dispatchers.Main) {
-                            syncInProgress = false
-                            showHint(if (result is SyncResult.Success) "Server replaced with local data" else "Force upload failed", scope)
-                        }
-                    }
-                },
-                onDismiss = { showForceUploadConfirm = false }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Force Download Button
-        var showForceDownloadConfirm by remember { mutableStateOf(false) }
-        Button(
-            onClick = { showForceDownloadConfirm = true },
-            enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
-            colors = ButtonDefaults.buttonColors(
-                backgroundColor = Color(200, 0, 0),
-                contentColor = Color.White,
-                disabledBackgroundColor = Color(200, 200, 200),
-                disabledContentColor = Color.Gray
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp)
-                .height(48.dp)
-        ) {
-            Text("⚠ Replace Local with Server Data", fontWeight = FontWeight.Bold)
-        }
-
-        if (showForceDownloadConfirm) {
-            ConfirmationDialog(
-                title = "Replace Local Data?",
-                message = "This will DELETE all local notebooks and replace them with data from the server. This cannot be undone!\n\nAre you sure?",
-                onConfirm = {
-                    showForceDownloadConfirm = false
-                    syncInProgress = true
-                    scope.launch(Dispatchers.IO) {
-                        // TODO: Implement force download
-                        val result = SyncEngine(context).forceDownloadAll()
-                        withContext(Dispatchers.Main) {
-                            syncInProgress = false
-                            showHint(if (result is SyncResult.Success) "Local data replaced with server data" else "Force download failed", scope)
-                        }
-                    }
-                },
-                onDismiss = { showForceDownloadConfirm = false }
-            )
-        }
 
         Spacer(modifier = Modifier.height(32.dp))
         SettingsDivider()
         Spacer(modifier = Modifier.height(16.dp))
 
         // Sync Log Viewer
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Sync Log",
-                style = MaterialTheme.typography.h6,
-                fontWeight = FontWeight.Bold
+        SyncLogViewer(syncLogs = syncLogs)
+    }
+}
+
+@Composable
+fun SyncEnableToggle(
+    syncSettings: AppSettings.SyncSettings,
+    settings: AppSettings,
+    kv: KvProxy,
+    context: Context
+) {
+    SettingToggleRow(
+        label = "Enable WebDAV Sync",
+        value = syncSettings.syncEnabled,
+        onToggle = { isChecked ->
+            kv.setAppSettings(
+                settings.copy(syncSettings = syncSettings.copy(syncEnabled = isChecked))
             )
-            Button(
-                onClick = { SyncLogger.clear() },
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = Color.Gray,
-                    contentColor = Color.White
-                ),
-                modifier = Modifier.height(32.dp)
-            ) {
-                Text("Clear", fontSize = 12.sp)
+            // Enable/disable WorkManager sync
+            if (isChecked && syncSettings.autoSync) {
+                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
+            } else {
+                SyncScheduler.disablePeriodicSync(context)
             }
         }
+    )
+}
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Box(
+@Composable
+fun SyncCredentialFields(
+    serverUrl: String,
+    username: String,
+    password: String,
+    onServerUrlChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit
+) {
+    // Server URL Field
+    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+        Text(
+            text = "Server URL",
+            style = MaterialTheme.typography.body2,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        BasicTextField(
+            value = serverUrl,
+            onValueChange = onServerUrlChange,
+            textStyle = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 14.sp,
+                color = MaterialTheme.colors.onSurface
+            ),
+            singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(300.dp)
-                .background(Color(250, 250, 250))
-                .border(1.dp, Color.Gray)
-        ) {
-            val scrollState = rememberScrollState()
-
-            // Auto-scroll to bottom when new logs arrive
-            LaunchedEffect(syncLogs.size) {
-                scrollState.animateScrollTo(scrollState.maxValue)
-            }
-
-            if (syncLogs.isEmpty()) {
-                Text(
-                    text = "No sync activity yet",
-                    style = MaterialTheme.typography.body2,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(12.dp)
-                )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(scrollState)
-                        .padding(8.dp)
-                ) {
-                    // Show last 20 logs
-                    syncLogs.takeLast(20).forEach { log ->
-                        val logColor = when (log.level) {
-                            SyncLogger.LogLevel.INFO -> Color(0, 100, 0)
-                            SyncLogger.LogLevel.WARNING -> Color(200, 100, 0)
-                            SyncLogger.LogLevel.ERROR -> Color(200, 0, 0)
-                        }
-
+                .background(Color(230, 230, 230, 255))
+                .padding(12.dp),
+            decorationBox = { innerTextField ->
+                Box {
+                    if (serverUrl.isEmpty()) {
                         Text(
-                            text = "[${log.timestamp}] ${log.message}",
+                            "https://nextcloud.example.com/remote.php/dav/files/username/",
                             style = TextStyle(
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                color = logColor
-                            ),
-                            modifier = Modifier.padding(vertical = 1.dp)
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
                         )
                     }
+                    innerTextField()
+                }
+            }
+        )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Username Field
+    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+        Text(
+            text = "Username",
+            style = MaterialTheme.typography.body2,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        BasicTextField(
+            value = username,
+            onValueChange = onUsernameChange,
+            textStyle = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 14.sp,
+                color = MaterialTheme.colors.onSurface
+            ),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(230, 230, 230, 255))
+                .padding(12.dp)
+        )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Password Field
+    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+        Text(
+            text = "Password",
+            style = MaterialTheme.typography.body2,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        BasicTextField(
+            value = password,
+            onValueChange = onPasswordChange,
+            textStyle = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 14.sp,
+                color = MaterialTheme.colors.onSurface
+            ),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(230, 230, 230, 255))
+                .padding(12.dp)
+        )
+    }
+}
+
+@Composable
+fun SyncConnectionTest(
+    serverUrl: String,
+    username: String,
+    password: String,
+    testingConnection: Boolean,
+    connectionStatus: String?,
+    onTestConnection: () -> Unit
+) {
+    Button(
+        onClick = onTestConnection,
+        enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
+        colors = ButtonDefaults.buttonColors(
+            backgroundColor = Color(80, 80, 80),
+            contentColor = Color.White,
+            disabledBackgroundColor = Color(200, 200, 200),
+            disabledContentColor = Color.Gray
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .height(48.dp)
+    ) {
+        if (testingConnection) {
+            Text("Testing connection...")
+        } else {
+            Text("Test Connection", fontWeight = FontWeight.Bold)
+        }
+    }
+
+    connectionStatus?.let { status ->
+        Text(
+            text = status,
+            style = MaterialTheme.typography.body2,
+            color = if (status.startsWith("✓")) Color(0, 150, 0) else Color(200, 0, 0),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+fun SyncControlToggles(
+    syncSettings: AppSettings.SyncSettings,
+    settings: AppSettings,
+    kv: KvProxy,
+    context: Context
+) {
+    SettingToggleRow(
+        label = "Automatic sync every ${syncSettings.syncInterval} minutes",
+        value = syncSettings.autoSync,
+        onToggle = { isChecked ->
+            kv.setAppSettings(
+                settings.copy(syncSettings = syncSettings.copy(autoSync = isChecked))
+            )
+            if (isChecked && syncSettings.syncEnabled) {
+                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
+            } else {
+                SyncScheduler.disablePeriodicSync(context)
+            }
+        }
+    )
+
+    SettingToggleRow(
+        label = "Sync when closing notes",
+        value = syncSettings.syncOnNoteClose,
+        onToggle = { isChecked ->
+            kv.setAppSettings(
+                settings.copy(syncSettings = syncSettings.copy(syncOnNoteClose = isChecked))
+            )
+        }
+    )
+}
+
+@Composable
+fun ManualSyncButton(
+    syncInProgress: Boolean,
+    syncSettings: AppSettings.SyncSettings,
+    serverUrl: String,
+    context: Context,
+    kv: KvProxy,
+    scope: CoroutineScope,
+    onSyncStateChange: (Boolean) -> Unit
+) {
+    Button(
+        onClick = {
+            onSyncStateChange(true)
+            scope.launch(Dispatchers.IO) {
+                val result = SyncEngine(context).syncAllNotebooks()
+                withContext(Dispatchers.Main) {
+                    onSyncStateChange(false)
+                    if (result is SyncResult.Success) {
+                        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                        val latestSettings = GlobalAppSettings.current
+                        kv.setAppSettings(
+                            latestSettings.copy(
+                                syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
+                            )
+                        )
+                        showHint("Sync completed successfully", scope)
+                    } else {
+                        showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
+                    }
+                }
+            }
+        },
+        enabled = !syncInProgress && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+        colors = ButtonDefaults.buttonColors(
+            backgroundColor = Color(0, 120, 200),
+            contentColor = Color.White,
+            disabledBackgroundColor = Color(200, 200, 200),
+            disabledContentColor = Color.Gray
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .height(56.dp)
+    ) {
+        if (syncInProgress) {
+            Text("Syncing...", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        } else {
+            Text("Sync Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+    }
+
+    syncSettings.lastSyncTime?.let { timestamp ->
+        Text(
+            text = "Last synced: $timestamp",
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+fun ForceOperationsSection(
+    syncSettings: AppSettings.SyncSettings,
+    serverUrl: String,
+    context: Context,
+    scope: CoroutineScope,
+    onSyncStateChange: (Boolean) -> Unit
+) {
+    Text(
+        text = "CAUTION: Replacement Operations",
+        style = MaterialTheme.typography.h6,
+        fontWeight = FontWeight.Bold,
+        color = Color(200, 0, 0),
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+
+    Text(
+        text = "Use these only when setting up a new device or resetting sync. These operations will delete data!",
+        style = MaterialTheme.typography.body2,
+        color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+        modifier = Modifier.padding(bottom = 16.dp, start = 4.dp, end = 4.dp)
+    )
+
+    var showForceUploadConfirm by remember { mutableStateOf(false) }
+    Button(
+        onClick = { showForceUploadConfirm = true },
+        enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+        colors = ButtonDefaults.buttonColors(
+            backgroundColor = Color(200, 100, 0),
+            contentColor = Color.White,
+            disabledBackgroundColor = Color(200, 200, 200),
+            disabledContentColor = Color.Gray
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .height(48.dp)
+    ) {
+        Text("⚠ Replace Server with Local Data", fontWeight = FontWeight.Bold)
+    }
+
+    if (showForceUploadConfirm) {
+        ConfirmationDialog(
+            title = "Replace Server Data?",
+            message = "This will DELETE all data on the server and replace it with local data from this device. This cannot be undone!\n\nAre you sure?",
+            onConfirm = {
+                showForceUploadConfirm = false
+                onSyncStateChange(true)
+                scope.launch(Dispatchers.IO) {
+                    val result = SyncEngine(context).forceUploadAll()
+                    withContext(Dispatchers.Main) {
+                        onSyncStateChange(false)
+                        showHint(if (result is SyncResult.Success) "Server replaced with local data" else "Force upload failed", scope)
+                    }
+                }
+            },
+            onDismiss = { showForceUploadConfirm = false }
+        )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    var showForceDownloadConfirm by remember { mutableStateOf(false) }
+    Button(
+        onClick = { showForceDownloadConfirm = true },
+        enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+        colors = ButtonDefaults.buttonColors(
+            backgroundColor = Color(200, 0, 0),
+            contentColor = Color.White,
+            disabledBackgroundColor = Color(200, 200, 200),
+            disabledContentColor = Color.Gray
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .height(48.dp)
+    ) {
+        Text("⚠ Replace Local with Server Data", fontWeight = FontWeight.Bold)
+    }
+
+    if (showForceDownloadConfirm) {
+        ConfirmationDialog(
+            title = "Replace Local Data?",
+            message = "This will DELETE all local notebooks and replace them with data from the server. This cannot be undone!\n\nAre you sure?",
+            onConfirm = {
+                showForceDownloadConfirm = false
+                onSyncStateChange(true)
+                scope.launch(Dispatchers.IO) {
+                    val result = SyncEngine(context).forceDownloadAll()
+                    withContext(Dispatchers.Main) {
+                        onSyncStateChange(false)
+                        showHint(if (result is SyncResult.Success) "Local data replaced with server data" else "Force download failed", scope)
+                    }
+                }
+            },
+            onDismiss = { showForceDownloadConfirm = false }
+        )
+    }
+}
+
+@Composable
+fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Sync Log",
+            style = MaterialTheme.typography.h6,
+            fontWeight = FontWeight.Bold
+        )
+        Button(
+            onClick = { SyncLogger.clear() },
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color.Gray,
+                contentColor = Color.White
+            ),
+            modifier = Modifier.height(32.dp)
+        ) {
+            Text("Clear", fontSize = 12.sp)
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(300.dp)
+            .background(Color(250, 250, 250))
+            .border(1.dp, Color.Gray)
+    ) {
+        val scrollState = rememberScrollState()
+
+        LaunchedEffect(syncLogs.size) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+
+        if (syncLogs.isEmpty()) {
+            Text(
+                text = "No sync activity yet",
+                style = MaterialTheme.typography.body2,
+                color = Color.Gray,
+                modifier = Modifier.padding(12.dp)
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+                    .padding(8.dp)
+            ) {
+                syncLogs.takeLast(20).forEach { log ->
+                    val logColor = when (log.level) {
+                        SyncLogger.LogLevel.INFO -> Color(0, 100, 0)
+                        SyncLogger.LogLevel.WARNING -> Color(200, 100, 0)
+                        SyncLogger.LogLevel.ERROR -> Color(200, 0, 0)
+                    }
+                    Text(
+                        text = "[${log.timestamp}] ${log.message}",
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = logColor
+                        ),
+                        modifier = Modifier.padding(vertical = 1.dp)
+                    )
                 }
             }
         }

@@ -40,31 +40,12 @@ class SyncEngine(private val context: Context) {
         return@withContext try {
             SLog.i(TAG, "Starting full sync...")
 
-            // Get sync settings and credentials
-            val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+            // Initialize sync client and settings
+            val (settings, webdavClient) = initializeSyncClient()
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
 
-            if (!settings.syncSettings.syncEnabled) {
-                SLog.i(TAG, "Sync disabled in settings")
-                return@withContext SyncResult.Success
-            }
-
-            val credentials = credentialManager.getCredentials()
-                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
-
-            val webdavClient = WebDAVClient(
-                settings.syncSettings.serverUrl,
-                credentials.first,
-                credentials.second
-            )
-
-            // Ensure base directory exists
-            if (!webdavClient.exists("/Notable")) {
-                webdavClient.createCollection("/Notable")
-            }
-            if (!webdavClient.exists("/Notable/notebooks")) {
-                webdavClient.createCollection("/Notable/notebooks")
-            }
+            // Ensure base directory structure exists on server
+            ensureServerDirectories(webdavClient)
 
             // 1. Sync folders first (they're referenced by notebooks)
             syncFolders(webdavClient)
@@ -72,68 +53,20 @@ class SyncEngine(private val context: Context) {
             // 2. Apply remote deletions (delete local notebooks that were deleted on other devices)
             val deletionsData = applyRemoteDeletions(webdavClient)
 
-            // 3. Snapshot local notebook IDs BEFORE downloading to detect deletions correctly
-            // IMPORTANT: We must capture this BEFORE downloading new notebooks, otherwise we can't
-            // detect which notebooks were deleted locally vs. newly downloaded
-            val localNotebooks = appRepository.bookRepository.getAll()
-            val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
-            SLog.i(TAG, "Found ${localNotebooks.size} local notebooks")
+            // 3. Sync existing local notebooks and capture pre-download snapshot
+            val preDownloadNotebookIds = syncExistingNotebooks()
 
-            for (notebook in localNotebooks) {
-                try {
-                    syncNotebook(notebook.id)
-                } catch (e: Exception) {
-                    SLog.e(TAG, "Failed to sync ${notebook.title}: ${e.message}")
-                    // Continue with other notebooks even if one fails
-                }
-            }
-
-            // 4. Discover and download notebooks from server that don't exist locally
-            SLog.i(TAG, "Checking server for new notebooks...")
-            if (webdavClient.exists("/Notable/notebooks")) {
-                val serverNotebookDirs = webdavClient.listCollection("/Notable/notebooks")
-                SLog.i(TAG, "DEBUG: Server returned ${serverNotebookDirs.size} items: $serverNotebookDirs")
-
-                SLog.i(TAG, "DEBUG: Local notebook IDs (before download): $preDownloadNotebookIds")
-
-                val newNotebookIds = serverNotebookDirs
-                    .map { it.trimEnd('/') }
-                    .filter { it !in preDownloadNotebookIds }
-                    .filter { it !in deletionsData.deletedNotebookIds }  // Skip deleted notebooks
-                    .filter { it !in settings.syncSettings.syncedNotebookIds }  // Skip previously synced notebooks (they're local deletions, not new)
-                SLog.i(TAG, "DEBUG: New notebook IDs after filtering: $newNotebookIds")
-
-                if (newNotebookIds.isNotEmpty()) {
-                    SLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
-                    for (notebookId in newNotebookIds) {
-                        try {
-                            SLog.i(TAG, "↓ Downloading new notebook from server: $notebookId")
-                            downloadNotebook(notebookId, webdavClient)
-                        } catch (e: Exception) {
-                            SLog.e(TAG, "Failed to download $notebookId: ${e.message}")
-                        }
-                    }
-                } else {
-                    SLog.i(TAG, "No new notebooks on server")
-                }
-            }
+            // 4. Discover and download new notebooks from server
+            downloadNewNotebooks(webdavClient, deletionsData, settings, preDownloadNotebookIds)
 
             // 5. Detect local deletions and upload to server
-            // IMPORTANT: Use the pre-download snapshot to detect deletions, not current state
             detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
 
             // 6. Sync Quick Pages (pages with notebookId = null)
             // TODO: Implement Quick Pages sync
 
             // 7. Update synced notebook IDs for next sync
-            val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
-            kvProxy.setAppSettings(
-                settings.copy(
-                    syncSettings = settings.syncSettings.copy(
-                        syncedNotebookIds = currentNotebookIds
-                    )
-                )
-            )
+            updateSyncedNotebookIds(settings)
 
             SLog.i(TAG, "✓ Full sync completed")
             SyncResult.Success
@@ -826,6 +759,121 @@ class SyncEngine(private val context: Context) {
             "pdf" -> "application/pdf"
             else -> "application/octet-stream"
         }
+    }
+
+    /**
+     * Initialize sync client by getting settings and credentials.
+     * @return Pair of (AppSettings, WebDAVClient) or null if initialization fails
+     */
+    private suspend fun initializeSyncClient(): Pair<AppSettings, WebDAVClient>? {
+        val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+            ?: return null
+
+        if (!settings.syncSettings.syncEnabled) {
+            SLog.i(TAG, "Sync disabled in settings")
+            return null
+        }
+
+        val credentials = credentialManager.getCredentials()
+            ?: return null
+
+        val webdavClient = WebDAVClient(
+            settings.syncSettings.serverUrl,
+            credentials.first,
+            credentials.second
+        )
+
+        return Pair(settings, webdavClient)
+    }
+
+    /**
+     * Ensure required server directory structure exists.
+     */
+    private suspend fun ensureServerDirectories(webdavClient: WebDAVClient) {
+        if (!webdavClient.exists("/Notable")) {
+            webdavClient.createCollection("/Notable")
+        }
+        if (!webdavClient.exists("/Notable/notebooks")) {
+            webdavClient.createCollection("/Notable/notebooks")
+        }
+    }
+
+    /**
+     * Sync all existing local notebooks.
+     * @return Set of notebook IDs that existed before any new downloads
+     */
+    private suspend fun syncExistingNotebooks(): Set<String> {
+        // IMPORTANT: Snapshot local notebook IDs BEFORE downloading to detect deletions correctly
+        val localNotebooks = appRepository.bookRepository.getAll()
+        val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
+        SLog.i(TAG, "Found ${localNotebooks.size} local notebooks")
+
+        for (notebook in localNotebooks) {
+            try {
+                syncNotebook(notebook.id)
+            } catch (e: Exception) {
+                SLog.e(TAG, "Failed to sync ${notebook.title}: ${e.message}")
+                // Continue with other notebooks even if one fails
+            }
+        }
+
+        return preDownloadNotebookIds
+    }
+
+    /**
+     * Discover and download new notebooks from server that don't exist locally.
+     */
+    private suspend fun downloadNewNotebooks(
+        webdavClient: WebDAVClient,
+        deletionsData: DeletionsData,
+        settings: AppSettings,
+        preDownloadNotebookIds: Set<String>
+    ) {
+        SLog.i(TAG, "Checking server for new notebooks...")
+
+        if (!webdavClient.exists("/Notable/notebooks")) {
+            return
+        }
+
+        val serverNotebookDirs = webdavClient.listCollection("/Notable/notebooks")
+        SLog.i(TAG, "DEBUG: Server returned ${serverNotebookDirs.size} items: $serverNotebookDirs")
+        SLog.i(TAG, "DEBUG: Local notebook IDs (before download): $preDownloadNotebookIds")
+
+        val newNotebookIds = serverNotebookDirs
+            .map { it.trimEnd('/') }
+            .filter { it !in preDownloadNotebookIds }
+            .filter { it !in deletionsData.deletedNotebookIds }  // Skip deleted notebooks
+            .filter { it !in settings.syncSettings.syncedNotebookIds }  // Skip previously synced notebooks (they're local deletions, not new)
+
+        SLog.i(TAG, "DEBUG: New notebook IDs after filtering: $newNotebookIds")
+
+        if (newNotebookIds.isNotEmpty()) {
+            SLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
+            for (notebookId in newNotebookIds) {
+                try {
+                    SLog.i(TAG, "↓ Downloading new notebook from server: $notebookId")
+                    downloadNotebook(notebookId, webdavClient)
+                } catch (e: Exception) {
+                    SLog.e(TAG, "Failed to download $notebookId: ${e.message}")
+                }
+            }
+        } else {
+            SLog.i(TAG, "No new notebooks on server")
+        }
+    }
+
+    /**
+     * Update the list of synced notebook IDs in settings.
+     */
+    private suspend fun updateSyncedNotebookIds(settings: AppSettings) {
+        val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
+        kvProxy.setAppSettings(
+            settings.copy(
+                syncSettings = settings.syncSettings.copy(
+                    syncedNotebookIds = currentNotebookIds
+                )
+            )
+        )
     }
 
     companion object {
