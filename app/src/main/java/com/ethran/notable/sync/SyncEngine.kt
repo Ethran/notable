@@ -233,6 +233,85 @@ class SyncEngine(private val context: Context) {
     }
 
     /**
+     * Upload a notebook deletion to the server.
+     * More efficient than full sync when you just deleted one notebook.
+     * @param notebookId ID of the notebook that was deleted locally
+     * @return SyncResult indicating success or failure
+     */
+    suspend fun uploadDeletion(notebookId: String): SyncResult = withContext(Dispatchers.IO) {
+        return@withContext try {
+            SLog.i(TAG, "Uploading deletion for notebook: $notebookId")
+
+            // Get sync settings and credentials
+            val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+                ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+
+            if (!settings.syncSettings.syncEnabled) {
+                return@withContext SyncResult.Success
+            }
+
+            val credentials = credentialManager.getCredentials()
+                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+
+            val webdavClient = WebDAVClient(
+                settings.syncSettings.serverUrl,
+                credentials.first,
+                credentials.second
+            )
+
+            // Read current deletions.json from server
+            val remotePath = "/Notable/deletions.json"
+            val deletionsSerializer = DeletionsSerializer
+            var deletionsData = if (webdavClient.exists(remotePath)) {
+                try {
+                    val deletionsJson = webdavClient.getFile(remotePath).decodeToString()
+                    deletionsSerializer.deserialize(deletionsJson)
+                } catch (e: Exception) {
+                    SLog.w(TAG, "Failed to parse deletions.json: ${e.message}")
+                    DeletionsData()
+                }
+            } else {
+                DeletionsData()
+            }
+
+            // Add this notebook to deletions
+            deletionsData = deletionsData.copy(
+                deletedNotebookIds = deletionsData.deletedNotebookIds + notebookId
+            )
+
+            // Delete notebook directory from server
+            val notebookPath = "/Notable/notebooks/$notebookId"
+            if (webdavClient.exists(notebookPath)) {
+                SLog.i(TAG, "✗ Deleting from server: $notebookId")
+                webdavClient.delete(notebookPath)
+            }
+
+            // Upload updated deletions.json
+            val deletionsJson = deletionsSerializer.serialize(deletionsData)
+            webdavClient.putFile(remotePath, deletionsJson.toByteArray(), "application/json")
+            SLog.i(TAG, "Updated deletions.json on server")
+
+            // Update syncedNotebookIds (remove the deleted notebook)
+            val updatedSyncedIds = settings.syncSettings.syncedNotebookIds - notebookId
+            kvProxy.setAppSettings(
+                settings.copy(
+                    syncSettings = settings.syncSettings.copy(
+                        syncedNotebookIds = updatedSyncedIds
+                    )
+                )
+            )
+
+            SLog.i(TAG, "✓ Deletion uploaded successfully")
+            SyncResult.Success
+
+        } catch (e: Exception) {
+            SLog.e(TAG, "Failed to upload deletion: ${e.message}")
+            e.printStackTrace()
+            SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+        }
+    }
+
+    /**
      * Sync folder hierarchy with the WebDAV server.
      */
     private suspend fun syncFolders(webdavClient: WebDAVClient) {

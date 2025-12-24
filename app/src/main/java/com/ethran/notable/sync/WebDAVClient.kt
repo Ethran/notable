@@ -6,9 +6,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.StringReader
 import java.net.HttpURLConnection
 import java.util.concurrent.TimeUnit
 
@@ -248,12 +251,8 @@ class WebDAVClient(
 
             val responseBody = response.body?.string() ?: return null
 
-            // Simple XML parsing to extract getlastmodified value
-            // For MVP, we use a simple regex. For production, consider using a proper XML parser.
-            // Use case-insensitive matching since some servers use <d:> and others use <D:>
-            val lastModifiedRegex = """<[dD]:getlastmodified>([^<]+)</[dD]:getlastmodified>""".toRegex()
-            val match = lastModifiedRegex.find(responseBody)
-            return match?.groupValues?.get(1)
+            // Parse XML response using XmlPullParser to properly handle namespaces and CDATA
+            return parseLastModifiedFromXml(responseBody)
         }
     }
 
@@ -294,13 +293,8 @@ class WebDAVClient(
             io.shipbook.shipbooksdk.Log.i("WebDAVClient", "PROPFIND response for $path (first 1500 chars):")
             io.shipbook.shipbooksdk.Log.i("WebDAVClient", responseBody.take(1500))
 
-            // Simple XML parsing to extract href values
-            // For MVP, we use regex. For production, consider using a proper XML parser.
-            // Use case-insensitive matching since some servers use <d:href> and others use <D:href>
-            val hrefRegex = """<[dD]:href>([^<]+)</[dD]:href>""".toRegex()
-            val matches = hrefRegex.findAll(responseBody)
-
-            val allHrefs = matches.map { it.groupValues[1] }.toList()
+            // Parse XML response using XmlPullParser to properly handle namespaces and CDATA
+            val allHrefs = parseHrefsFromXml(responseBody)
             io.shipbook.shipbooksdk.Log.i("WebDAVClient", "Found ${allHrefs.size} hrefs: $allHrefs")
 
             val filtered = allHrefs.filter { it != path && !it.endsWith("/$path") }
@@ -349,6 +343,75 @@ class WebDAVClient(
         val normalizedServer = serverUrl.trimEnd('/')
         val normalizedPath = if (path.startsWith('/')) path else "/$path"
         return normalizedServer + normalizedPath
+    }
+
+    /**
+     * Parse last modified timestamp from WebDAV XML response.
+     * Properly handles namespaces, CDATA, and whitespace.
+     * @param xml XML response from PROPFIND
+     * @return Last modified timestamp, or null if not found
+     */
+    private fun parseLastModifiedFromXml(xml: String): String? {
+        return try {
+            val factory = XmlPullParserFactory.newInstance()
+            factory.isNamespaceAware = true
+            val parser = factory.newPullParser()
+            parser.setInput(StringReader(xml))
+
+            var eventType = parser.eventType
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG) {
+                    // Check for getlastmodified tag (case-insensitive, namespace-aware)
+                    val localName = parser.name.lowercase()
+                    if (localName == "getlastmodified") {
+                        // Get text content, handling CDATA properly
+                        if (parser.next() == XmlPullParser.TEXT) {
+                            return parser.text.trim()
+                        }
+                    }
+                }
+                eventType = parser.next()
+            }
+            null
+        } catch (e: Exception) {
+            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Failed to parse XML for last modified: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Parse href values from WebDAV XML response.
+     * Properly handles namespaces, CDATA, and whitespace.
+     * @param xml XML response from PROPFIND
+     * @return List of href values
+     */
+    private fun parseHrefsFromXml(xml: String): List<String> {
+        return try {
+            val factory = XmlPullParserFactory.newInstance()
+            factory.isNamespaceAware = true
+            val parser = factory.newPullParser()
+            parser.setInput(StringReader(xml))
+
+            val hrefs = mutableListOf<String>()
+            var eventType = parser.eventType
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG) {
+                    // Check for href tag (case-insensitive, namespace-aware)
+                    val localName = parser.name.lowercase()
+                    if (localName == "href") {
+                        // Get text content, handling CDATA properly
+                        if (parser.next() == XmlPullParser.TEXT) {
+                            hrefs.add(parser.text.trim())
+                        }
+                    }
+                }
+                eventType = parser.next()
+            }
+            hrefs
+        } catch (e: Exception) {
+            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Failed to parse XML for hrefs: ${e.message}")
+            emptyList()
+        }
     }
 
     companion object {
