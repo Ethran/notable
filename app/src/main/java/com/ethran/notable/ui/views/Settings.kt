@@ -66,6 +66,7 @@ import com.ethran.notable.BuildConfig
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.SyncSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.ui.SelectMenu
 import com.ethran.notable.sync.CredentialManager
@@ -73,6 +74,7 @@ import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.sync.SyncResult
 import com.ethran.notable.sync.SyncScheduler
+import com.ethran.notable.sync.SyncState
 import com.ethran.notable.sync.WebDAVClient
 import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.showHint
@@ -741,7 +743,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
 
 @Composable
 fun SyncEnableToggle(
-    syncSettings: AppSettings.SyncSettings,
+    syncSettings: SyncSettings,
     settings: AppSettings,
     kv: KvProxy,
     context: Context
@@ -910,7 +912,7 @@ fun SyncConnectionTest(
 
 @Composable
 fun SyncControlToggles(
-    syncSettings: AppSettings.SyncSettings,
+    syncSettings: SyncSettings,
     settings: AppSettings,
     kv: KvProxy,
     context: Context
@@ -944,70 +946,118 @@ fun SyncControlToggles(
 @Composable
 fun ManualSyncButton(
     syncInProgress: Boolean,
-    syncSettings: AppSettings.SyncSettings,
+    syncSettings: SyncSettings,
     serverUrl: String,
     context: Context,
     kv: KvProxy,
-    scope: CoroutineScope,
+    scope: kotlinx.coroutines.CoroutineScope,
     onSyncStateChange: (Boolean) -> Unit
 ) {
-    Button(
-        onClick = {
-            onSyncStateChange(true)
-            scope.launch(Dispatchers.IO) {
-                val result = SyncEngine(context).syncAllNotebooks()
-                withContext(Dispatchers.Main) {
-                    onSyncStateChange(false)
-                    if (result is SyncResult.Success) {
-                        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                        val latestSettings = GlobalAppSettings.current
-                        kv.setAppSettings(
-                            latestSettings.copy(
-                                syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
+    // Observe sync state from SyncEngine
+    val syncState by SyncEngine.syncState.collectAsState()
+
+    Column {
+        Button(
+            onClick = {
+                onSyncStateChange(true)
+                scope.launch(Dispatchers.IO) {
+                    val result = SyncEngine(context).syncAllNotebooks()
+                    withContext(Dispatchers.Main) {
+                        onSyncStateChange(false)
+                        if (result is SyncResult.Success) {
+                            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                            val latestSettings = GlobalAppSettings.current
+                            kv.setAppSettings(
+                                latestSettings.copy(
+                                    syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
+                                )
                             )
-                        )
-                        showHint("Sync completed successfully", scope)
-                    } else {
-                        showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
+                            showHint("Sync completed successfully", scope)
+                        } else {
+                            showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
+                        }
                     }
                 }
+            },
+            enabled = syncState is SyncState.Idle && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = when (syncState) {
+                    is SyncState.Success -> Color(0, 150, 0)
+                    is SyncState.Error -> Color(200, 0, 0)
+                    else -> Color(0, 120, 200)
+                },
+                contentColor = Color.White,
+                disabledBackgroundColor = Color(200, 200, 200),
+                disabledContentColor = Color.Gray
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(56.dp)
+        ) {
+            when (val state = syncState) {
+                is SyncState.Idle -> Text("Sync Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                is SyncState.Syncing -> Text(
+                    "${state.details} (${(state.progress * 100).toInt()}%)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                is SyncState.Success -> Text("✓ Synced", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                is SyncState.Error -> Text("✗ Failed", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
-        },
-        enabled = !syncInProgress && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
-        colors = ButtonDefaults.buttonColors(
-            backgroundColor = Color(0, 120, 200),
-            contentColor = Color.White,
-            disabledBackgroundColor = Color(200, 200, 200),
-            disabledContentColor = Color.Gray
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-            .height(56.dp)
-    ) {
-        if (syncInProgress) {
-            Text("Syncing...", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        } else {
-            Text("Sync Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
-    }
 
-    syncSettings.lastSyncTime?.let { timestamp ->
-        Text(
-            text = "Last synced: $timestamp",
-            style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-        )
+        // Progress indicator
+        if (syncState is SyncState.Syncing) {
+            androidx.compose.material.LinearProgressIndicator(
+                progress = (syncState as SyncState.Syncing).progress,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 4.dp, top = 4.dp),
+                color = Color(0, 120, 200)
+            )
+        }
+
+        // Success summary
+        if (syncState is SyncState.Success) {
+            val summary = (syncState as SyncState.Success).summary
+            Text(
+                text = "Synced: ${summary.notebooksSynced}, Downloaded: ${summary.notebooksDownloaded}, Deleted: ${summary.notebooksDeleted} (${summary.duration}ms)",
+                style = MaterialTheme.typography.caption,
+                color = Color(0, 150, 0),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+            )
+        }
+
+        // Error details
+        if (syncState is SyncState.Error) {
+            val error = syncState as SyncState.Error
+            Text(
+                text = "Failed at ${error.step}: ${error.error}${if (error.canRetry) " (can retry)" else ""}",
+                style = MaterialTheme.typography.caption,
+                color = Color(200, 0, 0),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+            )
+        }
+
+        // Last sync time
+        syncSettings.lastSyncTime?.let { timestamp ->
+            Text(
+                text = "Last synced: $timestamp",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+            )
+        }
     }
 }
 
 @Composable
 fun ForceOperationsSection(
-    syncSettings: AppSettings.SyncSettings,
+    syncSettings: SyncSettings,
     serverUrl: String,
     context: Context,
-    scope: CoroutineScope,
+    scope: kotlinx.coroutines.CoroutineScope,
     onSyncStateChange: (Boolean) -> Unit
 ) {
     Text(

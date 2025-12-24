@@ -12,6 +12,11 @@ import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.ensureImagesFolder
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -37,8 +42,24 @@ class SyncEngine(private val context: Context) {
      * @return SyncResult indicating success or failure
      */
     suspend fun syncAllNotebooks(): SyncResult = withContext(Dispatchers.IO) {
+        // Try to acquire mutex - fail fast if already syncing
+        if (!syncMutex.tryLock()) {
+            SLog.w(TAG, "Sync already in progress, skipping")
+            return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)
+        }
+
+        val startTime = System.currentTimeMillis()
+        var notebooksSynced = 0
+        var notebooksDownloaded = 0
+        var notebooksDeleted = 0
+
         return@withContext try {
             SLog.i(TAG, "Starting full sync...")
+            updateState(SyncState.Syncing(
+                currentStep = SyncStep.INITIALIZING,
+                progress = 0.0f,
+                details = "Initializing sync..."
+            ))
 
             // Initialize sync client and settings
             val (settings, webdavClient) = initializeSyncClient()
@@ -48,35 +69,98 @@ class SyncEngine(private val context: Context) {
             ensureServerDirectories(webdavClient)
 
             // 1. Sync folders first (they're referenced by notebooks)
+            updateState(SyncState.Syncing(
+                currentStep = SyncStep.SYNCING_FOLDERS,
+                progress = 0.1f,
+                details = "Syncing folders..."
+            ))
             syncFolders(webdavClient)
 
             // 2. Apply remote deletions (delete local notebooks that were deleted on other devices)
+            updateState(SyncState.Syncing(
+                currentStep = SyncStep.APPLYING_DELETIONS,
+                progress = 0.2f,
+                details = "Applying remote deletions..."
+            ))
             val deletionsData = applyRemoteDeletions(webdavClient)
 
             // 3. Sync existing local notebooks and capture pre-download snapshot
+            updateState(SyncState.Syncing(
+                currentStep = SyncStep.SYNCING_NOTEBOOKS,
+                progress = 0.3f,
+                details = "Syncing local notebooks..."
+            ))
             val preDownloadNotebookIds = syncExistingNotebooks()
+            notebooksSynced = preDownloadNotebookIds.size
 
             // 4. Discover and download new notebooks from server
-            downloadNewNotebooks(webdavClient, deletionsData, settings, preDownloadNotebookIds)
+            updateState(SyncState.Syncing(
+                currentStep = SyncStep.DOWNLOADING_NEW,
+                progress = 0.6f,
+                details = "Downloading new notebooks..."
+            ))
+            val newCount = downloadNewNotebooks(webdavClient, deletionsData, settings, preDownloadNotebookIds)
+            notebooksDownloaded = newCount
 
             // 5. Detect local deletions and upload to server
-            detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
+            updateState(SyncState.Syncing(
+                currentStep = SyncStep.UPLOADING_DELETIONS,
+                progress = 0.8f,
+                details = "Uploading deletions..."
+            ))
+            val deletedCount = detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
+            notebooksDeleted = deletedCount
 
             // 6. Sync Quick Pages (pages with notebookId = null)
             // TODO: Implement Quick Pages sync
 
             // 7. Update synced notebook IDs for next sync
+            updateState(SyncState.Syncing(
+                currentStep = SyncStep.FINALIZING,
+                progress = 0.9f,
+                details = "Finalizing..."
+            ))
             updateSyncedNotebookIds(settings)
 
-            SLog.i(TAG, "✓ Full sync completed")
+            val duration = System.currentTimeMillis() - startTime
+            val summary = SyncSummary(
+                notebooksSynced = notebooksSynced,
+                notebooksDownloaded = notebooksDownloaded,
+                notebooksDeleted = notebooksDeleted,
+                duration = duration
+            )
+
+            SLog.i(TAG, "✓ Full sync completed in ${duration}ms")
+            updateState(SyncState.Success(summary))
+
+            // Auto-reset to Idle after a delay
+            delay(3000)
+            if (syncState.value is SyncState.Success) {
+                updateState(SyncState.Idle)
+            }
+
             SyncResult.Success
         } catch (e: IOException) {
             SLog.e(TAG, "Network error during sync: ${e.message}")
+            val currentStep = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
+            updateState(SyncState.Error(
+                error = SyncError.NETWORK_ERROR,
+                step = currentStep,
+                canRetry = true
+            ))
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
             SLog.e(TAG, "Unexpected error during sync: ${e.message}")
             e.printStackTrace()
+            val currentStep = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
+            updateState(SyncState.Error(
+                error = SyncError.UNKNOWN_ERROR,
+                step = currentStep,
+                canRetry = false
+            ))
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+        } finally {
+            syncMutex.unlock()
         }
     }
 
@@ -354,12 +438,13 @@ class SyncEngine(private val context: Context) {
      * @param preDownloadNotebookIds Snapshot of local notebook IDs BEFORE downloading new notebooks.
      *        This is critical - if we use current state, we can't tell which notebooks were deleted
      *        locally vs. just downloaded from server.
+     * @return Number of notebooks deleted
      */
     private suspend fun detectAndUploadLocalDeletions(
         webdavClient: WebDAVClient,
         settings: AppSettings,
         preDownloadNotebookIds: Set<String>
-    ) {
+    ): Int {
         SLog.i(TAG, "Detecting local deletions...")
 
         val remotePath = "/Notable/deletions.json"
@@ -411,6 +496,8 @@ class SyncEngine(private val context: Context) {
         } else {
             SLog.i(TAG, "No local deletions detected")
         }
+
+        return deletedLocally.size
     }
 
     /**
@@ -822,17 +909,18 @@ class SyncEngine(private val context: Context) {
 
     /**
      * Discover and download new notebooks from server that don't exist locally.
+     * @return Number of notebooks downloaded
      */
     private suspend fun downloadNewNotebooks(
         webdavClient: WebDAVClient,
         deletionsData: DeletionsData,
         settings: AppSettings,
         preDownloadNotebookIds: Set<String>
-    ) {
+    ): Int {
         SLog.i(TAG, "Checking server for new notebooks...")
 
         if (!webdavClient.exists("/Notable/notebooks")) {
-            return
+            return 0
         }
 
         val serverNotebookDirs = webdavClient.listCollection("/Notable/notebooks")
@@ -860,6 +948,8 @@ class SyncEngine(private val context: Context) {
         } else {
             SLog.i(TAG, "No new notebooks on server")
         }
+
+        return newNotebookIds.size
     }
 
     /**
@@ -878,6 +968,25 @@ class SyncEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "SyncEngine"
+
+        // Shared state across all SyncEngine instances
+        private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
+        val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
+
+        // Mutex to prevent concurrent syncs
+        private val syncMutex = Mutex()
+
+        /**
+         * Update the sync state (internal use only).
+         */
+        internal fun updateState(state: SyncState) {
+            _syncState.value = state
+        }
+
+        /**
+         * Check if sync mutex is locked.
+         */
+        fun isSyncInProgress(): Boolean = syncMutex.isLocked
     }
 }
 
@@ -898,5 +1007,71 @@ enum class SyncError {
     CONFIG_ERROR,
     SERVER_ERROR,
     CONFLICT_ERROR,
+    SYNC_IN_PROGRESS,
     UNKNOWN_ERROR
 }
+
+/**
+ * Represents the current state of a sync operation.
+ */
+sealed class SyncState {
+    /**
+     * No sync is currently running.
+     */
+    object Idle : SyncState()
+
+    /**
+     * Sync is currently in progress.
+     * @param currentStep Which step of the sync process we're in
+     * @param progress Overall progress from 0.0 to 1.0
+     * @param details Human-readable description of current activity
+     */
+    data class Syncing(
+        val currentStep: SyncStep,
+        val progress: Float,
+        val details: String
+    ) : SyncState()
+
+    /**
+     * Sync completed successfully.
+     * @param summary Statistics about what was synced
+     */
+    data class Success(
+        val summary: SyncSummary
+    ) : SyncState()
+
+    /**
+     * Sync failed with an error.
+     * @param error The type of error that occurred
+     * @param step Which step failed
+     * @param canRetry Whether this error is potentially recoverable
+     */
+    data class Error(
+        val error: SyncError,
+        val step: SyncStep,
+        val canRetry: Boolean
+    ) : SyncState()
+}
+
+/**
+ * Steps in the sync process, used for progress tracking.
+ */
+enum class SyncStep {
+    INITIALIZING,
+    SYNCING_FOLDERS,
+    APPLYING_DELETIONS,
+    SYNCING_NOTEBOOKS,
+    DOWNLOADING_NEW,
+    UPLOADING_DELETIONS,
+    FINALIZING
+}
+
+/**
+ * Summary of a completed sync operation.
+ */
+data class SyncSummary(
+    val notebooksSynced: Int,
+    val notebooksDownloaded: Int,
+    val notebooksDeleted: Int,
+    val duration: Long
+)

@@ -42,11 +42,28 @@ class SyncWorker(
                     Result.success()
                 }
                 is SyncResult.Failure -> {
-                    Log.e(TAG, "Sync failed: ${result.error}")
-                    if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
-                        Result.retry()
-                    } else {
-                        Result.failure()
+                    when (result.error) {
+                        SyncError.SYNC_IN_PROGRESS -> {
+                            Log.i(TAG, "Sync already in progress, skipping this run")
+                            // Don't retry - another sync is already running
+                            Result.success()
+                        }
+                        SyncError.NETWORK_ERROR -> {
+                            Log.e(TAG, "Network error during sync")
+                            if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
+                                Result.retry()
+                            } else {
+                                Result.failure()
+                            }
+                        }
+                        else -> {
+                            Log.e(TAG, "Sync failed: ${result.error}")
+                            if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
+                                Result.retry()
+                            } else {
+                                Result.failure()
+                            }
+                        }
                     }
                 }
             }
