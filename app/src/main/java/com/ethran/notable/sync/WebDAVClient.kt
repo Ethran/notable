@@ -50,8 +50,7 @@ class WebDAVClient(
                 response.isSuccessful
             }
         } catch (e: Exception) {
-            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Connection test failed: ${e.message}")
-            e.printStackTrace()
+            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Connection test failed: ${e.message}", e)
             false
         }
     }

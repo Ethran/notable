@@ -150,8 +150,7 @@ class SyncEngine(private val context: Context) {
             ))
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
-            SLog.e(TAG, "Unexpected error during sync: ${e.message}")
-            e.printStackTrace()
+            SLog.e(TAG, "Unexpected error during sync: ${e.message}", e)
             val currentStep = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
             updateState(SyncState.Error(
                 error = SyncError.UNKNOWN_ERROR,
@@ -243,8 +242,7 @@ class SyncEngine(private val context: Context) {
             Log.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
-            Log.e(TAG, "Error syncing notebook $notebookId: ${e.message}")
-            e.printStackTrace()
+            Log.e(TAG, "Error syncing notebook $notebookId: ${e.message}", e)
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -322,8 +320,7 @@ class SyncEngine(private val context: Context) {
             SyncResult.Success
 
         } catch (e: Exception) {
-            SLog.e(TAG, "Failed to upload deletion: ${e.message}")
-            e.printStackTrace()
+            SLog.e(TAG, "Failed to upload deletion: ${e.message}", e)
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -751,8 +748,7 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "✓ FORCE UPLOAD complete: ${notebooks.size} notebooks")
             SyncResult.Success
         } catch (e: Exception) {
-            SLog.e(TAG, "Force upload failed: ${e.message}")
-            e.printStackTrace()
+            SLog.e(TAG, "Force upload failed: ${e.message}", e)
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -812,8 +808,7 @@ class SyncEngine(private val context: Context) {
                         SLog.i(TAG, "Downloading notebook: $notebookId")
                         downloadNotebook(notebookId, webdavClient)
                     } catch (e: Exception) {
-                        SLog.e(TAG, "Failed to download $notebookDir: ${e.message}")
-                        e.printStackTrace()
+                        SLog.e(TAG, "Failed to download $notebookDir: ${e.message}", e)
                     }
                 }
             } else {
@@ -823,8 +818,7 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "✓ FORCE DOWNLOAD complete")
             SyncResult.Success
         } catch (e: Exception) {
-            SLog.e(TAG, "Force download failed: ${e.message}")
-            e.printStackTrace()
+            SLog.e(TAG, "Force download failed: ${e.message}", e)
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
