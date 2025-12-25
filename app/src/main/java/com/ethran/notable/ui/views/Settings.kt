@@ -629,7 +629,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
         credentialManager.getCredentials()?.let { (user, pass) ->
             username = user
             password = pass
-            SyncLogger.i("Settings", "Loaded credentials for user: $user")
+            SyncLogger.i("Settings", "Loaded credentials from secure storage")
         } ?: SyncLogger.w("Settings", "No credentials found in storage")
     }
 
