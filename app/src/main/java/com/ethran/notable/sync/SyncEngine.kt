@@ -57,7 +57,7 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "Starting full sync...")
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.INITIALIZING,
-                progress = 0.0f,
+                progress = PROGRESS_INITIALIZING,
                 details = "Initializing sync..."
             ))
 
@@ -71,7 +71,7 @@ class SyncEngine(private val context: Context) {
             // 1. Sync folders first (they're referenced by notebooks)
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.SYNCING_FOLDERS,
-                progress = 0.1f,
+                progress = PROGRESS_SYNCING_FOLDERS,
                 details = "Syncing folders..."
             ))
             syncFolders(webdavClient)
@@ -79,7 +79,7 @@ class SyncEngine(private val context: Context) {
             // 2. Apply remote deletions (delete local notebooks that were deleted on other devices)
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.APPLYING_DELETIONS,
-                progress = 0.2f,
+                progress = PROGRESS_APPLYING_DELETIONS,
                 details = "Applying remote deletions..."
             ))
             val deletionsData = applyRemoteDeletions(webdavClient)
@@ -87,7 +87,7 @@ class SyncEngine(private val context: Context) {
             // 3. Sync existing local notebooks and capture pre-download snapshot
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.SYNCING_NOTEBOOKS,
-                progress = 0.3f,
+                progress = PROGRESS_SYNCING_NOTEBOOKS,
                 details = "Syncing local notebooks..."
             ))
             val preDownloadNotebookIds = syncExistingNotebooks()
@@ -96,7 +96,7 @@ class SyncEngine(private val context: Context) {
             // 4. Discover and download new notebooks from server
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.DOWNLOADING_NEW,
-                progress = 0.6f,
+                progress = PROGRESS_DOWNLOADING_NEW,
                 details = "Downloading new notebooks..."
             ))
             val newCount = downloadNewNotebooks(webdavClient, deletionsData, settings, preDownloadNotebookIds)
@@ -105,7 +105,7 @@ class SyncEngine(private val context: Context) {
             // 5. Detect local deletions and upload to server
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.UPLOADING_DELETIONS,
-                progress = 0.8f,
+                progress = PROGRESS_UPLOADING_DELETIONS,
                 details = "Uploading deletions..."
             ))
             val deletedCount = detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
@@ -117,7 +117,7 @@ class SyncEngine(private val context: Context) {
             // 7. Update synced notebook IDs for next sync
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.FINALIZING,
-                progress = 0.9f,
+                progress = PROGRESS_FINALIZING,
                 details = "Finalizing..."
             ))
             updateSyncedNotebookIds(settings)
@@ -134,7 +134,7 @@ class SyncEngine(private val context: Context) {
             updateState(SyncState.Success(summary))
 
             // Auto-reset to Idle after a delay
-            delay(3000)
+            delay(SUCCESS_STATE_AUTO_RESET_MS)
             if (syncState.value is SyncState.Success) {
                 updateState(SyncState.Idle)
             }
@@ -210,24 +210,24 @@ class SyncEngine(private val context: Context) {
                 SLog.i(TAG, "Local: ${localNotebook.updatedAt} (${localNotebook.updatedAt.time}ms)")
                 SLog.i(TAG, "Difference: ${diffMs}ms")
 
-                // Use 1-second tolerance to ignore millisecond precision differences
+                // Use tolerance to ignore millisecond precision differences
                 when {
                     remoteUpdatedAt == null -> {
                         SLog.i(TAG, "↑ No remote timestamp, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
-                    diffMs < -1000 -> {
-                        // Remote is newer by > 1 second - download
+                    diffMs < -TIMESTAMP_TOLERANCE_MS -> {
+                        // Remote is newer by more than tolerance - download
                         SLog.i(TAG, "↓ Remote newer, downloading ${localNotebook.title}")
                         downloadNotebook(notebookId, webdavClient)
                     }
-                    diffMs > 1000 -> {
-                        // Local is newer by > 1 second - upload
+                    diffMs > TIMESTAMP_TOLERANCE_MS -> {
+                        // Local is newer by more than tolerance - upload
                         SLog.i(TAG, "↑ Local newer, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
                     else -> {
-                        // Within 1 second - no significant change
+                        // Within tolerance - no significant change
                         SLog.i(TAG, "= No changes (within tolerance), skipping ${localNotebook.title}")
                     }
                 }
@@ -968,6 +968,19 @@ class SyncEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "SyncEngine"
+
+        // Progress percentages for each sync step
+        private const val PROGRESS_INITIALIZING = 0.0f
+        private const val PROGRESS_SYNCING_FOLDERS = 0.1f
+        private const val PROGRESS_APPLYING_DELETIONS = 0.2f
+        private const val PROGRESS_SYNCING_NOTEBOOKS = 0.3f
+        private const val PROGRESS_DOWNLOADING_NEW = 0.6f
+        private const val PROGRESS_UPLOADING_DELETIONS = 0.8f
+        private const val PROGRESS_FINALIZING = 0.9f
+
+        // Timing constants
+        private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
+        private const val TIMESTAMP_TOLERANCE_MS = 1000L
 
         // Shared state across all SyncEngine instances
         private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)

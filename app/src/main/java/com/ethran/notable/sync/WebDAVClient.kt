@@ -25,9 +25,9 @@ class WebDAVClient(
     private val password: String
 ) {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
     private val credentials = Credentials.basic(username, password)
@@ -290,8 +290,8 @@ class WebDAVClient(
             val responseBody = response.body?.string() ?: return emptyList()
 
             // DEBUG: Log the raw response
-            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "PROPFIND response for $path (first 1500 chars):")
-            io.shipbook.shipbooksdk.Log.i("WebDAVClient", responseBody.take(1500))
+            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "PROPFIND response for $path (first $DEBUG_LOG_MAX_CHARS chars):")
+            io.shipbook.shipbooksdk.Log.i("WebDAVClient", responseBody.take(DEBUG_LOG_MAX_CHARS))
 
             // Parse XML response using XmlPullParser to properly handle namespaces and CDATA
             val allHrefs = parseHrefsFromXml(responseBody)
@@ -305,12 +305,12 @@ class WebDAVClient(
                     href.trimEnd('/').substringAfterLast('/')
                 }
                 .filter { filename ->
-                    // Only include valid UUIDs (36 chars with dashes at positions 8, 13, 18, 23)
-                    filename.length == 36 &&
-                    filename[8] == '-' &&
-                    filename[13] == '-' &&
-                    filename[18] == '-' &&
-                    filename[23] == '-'
+                    // Only include valid UUIDs
+                    filename.length == UUID_LENGTH &&
+                    filename[UUID_DASH_POS_1] == '-' &&
+                    filename[UUID_DASH_POS_2] == '-' &&
+                    filename[UUID_DASH_POS_3] == '-' &&
+                    filename[UUID_DASH_POS_4] == '-'
                 }
                 .toList()
         }
@@ -415,6 +415,21 @@ class WebDAVClient(
     }
 
     companion object {
+        // Timeout constants
+        private const val CONNECT_TIMEOUT_SECONDS = 30L
+        private const val READ_TIMEOUT_SECONDS = 60L
+        private const val WRITE_TIMEOUT_SECONDS = 60L
+
+        // Debug logging
+        private const val DEBUG_LOG_MAX_CHARS = 1500
+
+        // UUID validation constants
+        private const val UUID_LENGTH = 36
+        private const val UUID_DASH_POS_1 = 8
+        private const val UUID_DASH_POS_2 = 13
+        private const val UUID_DASH_POS_3 = 18
+        private const val UUID_DASH_POS_4 = 23
+
         /**
          * Factory method to test connection without full initialization.
          * @return true if connection successful

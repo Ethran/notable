@@ -13,12 +13,14 @@ import java.util.concurrent.TimeUnit
  */
 object SyncScheduler {
 
+    private const val DEFAULT_SYNC_INTERVAL_MINUTES = 5L
+
     /**
      * Enable periodic background sync.
      * @param context Android context
-     * @param intervalMinutes Sync interval in minutes (default 5)
+     * @param intervalMinutes Sync interval in minutes
      */
-    fun enablePeriodicSync(context: Context, intervalMinutes: Long = 5) {
+    fun enablePeriodicSync(context: Context, intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
