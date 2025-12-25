@@ -150,7 +150,7 @@ class SyncEngine(private val context: Context) {
             ))
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
-            SLog.e(TAG, "Unexpected error during sync: ${e.message}", e)
+            SLog.e(TAG, "Unexpected error during sync: ${e.message}\n${e.stackTraceToString()}")
             val currentStep = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
             updateState(SyncState.Error(
                 error = SyncError.UNKNOWN_ERROR,
@@ -239,10 +239,10 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "✓ Synced: ${localNotebook.title}")
             SyncResult.Success
         } catch (e: IOException) {
-            Log.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
+            SLog.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
-            Log.e(TAG, "Error syncing notebook $notebookId: ${e.message}", e)
+            SLog.e(TAG, "Error syncing notebook $notebookId: ${e.message}\n${e.stackTraceToString()}")
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -320,7 +320,7 @@ class SyncEngine(private val context: Context) {
             SyncResult.Success
 
         } catch (e: Exception) {
-            SLog.e(TAG, "Failed to upload deletion: ${e.message}", e)
+            SLog.e(TAG, "Failed to upload deletion: ${e.message}\n${e.stackTraceToString()}")
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -382,7 +382,7 @@ class SyncEngine(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error syncing folders: ${e.message}")
+            SLog.e(TAG, "Error syncing folders: ${e.message}\n${e.stackTraceToString()}")
             throw e
         }
     }
@@ -635,7 +635,7 @@ class SyncEngine(private val context: Context) {
                     // Return image with updated local URI
                     image.copy(uri = localFile.absolutePath)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to download image ${image.uri}: ${e.message}")
+                    SLog.e(TAG, "Failed to download image ${image.uri}: ${e.message}\n${e.stackTraceToString()}")
                     image
                 }
             } else {
@@ -655,7 +655,7 @@ class SyncEngine(private val context: Context) {
                     Log.i(TAG, "Downloaded background: $filename")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to download background ${page.background}: ${e.message}")
+                SLog.e(TAG, "Failed to download background ${page.background}: ${e.message}\n${e.stackTraceToString()}")
             }
         }
 
@@ -748,7 +748,7 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "✓ FORCE UPLOAD complete: ${notebooks.size} notebooks")
             SyncResult.Success
         } catch (e: Exception) {
-            SLog.e(TAG, "Force upload failed: ${e.message}", e)
+            SLog.e(TAG, "Force upload failed: ${e.message}\n${e.stackTraceToString()}")
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -808,7 +808,7 @@ class SyncEngine(private val context: Context) {
                         SLog.i(TAG, "Downloading notebook: $notebookId")
                         downloadNotebook(notebookId, webdavClient)
                     } catch (e: Exception) {
-                        SLog.e(TAG, "Failed to download $notebookDir: ${e.message}", e)
+                        SLog.e(TAG, "Failed to download $notebookDir: ${e.message}\n${e.stackTraceToString()}")
                     }
                 }
             } else {
@@ -818,7 +818,7 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "✓ FORCE DOWNLOAD complete")
             SyncResult.Success
         } catch (e: Exception) {
-            SLog.e(TAG, "Force download failed: ${e.message}", e)
+            SLog.e(TAG, "Force download failed: ${e.message}\n${e.stackTraceToString()}")
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
