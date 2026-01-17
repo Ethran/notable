@@ -118,4 +118,65 @@
 
     <string name="toolbar_scribble_to_erase_two_lined_short">Zamaż\n→usuń</string>
 
+    <!-- Sync Settings Tab -->
+    <!-- TODO: Native Polish speaker needed for proper translations -->
+    <string name="settings_tab_sync_name">Synchronizacja</string>
+    <string name="sync_title">Synchronizacja WebDAV</string>
+
+    <!-- Sync Field Labels -->
+    <string name="sync_server_url_label">URL serwera</string>
+    <string name="sync_username_label">Nazwa użytkownika</string>
+    <string name="sync_password_label">Hasło</string>
+    <string name="sync_server_url_placeholder">https://nextcloud.example.com/remote.php/dav/files/username/</string>
+
+    <!-- Sync Toggle Labels -->
+    <string name="sync_enable_label">Włącz synchronizację WebDAV</string>
+    <string name="sync_auto_sync_label">Automatyczna synchronizacja co %1$d minut</string>
+    <string name="sync_on_note_close_label">Synchronizuj przy zamykaniu notatek</string>
+
+    <!-- Sync Button Labels -->
+    <string name="sync_test_connection">Testuj połączenie</string>
+    <string name="sync_testing_connection">Testowanie połączenia…</string>
+    <string name="sync_now">Synchronizuj teraz</string>
+    <string name="sync_synced">✓ Zsynchronizowano</string>
+    <string name="sync_failed">✗ Niepowodzenie</string>
+    <string name="sync_clear_log">Wyczyść</string>
+
+    <!-- Sync Status Messages -->
+    <string name="sync_connected_successfully">✓ Połączono pomyślnie</string>
+    <string name="sync_connection_failed">✗ Połączenie nieudane</string>
+    <string name="sync_completed_successfully">Synchronizacja zakończona pomyślnie</string>
+    <string name="sync_failed_message">Synchronizacja nie powiodła się: %1$s</string>
+    <string name="sync_last_synced">Ostatnia synchronizacja: %1$s</string>
+
+    <!-- Sync Summary Messages -->
+    <string name="sync_summary">Zsynchronizowano: %1$d, Pobrano: %2$d, Usunięto: %3$d (%4$dms)</string>
+    <string name="sync_error_at_step">Błąd w kroku %1$s: %2$s%3$s</string>
+    <string name="sync_can_retry"> (możesz spróbować ponownie)</string>
+
+    <!-- Sync Progress -->
+    <string name="sync_progress_details">%1$s (%2$d%%)</string>
+
+    <!-- Sync Force Operations -->
+    <string name="sync_force_operations_title">UWAGA: Operacje zastępowania</string>
+    <string name="sync_force_operations_warning">Używaj tylko podczas konfiguracji nowego urządzenia lub resetowania synchronizacji. Te operacje usuwają dane!</string>
+    <string name="sync_force_upload_button">⚠ Zastąp serwer danymi lokalnymi</string>
+    <string name="sync_force_download_button">⚠ Zastąp dane lokalne danymi z serwera</string>
+    <string name="sync_force_upload_success">Serwer zastąpiony danymi lokalnymi</string>
+    <string name="sync_force_upload_failed">Wymuszony upload nie powiódł się</string>
+    <string name="sync_force_download_success">Dane lokalne zastąpione danymi z serwera</string>
+    <string name="sync_force_download_failed">Wymuszony download nie powiódł się</string>
+
+    <!-- Sync Confirmation Dialogs -->
+    <string name="sync_confirm_force_upload_title">Zastąpić dane serwera?</string>
+    <string name="sync_confirm_force_upload_message">To USUNIE wszystkie dane na serwerze i zastąpi je danymi lokalnymi z tego urządzenia. Nie można tego cofnąć!\n\nCzy jesteś pewny?</string>
+    <string name="sync_confirm_force_download_title">Zastąpić dane lokalne?</string>
+    <string name="sync_confirm_force_download_message">To USUNIE wszystkie lokalne zeszyty i zastąpi je danymi z serwera. Nie można tego cofnąć!\n\nCzy jesteś pewny?</string>
+    <string name="sync_dialog_cancel">Anuluj</string>
+    <string name="sync_dialog_confirm">Potwierdź</string>
+
+    <!-- Sync Log -->
+    <string name="sync_log_title">Dziennik synchronizacji</string>
+    <string name="sync_log_empty">Brak aktywności synchronizacji</string>
+
 </resources>

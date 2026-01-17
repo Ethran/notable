@@ -101,4 +101,64 @@
     <string name="current_page">Current Page</string>
     <string name="toolbar_scribble_to_erase_two_lined_short">Scribble\nto Erase</string>
 
+    <!-- Sync Settings Tab -->
+    <string name="settings_tab_sync_name">Sync</string>
+    <string name="sync_title">WebDAV Synchronization</string>
+
+    <!-- Sync Field Labels -->
+    <string name="sync_server_url_label">Server URL</string>
+    <string name="sync_username_label">Username</string>
+    <string name="sync_password_label">Password</string>
+    <string name="sync_server_url_placeholder">https://nextcloud.example.com/remote.php/dav/files/username/</string>
+
+    <!-- Sync Toggle Labels -->
+    <string name="sync_enable_label">Enable WebDAV Sync</string>
+    <string name="sync_auto_sync_label">Automatic sync every %1$d minutes</string>
+    <string name="sync_on_note_close_label">Sync when closing notes</string>
+
+    <!-- Sync Button Labels -->
+    <string name="sync_test_connection">Test Connection</string>
+    <string name="sync_testing_connection">Testing connection…</string>
+    <string name="sync_now">Sync Now</string>
+    <string name="sync_synced">✓ Synced</string>
+    <string name="sync_failed">✗ Failed</string>
+    <string name="sync_clear_log">Clear</string>
+
+    <!-- Sync Status Messages -->
+    <string name="sync_connected_successfully">✓ Connected successfully</string>
+    <string name="sync_connection_failed">✗ Connection failed</string>
+    <string name="sync_completed_successfully">Sync completed successfully</string>
+    <string name="sync_failed_message">Sync failed: %1$s</string>
+    <string name="sync_last_synced">Last synced: %1$s</string>
+
+    <!-- Sync Summary Messages -->
+    <string name="sync_summary">Synced: %1$d, Downloaded: %2$d, Deleted: %3$d (%4$dms)</string>
+    <string name="sync_error_at_step">Failed at %1$s: %2$s%3$s</string>
+    <string name="sync_can_retry"> (can retry)</string>
+
+    <!-- Sync Progress -->
+    <string name="sync_progress_details">%1$s (%2$d%%)</string>
+
+    <!-- Sync Force Operations -->
+    <string name="sync_force_operations_title">CAUTION: Replacement Operations</string>
+    <string name="sync_force_operations_warning">Use these only when setting up a new device or resetting sync. These operations will delete data!</string>
+    <string name="sync_force_upload_button">⚠ Replace Server with Local Data</string>
+    <string name="sync_force_download_button">⚠ Replace Local with Server Data</string>
+    <string name="sync_force_upload_success">Server replaced with local data</string>
+    <string name="sync_force_upload_failed">Force upload failed</string>
+    <string name="sync_force_download_success">Local data replaced with server data</string>
+    <string name="sync_force_download_failed">Force download failed</string>
+
+    <!-- Sync Confirmation Dialogs -->
+    <string name="sync_confirm_force_upload_title">Replace Server Data?</string>
+    <string name="sync_confirm_force_upload_message">This will DELETE all data on the server and replace it with local data from this device. This cannot be undone!\n\nAre you sure?</string>
+    <string name="sync_confirm_force_download_title">Replace Local Data?</string>
+    <string name="sync_confirm_force_download_message">This will DELETE all local notebooks and replace them with data from the server. This cannot be undone!\n\nAre you sure?</string>
+    <string name="sync_dialog_cancel">Cancel</string>
+    <string name="sync_dialog_confirm">Confirm</string>
+
+    <!-- Sync Log -->
+    <string name="sync_log_title">Sync Log</string>
+    <string name="sync_log_empty">No sync activity yet</string>
+
 </resources>

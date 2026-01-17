@@ -75,7 +75,7 @@ fun SettingsView(navController: NavController) {
     val tabs = listOf(
         context.getString(R.string.settings_tab_general_name),
         context.getString(R.string.settings_tab_gestures_name),
-        "Sync",  // TODO: Add to strings.xml
+        context.getString(R.string.settings_tab_sync_name),
         context.getString(R.string.settings_tab_debug_name)
     )
     var selectedTab by remember { mutableIntStateOf(0) }

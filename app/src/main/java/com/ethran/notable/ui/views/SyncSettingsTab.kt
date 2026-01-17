@@ -33,9 +33,11 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.datastore.SyncSettings
@@ -82,7 +84,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
 
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
-            text = "WebDAV Synchronization",
+            text = stringResource(R.string.sync_title),
             style = MaterialTheme.typography.h6,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
@@ -133,7 +135,10 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                     val result = WebDAVClient.testConnection(serverUrl, username, password)
                     withContext(Dispatchers.Main) {
                         testingConnection = false
-                        connectionStatus = if (result) "✓ Connected successfully" else "✗ Connection failed"
+                        connectionStatus = if (result)
+                            context.getString(R.string.sync_connected_successfully)
+                        else
+                            context.getString(R.string.sync_connection_failed)
                     }
                 }
             }
@@ -196,7 +201,7 @@ fun SyncEnableToggle(
     context: Context
 ) {
     SettingToggleRow(
-        label = "Enable WebDAV Sync",
+        label = stringResource(R.string.sync_enable_label),
         value = syncSettings.syncEnabled,
         onToggle = { isChecked ->
             kv.setAppSettings(
@@ -224,7 +229,7 @@ fun SyncCredentialFields(
     // Server URL Field
     Column(modifier = Modifier.padding(horizontal = 4.dp)) {
         Text(
-            text = "Server URL",
+            text = stringResource(R.string.sync_server_url_label),
             style = MaterialTheme.typography.body2,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colors.onSurface,
@@ -247,7 +252,7 @@ fun SyncCredentialFields(
                 Box {
                     if (serverUrl.isEmpty()) {
                         Text(
-                            "https://nextcloud.example.com/remote.php/dav/files/username/",
+                            stringResource(R.string.sync_server_url_placeholder),
                             style = TextStyle(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 14.sp,
@@ -266,7 +271,7 @@ fun SyncCredentialFields(
     // Username Field
     Column(modifier = Modifier.padding(horizontal = 4.dp)) {
         Text(
-            text = "Username",
+            text = stringResource(R.string.sync_username_label),
             style = MaterialTheme.typography.body2,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colors.onSurface,
@@ -293,7 +298,7 @@ fun SyncCredentialFields(
     // Password Field
     Column(modifier = Modifier.padding(horizontal = 4.dp)) {
         Text(
-            text = "Password",
+            text = stringResource(R.string.sync_password_label),
             style = MaterialTheme.typography.body2,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colors.onSurface,
@@ -341,9 +346,9 @@ fun SyncConnectionTest(
             .height(48.dp)
     ) {
         if (testingConnection) {
-            Text("Testing connection...")
+            Text(stringResource(R.string.sync_testing_connection))
         } else {
-            Text("Test Connection", fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.sync_test_connection), fontWeight = FontWeight.Bold)
         }
     }
 
@@ -365,7 +370,7 @@ fun SyncControlToggles(
     context: Context
 ) {
     SettingToggleRow(
-        label = "Automatic sync every ${syncSettings.syncInterval} minutes",
+        label = stringResource(R.string.sync_auto_sync_label, syncSettings.syncInterval),
         value = syncSettings.autoSync,
         onToggle = { isChecked ->
             kv.setAppSettings(
@@ -380,7 +385,7 @@ fun SyncControlToggles(
     )
 
     SettingToggleRow(
-        label = "Sync when closing notes",
+        label = stringResource(R.string.sync_on_note_close_label),
         value = syncSettings.syncOnNoteClose,
         onToggle = { isChecked ->
             kv.setAppSettings(
@@ -419,9 +424,9 @@ fun ManualSyncButton(
                                     syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
                                 )
                             )
-                            showHint("Sync completed successfully", scope)
+                            showHint(context.getString(R.string.sync_completed_successfully), scope)
                         } else {
-                            showHint("Sync failed: ${(result as? SyncResult.Failure)?.error}", scope)
+                            showHint(context.getString(R.string.sync_failed_message, (result as? SyncResult.Failure)?.error.toString()), scope)
                         }
                     }
                 }
@@ -443,14 +448,14 @@ fun ManualSyncButton(
                 .height(56.dp)
         ) {
             when (val state = syncState) {
-                is SyncState.Idle -> Text("Sync Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                is SyncState.Idle -> Text(stringResource(R.string.sync_now), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 is SyncState.Syncing -> Text(
-                    "${state.details} (${(state.progress * 100).toInt()}%)",
+                    stringResource(R.string.sync_progress_details, state.details, (state.progress * 100).toInt()),
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
-                is SyncState.Success -> Text("✓ Synced", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                is SyncState.Error -> Text("✗ Failed", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                is SyncState.Success -> Text(stringResource(R.string.sync_synced), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                is SyncState.Error -> Text(stringResource(R.string.sync_failed), fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
 
@@ -469,7 +474,13 @@ fun ManualSyncButton(
         if (syncState is SyncState.Success) {
             val summary = (syncState as SyncState.Success).summary
             Text(
-                text = "Synced: ${summary.notebooksSynced}, Downloaded: ${summary.notebooksDownloaded}, Deleted: ${summary.notebooksDeleted} (${summary.duration}ms)",
+                text = stringResource(
+                    R.string.sync_summary,
+                    summary.notebooksSynced,
+                    summary.notebooksDownloaded,
+                    summary.notebooksDeleted,
+                    summary.duration
+                ),
                 style = MaterialTheme.typography.caption,
                 color = Color(0, 150, 0),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
@@ -480,7 +491,12 @@ fun ManualSyncButton(
         if (syncState is SyncState.Error) {
             val error = syncState as SyncState.Error
             Text(
-                text = "Failed at ${error.step}: ${error.error}${if (error.canRetry) " (can retry)" else ""}",
+                text = stringResource(
+                    R.string.sync_error_at_step,
+                    error.step.toString(),
+                    error.error.toString(),
+                    if (error.canRetry) stringResource(R.string.sync_can_retry) else ""
+                ),
                 style = MaterialTheme.typography.caption,
                 color = Color(200, 0, 0),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
@@ -490,7 +506,7 @@ fun ManualSyncButton(
         // Last sync time
         syncSettings.lastSyncTime?.let { timestamp ->
             Text(
-                text = "Last synced: $timestamp",
+                text = stringResource(R.string.sync_last_synced, timestamp),
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
@@ -508,7 +524,7 @@ fun ForceOperationsSection(
     onSyncStateChange: (Boolean) -> Unit
 ) {
     Text(
-        text = "CAUTION: Replacement Operations",
+        text = stringResource(R.string.sync_force_operations_title),
         style = MaterialTheme.typography.h6,
         fontWeight = FontWeight.Bold,
         color = Color(200, 0, 0),
@@ -516,7 +532,7 @@ fun ForceOperationsSection(
     )
 
     Text(
-        text = "Use these only when setting up a new device or resetting sync. These operations will delete data!",
+        text = stringResource(R.string.sync_force_operations_warning),
         style = MaterialTheme.typography.body2,
         color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
         modifier = Modifier.padding(bottom = 16.dp, start = 4.dp, end = 4.dp)
@@ -537,13 +553,13 @@ fun ForceOperationsSection(
             .padding(horizontal = 4.dp)
             .height(48.dp)
     ) {
-        Text("⚠ Replace Server with Local Data", fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.sync_force_upload_button), fontWeight = FontWeight.Bold)
     }
 
     if (showForceUploadConfirm) {
         ConfirmationDialog(
-            title = "Replace Server Data?",
-            message = "This will DELETE all data on the server and replace it with local data from this device. This cannot be undone!\n\nAre you sure?",
+            title = stringResource(R.string.sync_confirm_force_upload_title),
+            message = stringResource(R.string.sync_confirm_force_upload_message),
             onConfirm = {
                 showForceUploadConfirm = false
                 onSyncStateChange(true)
@@ -551,7 +567,13 @@ fun ForceOperationsSection(
                     val result = SyncEngine(context).forceUploadAll()
                     withContext(Dispatchers.Main) {
                         onSyncStateChange(false)
-                        showHint(if (result is SyncResult.Success) "Server replaced with local data" else "Force upload failed", scope)
+                        showHint(
+                            if (result is SyncResult.Success)
+                                context.getString(R.string.sync_force_upload_success)
+                            else
+                                context.getString(R.string.sync_force_upload_failed),
+                            scope
+                        )
                     }
                 }
             },
@@ -576,13 +598,13 @@ fun ForceOperationsSection(
             .padding(horizontal = 4.dp)
             .height(48.dp)
     ) {
-        Text("⚠ Replace Local with Server Data", fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.sync_force_download_button), fontWeight = FontWeight.Bold)
     }
 
     if (showForceDownloadConfirm) {
         ConfirmationDialog(
-            title = "Replace Local Data?",
-            message = "This will DELETE all local notebooks and replace them with data from the server. This cannot be undone!\n\nAre you sure?",
+            title = stringResource(R.string.sync_confirm_force_download_title),
+            message = stringResource(R.string.sync_confirm_force_download_message),
             onConfirm = {
                 showForceDownloadConfirm = false
                 onSyncStateChange(true)
@@ -590,7 +612,13 @@ fun ForceOperationsSection(
                     val result = SyncEngine(context).forceDownloadAll()
                     withContext(Dispatchers.Main) {
                         onSyncStateChange(false)
-                        showHint(if (result is SyncResult.Success) "Local data replaced with server data" else "Force download failed", scope)
+                        showHint(
+                            if (result is SyncResult.Success)
+                                context.getString(R.string.sync_force_download_success)
+                            else
+                                context.getString(R.string.sync_force_download_failed),
+                            scope
+                        )
                     }
                 }
             },
@@ -607,7 +635,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Sync Log",
+            text = stringResource(R.string.sync_log_title),
             style = MaterialTheme.typography.h6,
             fontWeight = FontWeight.Bold
         )
@@ -619,7 +647,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
             ),
             modifier = Modifier.height(32.dp)
         ) {
-            Text("Clear", fontSize = 12.sp)
+            Text(stringResource(R.string.sync_clear_log), fontSize = 12.sp)
         }
     }
 
@@ -640,7 +668,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
 
         if (syncLogs.isEmpty()) {
             Text(
-                text = "No sync activity yet",
+                text = stringResource(R.string.sync_log_empty),
                 style = MaterialTheme.typography.body2,
                 color = Color.Gray,
                 modifier = Modifier.padding(12.dp)
@@ -712,7 +740,7 @@ fun ConfirmationDialog(
                         contentColor = Color.White
                     )
                 ) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.sync_dialog_cancel))
                 }
 
                 Button(
@@ -723,7 +751,7 @@ fun ConfirmationDialog(
                         contentColor = Color.White
                     )
                 ) {
-                    Text("Confirm", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.sync_dialog_confirm), fontWeight = FontWeight.Bold)
                 }
             }
         }
