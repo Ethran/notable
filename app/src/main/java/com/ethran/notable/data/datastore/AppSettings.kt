@@ -28,7 +28,8 @@ data class SyncSettings(
     val username: String = "",
     // Note: Password stored separately in EncryptedSharedPreferences for security
     val autoSync: Boolean = true,
-    val syncInterval: Int = 5,  // minutes
+    // Default must be >= 15 minutes due to WorkManager/JobScheduler minimum interval
+    val syncInterval: Int = 15,  // minutes
     val lastSyncTime: String? = null,
     val syncOnNoteClose: Boolean = true,
     // Track which notebooks we've successfully synced to detect deletions
