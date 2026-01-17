@@ -1,11 +1,14 @@
 package com.ethran.notable.sync
 
 import android.content.Context
+import android.util.Base64
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.data.db.encodeStrokePoints
+import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.editor.utils.Pen
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -78,13 +81,19 @@ class NotebookSerializer(private val context: Context) {
 
     /**
      * Serialize a page with its strokes and images to JSON format.
+     * Stroke points are embedded as base64-encoded SB1 binary format.
      * @param page Page entity
      * @param strokes List of Stroke entities for this page
      * @param images List of Image entities for this page
      * @return JSON string for {page-id}.json
      */
     fun serializePage(page: Page, strokes: List<Stroke>, images: List<Image>): String {
+        // Serialize strokes with embedded base64-encoded SB1 binary points
         val strokeDtos = strokes.map { stroke ->
+            // Encode stroke points using SB1 binary format, then base64 encode
+            val binaryData = encodeStrokePoints(stroke.points)
+            val base64Data = Base64.encodeToString(binaryData, Base64.NO_WRAP)
+
             StrokeDto(
                 id = stroke.id,
                 size = stroke.size,
@@ -95,16 +104,7 @@ class NotebookSerializer(private val context: Context) {
                 bottom = stroke.bottom,
                 left = stroke.left,
                 right = stroke.right,
-                points = stroke.points.map { point ->
-                    StrokePointDto(
-                        x = point.x,
-                        y = point.y,
-                        pressure = point.pressure,
-                        tiltX = point.tiltX,
-                        tiltY = point.tiltY,
-                        dt = point.dt?.toInt()
-                    )
-                },
+                pointsData = base64Data,
                 createdAt = iso8601Format.format(stroke.createdAt),
                 updatedAt = iso8601Format.format(stroke.updatedAt)
             )
@@ -141,7 +141,7 @@ class NotebookSerializer(private val context: Context) {
     }
 
     /**
-     * Deserialize page JSON to Page, Strokes, and Images.
+     * Deserialize page JSON with embedded base64-encoded SB1 binary stroke data.
      * @param jsonString JSON string in page format
      * @return Triple of (Page, List<Stroke>, List<Image>)
      */
@@ -160,6 +160,10 @@ class NotebookSerializer(private val context: Context) {
         )
 
         val strokes = pageDto.strokes.map { strokeDto ->
+            // Decode base64 to binary, then decode SB1 binary format to stroke points
+            val binaryData = Base64.decode(strokeDto.pointsData, Base64.NO_WRAP)
+            val points = decodeStrokePoints(binaryData)
+
             Stroke(
                 id = strokeDto.id,
                 size = strokeDto.size,
@@ -170,16 +174,7 @@ class NotebookSerializer(private val context: Context) {
                 bottom = strokeDto.bottom,
                 left = strokeDto.left,
                 right = strokeDto.right,
-                points = strokeDto.points.map { pointDto ->
-                    StrokePoint(
-                        x = pointDto.x,
-                        y = pointDto.y,
-                        pressure = pointDto.pressure,
-                        tiltX = pointDto.tiltX,
-                        tiltY = pointDto.tiltY,
-                        dt = pointDto.dt?.toUShort()
-                    )
-                },
+                points = points,
                 pageId = pageDto.id,
                 createdAt = parseIso8601(strokeDto.createdAt),
                 updatedAt = parseIso8601(strokeDto.updatedAt)
@@ -301,19 +296,9 @@ class NotebookSerializer(private val context: Context) {
         val bottom: Float,
         val left: Float,
         val right: Float,
-        val points: List<StrokePointDto>,
+        val pointsData: String,  // Base64-encoded SB1 binary format
         val createdAt: String,
         val updatedAt: String
-    )
-
-    @Serializable
-    private data class StrokePointDto(
-        val x: Float,
-        val y: Float,
-        val pressure: Float? = null,
-        val tiltX: Int? = null,
-        val tiltY: Int? = null,
-        val dt: Int? = null
     )
 
     @Serializable

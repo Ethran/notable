@@ -534,14 +534,14 @@ class SyncEngine(private val context: Context) {
         val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(page.id)
         val pageWithImages = appRepository.pageRepository.getWithImageById(page.id)
 
-        // Serialize page to JSON
+        // Serialize page to JSON with embedded base64-encoded SB1 binary stroke data
         val pageJson = notebookSerializer.serializePage(
             page,
             pageWithStrokes.strokes,
             pageWithImages.images
         )
 
-        // Upload page JSON
+        // Upload page JSON (strokes are embedded as base64)
         webdavClient.putFile(
             "/Notable/notebooks/$notebookId/pages/${page.id}.json",
             pageJson.toByteArray(),
@@ -615,8 +615,10 @@ class SyncEngine(private val context: Context) {
      * Download a single page with its strokes and images.
      */
     private suspend fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
-        // Download page JSON
+        // Download page JSON (contains embedded base64-encoded SB1 binary stroke data)
         val pageJson = webdavClient.getFile("/Notable/notebooks/$notebookId/pages/$pageId.json").decodeToString()
+
+        // Deserialize page (strokes are embedded as base64 in JSON)
         val (page, strokes, images) = notebookSerializer.deserializePage(pageJson)
 
         // Download referenced images and update their URIs to local paths
