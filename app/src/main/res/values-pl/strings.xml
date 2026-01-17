@@ -124,6 +124,7 @@
     <string name="sync_title">Synchronizacja WebDAV</string>
 
     <!-- Sync Field Labels -->
+    <string name="sync_server_url_note">Uwaga: \"/notable\" zostanie dodane do ścieżki, aby uporządkować pliki.</string>
     <string name="sync_server_url_label">URL serwera</string>
     <string name="sync_username_label">Nazwa użytkownika</string>
     <string name="sync_password_label">Hasło</string>
@@ -135,6 +136,7 @@
     <string name="sync_on_note_close_label">Synchronizuj przy zamykaniu notatek</string>
 
     <!-- Sync Button Labels -->
+    <string name="sync_save_credentials">Zapisz dane logowania</string>
     <string name="sync_test_connection">Testuj połączenie</string>
     <string name="sync_testing_connection">Testowanie połączenia…</string>
     <string name="sync_now">Synchronizuj teraz</string>
@@ -143,6 +145,7 @@
     <string name="sync_clear_log">Wyczyść</string>
 
     <!-- Sync Status Messages -->
+    <string name="sync_credentials_saved">Dane logowania zapisane</string>
     <string name="sync_connected_successfully">✓ Połączono pomyślnie</string>
     <string name="sync_connection_failed">✗ Połączenie nieudane</string>
     <string name="sync_completed_successfully">Synchronizacja zakończona pomyślnie</string>

@@ -66,6 +66,8 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
     var serverUrl by remember { mutableStateOf(syncSettings.serverUrl) }
     var username by remember { mutableStateOf(syncSettings.username) }
     var password by remember { mutableStateOf("") }
+    var savedUsername by remember { mutableStateOf(syncSettings.username) }
+    var savedPassword by remember { mutableStateOf("") }
     var testingConnection by remember { mutableStateOf(false) }
     var syncInProgress by remember { mutableStateOf(false) }
     var connectionStatus by remember { mutableStateOf<String?>(null) }
@@ -78,9 +80,14 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
         credentialManager.getCredentials()?.let { (user, pass) ->
             username = user
             password = pass
+            savedUsername = user
+            savedPassword = pass
             SyncLogger.i("Settings", "Loaded credentials for user: $user")
         } ?: SyncLogger.w("Settings", "No credentials found in storage")
     }
+
+    // Check if credentials have changed
+    val credentialsChanged = username != savedUsername || password != savedPassword
 
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
@@ -109,15 +116,36 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                 serverUrl = it
                 kv.setAppSettings(settings.copy(syncSettings = syncSettings.copy(serverUrl = it)))
             },
-            onUsernameChange = {
-                username = it
-                credentialManager.saveCredentials(it, password)
-            },
-            onPasswordChange = {
-                password = it
-                credentialManager.saveCredentials(username, it)
-            }
+            onUsernameChange = { username = it },
+            onPasswordChange = { password = it }
         )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Save Credentials Button
+        Button(
+            onClick = {
+                credentialManager.saveCredentials(username, password)
+                savedUsername = username
+                savedPassword = password
+                kv.setAppSettings(settings.copy(syncSettings = syncSettings.copy(username = username)))
+                SyncLogger.i("Settings", "Credentials saved for user: $username")
+                showHint(context.getString(R.string.sync_credentials_saved), scope)
+            },
+            enabled = credentialsChanged && username.isNotEmpty() && password.isNotEmpty(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color(0, 120, 200),
+                contentColor = Color.White,
+                disabledBackgroundColor = Color(200, 200, 200),
+                disabledContentColor = Color.Gray
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(48.dp)
+        ) {
+            Text(stringResource(R.string.sync_save_credentials), fontWeight = FontWeight.Bold)
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -228,6 +256,12 @@ fun SyncCredentialFields(
 ) {
     // Server URL Field
     Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+        Text(
+            text = stringResource(R.string.sync_server_url_note),
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
         Text(
             text = stringResource(R.string.sync_server_url_label),
             style = MaterialTheme.typography.body2,

@@ -106,6 +106,7 @@
     <string name="sync_title">WebDAV Synchronization</string>
 
     <!-- Sync Field Labels -->
+    <string name="sync_server_url_note">Note: \"/notable\" will be appended to your path to keep files organized.</string>
     <string name="sync_server_url_label">Server URL</string>
     <string name="sync_username_label">Username</string>
     <string name="sync_password_label">Password</string>
@@ -117,6 +118,7 @@
     <string name="sync_on_note_close_label">Sync when closing notes</string>
 
     <!-- Sync Button Labels -->
+    <string name="sync_save_credentials">Save Credentials</string>
     <string name="sync_test_connection">Test Connection</string>
     <string name="sync_testing_connection">Testing connection…</string>
     <string name="sync_now">Sync Now</string>
@@ -125,6 +127,7 @@
     <string name="sync_clear_log">Clear</string>
 
     <!-- Sync Status Messages -->
+    <string name="sync_credentials_saved">Credentials saved</string>
     <string name="sync_connected_successfully">✓ Connected successfully</string>
     <string name="sync_connection_failed">✗ Connection failed</string>
     <string name="sync_completed_successfully">Sync completed successfully</string>
