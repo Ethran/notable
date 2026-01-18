@@ -20,7 +20,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 // Alias for cleaner code
 private val SLog = SyncLogger
@@ -292,9 +295,13 @@ class SyncEngine(private val context: Context) {
                 DeletionsData()
             }
 
-            // Add this notebook to deletions
+            // Add this notebook to deletions with current timestamp
+            val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val deletionTimestamp = iso8601Format.format(Date())
             deletionsData = deletionsData.copy(
-                deletedNotebookIds = deletionsData.deletedNotebookIds + notebookId
+                deletedNotebooks = deletionsData.deletedNotebooks + (notebookId to deletionTimestamp)
             )
 
             // Delete notebook directory from server
@@ -393,6 +400,10 @@ class SyncEngine(private val context: Context) {
     /**
      * Download deletions.json from server and delete any local notebooks that were deleted on other devices.
      * This should be called EARLY in the sync process, before uploading local notebooks.
+     *
+     * Conflict resolution: If a local notebook was modified AFTER it was deleted on the server,
+     * it's considered a resurrection - don't delete it locally, and it will be re-uploaded.
+     *
      * @return DeletionsData for filtering discovery
      */
     private suspend fun applyRemoteDeletions(webdavClient: WebDAVClient): DeletionsData {
@@ -414,12 +425,40 @@ class SyncEngine(private val context: Context) {
             DeletionsData()
         }
 
-        // Delete any local notebooks that are in the server's deletions list
-        if (deletionsData.deletedNotebookIds.isNotEmpty()) {
-            SLog.i(TAG, "Server has ${deletionsData.deletedNotebookIds.size} deleted notebook(s)")
+        // Process deletions with conflict resolution
+        val allDeletedIds = deletionsData.getAllDeletedIds()
+        if (allDeletedIds.isNotEmpty()) {
+            SLog.i(TAG, "Server has ${allDeletedIds.size} deleted notebook(s)")
             val localNotebooks = appRepository.bookRepository.getAll()
+            val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+
             for (notebook in localNotebooks) {
-                if (notebook.id in deletionsData.deletedNotebookIds) {
+                if (notebook.id in allDeletedIds) {
+                    // Check if we have a deletion timestamp for conflict resolution
+                    val deletionTimestamp = deletionsData.deletedNotebooks[notebook.id]
+
+                    if (deletionTimestamp != null) {
+                        try {
+                            val deletedAt = iso8601Format.parse(deletionTimestamp)
+                            val localUpdatedAt = notebook.updatedAt
+
+                            // Compare timestamps: was local notebook modified AFTER server deletion?
+                            if (localUpdatedAt != null && deletedAt != null && localUpdatedAt.after(deletedAt)) {
+                                // RESURRECTION: Local notebook was modified after deletion on server
+                                SLog.i(TAG, "↻ Resurrecting '${notebook.title}' (modified after server deletion)")
+                                SyncLogger.i(TAG, "Local updated: $localUpdatedAt, Deleted on server: $deletedAt")
+                                // Don't delete it - it will be re-uploaded during sync
+                                continue
+                            }
+                        } catch (e: Exception) {
+                            SLog.w(TAG, "Failed to parse deletion timestamp for ${notebook.id}: ${e.message}")
+                            // Fall through to delete if timestamp parsing fails
+                        }
+                    }
+
+                    // Safe to delete: either no timestamp, or local is older than deletion
                     try {
                         SLog.i(TAG, "✗ Deleting locally (deleted on server): ${notebook.title}")
                         appRepository.bookRepository.delete(notebook.id)
@@ -471,9 +510,14 @@ class SyncEngine(private val context: Context) {
         if (deletedLocally.isNotEmpty()) {
             SLog.i(TAG, "Detected ${deletedLocally.size} local deletion(s)")
 
-            // Add local deletions to the deletions list
+            // Add local deletions to the deletions list with current timestamp
+            val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val deletionTimestamp = iso8601Format.format(Date())
+            val newDeletions = deletedLocally.associateWith { deletionTimestamp }
             deletionsData = deletionsData.copy(
-                deletedNotebookIds = deletionsData.deletedNotebookIds + deletedLocally
+                deletedNotebooks = deletionsData.deletedNotebooks + newDeletions
             )
 
             // Delete from server
@@ -492,7 +536,7 @@ class SyncEngine(private val context: Context) {
             // Upload updated deletions.json
             val deletionsJson = deletionsSerializer.serialize(deletionsData)
             webdavClient.putFile(remotePath, deletionsJson.toByteArray(), "application/json")
-            SLog.i(TAG, "Updated deletions.json on server with ${deletionsData.deletedNotebookIds.size} total deletion(s)")
+            SLog.i(TAG, "Updated deletions.json on server with ${deletionsData.getAllDeletedIds().size} total deletion(s)")
         } else {
             SLog.i(TAG, "No local deletions detected")
         }
@@ -929,7 +973,7 @@ class SyncEngine(private val context: Context) {
         val newNotebookIds = serverNotebookDirs
             .map { it.trimEnd('/') }
             .filter { it !in preDownloadNotebookIds }
-            .filter { it !in deletionsData.deletedNotebookIds }  // Skip deleted notebooks
+            .filter { it !in deletionsData.getAllDeletedIds() }  // Skip deleted notebooks
             .filter { it !in settings.syncSettings.syncedNotebookIds }  // Skip previously synced notebooks (they're local deletions, not new)
 
         SLog.i(TAG, "DEBUG: New notebook IDs after filtering: $newNotebookIds")
