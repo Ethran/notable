@@ -25,6 +25,9 @@ import java.util.Date
 // Alias for cleaner code
 private val SLog = SyncLogger
 
+// WebDAV root directory name - used as subdirectory appended to server URL path
+private const val WEBDAV_ROOT_DIR = "notable"
+
 /**
  * Core sync engine orchestrating WebDAV synchronization.
  * Handles bidirectional sync of folders, notebooks, pages, and files.
@@ -194,7 +197,7 @@ class SyncEngine(private val context: Context) {
                 ?: return@withContext SyncResult.Failure(SyncError.UNKNOWN_ERROR)
 
             // Check if remote notebook exists
-            val remotePath = "/Notable/notebooks/$notebookId/manifest.json"
+            val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/manifest.json"
             val remoteExists = webdavClient.exists(remotePath)
 
             SLog.i(TAG, "Checking: ${localNotebook.title}")
@@ -275,7 +278,7 @@ class SyncEngine(private val context: Context) {
             )
 
             // Read current deletions.json from server
-            val remotePath = "/Notable/deletions.json"
+            val remotePath = "/$WEBDAV_ROOT_DIR/deletions.json"
             val deletionsSerializer = DeletionsSerializer
             var deletionsData = if (webdavClient.exists(remotePath)) {
                 try {
@@ -295,7 +298,7 @@ class SyncEngine(private val context: Context) {
             )
 
             // Delete notebook directory from server
-            val notebookPath = "/Notable/notebooks/$notebookId"
+            val notebookPath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId"
             if (webdavClient.exists(notebookPath)) {
                 SLog.i(TAG, "✗ Deleting from server: $notebookId")
                 webdavClient.delete(notebookPath)
@@ -336,7 +339,7 @@ class SyncEngine(private val context: Context) {
             val localFolders = appRepository.folderRepository.getAll()
 
             // Check if remote folders.json exists
-            val remotePath = "/Notable/folders.json"
+            val remotePath = "/$WEBDAV_ROOT_DIR/folders.json"
             if (webdavClient.exists(remotePath)) {
                 // Download and merge
                 val remoteFoldersJson = webdavClient.getFile(remotePath).decodeToString()
@@ -395,7 +398,7 @@ class SyncEngine(private val context: Context) {
     private suspend fun applyRemoteDeletions(webdavClient: WebDAVClient): DeletionsData {
         SLog.i(TAG, "Applying remote deletions...")
 
-        val remotePath = "/Notable/deletions.json"
+        val remotePath = "/$WEBDAV_ROOT_DIR/deletions.json"
         val deletionsSerializer = DeletionsSerializer
 
         // Download deletions.json from server (if it exists)
@@ -444,7 +447,7 @@ class SyncEngine(private val context: Context) {
     ): Int {
         SLog.i(TAG, "Detecting local deletions...")
 
-        val remotePath = "/Notable/deletions.json"
+        val remotePath = "/$WEBDAV_ROOT_DIR/deletions.json"
         val deletionsSerializer = DeletionsSerializer
 
         // Get current deletions from server
@@ -476,7 +479,7 @@ class SyncEngine(private val context: Context) {
             // Delete from server
             for (notebookId in deletedLocally) {
                 try {
-                    val notebookPath = "/Notable/notebooks/$notebookId"
+                    val notebookPath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId"
                     if (webdavClient.exists(notebookPath)) {
                         SLog.i(TAG, "✗ Deleting from server: $notebookId")
                         webdavClient.delete(notebookPath)
@@ -505,14 +508,14 @@ class SyncEngine(private val context: Context) {
         SLog.i(TAG, "Uploading: ${notebook.title} (${notebook.pageIds.size} pages)")
 
         // Create remote directory structure
-        webdavClient.ensureParentDirectories("/Notable/notebooks/$notebookId/pages/")
-        webdavClient.createCollection("/Notable/notebooks/$notebookId/images")
-        webdavClient.createCollection("/Notable/notebooks/$notebookId/backgrounds")
+        webdavClient.ensureParentDirectories("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/pages/")
+        webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/images")
+        webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/backgrounds")
 
         // Upload manifest.json
         val manifestJson = notebookSerializer.serializeManifest(notebook)
         webdavClient.putFile(
-            "/Notable/notebooks/$notebookId/manifest.json",
+            "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/manifest.json",
             manifestJson.toByteArray(),
             "application/json"
         )
@@ -543,7 +546,7 @@ class SyncEngine(private val context: Context) {
 
         // Upload page JSON (strokes are embedded as base64)
         webdavClient.putFile(
-            "/Notable/notebooks/$notebookId/pages/${page.id}.json",
+            "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/pages/${page.id}.json",
             pageJson.toByteArray(),
             "application/json"
         )
@@ -553,7 +556,7 @@ class SyncEngine(private val context: Context) {
             if (image.uri != null) {
                 val localFile = File(image.uri)
                 if (localFile.exists()) {
-                    val remotePath = "/Notable/notebooks/$notebookId/images/${localFile.name}"
+                    val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/images/${localFile.name}"
                     if (!webdavClient.exists(remotePath)) {
                         webdavClient.putFile(remotePath, localFile, detectMimeType(localFile))
                         Log.i(TAG, "Uploaded image: ${localFile.name}")
@@ -568,7 +571,7 @@ class SyncEngine(private val context: Context) {
         if (page.backgroundType != "native" && page.background != "blank") {
             val bgFile = File(ensureBackgroundsFolder(), page.background)
             if (bgFile.exists()) {
-                val remotePath = "/Notable/notebooks/$notebookId/backgrounds/${bgFile.name}"
+                val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/backgrounds/${bgFile.name}"
                 if (!webdavClient.exists(remotePath)) {
                     webdavClient.putFile(remotePath, bgFile, detectMimeType(bgFile))
                     Log.i(TAG, "Uploaded background: ${bgFile.name}")
@@ -584,7 +587,7 @@ class SyncEngine(private val context: Context) {
         SLog.i(TAG, "Downloading notebook ID: $notebookId")
 
         // Download and parse manifest
-        val manifestJson = webdavClient.getFile("/Notable/notebooks/$notebookId/manifest.json").decodeToString()
+        val manifestJson = webdavClient.getFile("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/manifest.json").decodeToString()
         val notebook = notebookSerializer.deserializeManifest(manifestJson)
 
         SLog.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
@@ -616,7 +619,7 @@ class SyncEngine(private val context: Context) {
      */
     private suspend fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
         // Download page JSON (contains embedded base64-encoded SB1 binary stroke data)
-        val pageJson = webdavClient.getFile("/Notable/notebooks/$notebookId/pages/$pageId.json").decodeToString()
+        val pageJson = webdavClient.getFile("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/pages/$pageId.json").decodeToString()
 
         // Deserialize page (strokes are embedded as base64 in JSON)
         val (page, strokes, images) = notebookSerializer.deserializePage(pageJson)
@@ -629,7 +632,7 @@ class SyncEngine(private val context: Context) {
                     val localFile = File(ensureImagesFolder(), filename)
 
                     if (!localFile.exists()) {
-                        val remotePath = "/Notable/notebooks/$notebookId/images/$filename"
+                        val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/images/$filename"
                         webdavClient.getFile(remotePath, localFile)
                         Log.i(TAG, "Downloaded image: $filename")
                     }
@@ -652,7 +655,7 @@ class SyncEngine(private val context: Context) {
                 val localFile = File(ensureBackgroundsFolder(), filename)
 
                 if (!localFile.exists()) {
-                    val remotePath = "/Notable/notebooks/$notebookId/backgrounds/$filename"
+                    val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/backgrounds/$filename"
                     webdavClient.getFile(remotePath, localFile)
                     Log.i(TAG, "Downloaded background: $filename")
                 }
@@ -704,12 +707,12 @@ class SyncEngine(private val context: Context) {
 
             // Delete existing notebooks on server (but keep /Notable structure)
             try {
-                if (webdavClient.exists("/Notable/notebooks")) {
-                    val existingNotebooks = webdavClient.listCollection("/Notable/notebooks")
+                if (webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
+                    val existingNotebooks = webdavClient.listCollection("/$WEBDAV_ROOT_DIR/notebooks")
                     SLog.i(TAG, "Deleting ${existingNotebooks.size} existing notebooks from server")
                     for (notebookDir in existingNotebooks) {
                         try {
-                            webdavClient.delete("/Notable/notebooks/$notebookDir")
+                            webdavClient.delete("/$WEBDAV_ROOT_DIR/notebooks/$notebookDir")
                         } catch (e: Exception) {
                             SLog.w(TAG, "Failed to delete $notebookDir: ${e.message}")
                         }
@@ -720,18 +723,18 @@ class SyncEngine(private val context: Context) {
             }
 
             // Ensure base structure exists
-            if (!webdavClient.exists("/Notable")) {
-                webdavClient.createCollection("/Notable")
+            if (!webdavClient.exists("/$WEBDAV_ROOT_DIR")) {
+                webdavClient.createCollection("/$WEBDAV_ROOT_DIR")
             }
-            if (!webdavClient.exists("/Notable/notebooks")) {
-                webdavClient.createCollection("/Notable/notebooks")
+            if (!webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
+                webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks")
             }
 
             // Upload all folders
             val folders = appRepository.folderRepository.getAll()
             if (folders.isNotEmpty()) {
                 val foldersJson = folderSerializer.serializeFolders(folders)
-                webdavClient.putFile("/Notable/folders.json", foldersJson.toByteArray(), "application/json")
+                webdavClient.putFile("/$WEBDAV_ROOT_DIR/folders.json", foldersJson.toByteArray(), "application/json")
                 SLog.i(TAG, "Uploaded ${folders.size} folders")
             }
 
@@ -788,8 +791,8 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "Deleted ${localFolders.size} folders and ${localNotebooks.size} local notebooks")
 
             // Download folders from server
-            if (webdavClient.exists("/Notable/folders.json")) {
-                val foldersJson = webdavClient.getFile("/Notable/folders.json").decodeToString()
+            if (webdavClient.exists("/$WEBDAV_ROOT_DIR/folders.json")) {
+                val foldersJson = webdavClient.getFile("/$WEBDAV_ROOT_DIR/folders.json").decodeToString()
                 val folders = folderSerializer.deserializeFolders(foldersJson)
                 for (folder in folders) {
                     appRepository.folderRepository.create(folder)
@@ -798,8 +801,8 @@ class SyncEngine(private val context: Context) {
             }
 
             // Download all notebooks from server
-            if (webdavClient.exists("/Notable/notebooks")) {
-                val notebookDirs = webdavClient.listCollection("/Notable/notebooks")
+            if (webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
+                val notebookDirs = webdavClient.listCollection("/$WEBDAV_ROOT_DIR/notebooks")
                 SLog.i(TAG, "Found ${notebookDirs.size} notebook(s) on server")
                 SLog.i(TAG, "Notebook directories: $notebookDirs")
 
@@ -814,7 +817,7 @@ class SyncEngine(private val context: Context) {
                     }
                 }
             } else {
-                SLog.w(TAG, "/Notable/notebooks doesn't exist on server")
+                SLog.w(TAG, "/$WEBDAV_ROOT_DIR/notebooks doesn't exist on server")
             }
 
             SLog.i(TAG, "✓ FORCE DOWNLOAD complete")
@@ -873,11 +876,11 @@ class SyncEngine(private val context: Context) {
      * Ensure required server directory structure exists.
      */
     private suspend fun ensureServerDirectories(webdavClient: WebDAVClient) {
-        if (!webdavClient.exists("/Notable")) {
-            webdavClient.createCollection("/Notable")
+        if (!webdavClient.exists("/$WEBDAV_ROOT_DIR")) {
+            webdavClient.createCollection("/$WEBDAV_ROOT_DIR")
         }
-        if (!webdavClient.exists("/Notable/notebooks")) {
-            webdavClient.createCollection("/Notable/notebooks")
+        if (!webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
+            webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks")
         }
     }
 
@@ -915,11 +918,11 @@ class SyncEngine(private val context: Context) {
     ): Int {
         SLog.i(TAG, "Checking server for new notebooks...")
 
-        if (!webdavClient.exists("/Notable/notebooks")) {
+        if (!webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
             return 0
         }
 
-        val serverNotebookDirs = webdavClient.listCollection("/Notable/notebooks")
+        val serverNotebookDirs = webdavClient.listCollection("/$WEBDAV_ROOT_DIR/notebooks")
         SLog.i(TAG, "DEBUG: Server returned ${serverNotebookDirs.size} items: $serverNotebookDirs")
         SLog.i(TAG, "DEBUG: Local notebook IDs (before download): $preDownloadNotebookIds")
 
