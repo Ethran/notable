@@ -16,7 +16,7 @@ class CredentialManager(private val context: Context) {
 
     private val encryptedPrefs = EncryptedSharedPreferences.create(
         context,
-        "notable_sync_credentials",
+        PREFS_FILE_NAME,
         masterKey,
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
@@ -61,6 +61,7 @@ class CredentialManager(private val context: Context) {
     }
 
     companion object {
+        private const val PREFS_FILE_NAME = "notable_sync_credentials"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
     }
