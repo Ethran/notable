@@ -8,12 +8,42 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
+import java.io.Closeable
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.StringReader
 import java.net.HttpURLConnection
 import java.util.concurrent.TimeUnit
+
+/**
+ * Wrapper for streaming file downloads that properly manages the underlying HTTP response.
+ * This class ensures that both the InputStream and the HTTP Response are properly closed.
+ *
+ * Usage:
+ * ```
+ * webdavClient.getFileStream(path).use { streamResponse ->
+ *     streamResponse.inputStream.copyTo(outputStream)
+ * }
+ * ```
+ */
+class StreamResponse(
+    private val response: Response,
+    val inputStream: InputStream
+) : Closeable {
+    override fun close() {
+        try {
+            inputStream.close()
+        } catch (e: Exception) {
+            // Ignore input stream close errors
+        }
+        try {
+            response.close()
+        } catch (e: Exception) {
+            // Ignore response close errors
+        }
+    }
+}
 
 /**
  * WebDAV client built on OkHttp for Notable sync operations.
@@ -173,12 +203,21 @@ class WebDAVClient(
 
     /**
      * Get file as InputStream for streaming large files.
-     * Caller is responsible for closing the InputStream.
+     * Returns a StreamResponse that wraps both the InputStream and underlying HTTP Response.
+     * IMPORTANT: Caller MUST close the StreamResponse (use .use {} block) to prevent resource leaks.
+     *
+     * Example usage:
+     * ```
+     * webdavClient.getFileStream(path).use { streamResponse ->
+     *     streamResponse.inputStream.copyTo(outputStream)
+     * }
+     * ```
+     *
      * @param path Remote path relative to server URL
-     * @return InputStream of file content
+     * @return StreamResponse containing InputStream and managing underlying HTTP connection
      * @throws IOException if download fails
      */
-    fun getFileStream(path: String): InputStream {
+    fun getFileStream(path: String): StreamResponse {
         val url = buildUrl(path)
         val request = Request.Builder()
             .url(url)
@@ -191,7 +230,14 @@ class WebDAVClient(
             response.close()
             throw IOException("Failed to download file: ${response.code} ${response.message}")
         }
-        return response.body?.byteStream() ?: throw IOException("Empty response body")
+
+        val inputStream = response.body?.byteStream()
+            ?: run {
+                response.close()
+                throw IOException("Empty response body")
+            }
+
+        return StreamResponse(response, inputStream)
     }
 
     /**
