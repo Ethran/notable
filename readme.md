@@ -115,7 +115,7 @@ Notable features intuitive gesture controls within Editor mode to optimize the e
 ## System Requirements and Permissions
 The app targets Onyx BOOX devices and requires Android 10 (SDK 29) or higher. Limited support for Android 9 (SDK 28) may be possible if [issue #93](https://github.com/Ethran/notable/issues/93) is resolved. Handwriting functionality is currently not available on non-Onyx devices. Enabling handwriting on other devices may be possible in the future but is not supported at the moment.
 
-Storage access is required to manage notes, assets, and to observe PDF backgrounds, which need “all files access”. The database is stored at `Documents/natabledb` to simplify backups and reduce the risk of accidental deletion. Exports are written to `Documents/natable`.
+Storage access is required to manage notes, assets, and to observe PDF backgrounds, which need “all files access”. The database is stored at `Documents/notabledb` to simplify backups and reduce the risk of accidental deletion. Exports are written to `Documents/notable`.
 
 ---
 
