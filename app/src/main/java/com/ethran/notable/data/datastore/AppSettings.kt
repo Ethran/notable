@@ -22,6 +22,22 @@ object GlobalAppSettings {
 
 
 @Serializable
+data class SyncSettings(
+    val syncEnabled: Boolean = false,
+    val serverUrl: String = "",
+    val username: String = "",
+    // Note: Password stored separately in EncryptedSharedPreferences for security
+    val autoSync: Boolean = true,
+    // Default must be >= 15 minutes due to WorkManager/JobScheduler minimum interval
+    val syncInterval: Int = 15,  // minutes
+    val lastSyncTime: String? = null,
+    val syncOnNoteClose: Boolean = true,
+    // Track which notebooks we've successfully synced to detect deletions
+    val syncedNotebookIds: Set<String> = emptySet()
+)
+
+
+@Serializable
 data class AppSettings(
     val version: Int,
     val monitorBgFiles: Boolean = false,
@@ -49,6 +65,7 @@ data class AppSettings(
     val twoFingerSwipeRightAction: GestureAction? = defaultTwoFingerSwipeRightAction,
     val holdAction: GestureAction? = defaultHoldAction,
     val continuousStrokeSlider: Boolean = false,
+    val syncSettings: SyncSettings = SyncSettings(),
 
     ) {
     companion object {

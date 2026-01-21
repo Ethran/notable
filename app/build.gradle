@@ -204,6 +204,11 @@ dependencies {
     // for PDF support:
     implementation("com.artifex.mupdf:fitz:1.26.10")
 
+    // WebDAV sync dependencies
+    implementation "androidx.work:work-runtime-ktx:2.9.0"  // Background sync
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"    // HTTP/WebDAV client
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"  // Encrypted credential storage
+
     // Added so that R8 optimization don't fail
     // SLF4J backend: provides a simple logger so (probably) ShipBook can output logs.
     // Needed because SLF4J is just an API; without a binding, logging calls are ignored.

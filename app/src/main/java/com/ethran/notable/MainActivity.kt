@@ -85,6 +85,20 @@ class MainActivity : ComponentActivity() {
             this.lifecycleScope.launch(Dispatchers.IO) {
                 reencodeStrokePointsToSB1(this@MainActivity)
             }
+
+            // Trigger initial sync on app startup (fails silently if offline)
+            this.lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val settings = GlobalAppSettings.current
+                    if (settings.syncSettings.syncEnabled) {
+                        Log.i(TAG, "Triggering initial sync on app startup")
+                        com.ethran.notable.sync.SyncEngine(applicationContext).syncAllNotebooks()
+                    }
+                } catch (e: Exception) {
+                    Log.i(TAG, "Initial sync failed (offline?): ${e.message}")
+                    // Fail silently - periodic sync will handle it later
+                }
+            }
         }
 
         //EpdDeviceManager.enterAnimationUpdate(true);

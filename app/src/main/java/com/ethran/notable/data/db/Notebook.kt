@@ -51,6 +51,9 @@ interface NotebookDao {
     @Query("SELECT * FROM notebook WHERE parentFolderId is :folderId")
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>>
 
+    @Query("SELECT * FROM notebook")
+    fun getAll(): List<Notebook>
+
     @Query("SELECT * FROM notebook WHERE id = (:notebookId)")
     fun getByIdLive(notebookId: String): LiveData<Notebook>
 
@@ -77,6 +80,10 @@ class BookRepository(context: Context) {
     var db = AppDatabase.getDatabase(context).notebookDao()
     private var pageDb = AppDatabase.getDatabase(context).pageDao()
 
+    fun getAll(): List<Notebook> {
+        return db.getAll()
+    }
+
     fun create(notebook: Notebook) {
         db.create(notebook)
         val page = Page(
@@ -98,6 +105,14 @@ class BookRepository(context: Context) {
         Log.i(TAG, "updating DB")
         val updatedNotebook = notebook.copy(updatedAt = Date())
         db.update(updatedNotebook)
+    }
+
+    /**
+     * Update notebook without modifying the timestamp.
+     * Used during sync when downloading from server to preserve remote timestamp.
+     */
+    fun updatePreservingTimestamp(notebook: Notebook) {
+        db.update(notebook)
     }
 
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>> {

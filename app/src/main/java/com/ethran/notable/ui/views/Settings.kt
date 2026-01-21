@@ -75,6 +75,7 @@ fun SettingsView(navController: NavController) {
     val tabs = listOf(
         context.getString(R.string.settings_tab_general_name),
         context.getString(R.string.settings_tab_gestures_name),
+        context.getString(R.string.settings_tab_sync_name),
         context.getString(R.string.settings_tab_debug_name)
     )
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -133,7 +134,8 @@ fun SettingsView(navController: NavController) {
                 when (selectedTab) {
                     0 -> GeneralSettings(kv, settings)
                     1 -> EditGestures(context, kv, settings)
-                    2 -> DebugSettings(kv, settings, navController)
+                    2 -> SyncSettings(kv, settings, context)
+                    3 -> DebugSettings(kv, settings, navController)
                 }
 
             }

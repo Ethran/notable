@@ -331,10 +331,21 @@ class PageView(
 
     private fun saveStrokesToPersistLayer(strokes: List<Stroke>) {
         dbStrokes.create(strokes)
+        updateParentNotebookTimestamp()
     }
 
     private fun saveImagesToPersistLayer(image: List<Image>) {
         dbImages.create(image)
+        updateParentNotebookTimestamp()
+    }
+
+    /**
+     * Update the parent notebook's updatedAt timestamp so sync knows it has changes.
+     */
+    private fun updateParentNotebookTimestamp() {
+        val notebookId = pageFromDb?.notebookId ?: return
+        val notebook = appRepository.bookRepository.getById(notebookId) ?: return
+        appRepository.bookRepository.update(notebook)
     }
 
 
@@ -377,10 +388,12 @@ class PageView(
 
     private fun removeStrokesFromPersistLayer(strokeIds: List<String>) {
         appRepository.strokeRepository.deleteAll(strokeIds)
+        updateParentNotebookTimestamp()
     }
 
     private fun removeImagesFromPersistLayer(imageIds: List<String>) {
         appRepository.imageRepository.deleteAll(imageIds)
+        updateParentNotebookTimestamp()
     }
 
     // load background, fast, if it is accurate enough.

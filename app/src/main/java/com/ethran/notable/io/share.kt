@@ -33,7 +33,7 @@ fun shareBitmap(context: Context, bitmap: Bitmap) {
         bmpWithBackground.compress(Bitmap.CompressFormat.PNG, 100, stream)
         stream.close()
     } catch (e: IOException) {
-        e.printStackTrace()
+        Log.e(TAG, "Failed to save shared image: ${e.message}", e)
         return
     }
 
@@ -96,7 +96,7 @@ private fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
         )
         stream.close()
     } catch (e: IOException) {
-        e.printStackTrace()
+        Log.e(TAG, "Failed to save PDF preview image: ${e.message}", e)
     }
 
     val bitmapFile = File(cachePath, "share.png")

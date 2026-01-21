@@ -138,7 +138,7 @@ fun getCurrentVersionName(context: Context): String? {
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         return packageInfo.versionName
     } catch (e: PackageManager.NameNotFoundException) {
-        e.printStackTrace()
+        Log.e(TAG, "Package not found: ${e.message}", e)
     }
     return null
 }
