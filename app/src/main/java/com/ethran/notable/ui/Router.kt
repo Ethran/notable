@@ -388,7 +388,15 @@ private suspend fun handleDeepLink(context: Context, navController: NavControlle
             path.startsWith("page-") -> {
                 val pageId = path.removePrefix("page-")
                 logRouter.d("Opening existing page: $pageId")
-                navController.navigate("pages/$pageId")
+                // Check if page belongs to a notebook for proper navigation
+                val repo = AppRepository(context)
+                val page = repo.pageRepository.getById(pageId)
+                if (page?.notebookId != null) {
+                    // Open in notebook context for forward/backward navigation
+                    navController.navigate("books/${page.notebookId}/pages/$pageId")
+                } else {
+                    navController.navigate("pages/$pageId")
+                }
             }
 
             // Open existing book: notable://book-{uuid}
