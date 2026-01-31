@@ -48,7 +48,7 @@ class Converters {
 
 @Database(
     entities = [Folder::class, Notebook::class, Page::class, Stroke::class, Image::class, Kv::class],
-    version = 34,
+    version = 35,
     autoMigrations = [
         AutoMigration(19, 20),
         AutoMigration(20, 21),
@@ -63,7 +63,8 @@ class Converters {
         AutoMigration(30, 31, spec = AutoMigration30to31::class),
         AutoMigration(31, 32, spec = AutoMigration31to32::class),
         AutoMigration(32, 33),
-        AutoMigration(33, 34)
+        AutoMigration(33, 34),
+        AutoMigration(34, 35)
     ], exportSchema = true
 )
 @TypeConverters(Converters::class)

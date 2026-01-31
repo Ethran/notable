@@ -42,6 +42,11 @@ interface FolderDao {
     @Query("SELECT * FROM folder WHERE id IS :folderId")
     fun get(folderId: String): Folder
 
+    @Query("SELECT * FROM folder")
+    fun getAll(): List<Folder>
+
+    @Query("SELECT * FROM folder WHERE title = :title LIMIT 1")
+    fun getByTitle(title: String): Folder?
 
     @Insert
     fun create(folder: Folder): Long
@@ -64,8 +69,16 @@ class FolderRepository(context: Context) {
         db.update(folder)
     }
 
+    fun getAll(): List<Folder> {
+        return db.getAll()
+    }
+
     fun getAllInFolder(folderId: String? = null): LiveData<List<Folder>> {
         return db.getChildrenFolders(folderId)
+    }
+
+    fun getByTitle(title: String): Folder? {
+        return db.getByTitle(title)
     }
 
     fun getParent(folderId: String? = null): String? {
@@ -79,9 +92,7 @@ class FolderRepository(context: Context) {
         return db.get(folderId)
     }
 
-
     fun delete(id: String) {
         db.delete(id)
     }
-
 }

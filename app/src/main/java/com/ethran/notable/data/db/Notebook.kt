@@ -51,6 +51,9 @@ interface NotebookDao {
     @Query("SELECT * FROM notebook WHERE parentFolderId is :folderId")
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>>
 
+    @Query("SELECT * FROM notebook")
+    fun getAll(): List<Notebook>
+
     @Query("SELECT * FROM notebook WHERE id = (:notebookId)")
     fun getByIdLive(notebookId: String): LiveData<Notebook>
 
@@ -98,6 +101,10 @@ class BookRepository(context: Context) {
         Log.i(TAG, "updating DB")
         val updatedNotebook = notebook.copy(updatedAt = Date())
         db.update(updatedNotebook)
+    }
+
+    fun getAll(): List<Notebook> {
+        return db.getAll()
     }
 
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>> {
