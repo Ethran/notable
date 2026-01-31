@@ -325,8 +325,12 @@ private suspend fun handleDeepLink(context: Context, navController: NavControlle
             return
         }
 
-        // Get the path - handle both host-based and path-based formats
-        val path = uri.host ?: uri.path?.removePrefix("/") ?: return
+        // Build full path from host + path (notable://host/path/segments)
+        val path = buildString {
+            uri.host?.let { append(it) }
+            uri.path?.let { append(it) }
+        }.removePrefix("/")
+        if (path.isEmpty()) return
         logRouter.d("Handling deep link path: $path")
 
         when {
