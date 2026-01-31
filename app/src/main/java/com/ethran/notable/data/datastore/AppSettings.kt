@@ -48,9 +48,8 @@ data class AppSettings(
     val twoFingerSwipeLeftAction: GestureAction? = defaultTwoFingerSwipeLeftAction,
     val twoFingerSwipeRightAction: GestureAction? = defaultTwoFingerSwipeRightAction,
     val holdAction: GestureAction? = defaultHoldAction,
-    val continuousStrokeSlider: Boolean = false,
-
-    ) {
+    val continuousStrokeSlider: Boolean = false
+) {
     companion object {
         val defaultDoubleTapAction get() = GestureAction.Undo
         val defaultTwoFingerTapAction get() = GestureAction.ChangeTool
