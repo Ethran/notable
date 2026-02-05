@@ -8,6 +8,7 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.StrokeRepository
+import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.model.BackgroundType
 import com.onyx.android.sdk.extension.isNotNull
@@ -42,25 +43,23 @@ class AppRepository(val context: Context) {
         notebookId: String,
         pageId: String
     ): String? {
-        val book = bookRepository.getById(notebookId = notebookId)
-        val pages = book!!.pageIds
-        val index = pages.indexOf(pageId)
-        if (index == pages.size - 1)
+        val book = bookRepository.getById(notebookId = notebookId) ?: return null
+        val index = book.getPageIndex(pageId)
+        if (index == -1 || index == book.pageIds.size - 1)
             return null
-        return pages[index + 1]
+        return book.pageIds[index + 1]
     }
 
     fun getPreviousPageIdFromBookAndPage(
         notebookId: String,
         pageId: String
     ): String? {
-        val book = bookRepository.getById(notebookId = notebookId)
-        val pages = book!!.pageIds
-        val index = pages.indexOf(pageId)
-        if (index == 0 || index == -1) {
+        val book = bookRepository.getById(notebookId = notebookId) ?: return null
+        val index = book.getPageIndex(pageId)
+        if (index <= 0) { // handles -1 and 0
             return null
         }
-        return pages[index - 1]
+        return book.pageIds[index - 1]
     }
 
     fun duplicatePage(pageId: String) {
@@ -93,7 +92,7 @@ class AppRepository(val context: Context) {
         val notebookId = pageWithStrokes.page.notebookId
         if (notebookId != null) {
             val book = bookRepository.getById(notebookId) ?: return
-            val pageIndex = book.pageIds.indexOf(pageWithImages.page.id)
+            val pageIndex = book.getPageIndex(pageWithImages.page.id)
             if (pageIndex == -1) return
             val pageIds = book.pageIds.toMutableList()
             pageIds.add(pageIndex + 1, duplicatedPage.id)
@@ -126,7 +125,7 @@ class AppRepository(val context: Context) {
             ?: throw NoSuchElementException("Notebook with ID '$notebookId' not found.")
 
         // Return the index of the page. indexOf() returns -1 if the element is not found, which is a standard convention.
-        return book.pageIds.indexOf(pageId)
+        return book.getPageIndex(pageId)
     }
 
 }

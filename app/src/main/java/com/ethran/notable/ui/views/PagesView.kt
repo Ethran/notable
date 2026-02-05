@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.deletePage
 import com.ethran.notable.editor.ui.toolbar.Topbar
@@ -74,7 +75,6 @@ fun PagesView(navController: NavController, bookId: String) {
     val book by appRepository.bookRepository.getByIdLive(bookId).observeAsState()
     if (book == null) return
 
-    val pageIds = book!!.pageIds
     val openPageId = book?.openPageId
     val bookFolder = book?.parentFolderId
 
@@ -88,8 +88,8 @@ fun PagesView(navController: NavController, bookId: String) {
     val density = LocalDensity.current
 
     // Initial focus on current page
-    LaunchedEffect(openPageId, pageIds) {
-        val index = pageIds.indexOf(openPageId)
+    LaunchedEffect(openPageId, book) {
+        val index = if (openPageId != null) book!!.getPageIndex(openPageId) else -1
         if (index >= 0 && !reorderState.wareReordered) {
             Log.d("PagesView", "Initial focus on page $index")
             gridState.scrollToItem(index)
@@ -128,10 +128,9 @@ fun PagesView(navController: NavController, bookId: String) {
                 EditModeSwitch(isEditMode = isEditMode, onToggle = { isEditMode = it })
                 Spacer(modifier = Modifier.width(10.dp))
 
-                val openId = openPageId
-                if (openId != null) {
+                if (openPageId != null) {
                     JumpToCurrentPill {
-                        val idx = pageIds.indexOf(openId)
+                        val idx = book!!.getPageIndex(openPageId)
                         if (idx >= 0) scope.launch { gridState.scrollToItem(idx) }
                     }
                 }
@@ -163,7 +162,7 @@ fun PagesView(navController: NavController, bookId: String) {
                     .autoEInkAnimationOnScroll()
             ) {
                 itemsIndexed(
-                    items = pageIds,
+                    items = book!!.pageIds,
                     key = { _, id -> id }
                 ) { pageIndex, pageId ->
                     val isOpen = pageId == openPageId
@@ -281,11 +280,11 @@ fun PagesView(navController: NavController, bookId: String) {
                 }
             }
 
-            if (pageIds.size > 30) {
+            if (book!!.pageIds.size > 30) {
                 FastScroller(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     state = gridState,
-                    itemCount = pageIds.size,
+                    itemCount = book!!.pageIds.size,
                     getVisibleIndex = { gridState.firstVisibleItemIndex },
                     onDragStart = { setAnimationMode(true) },
                     onDragEnd = { setAnimationMode(false) }

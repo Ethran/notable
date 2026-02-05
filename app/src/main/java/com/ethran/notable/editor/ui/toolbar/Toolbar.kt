@@ -38,6 +38,7 @@ import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.EditorState
@@ -104,6 +105,7 @@ fun Toolbar(
     // Observe zoom level to decide button visibility
     val zoomLevel by state.pageView.zoomLevel.collectAsState()
 
+    val repository = remember { AppRepository(context).bookRepository }
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
@@ -438,14 +440,13 @@ fun Toolbar(
                         .width(0.5.dp)
                         .background(Color.Black)
                 )
-
                 if (state.bookId != null) {
-                    val book = AppRepository(context).bookRepository.getById(state.bookId)
+                    val book = repository.getById(state.bookId)
 
-                    // TODO maybe have generic utils for this ?
-                    val pageNumber =
-                        remember(state.currentPageId) { book!!.pageIds.indexOf(state.currentPageId) + 1 }
-                    val totalPageNumber = book!!.pageIds.size
+                    val pageNumber: String = remember(book?.id, state.currentPageId) {
+                        book?.let { (it.getPageIndex(state.currentPageId) + 1).toString() } ?: "?"
+                    }
+                    val totalPageNumber: String = book?.pageIds?.size?.toString() ?: "?"
 
                     Box(
                         contentAlignment = Alignment.Center,
