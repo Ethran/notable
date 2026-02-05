@@ -130,7 +130,7 @@ dependencies {
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_version"
     implementation "androidx.compose.material:material-icons-extended:1.7.8"
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.10.0'
-    implementation 'androidx.activity:activity-compose:1.12.2'
+    implementation 'androidx.activity:activity-compose:1.12.3'
     implementation 'androidx.fragment:fragment-ktx:1.8.9'
     implementation 'androidx.graphics:graphics-core:1.0.4'
     implementation 'androidx.input:input-motionprediction:1.0.0'
@@ -168,7 +168,7 @@ dependencies {
     implementation "androidx.compose.runtime:runtime:$compose_version"
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0'
 
-    implementation "androidx.navigation:navigation-compose:2.9.6"
+    implementation "androidx.navigation:navigation-compose:2.9.7"
 
     def room_version = "2.8.4"
 
@@ -198,7 +198,7 @@ dependencies {
 
     // For xopp file format
     implementation("org.apache.commons:commons-compress:1.28.0") // GZip support
-    implementation("org.lz4:lz4-java:1.8.0") // LZ4 support
+    implementation 'at.yawk.lz4:lz4-java:1.10.3' // LZ4 support
 
     // for PDF support:
     implementation("com.artifex.mupdf:fitz:1.26.10")
