@@ -6,6 +6,8 @@ import android.os.Environment
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.io.createFileFromContentUri
+import com.ethran.notable.io.isImageUri
+import com.ethran.notable.io.saveImageFromContentUri
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -52,8 +54,11 @@ fun copyBackgroundToDatabase(context: Context, fileUri: Uri, subfolder: String):
     outputDir = File(outputDir, subfolder)
     if (!outputDir.exists())
         outputDir.mkdirs()
-    return createFileFromContentUri(context, fileUri, outputDir)
-}
+    return if (isImageUri(context, fileUri))
+        // make sure that image is not too large
+        saveImageFromContentUri(context, fileUri, outputDir)
+    else
+        createFileFromContentUri(context, fileUri, outputDir)}
 
 fun copyImageToDatabase(context: Context, fileUri: Uri, subfolder: String? = null): File {
     var outputDir = ensureImagesFolder()
@@ -62,7 +67,7 @@ fun copyImageToDatabase(context: Context, fileUri: Uri, subfolder: String? = nul
         if (!outputDir.exists())
             outputDir.mkdirs()
     }
-    return createFileFromContentUri(context, fileUri, outputDir)
+    return saveImageFromContentUri(context, fileUri, outputDir)
 }
 
 
