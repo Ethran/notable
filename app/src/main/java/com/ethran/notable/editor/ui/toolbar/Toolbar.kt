@@ -441,7 +441,9 @@ fun Toolbar(
                         .background(Color.Black)
                 )
                 if (state.bookId != null) {
-                    val book = repository.getById(state.bookId)
+                    val book = remember(state.bookId) {
+                        repository.getById(state.bookId)
+                    }
 
                     val pageNumber: String = remember(book?.id, state.currentPageId) {
                         book?.let { (it.getPageIndex(state.currentPageId) + 1).toString() } ?: "?"
