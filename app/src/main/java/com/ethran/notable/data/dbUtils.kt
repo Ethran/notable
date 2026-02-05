@@ -55,10 +55,11 @@ fun copyBackgroundToDatabase(context: Context, fileUri: Uri, subfolder: String):
     if (!outputDir.exists())
         outputDir.mkdirs()
     return if (isImageUri(context, fileUri))
-        // make sure that image is not too large
+    // make sure that image is not too large
         saveImageFromContentUri(context, fileUri, outputDir)
     else
-        createFileFromContentUri(context, fileUri, outputDir)}
+        createFileFromContentUri(context, fileUri, outputDir)
+}
 
 fun copyImageToDatabase(context: Context, fileUri: Uri, subfolder: String? = null): File {
     var outputDir = ensureImagesFolder()

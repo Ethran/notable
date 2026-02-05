@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.FileObserver
 import android.os.ParcelFileDescriptor
@@ -79,7 +80,13 @@ fun saveImageFromContentUri(context: Context, fileUri: Uri, outputDir: File): Fi
 
             mime.equals("image/webp", ignoreCase = true) || destFile.extension.equals(
                 "webp", true
-            ) -> Bitmap.CompressFormat.WEBP
+            ) -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Bitmap.CompressFormat.WEBP_LOSSY
+                } else {
+                    Bitmap.CompressFormat.WEBP
+                }
+            }
 
             else -> Bitmap.CompressFormat.JPEG
         }
@@ -97,7 +104,6 @@ fun saveImageFromContentUri(context: Context, fileUri: Uri, outputDir: File): Fi
         return destFile
     } catch (e: Throwable) {
         // If anything goes wrong, fallback to copying the original
-        // (createFileFromContentUri should already implement a reliable copy)
         try {
             return createFileFromContentUri(context, fileUri, outputDir)
         } catch (_: Throwable) {
@@ -144,12 +150,13 @@ fun getFileNameFromUri(
 
     // Fallback if provider did not supply a name
     if (fileName.isNullOrBlank()) {
-        fileUtilsLog.e("createOutputFileFromUri: no display name found for uri=$fileUri")
+        fileUtilsLog.e("getFileNameFromUri: no display name found for uri=$fileUri")
         val ext = when (context.contentResolver.getType(fileUri)?.lowercase(Locale.US)) {
             "image/png" -> ".png"
             "image/webp" -> ".webp"
             "image/heic" -> ".heic"
             "image/jpg" -> ".jpg"
+            "image/jpeg" -> ".jpg"
             else -> ""
         }
         fileName = "file_${System.currentTimeMillis()}${ext}"
