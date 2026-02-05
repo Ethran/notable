@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -50,7 +51,7 @@ fun ToolbarMenu(
     val context = LocalContext.current
     val scope = CoroutineScope(Dispatchers.IO)
     val snackManager = LocalSnackContext.current
-    val appRepository = AppRepository(context)
+    val appRepository = remember { AppRepository(context) }
     val page = appRepository.pageRepository.getById(state.currentPageId)!!
     val book =
         if (page.notebookId != null) appRepository.bookRepository.getById(page.notebookId) else null
@@ -82,7 +83,7 @@ fun ToolbarMenu(
             DividerCentered()
 
             // Page exports
-            MenuItem(context.getString(R.string.export_page_to, "PDF")) {
+            MenuItem(stringResource(R.string.export_page_to, "PDF")) {
                 scope.launch {
                     snackManager.runWithSnack(
                         context.getString(
@@ -148,7 +149,7 @@ fun ToolbarMenu(
 
             // Book exports
             if (state.bookId != null && book != null) {
-                MenuItem(context.getString(R.string.export_book_to, "PDF")) {
+                MenuItem(stringResource(R.string.export_book_to, "PDF")) {
                     scope.launch {
                         snackManager.runWithSnack(
                             context.getString(
@@ -163,7 +164,7 @@ fun ToolbarMenu(
                     }
                     onClose()
                 }
-                MenuItem(context.getString(R.string.export_book_to, "PNG")) {
+                MenuItem(stringResource(R.string.export_book_to, "PNG")) {
                     scope.launch {
                         snackManager.runWithSnack(
                             context.getString(
@@ -178,7 +179,7 @@ fun ToolbarMenu(
                     }
                     onClose()
                 }
-                MenuItem(context.getString(R.string.export_book_to, "xopp")) {
+                MenuItem(stringResource(R.string.export_book_to, "xopp")) {
                     scope.launch {
                         snackManager.runWithSnack(
                             context.getString(

@@ -70,8 +70,8 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PagesView(navController: NavController, bookId: String) {
-    val appRepository = AppRepository(LocalContext.current)
     val context = LocalContext.current
+    val appRepository = remember { AppRepository(context) }
     val book by appRepository.bookRepository.getByIdLive(bookId).observeAsState()
     if (book == null) return
 
