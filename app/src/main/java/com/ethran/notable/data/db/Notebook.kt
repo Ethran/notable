@@ -176,3 +176,7 @@ fun Notebook.newPage(): Page {
         backgroundType = defaultBackgroundType
     )
 }
+
+fun Notebook.getPageIndex(pageId: String): Int {
+    return pageIds.indexOf(pageId)
+}
