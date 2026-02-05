@@ -2,8 +2,11 @@ package com.ethran.notable.io
 
 import android.content.ContentUris
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.FileObserver
 import android.os.ParcelFileDescriptor
@@ -11,6 +14,8 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.net.toUri
+import com.ethran.notable.SCREEN_HEIGHT
+import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.utils.UriUtils.getDataColumn
 import io.shipbook.shipbooksdk.ShipBook
@@ -19,7 +24,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.text.Normalizer
-import kotlin.use
+import java.util.Locale
+import kotlin.math.max
+import kotlin.math.min
 
 private val fileUtilsLog = ShipBook.getLogger("FileUtilsLogger")
 
@@ -35,32 +42,132 @@ fun getLinkedFilesDir(): File {
 }
 
 
+fun saveImageFromContentUri(context: Context, fileUri: Uri, outputDir: File): File {
+    val fileName = getFileNameFromUri(context, fileUri)
+    val destFile = File(outputDir, fileName)
+
+
+    // Decide max allowed pixel dimensions
+    val minDimension = 2048
+    val allowedW = max(SCREEN_WIDTH * 2, minDimension)
+    val allowedH = max(SCREEN_HEIGHT * 2, minDimension)
+
+    try {
+        // Use ImageDecoder so we can set target size during decoding (avoids decoding huge bitmap)
+        val source = ImageDecoder.createSource(context.contentResolver, fileUri)
+        val resizedBitmap: Bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val origW = info.size.width
+            val origH = info.size.height
+
+            // compute scale to fit into allowedW x allowedH while preserving aspect ratio
+            val scale = min(1.0f, min(allowedW.toFloat() / origW, allowedH.toFloat() / origH))
+            val targetW = max(1, (origW * scale).toInt())
+            val targetH = max(1, (origH * scale).toInt())
+
+            // request decoder to produce target size (software allocator to be safe)
+            decoder.setTargetSize(targetW, targetH)
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+
+        val mime = context.contentResolver.getType(fileUri) ?: ""
+
+        // Decide output format: preserve PNG if possible, otherwise JPEG
+        val outputFormat = when {
+            mime.equals("image/png", ignoreCase = true) || destFile.extension.equals(
+                "png",
+                true
+            ) -> Bitmap.CompressFormat.PNG
+
+            mime.equals("image/webp", ignoreCase = true) || destFile.extension.equals(
+                "webp", true
+            ) -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Bitmap.CompressFormat.WEBP_LOSSY
+                } else {
+                    Bitmap.CompressFormat.WEBP
+                }
+            }
+
+            else -> Bitmap.CompressFormat.JPEG
+        }
+
+        // Save resized bitmap to destFile
+        destFile.outputStream().use { out ->
+            val quality = if (outputFormat == Bitmap.CompressFormat.PNG) 100 else 90
+            resizedBitmap.compress(outputFormat, quality, out)
+            out.flush()
+        }
+
+        // Recycle to free memory
+        if (!resizedBitmap.isRecycled) resizedBitmap.recycle()
+
+        return destFile
+    } catch (e: Throwable) {
+        // If anything goes wrong, fallback to copying the original
+        try {
+            return createFileFromContentUri(context, fileUri, outputDir)
+        } catch (_: Throwable) {
+            // as last resort, rethrow the original detailed error
+            throw e
+        }
+    }
+}
+
+fun isImageUri(context: Context, uri: Uri): Boolean {
+    val mimeType = context.contentResolver.getType(uri)
+    return mimeType?.startsWith("image/") == true
+}
+
+
 // adapted from:
 // https://stackoverflow.com/questions/71241337/copy-image-from-uri-in-another-folder-with-another-name-in-kotlin-android
 fun createFileFromContentUri(context: Context, fileUri: Uri, outputDir: File): File {
-    var fileName = ""
-
-    // Get the display name of the file
-    context.contentResolver.query(fileUri, null, null, null, null)?.use { cursor ->
-        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        cursor.moveToFirst()
-        fileName = cursor.getString(nameIndex)
-    }
-
-    // Extract the MIME type if needed
-//    val fileType: String? = context.contentResolver.getType(fileUri)
-
-    // Open the input stream
-    val iStream: InputStream = context.contentResolver.openInputStream(fileUri)!!
-
-    fileName = sanitizeFileName(fileName)
+    val fileName = getFileNameFromUri(context, fileUri)
     val outputFile = File(outputDir, fileName)
+
+
+    val iStream: InputStream = context.contentResolver.openInputStream(fileUri)!!
 
     // Copy the input stream to the output file
     copyStreamToFile(iStream, outputFile)
     iStream.close()
     return outputFile
 }
+
+fun getFileNameFromUri(
+    context: Context,
+    fileUri: Uri
+): String {
+    var fileName: String? = null
+
+    // Try to get display name from content resolver
+    context.contentResolver.query(fileUri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (nameIndex >= 0 && cursor.moveToFirst()) {
+            fileName = cursor.getString(nameIndex)
+        }
+    }
+
+    // Fallback if provider did not supply a name
+    if (fileName.isNullOrBlank()) {
+        fileUtilsLog.e("getFileNameFromUri: no display name found for uri=$fileUri")
+        val ext = when (context.contentResolver.getType(fileUri)?.lowercase(Locale.US)) {
+            "image/png" -> ".png"
+            "image/webp" -> ".webp"
+            "image/heic" -> ".heic"
+            "image/jpg" -> ".jpg"
+            "image/jpeg" -> ".jpg"
+            else -> ""
+        }
+        fileName = "file_${System.currentTimeMillis()}${ext}"
+    }
+
+    // Sanitize filename
+    fileName = sanitizeFileName(fileName)
+
+    return fileName
+}
+
 
 fun sanitizeFileName(raw: String, maxLen: Int = 80): String {
     // Normalize accents → é → e, Ł → L, etc.
