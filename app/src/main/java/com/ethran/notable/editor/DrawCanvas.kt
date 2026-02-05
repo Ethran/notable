@@ -818,26 +818,39 @@ class DrawCanvas(
 
     fun drawCanvasToView(dirtyRect: Rect?) {
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+        var canvas: Canvas? = null
+        try {
+            // Lock the canvas only for the dirtyRect region
+            canvas = this.holder.lockCanvas(zoneToRedraw) ?: return
 
-        // Lock the canvas only for the dirtyRect region
-        val canvas = this.holder.lockCanvas(zoneToRedraw) ?: return
+            canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
 
-        canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
-
-        if (getActualState().mode == Mode.Select) {
-            // render selection, but only within dirtyRect
-            getActualState().selectionState.firstPageCut?.let { cutPoints ->
-                log.i("render cut")
-                val path = pointsToPath(cutPoints.map {
-                    SimplePointF(
-                        it.x - page.scroll.x, it.y - page.scroll.y
-                    )
-                })
-                canvas.drawPath(path, selectPaint)
+            if (getActualState().mode == Mode.Select) {
+                // render selection, but only within dirtyRect
+                getActualState().selectionState.firstPageCut?.let { cutPoints ->
+                    log.i("render cut")
+                    val path = pointsToPath(cutPoints.map {
+                        SimplePointF(
+                            it.x - page.scroll.x, it.y - page.scroll.y
+                        )
+                    })
+                    canvas.drawPath(path, selectPaint)
+                }
+            }
+            // finish rendering
+            this.holder.unlockCanvasAndPost(canvas)
+        } catch (e: IllegalStateException) {
+            log.w("Surface released during draw", e)
+            // ignore — surface is gone
+        } finally {
+            try {
+                if (canvas != null) {
+                    holder.unlockCanvasAndPost(canvas)
+                }
+            } catch (e: IllegalStateException) {
+                log.w("Surface released during unlock", e)
             }
         }
-        // finish rendering
-        this.holder.unlockCanvasAndPost(canvas)
     }
 
     private suspend fun updateIsDrawing() {
