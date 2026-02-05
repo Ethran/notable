@@ -316,6 +316,15 @@ class PageView(
         persistBitmapDebounced()
     }
 
+    fun updateStrokes(strokesToUpdate: List<Stroke>) {
+        strokes = strokes.map { stroke ->
+            strokesToUpdate.find { it.id == stroke.id } ?: stroke
+        }
+        appRepository.strokeRepository.update(strokesToUpdate)
+        PageDataManager.indexStrokes(coroutineScope, currentPageId)
+        persistBitmapDebounced()
+    }
+
     fun removeStrokes(strokeIds: List<String>) {
         strokes = strokes.filter { s -> !strokeIds.contains(s.id) }
         removeStrokesFromPersistLayer(strokeIds)
