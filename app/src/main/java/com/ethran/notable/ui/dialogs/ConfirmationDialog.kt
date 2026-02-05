@@ -123,7 +123,6 @@ fun ShowExportDialog(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.PDF,
                                     options = ExportOptions(
-                                        copyToClipboard = false,
                                     )
                                 )
 

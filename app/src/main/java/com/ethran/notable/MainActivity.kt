@@ -30,6 +30,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.reencodeStrokePointsToSB1
 import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.io.IndexExporter
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.Router
 import com.ethran.notable.ui.SnackBar
@@ -85,10 +86,13 @@ class MainActivity : ComponentActivity() {
             this.lifecycleScope.launch(Dispatchers.IO) {
                 reencodeStrokePointsToSB1(this@MainActivity)
             }
+            // Export index for external tools (e.g., Emacs integration)
+            IndexExporter.scheduleExport(this)
         }
 
         //EpdDeviceManager.enterAnimationUpdate(true);
-//        val intentData = intent.data?.lastPathSegment
+        // Extract deep link data from intent (e.g., notable://page-{id})
+        val intentData = intent.data?.toString()
 
         setContent {
             InkaTheme {
@@ -97,7 +101,7 @@ class MainActivity : ComponentActivity() {
                         Modifier
                             .background(Color.White)
                     ) {
-                        Router()
+                        Router(intentData = intentData)
                     }
                     Box(
                         Modifier
@@ -126,8 +130,11 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
-
             DrawCanvas.refreshUi.emit(Unit)
+        }
+        // Export index when app goes to background
+        if (hasFilePermission(this)) {
+            IndexExporter.scheduleExport(this)
         }
     }
 

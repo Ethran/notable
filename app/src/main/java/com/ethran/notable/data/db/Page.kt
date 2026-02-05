@@ -31,12 +31,15 @@ import java.util.UUID
     )]
 )
 data class Page(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(), val scroll: Int = 0,
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val name: String? = null,
+    val scroll: Int = 0,
     @ColumnInfo(index = true) val notebookId: String? = null,
     @ColumnInfo(defaultValue = "blank") val background: String = "blank", // path or native subtype
     @ColumnInfo(defaultValue = "native") val backgroundType: String = "native", // image, imageRepeating, coverImage, native
     @ColumnInfo(index = true) val parentFolderId: String? = null,
-    val createdAt: Date = Date(), val updatedAt: Date = Date()
+    val createdAt: Date = Date(),
+    val updatedAt: Date = Date()
 )
 
 data class PageWithStrokes(
@@ -57,6 +60,9 @@ data class PageWithImages(
 interface PageDao {
     @Query("SELECT * FROM page WHERE id IN (:ids)")
     fun getByIds(ids: List<String>): List<Page>
+
+    @Query("SELECT * FROM page")
+    fun getAll(): List<Page>
 
     @Query("SELECT * FROM page WHERE id = (:pageId)")
     fun getById(pageId: String): Page?
@@ -98,6 +104,10 @@ class PageRepository(context: Context) {
 
     fun updateScroll(id: String, scroll: Int) {
         return db.updateScroll(id, scroll)
+    }
+
+    fun getAll(): List<Page> {
+        return db.getAll()
     }
 
     fun getById(pageId: String): Page? {

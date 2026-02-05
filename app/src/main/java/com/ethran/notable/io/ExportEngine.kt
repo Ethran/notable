@@ -1,7 +1,5 @@
 package com.ethran.notable.io
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
@@ -53,9 +51,8 @@ sealed class ExportTarget {
 }
 
 data class ExportOptions(
-    val copyToClipboard: Boolean = true,
-    val targetFolderUri: Uri? = null, // can be made to also get from it fileName.
-    val overwrite: Boolean = false,   // TODO: Fix it -- for now it does not work correctly (it overwrites the files too often)
+    val targetFolderUri: Uri? = null,
+    val overwrite: Boolean = false,
     val fileName: String? = null
 )
 
@@ -110,9 +107,6 @@ class ExportEngine(
                         doc.writeTo(out)
                     }
                 }
-                if (options.copyToClipboard) copyPagePngLink(
-                    context, target.pageId
-                ) // You may want a separate PDF variant
             }
         }
 
@@ -143,8 +137,7 @@ class ExportEngine(
 
         when (target) {
             is ExportTarget.Page -> {
-                val pageId = target.pageId
-                val bitmap = renderBitmapForPage(pageId)
+                val bitmap = renderBitmapForPage(target.pageId)
                 bitmap.useAndRecycle { bmp ->
                     val bytes = bmp.toBytes(compressFormat)
                     saveBytes(
@@ -152,15 +145,11 @@ class ExportEngine(
                         ext, mime, options.overwrite, bytes
                     )
                 }
-                if (options.copyToClipboard && format == ExportFormat.PNG) {
-                    copyPagePngLink(context, pageId)
-                }
                 return "Page exported: $baseFileName.$ext"
             }
 
             is ExportTarget.Book -> {
                 val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
-                // Export each page separately (same folder = book title)
                 book.pageIds.forEachIndexed { index, pageId ->
                     val fileName = "$baseFileName-p${index + 1}"
                     val bitmap = renderBitmapForPage(pageId)
@@ -168,9 +157,6 @@ class ExportEngine(
                         val bytes = bmp.toBytes(compressFormat)
                         saveBytes(folderUri, fileName, ext, mime, options.overwrite, bytes)
                     }
-                }
-                if (options.copyToClipboard) {
-                    Log.w(TAG, "Can't copy book links or images to clipboard -- batch export.")
                 }
                 return "Book exported: ${book.title} (${book.pageIds.size} pages)"
             }
@@ -302,11 +288,9 @@ class ExportEngine(
 
     // Create a default directory Uri under Documents/notable/<subfolderPath> using file:// scheme.
     private fun getDefaultExportDirectoryUri(subfolderPath: String): Uri {
-        val documentsDir =
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-
+        val baseDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
         val targetPath = listOfNotBlank("notable", subfolderPath).joinToString(File.separator)
-        val dir = File(documentsDir, targetPath)
+        val dir = File(baseDir, targetPath)
         if (!dir.exists()) dir.mkdirs()
         return dir.toUri()
     }
@@ -549,26 +533,6 @@ class ExportEngine(
         }
     }
 
-
-    /* -------------------- Clipboard Helpers -------------------- */
-
-    private fun copyPagePngLink(context: Context, pageId: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = """
-            [[../attachments/Notable/Pages/notable-page-$pageId.png]]
-            [[Notable Link][notable://page-$pageId]]
-        """.trimIndent()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Page Link", text))
-    }
-
-    private fun copyBookPdfLink(context: Context, bookId: String, bookName: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = """
-            [[../attachments/Notable/Notebooks/$bookName.pdf]]
-            [[Notable Book Link][notable://book-$bookId]]
-        """.trimIndent()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Book PDF Link", text))
-    }
 
     /* -------------------- Utilities -------------------- */
 

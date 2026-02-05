@@ -40,7 +40,6 @@ fun exportToLinkedFile(
                     target = ExportTarget.Book(bookId),
                     format = ExportFormat.XOPP,
                     options = ExportOptions(
-                        copyToClipboard = false,
                         targetFolderUri = uriStr.toUri(),
                         overwrite = true
                     )
