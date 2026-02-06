@@ -452,6 +452,8 @@ object PageDataManager {
         this.strokes[pageId] = strokes.toMutableList()
     }
 
+    fun getStrokesById(pageId: String): HashMap<String, Stroke> = strokesById[pageId] ?: hashMapOf()
+
     fun getImages(pageId: String): List<Image> = images[pageId] ?: emptyList()
 
     fun setImages(pageId: String, images: List<Image>) {

@@ -91,6 +91,9 @@ class PageView(
         get() = PageDataManager.getStrokes(currentPageId)
         set(value) = PageDataManager.setStrokes(currentPageId, value)
 
+    val strokesById: HashMap<String, Stroke>
+        get() = PageDataManager.getStrokesById(currentPageId)
+
     var images: List<Image>
         get() = PageDataManager.getImages(currentPageId)
         set(value) = PageDataManager.setImages(currentPageId, value)
@@ -305,10 +308,7 @@ class PageView(
 
     fun addStrokes(strokesToAdd: List<Stroke>) {
         strokes += strokesToAdd
-        strokesToAdd.forEach {
-            val bottomPlusPadding = it.bottom + 50
-            if (bottomPlusPadding > height) height = bottomPlusPadding.toInt()
-        }
+        updateHeightForChange(strokesToAdd)
 
         saveStrokesToPersistLayer(strokesToAdd)
         PageDataManager.indexStrokes(coroutineScope, currentPageId)
@@ -316,10 +316,13 @@ class PageView(
         persistBitmapDebounced()
     }
 
+    // Completely updates strokes
     fun updateStrokes(strokesToUpdate: List<Stroke>) {
+        val strokeUpdateById = strokesToUpdate.associateBy { it.id }
         strokes = strokes.map { stroke ->
-            strokesToUpdate.find { it.id == stroke.id } ?: stroke
+            strokeUpdateById[stroke.id] ?: stroke
         }
+        updateHeightForChange(strokesToUpdate)
         appRepository.strokeRepository.update(strokesToUpdate)
         PageDataManager.indexStrokes(coroutineScope, currentPageId)
         persistBitmapDebounced()
@@ -336,6 +339,13 @@ class PageView(
 
     fun getStrokes(strokeIds: List<String>): List<Stroke?> {
         return PageDataManager.getStrokes(strokeIds, currentPageId)
+    }
+
+    fun updateHeightForChange(strokesChanged: List<Stroke>) {
+        strokesChanged.forEach {
+            val bottomPlusPadding = it.bottom + 50
+            if (bottomPlusPadding > height) height = bottomPlusPadding.toInt()
+        }
     }
 
     private fun saveStrokesToPersistLayer(strokes: List<Stroke>) {
