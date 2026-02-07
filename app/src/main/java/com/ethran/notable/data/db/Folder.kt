@@ -40,7 +40,7 @@ interface FolderDao {
     fun getChildrenFolders(folderId: String?): LiveData<List<Folder>>
 
     @Query("SELECT * FROM folder WHERE id IS :folderId")
-    fun get(folderId: String): Folder
+    fun get(folderId: String): Folder?
 
 
     @Insert
@@ -72,10 +72,10 @@ class FolderRepository(context: Context) {
         if (folderId == null)
             return null
         val folder = db.get(folderId)
-        return folder.parentFolderId
+        return folder?.parentFolderId
     }
 
-    fun get(folderId: String): Folder {
+    fun get(folderId: String): Folder? {
         return db.get(folderId)
     }
 
