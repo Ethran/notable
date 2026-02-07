@@ -2,6 +2,7 @@ package com.ethran.notable.editor
 
 
 import android.content.Context
+import android.database.sqlite.SQLiteConstraintException
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -349,7 +350,19 @@ class PageView(
     }
 
     private fun saveStrokesToPersistLayer(strokes: List<Stroke>) {
-        dbStrokes.create(strokes)
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                dbStrokes.create(strokes)
+            } catch (_: SQLiteConstraintException) {
+                // There were some rare bugs when strokes weren't unique when inserting from history
+                // I'm not sure if it's still a problem, let's just show the message
+                logAndShowError(
+                    "saveStrokesToPersistLayer",
+                    "Attempted to create strokes that already exist"
+                )
+                dbStrokes.update(strokes)
+            }
+        }
     }
 
     private fun saveImagesToPersistLayer(image: List<Image>) {

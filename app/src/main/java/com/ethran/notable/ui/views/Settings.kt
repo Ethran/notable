@@ -1,7 +1,9 @@
 package com.ethran.notable.ui.views
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +61,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.ui.SelectMenu
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.isLatestVersion
@@ -73,9 +76,9 @@ fun SettingsView(navController: NavController) {
 
     // Tab titles
     val tabs = listOf(
-        context.getString(R.string.settings_tab_general_name),
-        context.getString(R.string.settings_tab_gestures_name),
-        context.getString(R.string.settings_tab_debug_name)
+        stringResource(R.string.settings_tab_general_name),
+        stringResource(R.string.settings_tab_gestures_name),
+        stringResource(R.string.settings_tab_debug_name)
     )
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -379,10 +382,9 @@ fun GitHubSponsorButton(modifier: Modifier = Modifier) {
                     color = Color(0xFF24292E), shape = RoundedCornerShape(25.dp)
                 )
                 .clickable {
-                    val urlIntent = Intent(
-                        Intent.ACTION_VIEW, "https://github.com/sponsors/ethran".toUri()
+                    openInBrowser(
+                        context, "https://github.com/sponsors/ethran"
                     )
-                    context.startActivity(urlIntent)
                 }, contentAlignment = Alignment.Center
         ) {
             Row(
@@ -426,10 +428,7 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
 
             Button(
                 onClick = {
-                    val urlIntent = Intent(
-                        Intent.ACTION_VIEW, "https://github.com/ethran/notable/releases".toUri()
-                    )
-                    context.startActivity(urlIntent)
+                    openInBrowser(context, "https://github.com/ethran/notable/releases")
                 }, modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Upgrade, contentDescription = null)
@@ -581,4 +580,20 @@ fun SettingsDivider() {
         thickness = 1.dp,
         modifier = Modifier.padding(top = 0.dp, bottom = 4.dp)
     )
+}
+
+fun openInBrowser(context: Context, uriString: String) {
+    val urlIntent = Intent(
+        Intent.ACTION_VIEW, uriString.toUri()
+    )
+    try {
+        context.startActivity(urlIntent)
+    } catch (_: ActivityNotFoundException) {
+        // log and show error
+        SnackState.logAndShowError(
+            "openInBrowser",
+            "No application can handle this request. Please install a web browser.",
+            Log::w
+        )
+    }
 }

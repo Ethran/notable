@@ -44,7 +44,7 @@ fun ShowFolderSelectionDialog(
     val availableFolders by appRepository.folderRepository.getAllInFolder(currentFolderId)
         .observeAsState()
     val currentFolderName = currentFolderId?.let {
-        appRepository.folderRepository.get(it).title
+        appRepository.folderRepository.get(it)?.title
     } ?: "Library"
     val parentFolder = appRepository.folderRepository.getParent(currentFolderId)
 

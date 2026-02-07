@@ -10,6 +10,7 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
+import io.shipbook.shipbooksdk.Log
 import java.util.Date
 import java.util.UUID
 
@@ -40,7 +41,7 @@ interface FolderDao {
     fun getChildrenFolders(folderId: String?): LiveData<List<Folder>>
 
     @Query("SELECT * FROM folder WHERE id IS :folderId")
-    fun get(folderId: String): Folder
+    fun get(folderId: String): Folder?
 
 
     @Insert
@@ -72,10 +73,16 @@ class FolderRepository(context: Context) {
         if (folderId == null)
             return null
         val folder = db.get(folderId)
-        return folder.parentFolderId
+        return folder?.parentFolderId
     }
 
-    fun get(folderId: String): Folder {
+    fun get(folderId: String): Folder? {
+        val folder = db.get(folderId)
+        if (folder == null) Log.e("FolderRepository", "Folder not found: $folderId")
+        return folder
+    }
+
+    fun getWithChildren(folderId: String): Folder? {
         return db.get(folderId)
     }
 
