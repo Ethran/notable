@@ -19,6 +19,9 @@ fun getDbDir(): File {
     if (!dbDir.exists()) {
         dbDir.mkdirs()
     }
+    if (!dbDir.canWrite()) {
+        throw IllegalStateException("Database directory is not writable")
+    }
     return dbDir
 }
 
