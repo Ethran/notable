@@ -355,7 +355,7 @@ class PageView(
                 dbStrokes.create(strokes)
             } catch (_: SQLiteConstraintException) {
                 // There were some rare bugs when strokes weren't unique when inserting from history
-                // I'm not sure if its still a problem, lets just show the message
+                // I'm not sure if it's still a problem, let's just show the message
                 logAndShowError(
                     "saveStrokesToPersistLayer",
                     "Attempted to create strokes that already exist"
