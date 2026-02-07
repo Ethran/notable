@@ -570,6 +570,12 @@ fun DebugSettings(kv: KvProxy, settings: AppSettings, navController: NavControll
             onToggle = { isChecked ->
                 kv.setAppSettings(settings.copy(muPdfRendering = isChecked))
             })
+        SettingToggleRow(
+            label = "Allow destructive migrations",
+            value = settings.destructiveMigrations,
+            onToggle = { isChecked ->
+                kv.setAppSettings(settings.copy(destructiveMigrations = isChecked))
+            })
     }
 }
 
