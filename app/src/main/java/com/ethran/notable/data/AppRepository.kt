@@ -109,22 +109,16 @@ class AppRepository(val context: Context) {
     /**
      * Retrieves the 0-based index of a page within a notebook.
      *
-     * @param notebookId The ID of the notebook containing the page.
+     * @param notebookId The ID of the notebook containing the page (must not be null).
      * @param pageId The ID of the page to find.
      * @return The 0-based index of the page within the notebook's page list. Returns -1 if the page is not found.
-     * @throws IllegalArgumentException if the `notebookId` is null.
-     * @throws NoSuchElementException if the notebook with the given `notebookId` is not found.
+     * @throws NoSuchElementException if the notebook with the given notebookId is not found.
      */
-    // TODO: Improve handling errors. current function is not easily usable
-    fun getPageNumber(notebookId: String?, pageId: String): Int {
-        // Validate that notebookId is not null.
-        requireNotNull(notebookId) { "Notebook ID cannot be null." }
-
+    fun getPageNumber(notebookId: String, pageId: String): Int {
         // Fetch the book or throw an exception if it doesn't exist.
         val book = bookRepository.getById(notebookId)
             ?: throw NoSuchElementException("Notebook with ID '$notebookId' not found.")
 
-        // Return the index of the page. indexOf() returns -1 if the element is not found, which is a standard convention.
         return book.getPageIndex(pageId)
     }
 

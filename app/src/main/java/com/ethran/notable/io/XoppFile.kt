@@ -332,7 +332,7 @@ class XoppFile(
 
             boundingBox.inset(-strokeSize, -strokeSize)
             val toolName = strokeElement.getAttribute("tool")
-            val tool = Pen.Companion.fromString(toolName)
+            val tool = Pen.fromString(toolName)
 
             val stroke = Stroke(
                 size = strokeSize,
@@ -438,12 +438,13 @@ class XoppFile(
      */
     private fun parseColor(colorString: String): Color {
         return when (colorString.lowercase()) {
-            "black" -> Color.Companion.Black
-            "blue" -> Color.Companion.Blue
-            "red" -> Color.Companion.Red
-            "green" -> Color.Companion.Green
-            "magenta" -> Color.Companion.Magenta
-            "yellow" -> Color.Companion.Yellow
+            "black" -> Color.Black
+            "blue" -> Color.Blue
+            "red" -> Color.Red
+            "green" -> Color.Green
+            "magenta" -> Color.Magenta
+            "yellow" -> Color.Yellow
+            "gray" -> Color.Gray
             // Convert "#RRGGBBAA" → "#AARRGGBB" → Android Color
             else -> {
                 if (colorString.startsWith("#") && colorString.length == 9) Color(
@@ -451,7 +452,7 @@ class XoppFile(
                 )
                 else {
                     log.e("Unknown color: $colorString")
-                    Color.Companion.Black
+                    Color.Black
                 }
             }
         }
@@ -465,13 +466,13 @@ class XoppFile(
      */
     private fun getColorName(color: Color): String {
         return when (color) {
-            Color.Companion.Black -> "black"
-            Color.Companion.Blue -> "blue"
-            Color.Companion.Red -> "red"
-            Color.Companion.Green -> "green"
-            Color.Companion.Magenta -> "magenta"
-            Color.Companion.Yellow -> "yellow"
-            Color.Companion.DarkGray, Color.Companion.Gray -> "gray"
+            Color.Black -> "black"
+            Color.Blue -> "blue"
+            Color.Red -> "red"
+            Color.Green -> "green"
+            Color.Magenta -> "magenta"
+            Color.Yellow -> "yellow"
+            Color.DarkGray, Color.Gray -> "gray"
             else -> {
                 val argb = color.toArgb()
                 // Convert ARGB (Android default) → RGBA

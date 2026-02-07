@@ -140,16 +140,11 @@ class PageView(
     private var dbImages = AppDatabase.getDatabase(context).ImageDao()
 
     val currentPageNumber: Int
-        get() = try {
-            appRepository.getPageNumber(pageFromDb?.notebookId, currentPageId)
-        } catch (e: Exception) {
-            logAndShowError(
-                "PageView.currentPageNumber",
-                "Error getting page number: ${e.message}"
-            )
-            -1
-        }
-
+        get() = pageFromDb?.notebookId
+            ?.let { notebookId ->
+                appRepository.getPageNumber(notebookId, currentPageId)
+            }
+            ?: -1
 
     /*
         If pageNumber is -1, its assumed that the background is image type.
