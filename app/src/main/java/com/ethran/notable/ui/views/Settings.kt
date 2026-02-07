@@ -591,7 +591,7 @@ fun openInBrowser(context: Context, uriString: String) {
     } catch (_: ActivityNotFoundException) {
         // log and show error
         SnackState.logAndShowError(
-            "ShowUpdateButton",
+            "openInBrowser",
             "No application can handle this request. Please install a web browser.",
             Log::w
         )
