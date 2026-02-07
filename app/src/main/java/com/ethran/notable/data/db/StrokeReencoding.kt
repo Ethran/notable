@@ -292,7 +292,7 @@ private fun deleteOversizeData(db: SupportSQLiteDatabase): Boolean {
         SnackState.globalSnackFlow.tryEmit(
             SnackConf(
                 id = "oversize_1",
-                text = "Row deleted",
+                text = "Deleted oversized stroke data during migration. Some pen strokes may have been removed.",
                 duration = 4000
             )
         )
