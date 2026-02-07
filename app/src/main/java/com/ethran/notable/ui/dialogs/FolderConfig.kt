@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.FolderRepository
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.noRippleClickable
 import io.shipbook.shipbooksdk.Log
 
@@ -46,6 +47,11 @@ import io.shipbook.shipbooksdk.Log
 fun FolderConfigDialog(folderId: String, onClose: () -> Unit) {
     val folderRepository = FolderRepository(LocalContext.current)
     val folder = folderRepository.get(folderId)
+    if (folder == null) {
+        logAndShowError("FolderConfigDialog", "Folder not found")
+        onClose()
+        return
+    }
 
     var folderTitle by remember {
         mutableStateOf(folder.title)
