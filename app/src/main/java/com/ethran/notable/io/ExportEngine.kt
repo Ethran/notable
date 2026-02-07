@@ -25,10 +25,10 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
+import com.ethran.notable.data.model.BackgroundType.Native
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.Log
@@ -335,7 +335,7 @@ class ExportEngine(
                 if (book != null) {
                     // Page inside a book
                     val bookTitle = sanitizeFileName(book.title)
-                    val pageNumber = getPageNumber(page.notebookId, page.id)?.plus(1)
+                    val pageNumber = getPageNumber(book.id, page.id).plus(1)
                     val pageToken = if ((pageNumber ?: 0) >= 1) "p$pageNumber" else "p_"
                     "$bookTitle-$pageToken"
                 } else {
@@ -404,11 +404,20 @@ class ExportEngine(
     ) {
         canvas.scale(scaleFactor, scaleFactor)
         val scaledScroll = scroll / scaleFactor
+        val backgroundType =
+            data.page.notebookId?.let {
+                data.page.getBackgroundType()
+                    .resolveForExport(
+                        getPageNumber(
+                            it,
+                            data.page.id
+                        )
+                    )
+            } ?: Native
         drawBg(
             context,
             canvas,
-            data.page.getBackgroundType()
-                .resolveForExport(getPageNumber(data.page.notebookId, data.page.id)),
+            backgroundType,
             data.page.background,
             scaledScroll,
             scaleFactor
@@ -772,13 +781,9 @@ class ExportEngine(
         parts.filter { it.isNotBlank() }
 
     // Retrieves the 0-based page number of a specific page within a book.
-    fun getPageNumber(bookId: String?, id: String): Int? {
-        return try {
-            AppRepository(context).getPageNumber(bookId, id)
-        } catch (e: Exception) {
-            logAndShowError("getPageNumber", "${e.message}")
-            0
-        }
+    fun getPageNumber(bookId: String, id: String): Int {
+        return AppRepository(context).getPageNumber(bookId, id)
+
     }
 
 }

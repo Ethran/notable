@@ -665,7 +665,7 @@ class DrawCanvas(
         coroutineScope.launch {
             previewPage.debounce(50).collectLatest { pageId ->
                 val pageNumber =
-                    AppRepository(context).getPageNumber(page.pageFromDb?.notebookId, pageId)
+                    AppRepository(context).getPageNumber(page.pageFromDb?.notebookId!!, pageId)
                 Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
                 // Load and prepare a preview bitmap sized for the visible view area (IO thread)
                 val previewBitmap = withContext(Dispatchers.IO) {
