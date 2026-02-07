@@ -64,6 +64,9 @@ interface StrokeDao {
     @Update
     fun update(stroke: Stroke)
 
+    @Update
+    fun update(strokes: List<Stroke>)
+
     @Query("DELETE FROM stroke WHERE id IN (:ids)")
     fun deleteAll(ids: List<String>)
 
@@ -86,6 +89,10 @@ class StrokeRepository(context: Context) {
 
     fun update(stroke: Stroke) {
         return db.update(stroke)
+    }
+
+    fun update(strokes: List<Stroke>) {
+        return db.update(strokes)
     }
 
     fun deleteAll(ids: List<String>) {

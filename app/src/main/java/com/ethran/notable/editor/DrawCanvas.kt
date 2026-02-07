@@ -837,8 +837,6 @@ class DrawCanvas(
                     canvas.drawPath(path, selectPaint)
                 }
             }
-            // finish rendering
-            this.holder.unlockCanvasAndPost(canvas)
         } catch (e: IllegalStateException) {
             log.w("Surface released during draw", e)
             // ignore — surface is gone
