@@ -40,6 +40,7 @@ data class AppSettings(
     val simpleRendering: Boolean = false,
     val openGLRendering: Boolean = true,
     val muPdfRendering: Boolean = true,
+    val destructiveMigrations: Boolean = false,
 
     val doubleTapAction: GestureAction? = defaultDoubleTapAction,
     val twoFingerTapAction: GestureAction? = defaultTwoFingerTapAction,

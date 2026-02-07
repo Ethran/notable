@@ -3,11 +3,17 @@ package com.ethran.notable.data.db
 import android.content.Context
 import android.database.sqlite.SQLiteBlobTooBigException
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.views.hasFilePermission
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 private val log = ShipBook.getLogger("StrokeReencode")
@@ -49,6 +55,7 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
 
     while (true) {
         val remaining = countRemaining(db, "stroke_old")
+        log.d("Remaining rows: $remaining")
         if (remaining == 0) {
             // Finished
             db.execSQL("DROP TABLE IF EXISTS stroke_old")
@@ -77,13 +84,15 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
                     "FROM stroke_old ORDER BY rowid LIMIT $batchSize"
         )
 
-        if (!cursor.moveToFirst()) {
-            cursor.close()
-            continue
-        }
-
-        db.beginTransaction()
         try {
+            db.beginTransaction()
+
+            if (!cursor.moveToFirst()) {
+                log.d("No rows in stroke_old")
+                cursor.close()
+                continue
+            }
+
             val idIdx = cursor.getColumnIndexOrThrow("id")
             val sizeIdx = cursor.getColumnIndexOrThrow("size")
             val penIdx = cursor.getColumnIndexOrThrow("pen")
@@ -185,18 +194,37 @@ fun reencodeStrokePointsToSB1(appContext: Context) {
                     duration = 4000
                 )
             )
-            batchSize /= 2
-            require(batchSize != 0) { "Batch size cannot be 0" }
+
+
             if (batchSize == 1) {
-                SnackState.globalSnackFlow.tryEmit(
-                    SnackConf(
-                        id = "oversize_$batchSize",
-                        text = "Migration failed due to oversized stroke data.",
-                        duration = 4000
-                    )
+                log.e(
+                    "Migration failed due to oversized stroke data. reducing batchSize didn't help. ",
+                    rowBlob
                 )
-                break
+
+                if (GlobalAppSettings.current.destructiveMigrations) {
+                    db.endTransaction() //end fail transaction
+                    //begin new transaction
+                    db.beginTransaction()
+                    if (!deleteOversizeData(db))
+                        break
+                    else
+                        db.setTransactionSuccessful()
+                } else {
+                    val message = SnackConf(
+                        id = "oversize_$batchSize",
+                        text = "Migration failed due to oversized stroke data. reducing batchSize didn't help. You can choose to use destructive migrations in Debug Settings",
+                        duration = 6000
+                    )
+                    tryEmitDelayed(message, 2000)
+                    break
+                }
+
+            } else {
+                batchSize /= 2
             }
+            require(batchSize != 0) { "Batch size cannot be 0" }
+
         } catch (rowEx: Exception) {
             // Leave it; remains in stroke_old
             SnackState.globalSnackFlow.tryEmit(
@@ -247,5 +275,50 @@ private fun tableExists(db: SupportSQLiteDatabase, name: String): Boolean {
 private fun countRemaining(db: SupportSQLiteDatabase, name: String): Int {
     db.query("SELECT COUNT(*) FROM $name").use { c ->
         return if (c.moveToFirst()) c.getInt(0) else 0
+    }
+}
+
+private fun deleteOversizeData(db: SupportSQLiteDatabase): Boolean {
+    try {
+        log.d("Deleting oversize rows")
+        val sql = """
+      DELETE FROM stroke_old
+      WHERE rowid IN (
+        SELECT rowid FROM stroke_old
+        ORDER BY rowid LIMIT 1
+      )
+    """.trimIndent()
+        db.execSQL(sql)
+        SnackState.globalSnackFlow.tryEmit(
+            SnackConf(
+                id = "oversize_1",
+                text = "Row deleted",
+                duration = 4000
+            )
+        )
+        return true
+    } catch (delEx: Exception) {
+        log.e("Failed to delete oversize row(s) during destructive migration", delEx)
+        SnackState.globalSnackFlow.tryEmit(
+            SnackConf(
+                id = "oversize_delete_fail",
+                text = "Failed to delete oversize stroke(s): ${delEx.message}",
+                duration = 4000
+            )
+        )
+        return false
+    }
+}
+
+// ugly workaround to show snack after the UI was initialized.
+fun tryEmitDelayed(conf: SnackConf, delayMs: Long = 200L) {
+    val emitScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    emitScope.launch {
+        try {
+            delay(delayMs)
+            SnackState.globalSnackFlow.emit(conf)
+        } catch (t: Throwable) {
+            log.e("Delayed snack emit failed", t)
+        }
     }
 }
