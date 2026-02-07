@@ -311,7 +311,7 @@ private fun deleteOversizeData(db: SupportSQLiteDatabase): Boolean {
 }
 
 // ugly workaround to show snack after the UI was initialized.
-fun tryEmitDelayed(conf: SnackConf, delayMs: Long = 200L) {
+private fun tryEmitDelayed(conf: SnackConf, delayMs: Long = 200L) {
     val emitScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     emitScope.launch {
         try {
