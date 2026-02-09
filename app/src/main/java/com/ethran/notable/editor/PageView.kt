@@ -491,7 +491,7 @@ class PageView(
         log.d("Simple update scroll")
         val delta = (dragDelta / zoomLevel.value)
 
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
 
         scroll =
             Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
@@ -532,7 +532,7 @@ class PageView(
         if (deltaInPage == Offset.Zero) return
 
         // before scrolling, make sure that strokes are drawn.
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
 
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
@@ -614,7 +614,7 @@ class PageView(
 
     suspend fun applyZoomAndRedraw(newZoom: Float) {
         zoomLevel.value = newZoom
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -677,7 +677,7 @@ class PageView(
         }
 
         // Flush pending strokes/background before snapshot-based operations
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
 
         val scaleFactor = newZoom / oldZoom
         val screenW = windowedCanvas.width

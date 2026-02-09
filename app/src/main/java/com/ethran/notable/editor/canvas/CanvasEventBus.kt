@@ -2,11 +2,17 @@ package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
 import android.net.Uri
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
+import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.system.measureTimeMillis
 
 object CanvasEventBus {
     var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
@@ -44,4 +50,43 @@ object CanvasEventBus {
 
 
     val changePage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+
+    suspend fun waitForDrawing() {
+        Log.d(
+            "DrawCanvas.waitForDrawing", "waiting"
+        )
+        val elapsed = measureTimeMillis {
+            withTimeoutOrNull(3000) {
+                // Just to make sure wait 1ms before checking lock.
+                delay(1)
+                // Wait until drawingInProgress is unlocked before proceeding
+                while (CanvasEventBus.drawingInProgress.isLocked) {
+                    delay(5)
+                }
+            } ?: Log.e(
+                "DrawCanvas.waitForDrawing",
+                "Timeout while waiting for drawing lock. Potential deadlock."
+            )
+
+        }
+        when {
+            elapsed > 3000 -> Log.e(
+                "DrawCanvas.waitForDrawing", "Exceeded timeout ($elapsed ms)"
+            )
+
+            elapsed > 100 -> Log.w("DrawCanvas.waitForDrawing", "Took too long: $elapsed ms")
+            else -> Log.d("DrawCanvas.waitForDrawing", "Finished waiting in $elapsed ms")
+        }
+
+    }
+
+    suspend fun waitForDrawingWithSnack() {
+        if (drawingInProgress.isLocked) {
+            val snack = SnackConf(text = "Waiting for drawing to finish…", duration = 60000)
+            SnackState.globalSnackFlow.emit(snack)
+            waitForDrawing()
+            SnackState.cancelGlobalSnack.emit(snack.id)
+        }
+    }
 }

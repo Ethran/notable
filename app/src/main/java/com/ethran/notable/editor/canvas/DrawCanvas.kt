@@ -10,7 +10,6 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.canvas.OnyxInputHandler
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.selectPaint
@@ -22,15 +21,10 @@ import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
 import com.ethran.notable.editor.utils.pointsToPath
 import com.ethran.notable.editor.utils.refreshScreenRegion
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.system.measureTimeMillis
 
 
 val pressure = EpdController.getMaxTouchPressure()
@@ -69,47 +63,6 @@ class DrawCanvas(
         return super.performClick()
     }
     var glRenderer = OpenGLRenderer(this)
-
-    companion object {
-
-        suspend fun waitForDrawing() {
-            Log.d(
-                "DrawCanvas.waitForDrawing", "waiting"
-            )
-            val elapsed = measureTimeMillis {
-                withTimeoutOrNull(3000) {
-                    // Just to make sure wait 1ms before checking lock.
-                    delay(1)
-                    // Wait until drawingInProgress is unlocked before proceeding
-                    while (CanvasEventBus.drawingInProgress.isLocked) {
-                        delay(5)
-                    }
-                } ?: Log.e(
-                    "DrawCanvas.waitForDrawing",
-                    "Timeout while waiting for drawing lock. Potential deadlock."
-                )
-
-            }
-            when {
-                elapsed > 3000 -> Log.e(
-                    "DrawCanvas.waitForDrawing", "Exceeded timeout ($elapsed ms)"
-                )
-
-                elapsed > 100 -> Log.w("DrawCanvas.waitForDrawing", "Took too long: $elapsed ms")
-                else -> Log.d("DrawCanvas.waitForDrawing", "Finished waiting in $elapsed ms")
-            }
-
-        }
-
-        suspend fun waitForDrawingWithSnack() {
-            if (CanvasEventBus.drawingInProgress.isLocked) {
-                val snack = SnackConf(text = "Waiting for drawing to finish…", duration = 60000)
-                SnackState.globalSnackFlow.emit(snack)
-                waitForDrawing()
-                SnackState.cancelGlobalSnack.emit(snack.id)
-            }
-        }
-    }
 
     fun getActualState(): EditorState {
         return this.state

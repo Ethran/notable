@@ -46,7 +46,7 @@ class CanvasRefreshManager(
         // Do not use, if refresh need to be preformed without delay.
         // This function waits for strokes to be fully rendered.
         if (!state.isDrawing) {
-            DrawCanvas.Companion.waitForDrawing()
+            CanvasEventBus.waitForDrawing()
             drawCanvasToView(null)
             log.w("Not in drawing mode -- refreshUi ")
             return
@@ -59,7 +59,7 @@ class CanvasRefreshManager(
         } else log.v(
             "refreshUiSuspend() is called from the non-main thread."
         )
-        DrawCanvas.Companion.waitForDrawing()
+        CanvasEventBus.waitForDrawing()
         drawCanvasToView(null)
         resetScreenFreeze(touchHelper)
     }

@@ -315,7 +315,7 @@ class OnyxInputHandler(
             touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
-            DrawCanvas.Companion.waitForDrawing()
+            CanvasEventBus.waitForDrawing()
             // draw to view, before showing drawing, avoid stutter
             drawCanvas.drawCanvasToView(null)
             touchHelper!!.setRawDrawingEnabled(false)
