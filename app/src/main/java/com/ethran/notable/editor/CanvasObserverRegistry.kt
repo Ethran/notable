@@ -33,13 +33,14 @@ class CanvasObserverRegistry(
 ) {
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
     fun registerAll() {
+        ImageHandler(drawCanvas.context, page, state, coroutineScope).observeImageUri()
+
         observeRefreshUiImmediately()
         observeForceUpdate()
         observeRefreshUi()
         observeFocusChange()
         observeZoomLevel()
         observeDrawingState()
-        observeImageUri()
         observeSelectionGesture()
         observeClearPage()
         observeRestartAfterConfChange()
@@ -122,18 +123,6 @@ class CanvasObserverRegistry(
             CanvasEventBus.isDrawing.collect {
                 logCanvasObserver.v("drawing state changed to $it!")
                 state.isDrawing = it
-            }
-        }
-    }
-
-    private fun observeImageUri() {
-        coroutineScope.launch {
-            CanvasEventBus.addImageByUri.drop(1).collect { imageUri ->
-                if (imageUri != null) {
-                    logCanvasObserver.v("Received image: $imageUri")
-                    drawCanvas.handleImage(imageUri)
-                } //else
-//                    log.i(  "Image uri is empty")
             }
         }
     }
