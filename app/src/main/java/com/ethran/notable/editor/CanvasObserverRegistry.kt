@@ -6,6 +6,7 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPreview
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
@@ -30,7 +31,7 @@ class CanvasObserverRegistry(
     private val state: EditorState,
     private val history: History,
     private val inputHandler: OnyxInputHandler,
-//    private val refreshManager: CanvasRefreshManager
+    private val refreshManager: CanvasRefreshManager
 ) {
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
     fun registerAll() {
@@ -60,7 +61,7 @@ class CanvasObserverRegistry(
             CanvasEventBus.refreshUiImmediately.collect {
                 logCanvasObserver.v("Refreshing UI!")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                drawCanvas.refreshUi(zoneToRedraw)
+                refreshManager.refreshUi(zoneToRedraw)
             }
         }
     }
@@ -76,7 +77,7 @@ class CanvasObserverRegistry(
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 launch(Dispatchers.Default) {
-                    if (dirtyRectangle.isNull()) drawCanvas.refreshUiSuspend()
+                    if (dirtyRectangle.isNull()) refreshManager.refreshUiSuspend()
                     else {
                         partialRefreshRegionOnce(drawCanvas, zoneToRedraw, inputHandler.touchHelper)
                     }
@@ -89,7 +90,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch(Dispatchers.Default) {
             CanvasEventBus.refreshUi.collect {
                 logCanvasObserver.v("Refreshing UI!")
-                drawCanvas.refreshUiSuspend()
+                refreshManager.refreshUiSuspend()
             }
         }
     }
@@ -164,21 +165,21 @@ class CanvasObserverRegistry(
             snapshotFlow { state.pen }.drop(1).collect {
                 logCanvasObserver.v("pen change: ${state.pen}")
                 inputHandler.updatePenAndStroke()
-                drawCanvas.refreshUiSuspend()
+                refreshManager.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.penSettings.toMap() }.drop(1).collect {
                 logCanvasObserver.v("pen settings change: ${state.penSettings}")
                 inputHandler.updatePenAndStroke()
-                drawCanvas.refreshUiSuspend()
+                refreshManager.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.eraser }.drop(1).collect {
                 logCanvasObserver.v("eraser change: ${state.eraser}")
                 inputHandler.updatePenAndStroke()
-                drawCanvas.refreshUiSuspend()
+                refreshManager.refreshUiSuspend()
             }
         }
     }
@@ -205,7 +206,7 @@ class CanvasObserverRegistry(
                 logCanvasObserver.v("istoolbaropen change: ${state.isToolbarOpen}")
                 inputHandler.updateActiveSurface()
                 inputHandler.updatePenAndStroke()
-                drawCanvas.refreshUi(null)
+                refreshManager.refreshUi(null)
             }
         }
     }
@@ -215,7 +216,7 @@ class CanvasObserverRegistry(
             snapshotFlow { drawCanvas.getActualState().mode }.drop(1).collect {
                 logCanvasObserver.v("mode change: ${drawCanvas.getActualState().mode}")
                 inputHandler.updatePenAndStroke()
-                drawCanvas.refreshUiSuspend()
+                refreshManager.refreshUiSuspend()
             }
         }
     }
@@ -226,16 +227,17 @@ class CanvasObserverRegistry(
             // After 500ms add to history strokes
             CanvasEventBus.commitHistorySignal.debounce(500).collect {
                 logCanvasObserver.v("Commiting to history")
-                drawCanvas.commitToHistory()
+                commitToHistory()
             }
         }
         coroutineScope.launch {
             CanvasEventBus.commitHistorySignalImmediately.collect {
-                drawCanvas.commitToHistory()
+                commitToHistory()
                 CanvasEventBus.commitCompletion.complete(Unit)
             }
         }
     }
+
 
     private fun observeSaveCurrent() {
         coroutineScope.launch {
@@ -283,6 +285,20 @@ class CanvasObserverRegistry(
                 drawCanvas.restoreCanvas(zoneToRedraw)
             }
         }
+    }
+
+
+    // Why do I need it? What is the purpose of it?
+    private val strokeHistoryBatch = mutableListOf<String>()
+    private fun commitToHistory() {
+        if (strokeHistoryBatch.isNotEmpty()) history.addOperationsToHistory(
+            operations = listOf(
+                Operation.DeleteStroke(strokeHistoryBatch.map { it })
+            )
+        )
+        strokeHistoryBatch.clear()
+        //testing if it will help with undo hiding strokes.
+        drawCanvas.drawCanvasToView(null)
     }
 }
 

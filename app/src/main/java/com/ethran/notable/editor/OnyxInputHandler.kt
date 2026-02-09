@@ -49,7 +49,6 @@ class OnyxInputHandler(
     private val state: EditorState,
     private val history: History,
     private val coroutineScope: CoroutineScope,
-//    private val onStrokeReceived: (StrokeEvent) -> Unit
 ) {
     var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
@@ -113,7 +112,7 @@ class OnyxInputHandler(
                             boundingBox.right + padding,
                             boundingBox.bottom + padding
                         )
-                        drawCanvas.refreshUi(dirtyRect)
+                        drawCanvas.refreshManager.refreshUi(dirtyRect)
                     }
                 }
 
@@ -154,7 +153,7 @@ class OnyxInputHandler(
                                     max(startPoint.y, endPoint.y).toInt()
                                 )
 //                                partialRefreshRegionOnce(this@DrawCanvas, dirtyRect)
-                                drawCanvas.refreshUi(dirtyRect)
+                                drawCanvas.refreshManager.refreshUi(dirtyRect)
                                 CanvasEventBus.commitHistorySignal.emit(Unit)
                             }
                         }
@@ -246,7 +245,7 @@ class OnyxInputHandler(
                 boundingBox.right + padding,
                 boundingBox.bottom + padding
             )
-            drawCanvas.refreshUi(strokeArea)
+            drawCanvas.refreshManager.refreshUi(strokeArea)
 
             val zoneEffected = handleErase(
                 drawCanvas.page,
@@ -255,7 +254,7 @@ class OnyxInputHandler(
                 eraser = drawCanvas.getActualState().eraser
             )
             if (zoneEffected != null)
-                drawCanvas.refreshUi(zoneEffected)
+                drawCanvas.refreshManager.refreshUi(zoneEffected)
         }
 
         override fun onRawErasingTouchPointMoveReceived(p0: TouchPoint?) {

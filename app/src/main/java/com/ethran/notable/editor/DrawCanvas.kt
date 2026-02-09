@@ -6,41 +6,23 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
-import android.net.Uri
-import android.os.Looper
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.drawing.OpenGLRenderer
-import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
-import com.ethran.notable.editor.state.Operation
-import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
 import com.ethran.notable.editor.utils.pointsToPath
 import com.ethran.notable.editor.utils.refreshScreenRegion
-import com.ethran.notable.editor.utils.resetScreenFreeze
-import com.ethran.notable.editor.utils.selectImage
-import com.ethran.notable.editor.utils.selectImagesAndStrokes
-import com.ethran.notable.editor.utils.setAnimationMode
-import com.ethran.notable.editor.utils.toPageCoordinates
-import com.ethran.notable.io.uriToBitmap
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.showHint
-import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
-import com.onyx.android.sdk.extension.isNotNull
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -62,7 +44,6 @@ class DrawCanvas(
     val page: PageView,
     val history: History
 ) : SurfaceView(context) {
-    private val strokeHistoryBatch = mutableListOf<String>()
     private val log = ShipBook.getLogger("DrawCanvas")
 
     override fun onTouchEvent(event: MotionEvent): Boolean { //Custom view DrawCanvas overrides onTouchEvent but not performClick
@@ -72,7 +53,7 @@ class DrawCanvas(
         // We will only capture stylus events, and past rest down
 //        log.d("onTouchEvent, ${event.getToolType(0)}")
         if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS || event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER) {
-            return if (!DeviceCompat.isOnyxDevice || isErasing) glRenderer.onTouchListener.onTouch(
+            return if (!DeviceCompat.isOnyxDevice || inputHandler.isErasing) glRenderer.onTouchListener.onTouch(
                 this, event
             )
             else true
@@ -85,10 +66,7 @@ class DrawCanvas(
     override fun performClick(): Boolean {
         return super.performClick()
     }
-
     var glRenderer = OpenGLRenderer(this)
-
-    var isErasing: Boolean = false
 
     companion object {
 
@@ -137,10 +115,11 @@ class DrawCanvas(
 
 
     val inputHandler = OnyxInputHandler(this, page, state, history, coroutineScope)
+    val refreshManager = CanvasRefreshManager(this, page, state, inputHandler.touchHelper)
 
 
     private val observers = CanvasObserverRegistry(
-        coroutineScope, this, page, state, history, inputHandler
+        coroutineScope, this, page, state, history, inputHandler, refreshManager
     )
 
     fun registerObservers() = observers.registerAll()
@@ -193,57 +172,6 @@ class DrawCanvas(
 
     }
 
-
-
-    // TODO: move it
-    fun commitToHistory() {
-        if (strokeHistoryBatch.isNotEmpty()) history.addOperationsToHistory(
-            operations = listOf(
-                Operation.DeleteStroke(strokeHistoryBatch.map { it })
-            )
-        )
-        strokeHistoryBatch.clear()
-        //testing if it will help with undo hiding strokes.
-        drawCanvasToView(null)
-    }
-
-    fun refreshUi(dirtyRect: Rect?) {
-        log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoomLevel.value}")
-
-        // post what page drawn to visible surface
-        drawCanvasToView(dirtyRect)
-        if (CanvasEventBus.drawingInProgress.isLocked) log.w("Drawing is still in progress there might be a bug.")
-
-        // Use only if you have confidence that there are no strokes being drawn at the moment
-        if (!state.isDrawing) {
-            log.w("Not in drawing mode, skipping unfreezing")
-            return
-        }
-        // reset screen freeze
-        resetScreenFreeze(inputHandler.touchHelper)
-    }
-
-    suspend fun refreshUiSuspend() {
-        // Do not use, if refresh need to be preformed without delay.
-        // This function waits for strokes to be fully rendered.
-        if (!state.isDrawing) {
-            waitForDrawing()
-            drawCanvasToView(null)
-            log.w("Not in drawing mode -- refreshUi ")
-            return
-        }
-        if (Looper.getMainLooper().isCurrentThread) {
-            log.w(
-                "refreshUiSuspend() is called from the main thread."
-            )
-            logCallStack("refreshUiSuspend_main_thread")
-        } else log.v(
-            "refreshUiSuspend() is called from the non-main thread."
-        )
-        waitForDrawing()
-        drawCanvasToView(null)
-        resetScreenFreeze(inputHandler.touchHelper)
-    }
 
 
     fun drawCanvasToView(dirtyRect: Rect?) {
