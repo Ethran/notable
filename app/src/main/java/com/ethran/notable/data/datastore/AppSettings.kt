@@ -23,25 +23,22 @@ object GlobalAppSettings {
 
 @Serializable
 data class AppSettings(
+    // General
     val version: Int,
     val monitorBgFiles: Boolean = false,
-    val showWelcome: Boolean = true,
     val defaultNativeTemplate: String = "blank",
     val quickNavPages: List<String> = listOf(),
-    val debugMode: Boolean = false,
     val neoTools: Boolean = false,
+    val scribbleToEraseEnabled: Boolean = false,
     val toolbarPosition: Position = Position.Top,
     val smoothScroll: Boolean = true,
-    val monochromeMode: Boolean = false,
     val continuousZoom: Boolean = false,
-    val visualizePdfPagination: Boolean = false,
+    val continuousStrokeSlider: Boolean = false,
+    val monochromeMode: Boolean = false,
     val paginatePdf: Boolean = true,
-    val scribbleToEraseEnabled: Boolean = false,
-    val simpleRendering: Boolean = false,
-    val openGLRendering: Boolean = true,
-    val muPdfRendering: Boolean = true,
-    val destructiveMigrations: Boolean = false,
+    val visualizePdfPagination: Boolean = false,
 
+    // Gestures
     val doubleTapAction: GestureAction? = defaultDoubleTapAction,
     val twoFingerTapAction: GestureAction? = defaultTwoFingerTapAction,
     val swipeLeftAction: GestureAction? = defaultSwipeLeftAction,
@@ -49,7 +46,16 @@ data class AppSettings(
     val twoFingerSwipeLeftAction: GestureAction? = defaultTwoFingerSwipeLeftAction,
     val twoFingerSwipeRightAction: GestureAction? = defaultTwoFingerSwipeRightAction,
     val holdAction: GestureAction? = defaultHoldAction,
-    val continuousStrokeSlider: Boolean = false,
+
+
+    // Debug
+    val showWelcome: Boolean = true,
+    // [system information -- does not have a setting]
+    val debugMode: Boolean = false,
+    val simpleRendering: Boolean = false,
+    val openGLRendering: Boolean = true,
+    val muPdfRendering: Boolean = true,
+    val destructiveMigrations: Boolean = false,
 
     ) {
     companion object {
