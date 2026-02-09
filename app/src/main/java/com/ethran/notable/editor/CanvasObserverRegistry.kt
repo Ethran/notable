@@ -11,11 +11,11 @@ import com.ethran.notable.editor.utils.loadPreview
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.waitForEpdRefresh
 import com.onyx.android.sdk.extension.isNull
-import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -28,8 +28,7 @@ class CanvasObserverRegistry(
     private val page: PageView,
     private val state: EditorState,
     private val history: History,
-    private val touchHelper: TouchHelper?,
-//    private val inputHandler: OnyxInputHandler,
+    private val inputHandler: OnyxInputHandler,
 //    private val refreshManager: CanvasRefreshManager
 ) {
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
@@ -77,7 +76,7 @@ class CanvasObserverRegistry(
                 launch(Dispatchers.Default) {
                     if (dirtyRectangle.isNull()) drawCanvas.refreshUiSuspend()
                     else {
-                        partialRefreshRegionOnce(drawCanvas, zoneToRedraw, touchHelper)
+                        partialRefreshRegionOnce(drawCanvas, zoneToRedraw, inputHandler.touchHelper)
                     }
                 }
             }
@@ -99,7 +98,7 @@ class CanvasObserverRegistry(
                 logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
-                    drawCanvas.updatePenAndStroke() // The setting might been changed by other app.
+                    inputHandler.updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvas.drawCanvasToView(null)
                 } else {
                     CanvasEventBus.isDrawing.emit(false)
@@ -113,7 +112,7 @@ class CanvasObserverRegistry(
             page.zoomLevel.drop(1).collect {
                 logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
                 PageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
-                drawCanvas.updatePenAndStroke()
+                inputHandler.updatePenAndStroke()
             }
         }
     }
@@ -174,21 +173,21 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             snapshotFlow { state.pen }.drop(1).collect {
                 logCanvasObserver.v("pen change: ${state.pen}")
-                drawCanvas.updatePenAndStroke()
+                inputHandler.updatePenAndStroke()
                 drawCanvas.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.penSettings.toMap() }.drop(1).collect {
                 logCanvasObserver.v("pen settings change: ${state.penSettings}")
-                drawCanvas.updatePenAndStroke()
+                inputHandler.updatePenAndStroke()
                 drawCanvas.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.eraser }.drop(1).collect {
                 logCanvasObserver.v("eraser change: ${state.eraser}")
-                drawCanvas.updatePenAndStroke()
+                inputHandler.updatePenAndStroke()
                 drawCanvas.refreshUiSuspend()
             }
         }
@@ -205,7 +204,7 @@ class CanvasObserverRegistry(
 //                    EpdController.waitForUpdateFinished() // it does not work.
                     waitForEpdRefresh()
                 }
-                drawCanvas.updateIsDrawing()
+                inputHandler.updateIsDrawing()
             }
         }
     }
@@ -214,8 +213,8 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             snapshotFlow { state.isToolbarOpen }.drop(1).collect {
                 logCanvasObserver.v("istoolbaropen change: ${state.isToolbarOpen}")
-                drawCanvas.updateActiveSurface()
-                drawCanvas.updatePenAndStroke()
+                inputHandler.updateActiveSurface()
+                inputHandler.updatePenAndStroke()
                 drawCanvas.refreshUi(null)
             }
         }
@@ -225,12 +224,13 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             snapshotFlow { drawCanvas.getActualState().mode }.drop(1).collect {
                 logCanvasObserver.v("mode change: ${drawCanvas.getActualState().mode}")
-                drawCanvas.updatePenAndStroke()
+                inputHandler.updatePenAndStroke()
                 drawCanvas.refreshUiSuspend()
             }
         }
     }
 
+    @OptIn(FlowPreview::class)
     private fun observeHistory() {
         coroutineScope.launch {
             // After 500ms add to history strokes
@@ -257,6 +257,7 @@ class CanvasObserverRegistry(
         }
     }
 
+    @OptIn(FlowPreview::class)
     private fun observeQuickNav() {
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
