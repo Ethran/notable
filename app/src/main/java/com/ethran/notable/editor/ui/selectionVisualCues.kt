@@ -19,7 +19,7 @@ import androidx.compose.ui.zIndex
 
 @Composable
 fun SelectionVisualCues(crossPosition: IntOffset?, rectangleBounds: Rect?) {
-    // Box for showing visual clous for selection
+    // Box for showing visual cues for selection
     // separated from pointerInput box, as it has to be on top of everything.
     Box(
         modifier = Modifier
