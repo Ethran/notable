@@ -152,8 +152,10 @@ class OpenGLRenderer(
     }
 
     fun attachSurfaceView(surfaceView: SurfaceView) {
-        if (isAttached)
-            Log.w("OpenGLRenderer", "Already attached")
+        if (isAttached) {
+            Log.w("OpenGLRenderer", "Already attached, releasing old renderer first")
+            release()
+        }
         frontBufferRenderer = GLFrontBufferedRenderer(surfaceView, this)
         motionEventPredictor = MotionEventPredictor.newInstance(surfaceView)
     }
@@ -162,10 +164,11 @@ class OpenGLRenderer(
         get() = frontBufferRenderer != null
 
     fun release() {
-        frontBufferRenderer?.release(true)
-        {
+        Log.d("OpenGLRenderer", "Releasing renderer")
+        frontBufferRenderer?.release(true) {
             obtainRenderer().release()
         }
+        frontBufferRenderer = null
     }
 
     private fun getStrokePoint(motionEvent: MotionEvent): StrokePoint {

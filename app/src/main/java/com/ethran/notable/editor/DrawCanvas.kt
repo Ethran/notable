@@ -18,6 +18,10 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -139,18 +143,6 @@ class DrawCanvas(
     }
 
     private var glRenderer = OpenGLRenderer(this)
-    override fun onAttachedToWindow() {
-        log.d("Attached to window")
-        glRenderer = OpenGLRenderer(this@DrawCanvas)
-        super.onAttachedToWindow()
-        glRenderer.attachSurfaceView(this)
-    }
-
-    override fun onDetachedFromWindow() {
-        log.d("Detached from window")
-        glRenderer.release()
-        super.onDetachedFromWindow()
-    }
 
     var isErasing: Boolean = false
 
@@ -446,8 +438,11 @@ class DrawCanvas(
         } else null
         helper
     }
+
     fun init() {
         log.i("Initializing Canvas")
+        glRenderer.release()
+        glRenderer = OpenGLRenderer(this@DrawCanvas)
         glRenderer.attachSurfaceView(this)
 
 
