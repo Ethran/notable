@@ -31,6 +31,7 @@ import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.PlacementMode
+import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
@@ -247,6 +248,7 @@ class DrawCanvas(
         }
 
         override fun onRawDrawingTouchPointListReceived(plist: TouchPointList) {
+            if(touchHelper == null) return
             val currentLastStrokeEndTime = lastStrokeEndTime
             lastStrokeEndTime = System.currentTimeMillis()
             val startTime = System.currentTimeMillis()
@@ -359,7 +361,7 @@ class DrawCanvas(
                                 partialRefreshRegionOnce(
                                     this@DrawCanvas,
                                     erasedByScribbleDirtyRect,
-                                    touchHelper
+                                    touchHelper!!
                                 )
 
                             }
@@ -375,8 +377,9 @@ class DrawCanvas(
 
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
+            if(touchHelper == null) return
             if (GlobalAppSettings.current.openGLRendering) {
-                prepareForPartialUpdate(this@DrawCanvas, touchHelper)
+                prepareForPartialUpdate(this@DrawCanvas, touchHelper!!)
                 log.d("Eraser Mode")
             }
             isErasing = true
@@ -432,10 +435,17 @@ class DrawCanvas(
     }
 
     private val touchHelper by lazy {
-        referencedSurfaceView = this.hashCode().toString()
-        TouchHelper.create(this, inputCallback)
+        val helper = if (DeviceCompat.isOnyxDevice) {
+            try {
+                referencedSurfaceView = this.hashCode().toString()
+                TouchHelper.create(this, inputCallback)
+            } catch (t: Throwable) {
+                android.util.Log.w("OnyxInputHandler", "TouchHelper.create failed: ${t.message}")
+                null
+            }
+        } else null
+        helper
     }
-
     fun init() {
         log.i("Initializing Canvas")
         glRenderer.attachSurfaceView(this)
@@ -472,7 +482,7 @@ class DrawCanvas(
                 )
                 holder.removeCallback(this)
                 if (referencedSurfaceView == this@DrawCanvas.hashCode().toString()) {
-                    touchHelper.closeRawDrawing()
+                    touchHelper?.closeRawDrawing()
                 }
                 onSurfaceDestroy(this@DrawCanvas, touchHelper)
             }
@@ -851,36 +861,38 @@ class DrawCanvas(
     }
 
     private suspend fun updateIsDrawing() {
+        if(touchHelper == null) return
         log.i("Update is drawing: ${state.isDrawing}")
         if (state.isDrawing) {
-            touchHelper.setRawDrawingEnabled(true)
+            touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
             waitForDrawing()
             // draw to view, before showing drawing, avoid stutter
             drawCanvasToView(null)
-            touchHelper.setRawDrawingEnabled(false)
+            touchHelper!!.setRawDrawingEnabled(false)
         }
     }
 
     fun updatePenAndStroke() {
+        if(touchHelper == null) return
         // it takes around 11 ms to run on Note 4c.
         log.i("Update pen and stroke")
         when (state.mode) {
             // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> touchHelper.setStrokeStyle(penToStroke(state.pen))
+            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(state.pen))
                 ?.setStrokeWidth(state.penSettings[state.pen.penName]!!.strokeSize * page.zoomLevel.value)
                 ?.setStrokeColor(state.penSettings[state.pen.penName]!!.color)
 
             Mode.Erase -> {
                 when (state.eraser) {
-                    Eraser.PEN -> touchHelper.setStrokeStyle(penToStroke(Pen.MARKER))
+                    Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
                         ?.setStrokeWidth(30f)
                         ?.setStrokeColor(Color.GRAY)
 
                     Eraser.SELECT -> {
                         val dashStyleID = penToStroke(Pen.DASHED)
-                        touchHelper.setStrokeStyle(dashStyleID)
+                        touchHelper!!.setStrokeStyle(dashStyleID)
                         ?.setStrokeWidth(3f)
                             ?.setStrokeColor(Color.BLACK)
                         val params: FloatArray = FloatArray(4)
@@ -893,7 +905,7 @@ class DrawCanvas(
                 }
             }
 
-            Mode.Select -> touchHelper.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
+            Mode.Select -> touchHelper?.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
                 ?.setStrokeColor(Color.GRAY)
         }
     }
