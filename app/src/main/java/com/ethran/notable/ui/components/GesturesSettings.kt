@@ -53,7 +53,7 @@ fun GesturesSettings(context: Context, kv: KvProxy, settings: AppSettings?) {
             ),
         )
 
-        gestures.forEachIndexed { index, (title, default, override) ->
+        gestures.forEachIndexed { _, (title, default, override) ->
             GestureSelectorRow(
                 title = title, kv = kv, settings = settings, update = { action ->
                     when (title) {

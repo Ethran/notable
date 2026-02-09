@@ -22,7 +22,8 @@ fun GeneralSettings(kv: KvProxy, settings: AppSettings) {
                 kv.setAppSettings(settings.copy(defaultNativeTemplate = it))
             })
         SelectorRow(
-            label = "Toolbar Position", options = listOf(
+            label = stringResource(R.string.toolbar_position),
+            options = listOf(
                 AppSettings.Position.Top to stringResource(R.string.toolbar_position_top),
                 AppSettings.Position.Bottom to stringResource(
                     R.string.toolbar_position_bottom

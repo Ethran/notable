@@ -101,5 +101,6 @@
     <string name="observe_pdf">Observe PDF</string>
     <string name="current_page">Current Page</string>
     <string name="toolbar_scribble_to_erase_two_lined_short">Scribble\nto Erase</string>
+    <string name="toolbar_position">Toolbar Position</string>
 
 </resources>

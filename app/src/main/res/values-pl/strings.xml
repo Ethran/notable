@@ -118,5 +118,6 @@
     <string name="current_page">Bieżąca strona</string>
 
     <string name="toolbar_scribble_to_erase_two_lined_short">Zamaż\n→usuń</string>
+    <string name="toolbar_position">Pozycja paska narzędzi</string>
 
 </resources>
