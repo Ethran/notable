@@ -96,7 +96,7 @@ class OpenGLRenderer(
 
         timer.step("obtainRenderer")
 
-        obtainRenderer().drawSimpleLine(projection, pointsToDraw, Color.BLACK.toColor(), viewModel)
+        obtainRenderer().drawLine(projection, pointsToDraw, Color.BLACK.toColor(), viewModel)
 
         timer.end("drawLine")
     }
@@ -192,6 +192,8 @@ class OpenGLRenderer(
 
         when (event?.action) {
             MotionEvent.ACTION_DOWN -> {
+                // Clear leftover points from previous stroke
+                openGlPoints2.clear()
                 // Ask that the input system not batch MotionEvents
                 // but instead deliver them as soon as they're available
                 view.requestUnbufferedDispatch(event)
