@@ -216,6 +216,7 @@ fun Router() {
 private fun Modifier.detectThreeFingerTouchToOpenQuickNav(
     onOpen: () -> Unit
 ): Modifier = this.pointerInput(Unit) {
+    if(!GlobalAppSettings.current.enableQuickNav) return@pointerInput
     while (true) {
         try {
             awaitPointerEventScope {

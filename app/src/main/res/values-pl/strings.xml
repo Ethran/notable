@@ -43,6 +43,7 @@
     <string name="gesture_action_toggle_pen_eraser">Przełącz pióro/gumkę</string>
     <string name="gesture_action_toggle_zen_mode">Przełącz tryb Zen</string>
 
+    <string name="enable_quick_nav">Dotknij trzema palcami aby pokazać QuickNav</string>
     <string name="work_in_progress">(w trakcie implementacji)</string>
     <string name="toolbar_position_top">Góra</string>
     <string name="toolbar_position_bottom">Dół</string>

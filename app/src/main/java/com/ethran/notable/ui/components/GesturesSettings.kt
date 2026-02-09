@@ -10,6 +10,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 
 @Composable
@@ -85,6 +86,12 @@ fun GesturesSettings(context: Context, kv: KvProxy, settings: AppSettings?) {
                 }, default = default, override = override
             )
         }
+        SettingToggleRow(
+            label = stringResource(R.string.enable_quick_nav),
+            value = GlobalAppSettings.current.enableQuickNav,
+            onToggle = { isChecked ->
+                kv.setAppSettings( GlobalAppSettings.current.copy(enableQuickNav = isChecked))
+            })
     }
 }
 
