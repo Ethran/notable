@@ -177,7 +177,7 @@ class PageView(
         }
 
         coroutineScope.launch {
-            DrawCanvas.refreshUiImmediately.emit(Unit)
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
             loadPage()
             log.d("Page loaded (Init with id: $currentPageId)")
             collectAndPersistBitmapsBatch(context, coroutineScope)
@@ -232,7 +232,7 @@ class PageView(
             // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
             //  using function that does not wait for drawing mostly solved the problem.
             //  but there might be still bugs with it.
-            DrawCanvas.refreshUiImmediately.emit(Unit)
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
             loadPage()
             log.d("Page loaded (updatePageID($currentPageId))")
         }
@@ -280,7 +280,7 @@ class PageView(
                 // TODO: If we put it in loadPage(…) sometimes it will try to refresh
                 //  without seeing strokes, I have no idea why.
                 coroutineScope.launch(Dispatchers.Main.immediate) {
-                    DrawCanvas.forceUpdate.emit(null)
+                    CanvasEventBus.forceUpdate.emit(null)
                 }
                 logCache.d("Loaded page from persistent layer $currentPageId")
                 if (!PageDataManager.validatePageDataLoaded(currentPageId))
@@ -494,7 +494,7 @@ class PageView(
         scroll =
             Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
 
-        DrawCanvas.forceUpdate.emit(null)
+        CanvasEventBus.forceUpdate.emit(null)
     }
 
 
@@ -808,7 +808,7 @@ class PageView(
         // TODO: it might be worth to do it
         //  by redrawing only part of the screen, like in scroll and zoom.
         coroutineScope.launch {
-            DrawCanvas.forceUpdate.emit(null)
+            CanvasEventBus.forceUpdate.emit(null)
         }
         persistBitmapDebounced()
     }

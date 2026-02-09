@@ -80,7 +80,7 @@ import com.ethran.notable.TAG
 import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawDottedBg
 import com.ethran.notable.editor.drawing.drawHexedBg
 import com.ethran.notable.editor.drawing.drawLinedBg
@@ -165,7 +165,7 @@ fun BackgroundSelector(
 
                     Log.i(TAG, "PickVisualMedia: copied -> ${copiedFile.absolutePath}")
                     onChange(currentType.key, copiedFile.toString())
-                    scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+                    scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
                     pageBackground = copiedFile.toString()
                     Log.d(
                         TAG,
@@ -198,7 +198,7 @@ fun BackgroundSelector(
             try {
                 val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
                 onChange(currentType.key, copiedFile.toString())
-                scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+                scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
                 pageBackground = copiedFile.toString()
                 pageBackgroundType = currentType
                 Log.i(

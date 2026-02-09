@@ -3,7 +3,7 @@ package com.ethran.notable.editor.state
 import android.graphics.Rect
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.CanvasEventBus
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.strokeBounds
@@ -45,15 +45,15 @@ class History(pageView: PageView) {
             is HistoryBusActions.MoveHistory -> {
                 // Wait for commit to history to complete
                 if (actions.type == UndoRedoType.Undo) {
-                    DrawCanvas.commitCompletion = CompletableDeferred()
-                    DrawCanvas.commitHistorySignalImmediately.emit(Unit)
-                    DrawCanvas.commitCompletion.await()
+                    CanvasEventBus.commitCompletion = CompletableDeferred()
+                    CanvasEventBus.commitHistorySignalImmediately.emit(Unit)
+                    CanvasEventBus.commitCompletion.await()
                 }
                 val zoneAffected = undoRedo(type = actions.type)
                 if (zoneAffected != null) {
                     pageModel.drawAreaPageCoordinates(zoneAffected)
                     //moved to refresh after drawing
-                    DrawCanvas.refreshUi.emit(Unit)
+                    CanvasEventBus.refreshUi.emit(Unit)
                 } else {
                     SnackState.globalSnackFlow.emit(
                         SnackConf(

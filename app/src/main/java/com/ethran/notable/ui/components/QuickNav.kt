@@ -28,7 +28,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.CanvasEventBus
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.SnackConf
@@ -214,19 +214,19 @@ private fun BookScrubberBlock(
             currentIndex = appRepository.getPageNumber(bookId, currentPageId),
             onDragStart = {
                 // Persist current so preview can load from disk
-                DrawCanvas.saveCurrent.tryEmit(Unit)
+                CanvasEventBus.saveCurrent.tryEmit(Unit)
             },
             favIndexes = favoriteIndexesInBook,
             onPreviewIndexChanged = { idx ->
                 // Live preview of persisted snapshot (or “No preview available”)
                 Log.d("QuickNav", "onPreviewIndexChanged: $idx")
-                DrawCanvas.previewPage.tryEmit(getPageIdFromIndex(idx))
+                CanvasEventBus.previewPage.tryEmit(getPageIdFromIndex(idx))
             },
             onDragEnd = { idx ->
                 // Restore canvas to correct state
-                DrawCanvas.restoreCanvas.tryEmit(Unit)
+                CanvasEventBus.restoreCanvas.tryEmit(Unit)
                 // Commit: switch PageView to the chosen page
-                EditorControlTower.changePage.tryEmit(getPageIdFromIndex(idx))
+                CanvasEventBus.changePage.tryEmit(getPageIdFromIndex(idx))
             },
             onReturnClick = {
                 if (quickNavSourcePageId == null)
@@ -238,7 +238,7 @@ private fun BookScrubberBlock(
                     )
                 else
                 // Go back to the page where QuickNav was opened
-                    EditorControlTower.changePage.tryEmit(quickNavSourcePageId)
+                    CanvasEventBus.changePage.tryEmit(quickNavSourcePageId)
             })
     }
 

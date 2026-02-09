@@ -11,7 +11,7 @@ import com.ethran.notable.TAG
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.CanvasEventBus
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
@@ -125,7 +125,7 @@ fun selectImagesAndStrokes(
         ignoredStrokeIds = strokesToSelect.map { it.id })
 
     scope.launch {
-        DrawCanvas.refreshUi.emit(Unit)
+        CanvasEventBus.refreshUi.emit(Unit)
         editorState.isDrawing = false
     }
 }

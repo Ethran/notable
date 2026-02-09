@@ -17,6 +17,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.editor.CanvasEventBus
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.imageBounds
@@ -55,7 +56,7 @@ fun drawImage(context: Context, canvas: Canvas, image: Image, offset: Offset) {
         val softwareBitmap =
             imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
 
-        DrawCanvas.addImageByUri.value = null
+        CanvasEventBus.addImageByUri.value = null
 
         val rectOnImage = Rect(0, 0, imageBitmap.width, imageBitmap.height)
         val rectOnCanvas =

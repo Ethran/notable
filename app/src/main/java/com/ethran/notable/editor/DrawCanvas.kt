@@ -145,39 +145,6 @@ class DrawCanvas(
     var isErasing: Boolean = false
 
     companion object {
-        var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
-        var refreshUi = MutableSharedFlow<Unit>()
-        var refreshUiImmediately = MutableSharedFlow<Unit>(
-            replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
-        )
-        var isDrawing = MutableSharedFlow<Boolean>()
-        var restartAfterConfChange = MutableSharedFlow<Unit>()
-
-        // used for managing drawing state on regain focus
-        val onFocusChange = MutableSharedFlow<Boolean>()
-
-        // before undo we need to commit changes
-        val commitHistorySignal = MutableSharedFlow<Unit>()
-        val commitHistorySignalImmediately = MutableSharedFlow<Unit>()
-
-        // used for checking if commit was completed
-        var commitCompletion = CompletableDeferred<Unit>()
-
-        // It might be bad idea, but plan is to insert graphic in this, and then take it from it
-        // There is probably better way
-        var addImageByUri = MutableStateFlow<Uri?>(null)
-        var rectangleToSelectByGesture = MutableStateFlow<Rect?>(null)
-        var drawingInProgress = Mutex()
-
-        // For cleaning whole page, activated from toolbar menu
-        var clearPageSignal = MutableSharedFlow<Unit>()
-
-
-        // For QuickNav scrolling with previews
-        val saveCurrent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-        val previewPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
-        val restoreCanvas = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
 
         private suspend fun waitForDrawing() {
             Log.d(
@@ -188,7 +155,7 @@ class DrawCanvas(
                     // Just to make sure wait 1ms before checking lock.
                     delay(1)
                     // Wait until drawingInProgress is unlocked before proceeding
-                    while (drawingInProgress.isLocked) {
+                    while (CanvasEventBus.drawingInProgress.isLocked) {
                         delay(5)
                     }
                 } ?: Log.e(
@@ -209,7 +176,7 @@ class DrawCanvas(
         }
 
         suspend fun waitForDrawingWithSnack() {
-            if (drawingInProgress.isLocked) {
+            if (CanvasEventBus.drawingInProgress.isLocked) {
                 val snack = SnackConf(text = "Waiting for drawing to finish…", duration = 60000)
                 SnackState.globalSnackFlow.emit(snack)
                 waitForDrawing()
@@ -278,7 +245,7 @@ class DrawCanvas(
                 // before anything else happens.
                 Mode.Line -> {
                     coroutineScope.launch(Dispatchers.Main.immediate) {
-                        drawingInProgress.withLock {
+                        CanvasEventBus.drawingInProgress.withLock {
                             val lock = System.currentTimeMillis()
                             log.d("lock obtained in ${lock - startTime} ms")
 
@@ -308,7 +275,7 @@ class DrawCanvas(
                                 )
 //                                partialRefreshRegionOnce(this@DrawCanvas, dirtyRect)
                                 refreshUi(dirtyRect)
-                                commitHistorySignal.emit(Unit)
+                                CanvasEventBus.commitHistorySignal.emit(Unit)
                             }
                         }
 
@@ -317,7 +284,7 @@ class DrawCanvas(
 
                 Mode.Draw -> {
                     coroutineScope.launch(Dispatchers.Main.immediate) {
-                        drawingInProgress.withLock {
+                        CanvasEventBus.drawingInProgress.withLock {
                             val lock = System.currentTimeMillis()
                             log.d("lock obtained in ${lock - startTime} ms")
 
@@ -358,7 +325,7 @@ class DrawCanvas(
 
                         }
                         coroutineScope.launch(Dispatchers.Default) {
-                            commitHistorySignal.emit(Unit)
+                            CanvasEventBus.commitHistorySignal.emit(Unit)
                         }
                     }
                 }
@@ -489,7 +456,7 @@ class DrawCanvas(
     fun registerObservers() {
 
         coroutineScope.launch {
-            refreshUiImmediately.collect {
+            CanvasEventBus.refreshUiImmediately.collect {
                 logCanvasObserver.v("Refreshing UI!")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 refreshUi(zoneToRedraw)
@@ -500,7 +467,7 @@ class DrawCanvas(
         // given null it will redraw whole page
         // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
         coroutineScope.launch(Dispatchers.Main.immediate) {
-            forceUpdate.collect { dirtyRectangle ->
+            CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
                 logCanvasObserver.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
@@ -516,21 +483,21 @@ class DrawCanvas(
 
         // observe refreshUi
         coroutineScope.launch(Dispatchers.Default) {
-            refreshUi.collect {
+            CanvasEventBus.refreshUi.collect {
                 logCanvasObserver.v("Refreshing UI!")
                 refreshUiSuspend()
             }
         }
 
         coroutineScope.launch {
-            onFocusChange.collect { hasFocus ->
+            CanvasEventBus.onFocusChange.collect { hasFocus ->
                 logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     state.checkForSelectionsAndMenus()
                     updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvasToView(null)
                 } else {
-                    isDrawing.emit(false)
+                    CanvasEventBus.isDrawing.emit(false)
                 }
             }
         }
@@ -543,7 +510,7 @@ class DrawCanvas(
         }
 
         coroutineScope.launch {
-            isDrawing.collect {
+            CanvasEventBus.isDrawing.collect {
                 logCanvasObserver.v("drawing state changed to $it!")
                 state.isDrawing = it
             }
@@ -551,7 +518,7 @@ class DrawCanvas(
 
 
         coroutineScope.launch {
-            addImageByUri.drop(1).collect { imageUri ->
+            CanvasEventBus.addImageByUri.drop(1).collect { imageUri ->
                 if (imageUri != null) {
                     logCanvasObserver.v("Received image: $imageUri")
                     handleImage(imageUri)
@@ -560,7 +527,7 @@ class DrawCanvas(
             }
         }
         coroutineScope.launch {
-            rectangleToSelectByGesture.drop(1).collect {
+            CanvasEventBus.rectangleToSelectByGesture.drop(1).collect {
                 if (it != null) {
                     logCanvasObserver.v("Area to Select (screen): $it")
                     selectRectangle(it)
@@ -569,7 +536,7 @@ class DrawCanvas(
         }
 
         coroutineScope.launch {
-            clearPageSignal.collect {
+            CanvasEventBus.clearPageSignal.collect {
                 require(!state.isDrawing) { "Cannot clear page in drawing mode" }
                 logCanvasObserver.v("Clear page signal!")
                 cleanAllStrokes(page, history)
@@ -577,7 +544,7 @@ class DrawCanvas(
         }
 
         coroutineScope.launch {
-            restartAfterConfChange.collect {
+            CanvasEventBus.restartAfterConfChange.collect {
                 logCanvasObserver.v("Configuration changed!")
                 init()
                 drawCanvasToView(null)
@@ -643,21 +610,21 @@ class DrawCanvas(
 
         coroutineScope.launch {
             //After 500ms add to history strokes
-            commitHistorySignal.debounce(500).collect {
+            CanvasEventBus.commitHistorySignal.debounce(500).collect {
                 logCanvasObserver.v("Commiting to history")
                 commitToHistory()
             }
         }
         coroutineScope.launch {
-            commitHistorySignalImmediately.collect {
+            CanvasEventBus.commitHistorySignalImmediately.collect {
                 commitToHistory()
-                commitCompletion.complete(Unit)
+                CanvasEventBus.commitCompletion.complete(Unit)
             }
         }
 
 
         coroutineScope.launch {
-            saveCurrent.collect {
+            CanvasEventBus.saveCurrent.collect {
                 // Push current bitmap to persist layer so preview has something to load
                 PageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
                 PageDataManager.saveTopic.tryEmit(page.currentPageId)
@@ -665,7 +632,7 @@ class DrawCanvas(
         }
 
         coroutineScope.launch {
-            previewPage.debounce(50).collectLatest { pageId ->
+            CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
                 val pageNumber =
                     AppRepository(context).getPageNumber(page.pageFromDb?.notebookId!!, pageId)
                 Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
@@ -691,7 +658,7 @@ class DrawCanvas(
         }
 
         coroutineScope.launch {
-            restoreCanvas.collect {
+            CanvasEventBus.restoreCanvas.collect {
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 restoreCanvas(zoneToRedraw)
             }
@@ -708,7 +675,7 @@ class DrawCanvas(
         val imagesToSelect = PageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)
         val strokesToSelect = PageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
         if (imagesToSelect.isNotNull() && strokesToSelect.isNotNull()) {
-            rectangleToSelectByGesture.value = null
+            CanvasEventBus.rectangleToSelectByGesture.value = null
             if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
                 selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
             } else {
@@ -745,7 +712,7 @@ class DrawCanvas(
 
         // post what page drawn to visible surface
         drawCanvasToView(dirtyRect)
-        if (drawingInProgress.isLocked) log.w("Drawing is still in progress there might be a bug.")
+        if (CanvasEventBus.drawingInProgress.isLocked) log.w("Drawing is still in progress there might be a bug.")
 
         // Use only if you have confidence that there are no strokes being drawn at the moment
         if (!state.isDrawing) {
@@ -787,7 +754,7 @@ class DrawCanvas(
         val softwareBitmap =
             imageBitmap?.asAndroidBitmap()?.copy(Bitmap.Config.ARGB_8888, true)
         if (softwareBitmap != null) {
-            addImageByUri.value = null
+            CanvasEventBus.addImageByUri.value = null
 
             // Get the image dimensions
             val imageWidth = softwareBitmap.width

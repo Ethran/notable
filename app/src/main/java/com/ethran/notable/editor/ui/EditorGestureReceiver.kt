@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.CanvasEventBus
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.DOUBLE_TAP_MIN_MS
 import com.ethran.notable.editor.state.DOUBLE_TAP_TIMEOUT_MS
@@ -189,7 +189,7 @@ fun EditorGestureReceiver(
                                 log.d("Zoom or drag -- final redraw")
                                 coroutineScope.launch {
                                     // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
-                                    DrawCanvas.forceUpdate.emit(null)
+                                    CanvasEventBus.forceUpdate.emit(null)
                                 }
                                 gestureState.gestureMode =
                                     GestureMode.Normal // return screen updates to normal.
@@ -379,7 +379,7 @@ private fun resolveGesture(
             log.i("select")
             scope.launch {
 //                log.w( "rect in screen coord: $rectangle")
-                DrawCanvas.rectangleToSelectByGesture.emit(rectangle)
+                CanvasEventBus.rectangleToSelectByGesture.emit(rectangle)
             }
         }
     }

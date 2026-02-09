@@ -29,7 +29,7 @@ import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.reencodeStrokePointsToSB1
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.CanvasEventBus
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.Router
 import com.ethran.notable.ui.SnackBar
@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
         super.onRestart()
         // redraw after device sleep
         this.lifecycleScope.launch {
-            DrawCanvas.restartAfterConfChange.emit(Unit)
+            CanvasEventBus.restartAfterConfChange.emit(Unit)
         }
     }
 
@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
 
-            DrawCanvas.refreshUi.emit(Unit)
+            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
             enableFullScreen()
         }
         lifecycleScope.launch {
-            DrawCanvas.onFocusChange.emit(hasFocus)
+            CanvasEventBus.onFocusChange.emit(hasFocus)
         }
     }
 
@@ -154,9 +154,9 @@ class MainActivity : ComponentActivity() {
         }
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
-        // Not necessary, done in DrawCanvas.surfaceChanged()
+        // Not necessary, done in CanvasEventBus.surfaceChanged()
 //        this.lifecycleScope.launch {
-//            DrawCanvas.restartAfterConfChange.emit(Unit)
+//            CanvasEventBus.restartAfterConfChange.emit(Unit)
 //        }
     }
 
