@@ -194,37 +194,6 @@ class DrawCanvas(
     }
 
 
-    /**
-     * handles selection, and decide if we should exit the animation mode
-     */
-    suspend fun selectRectangle(rectToSelect: Rect) {
-        val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
-
-        val imagesToSelect =
-            PageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)
-        val strokesToSelect =
-            PageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
-        if (imagesToSelect.isNotNull() && strokesToSelect.isNotNull()) {
-            CanvasEventBus.rectangleToSelectByGesture.value = null
-            if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
-                selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
-            } else {
-                setAnimationMode(false)
-                SnackState.globalSnackFlow.emit(
-                    SnackConf(
-                        text = "There isn't anything.",
-                        duration = 3000,
-                    )
-                )
-            }
-        } else SnackState.globalSnackFlow.emit(
-            SnackConf(
-                text = "Page is empty!",
-                duration = 3000,
-            )
-        )
-
-    }
 
     // TODO: move it
     fun commitToHistory() {

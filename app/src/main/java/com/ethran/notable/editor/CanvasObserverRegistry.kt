@@ -9,6 +9,7 @@ import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPreview
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
+import com.ethran.notable.editor.utils.selectRectangle
 import com.ethran.notable.editor.utils.waitForEpdRefresh
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.Log
@@ -132,7 +133,7 @@ class CanvasObserverRegistry(
             CanvasEventBus.rectangleToSelectByGesture.drop(1).collect {
                 if (it != null) {
                     logCanvasObserver.v("Area to Select (screen): $it")
-                    drawCanvas.selectRectangle(it)
+                    selectRectangle(page, drawCanvas.coroutineScope, state, it)
                 }
             }
         }
