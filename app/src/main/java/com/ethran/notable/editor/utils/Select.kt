@@ -8,15 +8,18 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.TAG
+import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.PlacementMode
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -125,7 +128,7 @@ fun selectImagesAndStrokes(
         ignoredStrokeIds = strokesToSelect.map { it.id })
 
     scope.launch {
-        DrawCanvas.refreshUi.emit(Unit)
+        CanvasEventBus.refreshUi.emit(Unit)
         editorState.isDrawing = false
     }
 }
@@ -236,4 +239,37 @@ fun handleSelect(
 
         // TODO collocate with control tower ?
     }
+}
+
+
+/**
+ * handles selection, and decide if we should exit the animation mode
+ */
+suspend fun selectRectangle(page: PageView, coroutineScope: CoroutineScope, state: EditorState, rectToSelect: Rect) {
+    val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
+
+    val imagesToSelect =
+        PageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)
+    val strokesToSelect =
+        PageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
+    if (imagesToSelect != null && strokesToSelect != null) {
+        CanvasEventBus.rectangleToSelectByGesture.value = null
+        if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
+            selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
+        } else {
+            setAnimationMode(false)
+            SnackState.globalSnackFlow.emit(
+                SnackConf(
+                    text = "There isn't anything.",
+                    duration = 3000,
+                )
+            )
+        }
+    } else SnackState.globalSnackFlow.emit(
+        SnackConf(
+            text = "Page is empty!",
+            duration = 3000,
+        )
+    )
+
 }

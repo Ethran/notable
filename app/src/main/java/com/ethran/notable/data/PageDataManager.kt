@@ -17,7 +17,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.IN_IGNORED
@@ -644,7 +644,7 @@ object PageDataManager {
                         fileToPages[filePath]?.forEach { pid ->
                             invalidateBackground(pid)
                             if (pid == currentPage) {
-                                DrawCanvas.Companion.forceUpdate.emit(null)
+                                CanvasEventBus.forceUpdate.emit(null)
                                 SnackState.globalSnackFlow.emit(
                                     SnackConf(text = "Background file changed", duration = 4000)
                                 )

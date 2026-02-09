@@ -39,7 +39,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
@@ -123,7 +123,7 @@ fun Toolbar(
 
                     // Set isImageLoaded to true
                     toolbarLog.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
-                    DrawCanvas.addImageByUri.value = copiedFile.toUri()
+                    CanvasEventBus.addImageByUri.value = copiedFile.toUri()
 
                 } catch (e: Exception) {
                     toolbarLog.e("ImagePicker: copy failed: ${e.message}", e)
@@ -184,7 +184,7 @@ fun Toolbar(
                         backgroundType = backgroundType
                     )
                 state.pageView.updatePageSettings(updatedPage)
-                scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+                scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
             }
         ) {
             state.menuStates.isBackgroundSelectorModalOpen = false

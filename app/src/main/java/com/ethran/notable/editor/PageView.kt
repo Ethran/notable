@@ -29,6 +29,8 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.canvas.DrawCanvas
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.state.ZOOM_SNAP_THRESHOLD
@@ -177,7 +179,7 @@ class PageView(
         }
 
         coroutineScope.launch {
-            DrawCanvas.refreshUiImmediately.emit(Unit)
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
             loadPage()
             log.d("Page loaded (Init with id: $currentPageId)")
             collectAndPersistBitmapsBatch(context, coroutineScope)
@@ -232,7 +234,7 @@ class PageView(
             // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
             //  using function that does not wait for drawing mostly solved the problem.
             //  but there might be still bugs with it.
-            DrawCanvas.refreshUiImmediately.emit(Unit)
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
             loadPage()
             log.d("Page loaded (updatePageID($currentPageId))")
         }
@@ -280,7 +282,7 @@ class PageView(
                 // TODO: If we put it in loadPage(…) sometimes it will try to refresh
                 //  without seeing strokes, I have no idea why.
                 coroutineScope.launch(Dispatchers.Main.immediate) {
-                    DrawCanvas.forceUpdate.emit(null)
+                    CanvasEventBus.forceUpdate.emit(null)
                 }
                 logCache.d("Loaded page from persistent layer $currentPageId")
                 if (!PageDataManager.validatePageDataLoaded(currentPageId))
@@ -489,12 +491,12 @@ class PageView(
         log.d("Simple update scroll")
         val delta = (dragDelta / zoomLevel.value)
 
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
 
         scroll =
             Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
 
-        DrawCanvas.forceUpdate.emit(null)
+        CanvasEventBus.forceUpdate.emit(null)
     }
 
 
@@ -530,7 +532,7 @@ class PageView(
         if (deltaInPage == Offset.Zero) return
 
         // before scrolling, make sure that strokes are drawn.
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
 
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
@@ -612,7 +614,7 @@ class PageView(
 
     suspend fun applyZoomAndRedraw(newZoom: Float) {
         zoomLevel.value = newZoom
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -675,7 +677,7 @@ class PageView(
         }
 
         // Flush pending strokes/background before snapshot-based operations
-        DrawCanvas.waitForDrawingWithSnack()
+        CanvasEventBus.waitForDrawingWithSnack()
 
         val scaleFactor = newZoom / oldZoom
         val screenW = windowedCanvas.width
@@ -808,7 +810,7 @@ class PageView(
         // TODO: it might be worth to do it
         //  by redrawing only part of the screen, like in scroll and zoom.
         coroutineScope.launch {
-            DrawCanvas.forceUpdate.emit(null)
+            CanvasEventBus.forceUpdate.emit(null)
         }
         persistBitmapDebounced()
     }
