@@ -4,12 +4,10 @@ import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.editor.utils.ImageHandler
-import com.ethran.notable.editor.canvas.OnyxInputHandler
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.Operation
+import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPreview
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
@@ -230,12 +228,12 @@ class CanvasObserverRegistry(
             // After 500ms add to history strokes
             CanvasEventBus.commitHistorySignal.debounce(500).collect {
                 logCanvasObserver.v("Commiting to history")
-                commitToHistory()
+                drawCanvas.commitToHistory()
             }
         }
         coroutineScope.launch {
             CanvasEventBus.commitHistorySignalImmediately.collect {
-                commitToHistory()
+                drawCanvas.commitToHistory()
                 CanvasEventBus.commitCompletion.complete(Unit)
             }
         }
@@ -291,18 +289,6 @@ class CanvasObserverRegistry(
     }
 
 
-    // Why do I need it? What is the purpose of it?
-    private val strokeHistoryBatch = mutableListOf<String>()
-    private fun commitToHistory() {
-        if (strokeHistoryBatch.isNotEmpty()) history.addOperationsToHistory(
-            operations = listOf(
-                Operation.DeleteStroke(strokeHistoryBatch.map { it })
-            )
-        )
-        strokeHistoryBatch.clear()
-        //testing if it will help with undo hiding strokes.
-        drawCanvas.drawCanvasToView(null)
-    }
 }
 
 

@@ -51,10 +51,10 @@ class OnyxInputHandler(
     private val state: EditorState,
     private val history: History,
     private val coroutineScope: CoroutineScope,
+    private val strokeHistoryBatch: MutableList<String>,
 ) {
     var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
-    private val strokeHistoryBatch = mutableListOf<String>()
     private val log = ShipBook.getLogger("DrawCanvas")
 
     // TODO: As OnyxInput is not done by lazy, which forces evaluation of the touchHelper

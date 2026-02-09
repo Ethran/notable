@@ -15,13 +15,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.measureTimeMillis
 
 object CanvasEventBus {
-    var forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
-    var refreshUi = MutableSharedFlow<Unit>()
-    var refreshUiImmediately = MutableSharedFlow<Unit>(
+    val forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
+    val refreshUi = MutableSharedFlow<Unit>()
+    val refreshUiImmediately = MutableSharedFlow<Unit>(
         replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    var isDrawing = MutableSharedFlow<Boolean>()
-    var restartAfterConfChange = MutableSharedFlow<Unit>()
+    val isDrawing = MutableSharedFlow<Boolean>()
+    val restartAfterConfChange = MutableSharedFlow<Unit>()
 
     // used for managing drawing state on regain focus
     val onFocusChange = MutableSharedFlow<Boolean>()
@@ -35,12 +35,12 @@ object CanvasEventBus {
 
     // It might be bad idea, but plan is to insert graphic in this, and then take it from it
     // There is probably better way
-    var addImageByUri = MutableStateFlow<Uri?>(null)
-    var rectangleToSelectByGesture = MutableStateFlow<Rect?>(null)
-    var drawingInProgress = Mutex()
+    val addImageByUri = MutableStateFlow<Uri?>(null)
+    val rectangleToSelectByGesture = MutableStateFlow<Rect?>(null)
+    val drawingInProgress = Mutex()
 
     // For cleaning whole page, activated from toolbar menu
-    var clearPageSignal = MutableSharedFlow<Unit>()
+    val clearPageSignal = MutableSharedFlow<Unit>()
 
 
     // For QuickNav scrolling with previews
@@ -61,7 +61,7 @@ object CanvasEventBus {
                 // Just to make sure wait 1ms before checking lock.
                 delay(1)
                 // Wait until drawingInProgress is unlocked before proceeding
-                while (CanvasEventBus.drawingInProgress.isLocked) {
+                while (drawingInProgress.isLocked) {
                     delay(5)
                 }
             } ?: Log.e(

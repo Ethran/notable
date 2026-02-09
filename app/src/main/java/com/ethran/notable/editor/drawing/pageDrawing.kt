@@ -35,7 +35,7 @@ private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
  * This function performs the following steps:
  * 1. Converts the URI of the image into a `Bitmap` object.
  * 2. Converts the `ImageBitmap` to a software-backed `Bitmap` for compatibility.
- * 3. Clears the value of `DrawCanvas.addImageByUri` to null.
+ * 3. Clears the value of `CanvasEventBus.addImageByUri` to null.
  * 4. Draws the specified bitmap onto the provided Canvas within a destination rectangle
  *    defined by the `Image` object coordinates (`x`, `y`) and its dimensions (`width`, `height`),
  *    adjusted by the `offset`.
