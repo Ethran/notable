@@ -134,10 +134,10 @@ fun EditorView(
 
 
         InkaTheme {
+            EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
                 state = editorState, page = page, history = history
             )
-            EditorGestureReceiver(controlTower = editorControlTower)
             SelectedBitmap(
                 context = context,
                 controlTower = editorControlTower

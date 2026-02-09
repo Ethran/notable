@@ -179,7 +179,6 @@ class OpenGLRenderer(
         )
     }
 
-    // THIS DOES NOT GET ANY EVENTS, see EditorGestureReceiver.
     @SuppressLint("ClickableViewAccessibility")
     val onTouchListener = View.OnTouchListener { view, event ->
         val point = getStrokePoint(event)

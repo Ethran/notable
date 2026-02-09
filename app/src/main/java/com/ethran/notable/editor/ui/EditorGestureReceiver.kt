@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -50,11 +49,9 @@ private val log = ShipBook.getLogger("GestureReceiver")
 
 
 @Composable
-@ExperimentalComposeUiApi
 fun EditorGestureReceiver(
     controlTower: EditorControlTower,
 ) {
-
     val coroutineScope = rememberCoroutineScope()
     val appSettings = remember { GlobalAppSettings.current }
     var crossPosition by remember { mutableStateOf<IntOffset?>(null) }
@@ -62,34 +59,16 @@ fun EditorGestureReceiver(
     val view = LocalView.current
     Box(
         modifier = Modifier
-            // TODO: Change to // .pointerInteropFilter { ev -> ……}
-            // for now it consumes all gestures - even stylus one.
             .pointerInput(Unit) {
                 awaitEachGesture {
                     try {
                         // Detect initial touch
                         val down = awaitFirstDown()
 
-                        // Ignore non-touch input
-                        if (down.type == PointerType.Stylus) {
-                            log.i("Redirecting stylus input")
+                        // We should not get any stylus events
+                        require(down.type != PointerType.Stylus ||
+                                down.type == PointerType.Eraser)
 
-                            // TODO: It's only temporary workaround.
-                            // Track all moves until the stylus is lifted
-                            do {
-                                val event = awaitPointerEvent()
-                                val stylus =
-                                    event.changes.firstOrNull { it.type == PointerType.Stylus }
-                                stylus?.let {
-                                    coroutineScope.launch {
-                                        DrawCanvas.eraserTouchPoint.emit(it.position)
-                                    }
-                                    it.consume()
-                                }
-                            } while (stylus?.pressed == true)
-
-                            return@awaitEachGesture
-                        }
 
                         // testing if it will fixed exception:
                         // kotlinx.coroutines.CompletionHandlerException: Exception in resume

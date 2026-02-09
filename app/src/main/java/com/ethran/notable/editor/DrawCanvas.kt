@@ -1,5 +1,6 @@
 package com.ethran.notable.editor
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -9,10 +10,10 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
@@ -21,7 +22,6 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
-import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.drawImage
@@ -104,7 +104,7 @@ val pressure = EpdController.getMaxTouchPressure()
 // keep reference of the surface view presently associated to the singleton touchhelper
 var referencedSurfaceView: String = ""
 
-// TODO: Do not recreate surface on every page change
+@SuppressLint("ViewConstructor") // we never execute constructor from XML
 class DrawCanvas(
     context: Context,
     val coroutineScope: CoroutineScope,
@@ -116,7 +116,26 @@ class DrawCanvas(
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
     private val log = ShipBook.getLogger("DrawCanvas")
     var lastStrokeEndTime: Long = 0
-    //private val commitHistorySignal = MutableSharedFlow<Unit>()
+
+    override fun onTouchEvent(event: MotionEvent): Boolean { //Custom view DrawCanvas overrides onTouchEvent but not performClick
+        if (event.action == MotionEvent.ACTION_UP) {
+            performClick()
+        }
+        // We will only capture stylus events, and past rest down
+        log.d("onTouchEvent, ${event.getToolType(0)}")
+        if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS ||
+            event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
+        ) {
+            return glRenderer.onTouchListener.onTouch(this, event)
+        }
+        // Pass everything else down
+        return super.onTouchEvent(event)
+    }
+
+    @Suppress("RedundantOverride")
+    override fun performClick(): Boolean {
+        return super.performClick()
+    }
 
     private var glRenderer = OpenGLRenderer(this)
     override fun onAttachedToWindow() {
@@ -142,7 +161,6 @@ class DrawCanvas(
         )
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
-        var eraserTouchPoint = MutableSharedFlow<Offset?>() //TODO: replace with proper solution
 
         // used for managing drawing state on regain focus
         val onFocusChange = MutableSharedFlow<Boolean>()
@@ -422,8 +440,6 @@ class DrawCanvas(
         log.i("Initializing Canvas")
         glRenderer.attachSurfaceView(this)
 
-        // This does not work, as EditorGestureReceiver is stealing all the events.
-        setOnTouchListener(glRenderer.onTouchListener)
 
         val surfaceCallback: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -562,23 +578,6 @@ class DrawCanvas(
                 logCanvasObserver.v("Configuration changed!")
                 init()
                 drawCanvasToView(null)
-            }
-        }
-        coroutineScope.launch {
-            eraserTouchPoint.collect { p ->
-                if (!isErasing || !GlobalAppSettings.current.openGLRendering) {
-                    return@collect
-                }
-                logCanvasObserver.v("collected: $p")
-                if (p == null) return@collect
-                val strokePoint = StrokePoint(
-                    x = p.x,
-                    y = p.y,
-                    pressure = 1f,
-                    tiltX = 0,
-                    tiltY = 0,
-                )
-                glRenderer.frontBufferRenderer?.renderFrontBufferedLayer(strokePoint)
             }
         }
 
