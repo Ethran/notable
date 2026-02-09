@@ -96,7 +96,7 @@ class OpenGLRenderer(
 
         timer.step("obtainRenderer")
 
-        obtainRenderer().drawSimpleLine(projection, pointsToDraw, Color.BLACK.toColor(), viewModel)
+        obtainRenderer().drawLine(projection, pointsToDraw, Color.BLACK.toColor(), viewModel)
 
         timer.end("drawLine")
     }
@@ -152,8 +152,10 @@ class OpenGLRenderer(
     }
 
     fun attachSurfaceView(surfaceView: SurfaceView) {
-        if (isAttached)
-            Log.w("OpenGLRenderer", "Already attached")
+        if (isAttached) {
+            Log.w("OpenGLRenderer", "Already attached, releasing old renderer first")
+            release()
+        }
         frontBufferRenderer = GLFrontBufferedRenderer(surfaceView, this)
         motionEventPredictor = MotionEventPredictor.newInstance(surfaceView)
     }
@@ -162,10 +164,11 @@ class OpenGLRenderer(
         get() = frontBufferRenderer != null
 
     fun release() {
-        frontBufferRenderer?.release(true)
-        {
+        Log.d("OpenGLRenderer", "Releasing renderer")
+        frontBufferRenderer?.release(true) {
             obtainRenderer().release()
         }
+        frontBufferRenderer = null
     }
 
     private fun getStrokePoint(motionEvent: MotionEvent): StrokePoint {
@@ -179,7 +182,6 @@ class OpenGLRenderer(
         )
     }
 
-    // THIS DOES NOT GET ANY EVENTS, see EditorGestureReceiver.
     @SuppressLint("ClickableViewAccessibility")
     val onTouchListener = View.OnTouchListener { view, event ->
         val point = getStrokePoint(event)
@@ -190,6 +192,8 @@ class OpenGLRenderer(
 
         when (event?.action) {
             MotionEvent.ACTION_DOWN -> {
+                // Clear leftover points from previous stroke
+                openGlPoints2.clear()
                 // Ask that the input system not batch MotionEvents
                 // but instead deliver them as soon as they're available
                 view.requestUnbufferedDispatch(event)

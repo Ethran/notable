@@ -1,5 +1,6 @@
 package com.ethran.notable.editor
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -9,10 +10,10 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
@@ -21,7 +22,6 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
-import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.drawImage
@@ -31,6 +31,7 @@ import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.PlacementMode
+import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
@@ -104,7 +105,7 @@ val pressure = EpdController.getMaxTouchPressure()
 // keep reference of the surface view presently associated to the singleton touchhelper
 var referencedSurfaceView: String = ""
 
-// TODO: Do not recreate surface on every page change
+@SuppressLint("ViewConstructor") // we never execute constructor from XML
 class DrawCanvas(
     context: Context,
     val coroutineScope: CoroutineScope,
@@ -116,21 +117,30 @@ class DrawCanvas(
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
     private val log = ShipBook.getLogger("DrawCanvas")
     var lastStrokeEndTime: Long = 0
-    //private val commitHistorySignal = MutableSharedFlow<Unit>()
+
+    override fun onTouchEvent(event: MotionEvent): Boolean { //Custom view DrawCanvas overrides onTouchEvent but not performClick
+        if (event.action == MotionEvent.ACTION_UP) {
+            performClick()
+        }
+        // We will only capture stylus events, and past rest down
+//        log.d("onTouchEvent, ${event.getToolType(0)}")
+        if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS ||
+            event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
+        ) {
+            if (!DeviceCompat.isOnyxDevice || isErasing)
+                return glRenderer.onTouchListener.onTouch(this, event)
+            else return true
+        }
+        // Pass everything else down
+        return super.onTouchEvent(event)
+    }
+
+    @Suppress("RedundantOverride")
+    override fun performClick(): Boolean {
+        return super.performClick()
+    }
 
     private var glRenderer = OpenGLRenderer(this)
-    override fun onAttachedToWindow() {
-        log.d("Attached to window")
-        glRenderer = OpenGLRenderer(this@DrawCanvas)
-        super.onAttachedToWindow()
-        glRenderer.attachSurfaceView(this)
-    }
-
-    override fun onDetachedFromWindow() {
-        log.d("Detached from window")
-        glRenderer.release()
-        super.onDetachedFromWindow()
-    }
 
     var isErasing: Boolean = false
 
@@ -142,7 +152,6 @@ class DrawCanvas(
         )
         var isDrawing = MutableSharedFlow<Boolean>()
         var restartAfterConfChange = MutableSharedFlow<Unit>()
-        var eraserTouchPoint = MutableSharedFlow<Offset?>() //TODO: replace with proper solution
 
         // used for managing drawing state on regain focus
         val onFocusChange = MutableSharedFlow<Boolean>()
@@ -229,6 +238,7 @@ class DrawCanvas(
         }
 
         override fun onRawDrawingTouchPointListReceived(plist: TouchPointList) {
+            if(touchHelper == null) return
             val currentLastStrokeEndTime = lastStrokeEndTime
             lastStrokeEndTime = System.currentTimeMillis()
             val startTime = System.currentTimeMillis()
@@ -341,7 +351,7 @@ class DrawCanvas(
                                 partialRefreshRegionOnce(
                                     this@DrawCanvas,
                                     erasedByScribbleDirtyRect,
-                                    touchHelper
+                                    touchHelper!!
                                 )
 
                             }
@@ -357,8 +367,9 @@ class DrawCanvas(
 
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
+            if(touchHelper == null) return
             if (GlobalAppSettings.current.openGLRendering) {
-                prepareForPartialUpdate(this@DrawCanvas, touchHelper)
+                prepareForPartialUpdate(this@DrawCanvas, touchHelper!!)
                 log.d("Eraser Mode")
             }
             isErasing = true
@@ -414,16 +425,24 @@ class DrawCanvas(
     }
 
     private val touchHelper by lazy {
-        referencedSurfaceView = this.hashCode().toString()
-        TouchHelper.create(this, inputCallback)
+        val helper = if (DeviceCompat.isOnyxDevice) {
+            try {
+                referencedSurfaceView = this.hashCode().toString()
+                TouchHelper.create(this, inputCallback)
+            } catch (t: Throwable) {
+                android.util.Log.w("OnyxInputHandler", "TouchHelper.create failed: ${t.message}")
+                null
+            }
+        } else null
+        helper
     }
 
     fun init() {
         log.i("Initializing Canvas")
+        glRenderer.release()
+        glRenderer = OpenGLRenderer(this@DrawCanvas)
         glRenderer.attachSurfaceView(this)
 
-        // This does not work, as EditorGestureReceiver is stealing all the events.
-        setOnTouchListener(glRenderer.onTouchListener)
 
         val surfaceCallback: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -456,7 +475,7 @@ class DrawCanvas(
                 )
                 holder.removeCallback(this)
                 if (referencedSurfaceView == this@DrawCanvas.hashCode().toString()) {
-                    touchHelper.closeRawDrawing()
+                    touchHelper?.closeRawDrawing()
                 }
                 onSurfaceDestroy(this@DrawCanvas, touchHelper)
             }
@@ -562,23 +581,6 @@ class DrawCanvas(
                 logCanvasObserver.v("Configuration changed!")
                 init()
                 drawCanvasToView(null)
-            }
-        }
-        coroutineScope.launch {
-            eraserTouchPoint.collect { p ->
-                if (!isErasing || !GlobalAppSettings.current.openGLRendering) {
-                    return@collect
-                }
-                logCanvasObserver.v("collected: $p")
-                if (p == null) return@collect
-                val strokePoint = StrokePoint(
-                    x = p.x,
-                    y = p.y,
-                    pressure = 1f,
-                    tiltX = 0,
-                    tiltY = 0,
-                )
-                glRenderer.frontBufferRenderer?.renderFrontBufferedLayer(strokePoint)
             }
         }
 
@@ -852,36 +854,38 @@ class DrawCanvas(
     }
 
     private suspend fun updateIsDrawing() {
+        if(touchHelper == null) return
         log.i("Update is drawing: ${state.isDrawing}")
         if (state.isDrawing) {
-            touchHelper.setRawDrawingEnabled(true)
+            touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
             waitForDrawing()
             // draw to view, before showing drawing, avoid stutter
             drawCanvasToView(null)
-            touchHelper.setRawDrawingEnabled(false)
+            touchHelper!!.setRawDrawingEnabled(false)
         }
     }
 
     fun updatePenAndStroke() {
+        if(touchHelper == null) return
         // it takes around 11 ms to run on Note 4c.
         log.i("Update pen and stroke")
         when (state.mode) {
             // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> touchHelper.setStrokeStyle(penToStroke(state.pen))
+            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(state.pen))
                 ?.setStrokeWidth(state.penSettings[state.pen.penName]!!.strokeSize * page.zoomLevel.value)
                 ?.setStrokeColor(state.penSettings[state.pen.penName]!!.color)
 
             Mode.Erase -> {
                 when (state.eraser) {
-                    Eraser.PEN -> touchHelper.setStrokeStyle(penToStroke(Pen.MARKER))
+                    Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
                         ?.setStrokeWidth(30f)
                         ?.setStrokeColor(Color.GRAY)
 
                     Eraser.SELECT -> {
                         val dashStyleID = penToStroke(Pen.DASHED)
-                        touchHelper.setStrokeStyle(dashStyleID)
+                        touchHelper!!.setStrokeStyle(dashStyleID)
                         ?.setStrokeWidth(3f)
                             ?.setStrokeColor(Color.BLACK)
                         val params: FloatArray = FloatArray(4)
@@ -894,7 +898,7 @@ class DrawCanvas(
                 }
             }
 
-            Mode.Select -> touchHelper.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
+            Mode.Select -> touchHelper?.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
                 ?.setStrokeColor(Color.GRAY)
         }
     }

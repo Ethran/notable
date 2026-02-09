@@ -12,6 +12,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import kotlin.concurrent.thread
+import kotlin.math.max
+import kotlin.math.min
 
 
 class LineRenderer {
@@ -164,8 +166,12 @@ class LineRenderer {
         GLES20.glUniform4fv(colorHandle, 1, colorArray, 0)
         GLES20.glUniformMatrix4fv(mvpMatrixHandle, 1, false, mvpMatrix, 0)
         vertexBuffer?.let { buffer ->
-            for (i in 0 until points.size - 1) {
+            var minX = Float.MAX_VALUE
+            var minY = Float.MAX_VALUE
+            var maxX = Float.MIN_VALUE
+            var maxY = Float.MIN_VALUE
 
+            for (i in 0 until points.size - 1) {
                 val p1 = points[i]
                 val p2 = points[i + 1]
 
@@ -176,25 +182,30 @@ class LineRenderer {
                 buffer.put(lineCoords)
                 buffer.position(0)
 
-                // Prepare the triangle coordinate data
                 GLES20.glVertexAttribPointer(
                     positionHandle, COORDS_PER_VERTEX,
                     GLES20.GL_FLOAT, false,
                     VERTEX_STRIDE, buffer
                 )
-                // Render
                 GLES20.glDrawArrays(GLES20.GL_LINES, 0, VERTEX_COUNT)
-                val dirtyRect = Rect(
-                    p1.x.toInt() - 20,
-                    p1.y.toInt() - 20,
-                    p1.x.toInt() + 20,
-                    p1.y.toInt() + 20
-                )
 
-                GLES20.glDisableVertexAttribArray(positionHandle)
-//                EpdController.handwritingRepaint(viewModel, dirtyRect);
+                minX = min(minX, min(p1.x, p2.x))
+                minY = min(minY, min(p1.y, p2.y))
+                maxX = max(maxX, max(p1.x, p2.x))
+                maxY = max(maxY, max(p1.y, p2.y))
+            }
+
+            val margin = 20
+            dirtyRect = Rect(
+                minX.toInt() - margin,
+                minY.toInt() - margin,
+                maxX.toInt() + margin,
+                maxY.toInt() + margin
+            )
+
+            GLES20.glDisableVertexAttribArray(positionHandle)
+            thread {
                 refreshScreenRegion(viewModel, dirtyRect)
-
             }
         }
         GLES20.glDisableVertexAttribArray(positionHandle)
