@@ -57,6 +57,8 @@ class OnyxInputHandler(
     private val strokeHistoryBatch = mutableListOf<String>()
     private val log = ShipBook.getLogger("DrawCanvas")
 
+    // TODO: As OnyxInput is not done by lazy, which forces evaluation of the touchHelper
+    //       lazy during DrawCanvas construction.
     val touchHelper by lazy {
         val helper = if (DeviceCompat.isOnyxDevice) {
             try {
