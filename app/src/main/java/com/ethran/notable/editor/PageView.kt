@@ -29,6 +29,8 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.canvas.DrawCanvas
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.state.ZOOM_SNAP_THRESHOLD

@@ -29,7 +29,7 @@ import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.reencodeStrokePointsToSB1
-import com.ethran.notable.editor.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.Router
 import com.ethran.notable.ui.SnackBar

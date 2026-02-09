@@ -39,7 +39,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
-import com.ethran.notable.editor.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode

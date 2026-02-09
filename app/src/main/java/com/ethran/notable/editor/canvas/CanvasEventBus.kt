@@ -1,4 +1,4 @@
-package com.ethran.notable.editor
+package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
 import android.net.Uri

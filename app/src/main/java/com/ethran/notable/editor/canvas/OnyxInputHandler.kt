@@ -1,12 +1,13 @@
-package com.ethran.notable.editor
+package com.ethran.notable.editor.canvas
 
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.RectF
+import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.DrawCanvas.Companion.waitForDrawing
+import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
@@ -26,6 +27,7 @@ import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.penToStroke
 import com.ethran.notable.editor.utils.prepareForPartialUpdate
 import com.ethran.notable.editor.utils.restoreDefaults
+import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.transformToLine
 import com.ethran.notable.ui.convertDpToPixel
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -53,7 +55,7 @@ class OnyxInputHandler(
     var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
     private val strokeHistoryBatch = mutableListOf<String>()
-    private val log = ShipBook.getLogger("DrawCanvas")
+    private val log = ShipBook.Companion.getLogger("DrawCanvas")
 
     val touchHelper by lazy {
         val helper = if (DeviceCompat.isOnyxDevice) {
@@ -61,7 +63,7 @@ class OnyxInputHandler(
                 referencedSurfaceView = this.hashCode().toString()
                 TouchHelper.create(drawCanvas, inputCallback)
             } catch (t: Throwable) {
-                android.util.Log.w("OnyxInputHandler", "TouchHelper.create failed: ${t.message}")
+                Log.w("OnyxInputHandler", "TouchHelper.create failed: ${t.message}")
                 null
             }
         } else null
@@ -313,7 +315,7 @@ class OnyxInputHandler(
             touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
-            waitForDrawing()
+            DrawCanvas.Companion.waitForDrawing()
             // draw to view, before showing drawing, avoid stutter
             drawCanvas.drawCanvasToView(null)
             touchHelper!!.setRawDrawingEnabled(false)
@@ -328,7 +330,7 @@ class OnyxInputHandler(
             onSurfaceInit(drawCanvas)
             val toolbarHeight =
                 if (state.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
-            com.ethran.notable.editor.utils.setupSurface(
+            setupSurface(
                 drawCanvas,
                 touchHelper,
                 toolbarHeight

@@ -1,9 +1,12 @@
-package com.ethran.notable.editor
+package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.editor.utils.ImageHandler
+import com.ethran.notable.editor.canvas.OnyxInputHandler
+import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Operation

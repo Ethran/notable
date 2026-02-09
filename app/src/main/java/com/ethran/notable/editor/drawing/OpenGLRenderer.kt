@@ -16,7 +16,7 @@ import androidx.graphics.lowlatency.GLFrontBufferedRenderer
 import androidx.graphics.opengl.egl.EGLManager
 import androidx.input.motionprediction.MotionEventPredictor
 import com.ethran.notable.data.db.StrokePoint
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.canvas.DrawCanvas
 import com.ethran.notable.utils.Timing
 import io.shipbook.shipbooksdk.Log
 

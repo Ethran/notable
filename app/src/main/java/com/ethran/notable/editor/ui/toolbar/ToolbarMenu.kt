@@ -28,7 +28,7 @@ import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.BUTTON_SIZE
-import com.ethran.notable.editor.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat

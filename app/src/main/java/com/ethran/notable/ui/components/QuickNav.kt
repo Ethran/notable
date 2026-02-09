@@ -28,7 +28,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.editor.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.SnackConf

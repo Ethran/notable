@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.state.DOUBLE_TAP_MIN_MS
 import com.ethran.notable.editor.state.DOUBLE_TAP_TIMEOUT_MS

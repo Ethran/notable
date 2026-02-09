@@ -1,4 +1,4 @@
-package com.ethran.notable.editor
+package com.ethran.notable.editor.utils
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -6,10 +6,11 @@ import android.net.Uri
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ethran.notable.data.db.Image
+import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.PlacementMode
-import com.ethran.notable.editor.utils.selectImage
 import com.ethran.notable.io.uriToBitmap
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.Log
@@ -24,7 +25,7 @@ class ImageHandler(
     private val state: EditorState,
     private val coroutineScope: CoroutineScope
 ) {
-    private val logImageHandler = ShipBook.getLogger("ImageHandler")
+    private val logImageHandler = ShipBook.Companion.getLogger("ImageHandler")
 
      fun observeImageUri() {
         coroutineScope.launch {
@@ -72,7 +73,7 @@ class ImageHandler(
             // make sure, that after regaining focus, we wont go back to drawing mode
         } else {
             // Handle cases where the bitmap could not be created
-            Log.e("ImageProcessing", "Failed to create software bitmap from URI.")
+            Log.Companion.e("ImageProcessing", "Failed to create software bitmap from URI.")
         }
     }
 }

@@ -17,8 +17,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.CanvasEventBus
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.imageBounds
 import com.ethran.notable.editor.utils.plus

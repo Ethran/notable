@@ -1,4 +1,4 @@
-package com.ethran.notable.editor
+package com.ethran.notable.editor.canvas
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -10,6 +10,8 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.ethran.notable.data.model.SimplePointF
+import com.ethran.notable.editor.canvas.OnyxInputHandler
+import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.EditorState

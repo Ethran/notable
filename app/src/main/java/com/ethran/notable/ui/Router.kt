@@ -25,7 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.EditorView
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.ui.components.Anchor

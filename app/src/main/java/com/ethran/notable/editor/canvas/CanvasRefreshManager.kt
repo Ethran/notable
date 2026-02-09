@@ -1,4 +1,4 @@
-package com.ethran.notable.editor
+package com.ethran.notable.editor.canvas
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -6,7 +6,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Looper
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.DrawCanvas.Companion.waitForDrawing
+import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
@@ -46,7 +46,7 @@ class CanvasRefreshManager(
         // Do not use, if refresh need to be preformed without delay.
         // This function waits for strokes to be fully rendered.
         if (!state.isDrawing) {
-            waitForDrawing()
+            DrawCanvas.Companion.waitForDrawing()
             drawCanvasToView(null)
             log.w("Not in drawing mode -- refreshUi ")
             return
@@ -59,7 +59,7 @@ class CanvasRefreshManager(
         } else log.v(
             "refreshUiSuspend() is called from the non-main thread."
         )
-        waitForDrawing()
+        DrawCanvas.Companion.waitForDrawing()
         drawCanvasToView(null)
         resetScreenFreeze(touchHelper)
     }
