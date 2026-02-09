@@ -18,10 +18,6 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -127,11 +123,13 @@ class DrawCanvas(
             performClick()
         }
         // We will only capture stylus events, and past rest down
-        log.d("onTouchEvent, ${event.getToolType(0)}")
+//        log.d("onTouchEvent, ${event.getToolType(0)}")
         if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS ||
             event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
         ) {
-            return glRenderer.onTouchListener.onTouch(this, event)
+            if (!DeviceCompat.isOnyxDevice || isErasing)
+                return glRenderer.onTouchListener.onTouch(this, event)
+            else return true
         }
         // Pass everything else down
         return super.onTouchEvent(event)
