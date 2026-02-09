@@ -1,7 +1,9 @@
 package com.ethran.notable.editor.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ethran.notable.TAG
 import com.ethran.notable.editor.DrawCanvas
@@ -17,16 +19,13 @@ fun EditorSurface(
     val coroutineScope = rememberCoroutineScope()
     Log.i(TAG, "recompose surface")
 
-//    Box(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .fillMaxHeight()
-//
-//    ) {
-    AndroidView(factory = { ctx ->
-        DrawCanvas(ctx, coroutineScope, state, page, history).apply {
-            init()
-            registerObservers()
-        }
-    })
+    AndroidView(
+        factory = { ctx ->
+            DrawCanvas(ctx, coroutineScope, state, page, history).apply {
+                init()
+                registerObservers()
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
 }
