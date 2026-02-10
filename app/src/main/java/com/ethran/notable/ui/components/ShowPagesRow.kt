@@ -1,6 +1,5 @@
 package com.ethran.notable.ui.components
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,9 +26,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.ui.PageMenu
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.ui.noRippleClickable
@@ -40,7 +37,6 @@ import io.shipbook.shipbooksdk.ShipBook
 
 private val logPagesRow = ShipBook.getLogger("QuickNav")
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ShowPagesRow(
     singlePages: List<Page>?,
@@ -93,14 +89,10 @@ fun ShowPagesRow(
                         .aspectRatio(3f / 4f)
                         .border(1.dp, Color.Gray, RectangleShape)
                         .noRippleClickable {
-                            val page = Page(
-                                notebookId = null,
-                                background = GlobalAppSettings.current.defaultNativeTemplate,
-                                backgroundType = BackgroundType.Native.key,
-                                parentFolderId = folderId
-                            )
-                            appRepository.pageRepository.create(page)
-                            navController.navigate("pages/${page.id}")
+                            val pageId =
+                                appRepository.createNewQuickPage(parentFolderId = folderId)
+                                    ?: return@noRippleClickable
+                            navController.navigate("pages/${pageId}")
                         }) {
                     Icon(
                         imageVector = FeatherIcons.FilePlus,

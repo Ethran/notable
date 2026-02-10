@@ -11,6 +11,7 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import io.shipbook.shipbooksdk.ShipBook
 
 
@@ -131,11 +132,17 @@ class ImportEngine(
         val strokeRepo = AppDatabase.getDatabase(context).strokeDao()
         val imageRepo = AppDatabase.getDatabase(context).ImageDao()
         XoppFile(context).importBook(uri) { pageData ->
-            // TODO: handle conflict with existing pages, make sure that we won't insert the same strokes that already exist.
-            pageRepo.create(pageData.page.copy(notebookId = book.id))
-            strokeRepo.create(pageData.strokes)
-            imageRepo.create(pageData.images)
-            bookRepo.addPage(book.id, pageData.page.id)
+            try {
+                // TODO: handle conflict with existing pages, make sure that we won't insert the same strokes that already exist.
+                pageRepo.create(pageData.page.copy(notebookId = book.id))
+                strokeRepo.create(pageData.strokes)
+                imageRepo.create(pageData.images)
+                bookRepo.addPage(book.id, pageData.page.id)
+            } catch (e: Exception) {
+                logAndShowError(
+                    "importBook", "failed import book  ${e.message}"
+                )
+            }
 
         }
         return "Imported Xopp file"
@@ -161,13 +168,18 @@ class ImportEngine(
         val strokeRepo = AppDatabase.getDatabase(context).strokeDao()
         val imageRepo = AppDatabase.getDatabase(context).ImageDao()
         importPdf(fileToSave, options) { pageData ->
-            pageRepo.create(pageData.page.copy(notebookId = book.id))
-            if (pageData.strokes.isNotEmpty())
-                strokeRepo.create(pageData.strokes)
-            if (pageData.images.isNotEmpty())
-                imageRepo.create(pageData.images)
-
-            bookRepo.addPage(book.id, pageData.page.id)
+            try {
+                pageRepo.create(pageData.page.copy(notebookId = book.id))
+                if (pageData.strokes.isNotEmpty())
+                    strokeRepo.create(pageData.strokes)
+                if (pageData.images.isNotEmpty())
+                    imageRepo.create(pageData.images)
+                bookRepo.addPage(book.id, pageData.page.id)
+            } catch (e: Exception) {
+                logAndShowError(
+                    "importBook", "failed import book  ${e.message}"
+                )
+            }
 
         }
         return "Imported Pdf file"
