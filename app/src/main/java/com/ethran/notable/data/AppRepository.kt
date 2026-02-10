@@ -125,9 +125,9 @@ class AppRepository(val context: Context) {
         return book.getPageIndex(pageId)
     }
 
-    fun createNewPage(parentFolderId: String? = null, notebookId: String? = null) {
+    fun createNewQuickPage(parentFolderId: String? = null) : String? {
         val page = Page(
-            notebookId = notebookId,
+            notebookId = null,
             background = GlobalAppSettings.current.defaultNativeTemplate,
             backgroundType = BackgroundType.Native.key,
             parentFolderId = parentFolderId
@@ -139,21 +139,25 @@ class AppRepository(val context: Context) {
                 "createNewPAge",
                 "failed to create page ${e.message}"
             )
+            return null
         }
+        return page.id
     }
 
-    fun newPageInBook(notebookId: String, index: Int = 0) {
+    fun newPageInBook(notebookId: String, index: Int = 0): String? {
         try {
             val book = bookRepository.getById(notebookId)
-                ?: return
+                ?: return null
             val page = book.newPage()
             pageRepository.create(page)
             bookRepository.addPage(notebookId, page.id, index)
+            return page.id
         } catch (e: Exception) {
             logAndShowError(
                 "newPageInBook",
                 "failed to create page  ${e.message}"
             )
+            return null
         }
     }
 

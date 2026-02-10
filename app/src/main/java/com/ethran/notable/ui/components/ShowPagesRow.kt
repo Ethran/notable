@@ -26,12 +26,9 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.ui.PageMenu
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.noRippleClickable
 import com.onyx.android.sdk.extension.isNullOrEmpty
 import compose.icons.FeatherIcons
@@ -92,7 +89,10 @@ fun ShowPagesRow(
                         .aspectRatio(3f / 4f)
                         .border(1.dp, Color.Gray, RectangleShape)
                         .noRippleClickable {
-                            appRepository.createNewPage(parentFolderId = folderId, )
+                            val pageId =
+                                appRepository.createNewQuickPage(parentFolderId = folderId)
+                                    ?: return@noRippleClickable
+                            navController.navigate("pages/${pageId}")
                         }) {
                     Icon(
                         imageVector = FeatherIcons.FilePlus,
