@@ -190,15 +190,7 @@ fun PagesView(navController: NavController, bookId: String) {
                             onDelete = { pendingDeletePageId = pageId },
                             onDuplicate = { appRepository.duplicatePage(pageId) },
                             onAddAfter = {
-                                val bookNow =
-                                    appRepository.bookRepository.getById(bookId) ?: return@PageCard
-                                val newPg = bookNow.newPage()
-                                appRepository.pageRepository.create(newPg)
-                                appRepository.bookRepository.addPage(
-                                    bookId,
-                                    newPg.id,
-                                    pageIndex + 1
-                                )
+                                appRepository.newPageInBook(bookId, pageIndex + 1)
                             }
                         )
                     }

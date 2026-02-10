@@ -1,16 +1,19 @@
 package com.ethran.notable.data
 
 import android.content.Context
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.KvRepository
+import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.onyx.android.sdk.extension.isNotNull
 import java.util.Date
 import java.util.UUID
@@ -120,6 +123,38 @@ class AppRepository(val context: Context) {
             ?: throw NoSuchElementException("Notebook with ID '$notebookId' not found.")
 
         return book.getPageIndex(pageId)
+    }
+
+    fun createNewPage(parentFolderId: String? = null, notebookId: String? = null) {
+        val page = Page(
+            notebookId = notebookId,
+            background = GlobalAppSettings.current.defaultNativeTemplate,
+            backgroundType = BackgroundType.Native.key,
+            parentFolderId = parentFolderId
+        )
+        try {
+            pageRepository.create(page)
+        } catch (e: android.database.sqlite.SQLiteConstraintException) {
+            logAndShowError(
+                "createNewPAge",
+                "failed to create page ${e.message}"
+            )
+        }
+    }
+
+    fun newPageInBook(notebookId: String, index: Int = 0) {
+        try {
+            val book = bookRepository.getById(notebookId)
+                ?: return
+            val page = book.newPage()
+            pageRepository.create(page)
+            bookRepository.addPage(notebookId, page.id, index)
+        } catch (e: Exception) {
+            logAndShowError(
+                "newPageInBook",
+                "failed to create page  ${e.message}"
+            )
+        }
     }
 
 }

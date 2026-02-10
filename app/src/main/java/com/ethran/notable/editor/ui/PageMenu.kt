@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.deletePage
 import com.ethran.notable.ui.noRippleClickable
 
@@ -76,11 +75,7 @@ fun PageMenu(
                     Modifier
                         .padding(10.dp)
                         .noRippleClickable {
-                            val book = appRepository.bookRepository.getById(notebookId)
-                                ?: return@noRippleClickable
-                            val page = book.newPage()
-                            appRepository.pageRepository.create(page)
-                            appRepository.bookRepository.addPage(notebookId, page.id, index + 1)
+                            appRepository.newPageInBook(notebookId, index + 1)
                         }) {
                     Text("Insert after")
                 }
