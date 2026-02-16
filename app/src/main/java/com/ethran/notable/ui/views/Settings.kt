@@ -51,25 +51,28 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
-import androidx.navigation.NavController
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.DebugSettings
-import com.ethran.notable.ui.components.GesturesSettings
 import com.ethran.notable.ui.components.GeneralSettings
+import com.ethran.notable.ui.components.GesturesSettings
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.utils.isNext
 import kotlin.concurrent.thread
 
 @Composable
-fun SettingsView(navController: NavController) {
+fun SettingsView(
+    goToWelcome: () -> Unit,
+    goBack: () -> Unit
+) {
     val context = LocalContext.current
     val kv = KvProxy(context)
     val settings = GlobalAppSettings.current
@@ -90,7 +93,7 @@ fun SettingsView(navController: NavController) {
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            TitleBar(context, navController)
+            TitleBar(context, goBack)
             // Tabs
             TabRow(
                 selectedTabIndex = selectedTab,
@@ -136,7 +139,7 @@ fun SettingsView(navController: NavController) {
                 when (selectedTab) {
                     0 -> GeneralSettings(kv, settings)
                     1 -> GesturesSettings(context, kv, settings)
-                    2 -> DebugSettings(kv, settings, navController)
+                    2 -> DebugSettings(kv, settings, goToWelcome)
                 }
 
             }
@@ -168,7 +171,7 @@ fun SettingsView(navController: NavController) {
 
 
 @Composable
-fun TitleBar(context: Context, navController: NavController) {
+fun TitleBar(context: Context, goBack: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -177,7 +180,7 @@ fun TitleBar(context: Context, navController: NavController) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         IconButton(
-            onClick = { navController.popBackStack() }, modifier = Modifier.size(40.dp)
+            onClick = goBack, modifier = Modifier.size(40.dp)
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -309,6 +312,20 @@ fun openInBrowser(context: Context, uriString: String) {
             "openInBrowser",
             "No application can handle this request. Please install a web browser.",
             Log::w
+        )
+    }
+}
+
+
+@Preview(
+    showBackground = true,
+)
+@Composable
+fun SettingsPreview() {
+    MaterialTheme {
+        SettingsView (
+            goToWelcome = {},
+            goBack = {}
         )
     }
 }
