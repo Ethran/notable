@@ -116,6 +116,7 @@
     <string name="sync_enable_label">Enable WebDAV Sync</string>
     <string name="sync_auto_sync_label">Automatic sync every %1$d minutes</string>
     <string name="sync_on_note_close_label">Sync when closing notes</string>
+    <string name="sync_wifi_only_label">Sync on WiFi only (no mobile data)</string>
 
     <!-- Sync Button Labels -->
     <string name="sync_save_credentials">Save Credentials</string>
@@ -159,6 +160,12 @@
     <string name="sync_confirm_force_download_message">This will DELETE all local notebooks and replace them with data from the server. This cannot be undone!\n\nAre you sure?</string>
     <string name="sync_dialog_cancel">Cancel</string>
     <string name="sync_dialog_confirm">Confirm</string>
+
+    <!-- Sync Clock Skew -->
+    <string name="sync_clock_skew_warning">Connected successfully, but your device clock differs from the server by %1$d seconds. Sync may produce incorrect results until this is corrected.</string>
+
+    <!-- Sync WiFi-only -->
+    <string name="sync_wifi_required_message">Not syncing: WiFi-only sync is enabled and you\'re on mobile data. Connect to WiFi or disable the WiFi-only setting.</string>
 
     <!-- Sync Log -->
     <string name="sync_log_title">Sync Log</string>

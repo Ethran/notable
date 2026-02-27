@@ -71,6 +71,30 @@ class SyncEngine(private val context: Context) {
             val (settings, webdavClient) = initializeSyncClient()
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
 
+            // Enforce WiFi-only setting
+            if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isWiFiConnected()) {
+                SLog.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping")
+                updateState(SyncState.Error(
+                    error = SyncError.WIFI_REQUIRED,
+                    step = SyncStep.INITIALIZING,
+                    canRetry = false
+                ))
+                return@withContext SyncResult.Failure(SyncError.WIFI_REQUIRED)
+            }
+
+            // Check clock skew before proceeding
+            val skewMs = checkClockSkew(webdavClient)
+            if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
+                val skewSec = skewMs / 1000
+                SLog.w(TAG, "Clock skew too large: ${skewSec}s (threshold: ${CLOCK_SKEW_THRESHOLD_MS / 1000}s)")
+                updateState(SyncState.Error(
+                    error = SyncError.CLOCK_SKEW,
+                    step = SyncStep.INITIALIZING,
+                    canRetry = false
+                ))
+                return@withContext SyncResult.Failure(SyncError.CLOCK_SKEW)
+            }
+
             // Ensure base directory structure exists on server
             ensureServerDirectories(webdavClient)
 
@@ -186,6 +210,12 @@ class SyncEngine(private val context: Context) {
                 return@withContext SyncResult.Success
             }
 
+            // Silently skip sync-on-close if not on WiFi — this isn't user-initiated
+            if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isWiFiConnected()) {
+                SLog.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping notebook sync")
+                return@withContext SyncResult.Success
+            }
+
             val credentials = credentialManager.getCredentials()
                 ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
 
@@ -194,6 +224,14 @@ class SyncEngine(private val context: Context) {
                 credentials.first,
                 credentials.second
             )
+
+            // Check clock skew before proceeding
+            val skewMs = checkClockSkew(webdavClient)
+            if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
+                val skewSec = skewMs / 1000
+                SLog.w(TAG, "Clock skew too large for single-notebook sync: ${skewSec}s")
+                return@withContext SyncResult.Failure(SyncError.CLOCK_SKEW)
+            }
 
             // Get local notebook
             val localNotebook = appRepository.bookRepository.getById(notebookId)
@@ -892,6 +930,15 @@ class SyncEngine(private val context: Context) {
     }
 
     /**
+     * Check clock skew between this device and the WebDAV server.
+     * @return Skew in ms (deviceTime - serverTime), or null if server time unavailable
+     */
+    private fun checkClockSkew(webdavClient: WebDAVClient): Long? {
+        val serverTime = webdavClient.getServerTime() ?: return null
+        return System.currentTimeMillis() - serverTime
+    }
+
+    /**
      * Initialize sync client by getting settings and credentials.
      * @return Pair of (AppSettings, WebDAVClient) or null if initialization fails
      */
@@ -1024,6 +1071,7 @@ class SyncEngine(private val context: Context) {
         // Timing constants
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
         private const val TIMESTAMP_TOLERANCE_MS = 1000L
+        private const val CLOCK_SKEW_THRESHOLD_MS = 30_000L
 
         // Shared state across all SyncEngine instances
         private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
@@ -1063,6 +1111,8 @@ enum class SyncError {
     CONFIG_ERROR,
     SERVER_ERROR,
     CONFLICT_ERROR,
+    CLOCK_SKEW,
+    WIFI_REQUIRED,
     SYNC_IN_PROGRESS,
     UNKNOWN_ERROR
 }

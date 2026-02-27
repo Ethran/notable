@@ -3,6 +3,9 @@ package com.ethran.notable.sync
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.ethran.notable.APP_SETTINGS_KEY
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.db.KvProxy
 import io.shipbook.shipbooksdk.Log
 
 /**
@@ -22,6 +25,14 @@ class SyncWorker(
         if (!connectivityChecker.isNetworkAvailable()) {
             Log.i(TAG, "No network available, will retry later")
             return Result.retry()
+        }
+
+        // Check WiFi-only setting (WorkManager constraint already handles this, but be explicit)
+        val kvProxy = KvProxy(applicationContext)
+        val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+        if (settings?.syncSettings?.wifiOnly == true && !connectivityChecker.isWiFiConnected()) {
+            Log.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping")
+            return Result.success()
         }
 
         // Check if we have credentials

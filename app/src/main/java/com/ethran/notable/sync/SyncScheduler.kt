@@ -19,10 +19,12 @@ object SyncScheduler {
      * Enable periodic background sync.
      * @param context Android context
      * @param intervalMinutes Sync interval in minutes
+     * @param wifiOnly If true, only run on unmetered (WiFi) connections
      */
-    fun enablePeriodicSync(context: Context, intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES) {
+    fun enablePeriodicSync(context: Context, intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES, wifiOnly: Boolean = false) {
+        val networkType = if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiredNetworkType(networkType)
             .build()
 
         val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
@@ -34,7 +36,7 @@ object SyncScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             SyncWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,  // Keep existing if already scheduled
+            ExistingPeriodicWorkPolicy.UPDATE,  // Update constraints if already scheduled
             syncRequest
         )
     }

@@ -14,6 +14,9 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.StringReader
 import java.net.HttpURLConnection
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -82,6 +85,30 @@ class WebDAVClient(
         } catch (e: Exception) {
             io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Connection test failed: ${e.message}", e)
             false
+        }
+    }
+
+    /**
+     * Get the server's current time from the Date response header.
+     * Makes a HEAD request and parses the RFC 1123 Date header.
+     * @return Server time as epoch millis, or null if unavailable/unparseable
+     */
+    fun getServerTime(): Long? {
+        return try {
+            val request = Request.Builder()
+                .url(serverUrl)
+                .head()
+                .header("Authorization", credentials)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val dateHeader = response.header("Date") ?: return@use null
+                parseHttpDate(dateHeader)
+            }
+        } catch (e: Exception) {
+            io.shipbook.shipbooksdk.Log.w("WebDAVClient", "Failed to get server time: ${e.message}")
+            null
         }
     }
 
@@ -475,15 +502,55 @@ class WebDAVClient(
         private const val UUID_DASH_POS_3 = 18
         private const val UUID_DASH_POS_4 = 23
 
+        // RFC 1123 date format used in HTTP Date headers
+        private const val HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+
         /**
-         * Factory method to test connection without full initialization.
-         * @return true if connection successful
+         * Parse an HTTP Date header (RFC 1123 format) to epoch millis.
+         * @return Epoch millis or null if unparseable
          */
-        fun testConnection(serverUrl: String, username: String, password: String): Boolean {
+        fun parseHttpDate(dateHeader: String): Long? {
             return try {
-                WebDAVClient(serverUrl, username, password).testConnection()
+                val sdf = SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US)
+                sdf.timeZone = TimeZone.getTimeZone("GMT")
+                sdf.parse(dateHeader)?.time
             } catch (e: Exception) {
-                false
+                null
+            }
+        }
+
+        /**
+         * Factory method to test connection and detect clock skew.
+         * @return Pair of (connectionSuccessful, clockSkewMs) where clockSkewMs is
+         *         the difference (deviceTime - serverTime) in milliseconds, or null
+         *         if the server did not return a Date header.
+         */
+        fun testConnection(serverUrl: String, username: String, password: String): Pair<Boolean, Long?> {
+            return try {
+                val client = WebDAVClient(serverUrl, username, password)
+                val connected = client.testConnection()
+                val clockSkewMs = if (connected) {
+                    client.getServerTime()?.let { serverTime ->
+                        System.currentTimeMillis() - serverTime
+                    }
+                } else {
+                    null
+                }
+                Pair(connected, clockSkewMs)
+            } catch (e: Exception) {
+                Pair(false, null)
+            }
+        }
+
+        /**
+         * Factory method to get server time without full initialization.
+         * @return Server time as epoch millis, or null if unavailable
+         */
+        fun getServerTime(serverUrl: String, username: String, password: String): Long? {
+            return try {
+                WebDAVClient(serverUrl, username, password).getServerTime()
+            } catch (e: Exception) {
+                null
             }
         }
     }

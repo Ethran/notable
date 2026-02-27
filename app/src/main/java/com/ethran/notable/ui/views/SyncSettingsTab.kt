@@ -160,13 +160,15 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                 testingConnection = true
                 connectionStatus = null
                 scope.launch(Dispatchers.IO) {
-                    val result = WebDAVClient.testConnection(serverUrl, username, password)
+                    val (connected, clockSkewMs) = WebDAVClient.testConnection(serverUrl, username, password)
                     withContext(Dispatchers.Main) {
                         testingConnection = false
-                        connectionStatus = if (result)
-                            context.getString(R.string.sync_connected_successfully)
-                        else
-                            context.getString(R.string.sync_connection_failed)
+                        connectionStatus = when {
+                            !connected -> context.getString(R.string.sync_connection_failed)
+                            clockSkewMs != null && kotlin.math.abs(clockSkewMs) > 30_000L ->
+                                context.getString(R.string.sync_clock_skew_warning, clockSkewMs / 1000)
+                            else -> context.getString(R.string.sync_connected_successfully)
+                        }
                     }
                 }
             }
@@ -237,7 +239,7 @@ fun SyncEnableToggle(
             )
             // Enable/disable WorkManager sync
             if (isChecked && syncSettings.autoSync) {
-                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
+                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong(), syncSettings.wifiOnly)
             } else {
                 SyncScheduler.disablePeriodicSync(context)
             }
@@ -387,10 +389,15 @@ fun SyncConnectionTest(
     }
 
     connectionStatus?.let { status ->
+        val statusColor = when {
+            status.startsWith("✓") -> Color(0, 150, 0)
+            status.startsWith("✗") -> Color(200, 0, 0)
+            else -> Color(200, 100, 0) // Warning (e.g. clock skew)
+        }
         Text(
             text = status,
             style = MaterialTheme.typography.body2,
-            color = if (status.startsWith("✓")) Color(0, 150, 0) else Color(200, 0, 0),
+            color = statusColor,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
         )
     }
@@ -411,7 +418,7 @@ fun SyncControlToggles(
                 settings.copy(syncSettings = syncSettings.copy(autoSync = isChecked))
             )
             if (isChecked && syncSettings.syncEnabled) {
-                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong())
+                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong(), syncSettings.wifiOnly)
             } else {
                 SyncScheduler.disablePeriodicSync(context)
             }
@@ -425,6 +432,20 @@ fun SyncControlToggles(
             kv.setAppSettings(
                 settings.copy(syncSettings = syncSettings.copy(syncOnNoteClose = isChecked))
             )
+        }
+    )
+
+    SettingToggleRow(
+        label = stringResource(R.string.sync_wifi_only_label),
+        value = syncSettings.wifiOnly,
+        onToggle = { isChecked ->
+            kv.setAppSettings(
+                settings.copy(syncSettings = syncSettings.copy(wifiOnly = isChecked))
+            )
+            // Re-schedule background sync with updated network constraint
+            if (syncSettings.autoSync && syncSettings.syncEnabled) {
+                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong(), isChecked)
+            }
         }
     )
 }
@@ -524,13 +545,18 @@ fun ManualSyncButton(
         // Error details
         if (syncState is SyncState.Error) {
             val error = syncState as SyncState.Error
-            Text(
-                text = stringResource(
+            val errorText = if (error.error == com.ethran.notable.sync.SyncError.WIFI_REQUIRED) {
+                stringResource(R.string.sync_wifi_required_message)
+            } else {
+                stringResource(
                     R.string.sync_error_at_step,
                     error.step.toString(),
                     error.error.toString(),
                     if (error.canRetry) stringResource(R.string.sync_can_retry) else ""
-                ),
+                )
+            }
+            Text(
+                text = errorText,
                 style = MaterialTheme.typography.caption,
                 color = Color(200, 0, 0),
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)

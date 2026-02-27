@@ -407,6 +407,19 @@ This comparison uses a **pre-download snapshot** of local notebook IDs -- taken 
 - **Page-level conflicts are not merged.** If two devices edit different pages of the same notebook, the entire notebook is overwritten by the newer version. Stroke-level or page-level merging is a potential future enhancement.
 - **No conflict UI.** There is no mechanism to present both versions to the user and let them choose. Last-writer-wins is applied automatically.
 - **Folder deletion is not cascaded across devices.** Deleting a folder locally does not propagate to other devices via `deletions.json` (only notebook deletions are tracked).
+- **Depends on reasonably synchronized device clocks.** Timestamp comparison is the foundation of conflict resolution. If two devices have significantly different clock settings, the wrong version may win. This is mitigated by the clock skew detection described in 6.7, which blocks sync when the device clock differs from the server by more than 30 seconds.
+
+### 6.7 Clock Skew Detection
+
+Because the sync system relies on `updatedAt` timestamps set by each device's local clock, clock disagreements between devices can cause the wrong version to win during conflict resolution. For example, if Device A's clock is 5 minutes ahead, its edits will always appear "newer" even if Device B edited more recently.
+
+**Validation:** Before every sync (both full sync and single-notebook sync-on-close), the engine makes a HEAD request to the WebDAV server and reads the HTTP `Date` response header. This is compared against the device's `System.currentTimeMillis()` to compute the skew.
+
+**Threshold:** If the absolute skew exceeds 30 seconds (`CLOCK_SKEW_THRESHOLD_MS`), the sync is aborted with a `CLOCK_SKEW` error. This threshold is generous enough to tolerate normal NTP drift but strict enough to catch misconfigured clocks.
+
+**Escape hatch:** Force upload and force download operations are **not** gated by clock skew detection. These are explicit user actions that bypass normal sync logic entirely, so timestamp comparison is irrelevant — the user is choosing which side wins wholesale.
+
+**UI feedback:** The settings "Test Connection" button also checks clock skew. If the connection succeeds but skew exceeds the threshold, a warning is displayed telling the user how many seconds their clock differs from the server.
 
 ---
 
@@ -445,6 +458,7 @@ enum class SyncError {
     CONFIG_ERROR,       // Settings missing or sync disabled
     SERVER_ERROR,       // Unexpected server response
     CONFLICT_ERROR,     // (Reserved for future use)
+    CLOCK_SKEW,         // Device clock differs from server by >30s (see 6.7)
     SYNC_IN_PROGRESS,   // Another sync is already running (mutex held)
     UNKNOWN_ERROR       // Catch-all for unexpected exceptions
 }
@@ -528,15 +542,16 @@ Sync configuration lives in `AppSettings.syncSettings`:
 
 Potential enhancements beyond the current implementation, roughly ordered by impact:
 
-1. **Page-level sync granularity.** Compare and sync individual pages rather than whole notebooks to reduce bandwidth and improve conflict handling for multi-page notebooks.
-2. **Stroke-level merge.** When two devices edit different pages of the same notebook, merge non-overlapping changes instead of last-writer-wins at the notebook level.
-3. **Conflict UI.** Present both local and remote versions when a conflict is detected and let the user choose.
-4. **Selective sync.** Allow users to choose which notebooks sync to which devices.
-5. **Compression.** Gzip large JSON files before upload to reduce bandwidth.
-6. **Incremental page sync.** Track per-page timestamps and only upload/download pages that actually changed within a notebook.
-7. **Quick Pages sync.** Pages with `notebookId = null` (standalone pages not in any notebook) are not currently synced.
-8. **Sync progress UI.** Expose per-notebook progress during large syncs.
-9. **Device screen size scaling.** Notes created on one Boox tablet size may need coordinate scaling on a different model.
+1. **ETag-based change detection.** Replace timestamp comparison with HTTP ETags for determining whether a remote resource has changed. ETags are set by the server (not the client's clock), eliminating clock skew as a concern entirely. The flow would be: store the ETag from each PUT/GET response, and on the next sync, send `If-None-Match` with the stored ETag — a 304 means no change, avoiding a full download. This would make clock skew detection unnecessary and improve bandwidth efficiency.
+2. **Page-level sync granularity.** Compare and sync individual pages rather than whole notebooks to reduce bandwidth and improve conflict handling for multi-page notebooks.
+3. **Stroke-level merge.** When two devices edit different pages of the same notebook, merge non-overlapping changes instead of last-writer-wins at the notebook level.
+4. **Conflict UI.** Present both local and remote versions when a conflict is detected and let the user choose.
+5. **Selective sync.** Allow users to choose which notebooks sync to which devices.
+6. **Compression.** Gzip large JSON files before upload to reduce bandwidth.
+7. **Incremental page sync.** Track per-page timestamps and only upload/download pages that actually changed within a notebook.
+8. **Quick Pages sync.** Pages with `notebookId = null` (standalone pages not in any notebook) are not currently synced.
+9. **Sync progress UI.** Expose per-notebook progress during large syncs.
+10. **Device screen size scaling.** Notes created on one Boox tablet size may need coordinate scaling on a different model.
 
 ---
 
