@@ -31,9 +31,9 @@ The sync system serializes each notebook as a set of JSON files rather than repl
 
 - **SQLite is not designed for network concurrency.** Shipping the database file creates split-brain problems when two devices edit different notebooks simultaneously.
 - **Granular failure isolation.** If one notebook fails to sync (corrupt data, network timeout mid-transfer), the rest succeed. A database-level sync is all-or-nothing.
-- **External tooling.** The JSON format on the server is human-readable and machine-parseable, enabling external processing (e.g., PyTorch pipelines for handwriting analysis, scripted batch operations).
+- **External tooling.** The container format on the server is JSON (human-readable, machine-parseable), with the heavy payload -- stroke point data -- encoded in the existing SB1 binary format (base64-wrapped for JSON transport). This enables external processing (e.g., PyTorch pipelines for handwriting analysis, scripted batch operations) while reusing the same binary stroke encoding the app already uses locally.
 - **Selective sync.** Per-notebook granularity makes it straightforward to add selective sync in the future (sync only some notebooks to a device).
-- **Standard WebDAV compatibility.** The protocol only requires GET, PUT, DELETE, MKCOL, and PROPFIND -- operations that every WebDAV server supports. No server-side logic or database is needed.
+- **Standard WebDAV compatibility.** The protocol only requires GET, PUT, DELETE, MKCOL, HEAD, and PROPFIND -- operations that every WebDAV server supports. No server-side logic or database is needed.
 
 ### Why Not CouchDB / Syncthing / Other Sync Frameworks?
 
@@ -445,7 +445,7 @@ enum class SyncError {
     CONFIG_ERROR,       // Settings missing or sync disabled
     SERVER_ERROR,       // Unexpected server response
     CONFLICT_ERROR,     // (Reserved for future use)
-    SYNC_IN_PROGRESS,  // Another sync is already running (mutex held)
+    SYNC_IN_PROGRESS,   // Another sync is already running (mutex held)
     UNKNOWN_ERROR       // Catch-all for unexpected exceptions
 }
 ```
