@@ -22,7 +22,7 @@ You'll need access to a WebDAV server. Common options include:
 1. **Nextcloud** (Recommended for self-hosting)
    - Free and open source
    - Full control over your data
-   - URL format: `https://your-nextcloud.com/remote.php/dav/files/username/`
+   - URL format: `https://your-nextcloud.com/remote.php/dav/files/username/` (some installations may require the ownCloud format seen below)
 
 2. **ownCloud**
    - Similar to Nextcloud
@@ -51,10 +51,23 @@ From your WebDAV provider, you'll need:
 
 This prevents your notebooks from cluttering the root of your WebDAV storage.
 
+#### Using Two-Factor Authentication (2FA)
+
+If your Nextcloud account has two-factor authentication enabled, your regular password will not work for WebDAV. You'll need to create an app-specific password:
+
+1. Log in to Nextcloud via your browser
+2. Go to **Settings** → **Security**
+3. Under **Devices & sessions**, click **Create new app password**
+4. Give it a name (e.g., "Notable")
+5. Nextcloud will generate a username and password for this app
+6. Use these generated credentials (not your regular login) when configuring Notable
+
+Other WebDAV providers with 2FA may have a similar app password mechanism -- check your provider's documentation.
+
 ### 2. Configure Notable
 
 1. Open Notable
-2. Go to **Settings** (three-line menu icon)
+2. Go to **Settings** (gear wheel icon)
 3. Select the **Sync** tab
 4. Enter your WebDAV credentials:
    - **Server URL**: Your WebDAV endpoint URL
