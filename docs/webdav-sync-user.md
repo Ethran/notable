@@ -234,6 +234,7 @@ If you encounter issues:
 ## Technical Details
 
 For developers interested in how sync works internally, see:
+- [WebDAV Sync Technical Documentation](webdav-sync-technical.md) - Architecture, sync protocol, data formats, conflict resolution
 - [Database Structure](database-structure.md) - Data storage formats including SB1
 - [File Structure](file-structure.md) - Local file organization
 
