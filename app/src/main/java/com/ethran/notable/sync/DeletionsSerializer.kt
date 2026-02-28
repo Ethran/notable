@@ -3,6 +3,9 @@ package com.ethran.notable.sync
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Tracks deleted notebooks across devices with deletion timestamps.
@@ -26,6 +29,25 @@ data class DeletionsData(
      */
     fun getAllDeletedIds(): Set<String> {
         return deletedNotebooks.keys + deletedNotebookIds
+    }
+
+    /**
+     * Returns a copy with entries older than [maxAgeDays] removed from [deletedNotebooks].
+     * Entries that cannot be parsed are kept.
+     */
+    fun pruned(maxAgeDays: Long): DeletionsData {
+        val cutoffMs = System.currentTimeMillis() - maxAgeDays * 24 * 60 * 60 * 1000L
+        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val kept = deletedNotebooks.filter { (_, timestamp) ->
+            try {
+                (format.parse(timestamp)?.time ?: Long.MIN_VALUE) > cutoffMs
+            } catch (e: Exception) {
+                true
+            }
+        }
+        return copy(deletedNotebooks = kept)
     }
 }
 

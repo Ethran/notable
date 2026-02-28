@@ -349,8 +349,8 @@ class SyncEngine(private val context: Context) {
                 webdavClient.delete(notebookPath)
             }
 
-            // Upload updated deletions.json
-            val deletionsJson = deletionsSerializer.serialize(deletionsData)
+            // Upload updated deletions.json (pruning old entries before writing)
+            val deletionsJson = deletionsSerializer.serialize(deletionsData.pruned(DELETIONS_MAX_AGE_DAYS))
             webdavClient.putFile(remotePath, deletionsJson.toByteArray(), "application/json")
             SLog.i(TAG, "Updated deletions.json on server")
 
@@ -571,10 +571,11 @@ class SyncEngine(private val context: Context) {
                 }
             }
 
-            // Upload updated deletions.json
-            val deletionsJson = deletionsSerializer.serialize(deletionsData)
+            // Upload updated deletions.json (pruning old entries before writing)
+            val prunedDeletionsData = deletionsData.pruned(DELETIONS_MAX_AGE_DAYS)
+            val deletionsJson = deletionsSerializer.serialize(prunedDeletionsData)
             webdavClient.putFile(remotePath, deletionsJson.toByteArray(), "application/json")
-            SLog.i(TAG, "Updated deletions.json on server with ${deletionsData.getAllDeletedIds().size} total deletion(s)")
+            SLog.i(TAG, "Updated deletions.json on server with ${prunedDeletionsData.getAllDeletedIds().size} total deletion(s)")
         } else {
             SLog.i(TAG, "No local deletions detected")
         }
@@ -1072,6 +1073,7 @@ class SyncEngine(private val context: Context) {
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
         private const val TIMESTAMP_TOLERANCE_MS = 1000L
         private const val CLOCK_SKEW_THRESHOLD_MS = 30_000L
+        private const val DELETIONS_MAX_AGE_DAYS = 90L
 
         // Shared state across all SyncEngine instances
         private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
