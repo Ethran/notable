@@ -5,17 +5,18 @@ This document describes the architecture, protocol, data formats, and design dec
 **It was created by AI, and roughly checked for correctness.
 Refer to code for actual implementation.**
 
-Contents:
-- Architecture overview and design rationale
-- Why a custom WebDAV client
-- Component overview
-- Sync protocol (full sync flow)
-- Data format specification
-- Conflict resolution
-- Security model
-- Error handling and recovery
-- Integration points
-- Future work
+## Contents
+
+- [1) Architecture Overview](#1-architecture-overview)
+- [2) Component Overview](#2-component-overview)
+- [3) Sync Protocol](#3-sync-protocol)
+- [4) Data Format Specification](#4-data-format-specification)
+- [5) Conflict Resolution](#5-conflict-resolution)
+- [6) Security Model](#6-security-model)
+- [7) Error Handling and Recovery](#7-error-handling-and-recovery)
+- [8) Integration Points](#8-integration-points)
+- [9) Future Work](#9-future-work)
+- [Appendix: Design Rationale](#appendix-design-rationale)
 
 ---
 
@@ -35,39 +36,9 @@ The sync system serializes each notebook as a set of JSON files rather than repl
 - **Selective sync.** Per-notebook granularity makes it straightforward to add selective sync in the future (sync only some notebooks to a device).
 - **Standard WebDAV compatibility.** The protocol only requires GET, PUT, DELETE, MKCOL, HEAD, and PROPFIND -- operations that every WebDAV server supports. No server-side logic or database is needed.
 
-### Why Not CouchDB / Syncthing / Other Sync Frameworks?
-
-Notable targets Onyx Boox e-ink tablets, which are locked-down Android devices. The sync solution must:
-
-1. Work with servers the user already owns (Nextcloud is extremely common in this community).
-2. Require no server-side component installation.
-3. Run within a standard Android app without root or sideloaded services.
-4. Use only HTTP/HTTPS for network communication (no custom protocols, no peer-to-peer).
-
-WebDAV meets all four constraints. CouchDB would require server installation. Syncthing requires a background service and open ports. SFTP is not universally available. WebDAV is the lowest common denominator that actually works for this user base.
-
 ---
 
-## 2) Why a Custom WebDAV Client
-
-The `WebDAVClient` class implements WebDAV operations directly on OkHttp rather than using an existing Java/Android WebDAV library. This was not the first choice -- existing libraries were evaluated:
-
-- **Sardine** (the most popular Java WebDAV library): Depends on Apache HttpClient, which was removed from the Android SDK in API 23. The `android-sardine` fork has not been maintained since 2019 and targets deprecated APIs.
-- **jackrabbit-webdav**: Part of the Apache Jackrabbit project. Heavyweight dependency (~2MB+) designed for full JCR content repositories, not simple file sync. Also depends on Apache HttpClient.
-- **Milton**: Server-side WebDAV framework, not a client library.
-- **OkHttp-based alternatives**: No maintained library exists that wraps OkHttp for WebDAV specifically.
-
-Notable's WebDAV needs are narrow: PUT, GET, DELETE, MKCOL, PROPFIND (Depth 0 and 1), and HEAD. These map directly to HTTP methods. The entire client is ~490 lines including XML parsing, which is smaller than any of the above libraries and has zero transitive dependencies beyond OkHttp (which the project already uses).
-
-The implementation:
-- Uses OkHttp (already a project dependency) for all HTTP operations.
-- Parses PROPFIND XML responses with Android's built-in `XmlPullParser` (no additional XML libraries).
-- Handles WebDAV-specific semantics: MKCOL returning 405 when a collection already exists, 404 on DELETE being acceptable (idempotent delete), namespace-aware XML parsing for `DAV:` responses.
-- Provides both byte-array and streaming file download for memory-efficient handling of large files.
-
----
-
-## 3) Component Overview
+## 2) Component Overview
 
 All sync code lives in `com.ethran.notable.sync`. The components and their responsibilities:
 
@@ -89,26 +60,26 @@ All sync code lives in `com.ethran.notable.sync`. The components and their respo
 └─────────────────────────────────────────────────────┘
 ```
 
-| File | Lines | Role |
-|------|-------|------|
-| `SyncEngine.kt` | ~1130 | Core orchestrator. Full sync flow, per-notebook sync, deletion upload, force upload/download. State machine (`SyncState`) and mutex for concurrency control. |
-| `WebDAVClient.kt` | ~490 | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. Streaming downloads. |
-| `NotebookSerializer.kt` | ~315 | Serializes/deserializes notebooks, pages, strokes, and images to/from JSON. Stroke points are embedded as base64-encoded [SB1 binary](database-structure.md) data. |
-| `FolderSerializer.kt` | ~112 | Serializes/deserializes the folder hierarchy to/from `folders.json`. |
-| `DeletionsSerializer.kt` | ~50 | Manages `deletions.json`, which tracks deleted notebook IDs with timestamps for conflict resolution. |
-| `SyncWorker.kt` | ~89 | `CoroutineWorker` for WorkManager integration. Checks connectivity and credentials before delegating to `SyncEngine`. |
-| `SyncScheduler.kt` | ~58 | Schedules/cancels periodic sync via WorkManager. |
-| `CredentialManager.kt` | ~68 | Stores WebDAV credentials in `EncryptedSharedPreferences` (AES-256-GCM). |
-| `ConnectivityChecker.kt` | ~34 | Queries Android `ConnectivityManager` for network/WiFi availability. |
-| `SyncLogger.kt` | ~81 | Maintains a ring buffer of recent log entries (exposed as `StateFlow`) for the sync UI. |
+| File | Role |
+|------|------|
+| [`SyncEngine.kt`](../app/src/main/java/com/ethran/notable/sync/SyncEngine.kt) | Core orchestrator. Full sync flow, per-notebook sync, deletion upload, force upload/download. State machine (`SyncState`) and mutex for concurrency control. |
+| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt) | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. Streaming downloads. |
+| [`NotebookSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSerializer.kt) | Serializes/deserializes notebooks, pages, strokes, and images to/from JSON. Stroke points are embedded as base64-encoded [SB1 binary](database-structure.md) data. |
+| [`FolderSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/FolderSerializer.kt) | Serializes/deserializes the folder hierarchy to/from `folders.json`. |
+| [`DeletionsSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/DeletionsSerializer.kt) | Manages `deletions.json`, which tracks deleted notebook IDs with timestamps for conflict resolution. |
+| [`SyncWorker.kt`](../app/src/main/java/com/ethran/notable/sync/SyncWorker.kt) | `CoroutineWorker` for WorkManager integration. Checks connectivity and credentials before delegating to `SyncEngine`. |
+| [`SyncScheduler.kt`](../app/src/main/java/com/ethran/notable/sync/SyncScheduler.kt) | Schedules/cancels periodic sync via WorkManager. |
+| [`CredentialManager.kt`](../app/src/main/java/com/ethran/notable/sync/CredentialManager.kt) | Stores WebDAV credentials in `EncryptedSharedPreferences` (AES-256-GCM). |
+| [`ConnectivityChecker.kt`](../app/src/main/java/com/ethran/notable/sync/ConnectivityChecker.kt) | Queries Android `ConnectivityManager` for network/WiFi availability. |
+| [`SyncLogger.kt`](../app/src/main/java/com/ethran/notable/sync/SyncLogger.kt) | Maintains a ring buffer of recent log entries (exposed as `StateFlow`) for the sync UI. |
 
 ---
 
-## 4) Sync Protocol
+## 3) Sync Protocol
 
-### 4.1 Full Sync Flow (`syncAllNotebooks`)
+### 3.1 Full Sync Flow (`syncAllNotebooks`)
 
-A full sync executes the following steps in order. A coroutine `Mutex` prevents concurrent sync operations.
+A full sync executes the following steps in order. A coroutine `Mutex` prevents concurrent sync operations on a single device (see section 7.2 for multi-device concurrency).
 
 ```
 1. INITIALIZE
@@ -158,7 +129,9 @@ A full sync executes the following steps in order. A coroutine `Mutex` prevents 
    └── Persist to AppSettings
 ```
 
-### 4.2 Per-Notebook Upload
+### 3.2 Per-Notebook Upload
+
+Conflict detection is at the **notebook level** (manifest `updatedAt`). Individual pages are uploaded as separate files, but if two devices have edited different pages of the same notebook, the device with the newer `updatedAt` wins the entire notebook (see section 5.6).
 
 ```
 uploadNotebook(notebook):
@@ -175,7 +148,7 @@ uploadNotebook(notebook):
         - If local file exists and not already on server → PUT to backgrounds/
 ```
 
-### 4.3 Per-Notebook Download
+### 3.3 Per-Notebook Download
 
 ```
 downloadNotebook(notebookId):
@@ -196,11 +169,11 @@ downloadNotebook(notebookId):
      f. Insert strokes and images
 ```
 
-### 4.4 Single-Notebook Sync (`syncNotebook`)
+### 3.4 Single-Notebook Sync (`syncNotebook`)
 
 Used for sync-on-close (triggered when the user closes the editor). Follows the same timestamp-comparison logic as step 4 of the full sync, but operates on a single notebook without the full deletion/discovery flow.
 
-### 4.5 Deletion Propagation (`uploadDeletion`)
+### 3.5 Deletion Propagation (`uploadDeletion`)
 
 When a notebook is deleted locally, a targeted operation can immediately propagate the deletion to the server without running a full sync:
 
@@ -212,9 +185,9 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 
 ---
 
-## 5) Data Format Specification
+## 4) Data Format Specification
 
-### 5.1 Server Directory Structure
+### 4.1 Server Directory Structure
 
 ```
 /notable/                           ← WEBDAV_ROOT_DIR, appended to user's server URL
@@ -231,7 +204,7 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
             └── {filename}          ← Custom background images
 ```
 
-### 5.2 manifest.json
+### 4.2 manifest.json
 
 ```json
 {
@@ -255,7 +228,7 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 - `serverTimestamp`: Set at serialization time. Used for sync comparison.
 - All timestamps are ISO 8601 UTC.
 
-### 5.3 Page JSON (`pages/{uuid}.json`)
+### 4.3 Page JSON (`pages/{uuid}.json`)
 
 ```json
 {
@@ -305,7 +278,7 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 - `images[].uri`: Relative path on the server (e.g., `images/filename.jpg`). Converted to/from absolute local paths during upload/download.
 - `notebookId`: May be `null` for Quick Pages (standalone pages not belonging to a notebook).
 
-### 5.4 folders.json
+### 4.4 folders.json
 
 ```json
 {
@@ -326,7 +299,7 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 - `parentFolderId`: References another folder's `id` for nesting, or `null` for root-level folders.
 - Folder hierarchy must be synced before notebooks because notebooks reference `parentFolderId`.
 
-### 5.5 deletions.json
+### 4.5 deletions.json
 
 ```json
 {
@@ -338,10 +311,10 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 }
 ```
 
-- `deletedNotebooks`: Map of notebook UUID to ISO 8601 deletion timestamp. The timestamp is critical for conflict resolution (see section 6).
+- `deletedNotebooks`: Map of notebook UUID to ISO 8601 deletion timestamp. The timestamp is critical for conflict resolution (see section 5).
 - `deletedNotebookIds`: Legacy field from an earlier format that did not track timestamps. Retained for backward compatibility. New deletions always use the timestamped map.
 
-### 5.6 JSON Configuration
+### 4.6 JSON Configuration
 
 All serializers use `kotlinx.serialization` with:
 - `prettyPrint = true`: Human-readable output, debuggable on the server.
@@ -349,9 +322,9 @@ All serializers use `kotlinx.serialization` with:
 
 ---
 
-## 6) Conflict Resolution
+## 5) Conflict Resolution
 
-### 6.1 Strategy: Last-Writer-Wins with Resurrection
+### 5.1 Strategy: Last-Writer-Wins with Resurrection
 
 The sync system uses **timestamp-based last-writer-wins** at the notebook level. This is a deliberate simplicity tradeoff:
 
@@ -359,7 +332,7 @@ The sync system uses **timestamp-based last-writer-wins** at the notebook level.
 - **Appropriate for the use case.** Most Notable users have one or two devices. Simultaneous editing of the same notebook on two devices is rare. When it does happen, the most recent edit is almost always the one the user wants.
 - **Predictable behavior.** Users can reason about "I edited this last, so my version wins" without understanding distributed systems theory.
 
-### 6.2 Timestamp Comparison
+### 5.2 Timestamp Comparison
 
 When both local and remote versions of a notebook exist:
 
@@ -373,7 +346,7 @@ if |diffMs| <= 1000ms → within tolerance → skip (considered equal)
 
 The 1-second tolerance exists because timestamps pass through ISO 8601 serialization (which truncates to seconds) and through different system clocks. Without tolerance, rounding artifacts would cause spurious upload/download cycles.
 
-### 6.3 Deletion vs. Edit Conflicts
+### 5.3 Deletion vs. Edit Conflicts
 
 The most dangerous conflict in any sync system is: device A deletes a notebook while device B (offline) edits it. Without careful handling, the edit is silently lost.
 
@@ -385,14 +358,19 @@ Notable handles this with **timestamped deletions and resurrection**:
    - If the local notebook's `updatedAt` is **before** the deletion timestamp, the notebook is deleted locally (it was not edited after deletion -- safe to remove).
 3. This ensures that edits made after a deletion are never silently discarded.
 
-### 6.4 Folder Merge
+### 5.4 Folder Merge
 
 Folders use a simpler per-folder last-writer-wins merge:
 - All remote folders are loaded into a map.
 - Local folders are merged in: if a local folder has a later `updatedAt` than its remote counterpart, the local version wins.
 - The merged set is written to both the local database and the server.
 
-### 6.5 Local Deletion Detection
+### 5.5 Move Operations
+
+- **Notebook moved to a different folder**: Updates `parentFolderId` on the notebook, which bumps `updatedAt`. The manifest is re-uploaded on the next sync, propagating the move.
+- **Pages rearranged within a notebook**: Updates the `pageIds` order in the manifest, which bumps `updatedAt`. Same mechanism -- manifest re-uploads on next sync.
+
+### 5.6 Local Deletion Detection
 
 Detecting that a notebook was deleted locally (as opposed to never existing) requires comparing the current set of local notebook IDs against the set from the last successful sync (`syncedNotebookIds` in AppSettings):
 
@@ -402,14 +380,15 @@ locallyDeleted = syncedNotebookIds - currentLocalNotebookIds
 
 This comparison uses a **pre-download snapshot** of local notebook IDs -- taken before downloading new notebooks from the server. This is critical: without it, a newly downloaded notebook would appear "new" in the current set and would not be in `syncedNotebookIds`, causing it to be misidentified as a local deletion.
 
-### 6.6 Known Limitations
+### 5.7 Known Limitations
 
 - **Page-level conflicts are not merged.** If two devices edit different pages of the same notebook, the entire notebook is overwritten by the newer version. Stroke-level or page-level merging is a potential future enhancement.
 - **No conflict UI.** There is no mechanism to present both versions to the user and let them choose. Last-writer-wins is applied automatically.
 - **Folder deletion is not cascaded across devices.** Deleting a folder locally does not propagate to other devices via `deletions.json` (only notebook deletions are tracked).
-- **Depends on reasonably synchronized device clocks.** Timestamp comparison is the foundation of conflict resolution. If two devices have significantly different clock settings, the wrong version may win. This is mitigated by the clock skew detection described in 6.7, which blocks sync when the device clock differs from the server by more than 30 seconds.
+- **Concurrent syncs from two devices are not atomic.** The shared files `folders.json` and `deletions.json` are updated via read-modify-write cycles with no server-side locking. If two devices sync simultaneously, one device's write can clobber the other's merge. The next sync will self-heal the data, but a folder rename or deletion could be lost in the narrow window. ETag-based optimistic locking (see section 9) would eliminate this race.
+- **Depends on reasonably synchronized device clocks.** Timestamp comparison is the foundation of conflict resolution. If two devices have significantly different clock settings, the wrong version may win. This is mitigated by the clock skew detection described in 5.8, which blocks sync when the device clock differs from the server by more than 30 seconds.
 
-### 6.7 Clock Skew Detection
+### 5.8 Clock Skew Detection
 
 Because the sync system relies on `updatedAt` timestamps set by each device's local clock, clock disagreements between devices can cause the wrong version to win during conflict resolution. For example, if Device A's clock is 5 minutes ahead, its edits will always appear "newer" even if Device B edited more recently.
 
@@ -417,15 +396,15 @@ Because the sync system relies on `updatedAt` timestamps set by each device's lo
 
 **Threshold:** If the absolute skew exceeds 30 seconds (`CLOCK_SKEW_THRESHOLD_MS`), the sync is aborted with a `CLOCK_SKEW` error. This threshold is generous enough to tolerate normal NTP drift but strict enough to catch misconfigured clocks.
 
-**Escape hatch:** Force upload and force download operations are **not** gated by clock skew detection. These are explicit user actions that bypass normal sync logic entirely, so timestamp comparison is irrelevant — the user is choosing which side wins wholesale.
+**Escape hatch:** Force upload and force download operations are **not** gated by clock skew detection. These are explicit user actions that bypass normal sync logic entirely, so timestamp comparison is irrelevant -- the user is choosing which side wins wholesale.
 
 **UI feedback:** The settings "Test Connection" button also checks clock skew. If the connection succeeds but skew exceeds the threshold, a warning is displayed telling the user how many seconds their clock differs from the server.
 
 ---
 
-## 7) Security Model
+## 6) Security Model
 
-### 7.1 Credential Storage
+### 6.1 Credential Storage
 
 Credentials are stored using Android's `EncryptedSharedPreferences` (from `androidx.security:security-crypto`):
 
@@ -434,22 +413,22 @@ Credentials are stored using Android's `EncryptedSharedPreferences` (from `andro
 - **Value encryption**: AES-256-GCM (authenticated encryption for preference values).
 - Credentials are stored separately from the main app database (`KvProxy`), ensuring they are always encrypted at rest regardless of device encryption state.
 
-### 7.2 Transport Security
+### 6.2 Transport Security
 
 - The WebDAV client communicates over HTTPS (strongly recommended in user documentation).
 - HTTP URLs are accepted but not recommended. The client does not enforce HTTPS -- this is left to the user's discretion since some users run WebDAV on local networks.
 - OkHttp handles TLS certificate validation using the system trust store.
 
-### 7.3 Logging
+### 6.3 Logging
 
 - `SyncLogger` never logs credentials or authentication headers.
 - Debug logging of PROPFIND responses is truncated to 1500 characters to prevent sensitive directory listings from filling logs.
 
 ---
 
-## 8) Error Handling and Recovery
+## 7) Error Handling and Recovery
 
-### 8.1 Error Types
+### 7.1 Error Types
 
 ```kotlin
 enum class SyncError {
@@ -458,24 +437,26 @@ enum class SyncError {
     CONFIG_ERROR,       // Settings missing or sync disabled
     SERVER_ERROR,       // Unexpected server response
     CONFLICT_ERROR,     // (Reserved for future use)
-    CLOCK_SKEW,         // Device clock differs from server by >30s (see 6.7)
+    CLOCK_SKEW,         // Device clock differs from server by >30s (see 5.8)
     SYNC_IN_PROGRESS,   // Another sync is already running (mutex held)
     UNKNOWN_ERROR       // Catch-all for unexpected exceptions
 }
 ```
 
-### 8.2 Concurrency Control
+### 7.2 Concurrency Control
 
-A companion-object-level `Mutex` prevents concurrent sync operations across all `SyncEngine` instances. If `syncAllNotebooks()` is called while a sync is already running, it returns immediately with `SyncResult.Failure(SYNC_IN_PROGRESS)`.
+A companion-object-level `Mutex` prevents concurrent sync operations across all `SyncEngine` instances on a single device. If `syncAllNotebooks()` is called while a sync is already running, it returns immediately with `SyncResult.Failure(SYNC_IN_PROGRESS)`.
 
-### 8.3 Failure Isolation
+There is no cross-device locking -- WebDAV does not provide atomic multi-file transactions. See the concurrency note in section 5.7.
+
+### 7.3 Failure Isolation
 
 Failures are isolated at the notebook level:
 - If a single notebook fails to upload or download, the error is logged and sync continues with the remaining notebooks.
 - If a single page fails to download within a notebook, the error is logged and the remaining pages are still processed.
 - Only top-level failures (network unreachable, credentials invalid, server directory structure creation failed) abort the entire sync.
 
-### 8.4 Retry Strategy (Background Sync)
+### 7.4 Retry Strategy (Background Sync)
 
 `SyncWorker` (WorkManager) implements retry with the following policy:
 - **Network unavailable**: Return `Result.retry()` (WorkManager will back off and retry).
@@ -484,14 +465,14 @@ Failures are isolated at the notebook level:
 - **Other errors**: Retry up to 3 attempts, then fail.
 - WorkManager's exponential backoff handles retry timing.
 
-### 8.5 WebDAV Idempotency
+### 7.5 WebDAV Idempotency
 
-The WebDAV client handles server quirks:
-- `MKCOL` returning 405 (Method Not Allowed) is treated as success -- it means the collection already exists.
+The WebDAV client handles standard server responses that are not errors:
+- `MKCOL` returning 405 (Method Not Allowed) is treated as success -- per RFC 4918, this means the collection already exists. This is only accepted on `MKCOL`; a 405 on any other operation is treated as an error.
 - `DELETE` returning 404 (Not Found) is treated as success -- the resource is already gone.
 - Both operations are thus idempotent and safe to retry.
 
-### 8.6 State Machine
+### 7.6 State Machine
 
 Sync state is exposed as a `StateFlow<SyncState>` for UI observation:
 
@@ -506,16 +487,16 @@ Idle → Syncing(step, progress, details) → Success(summary) → Idle
 
 ---
 
-## 9) Integration Points
+## 8) Integration Points
 
-### 9.1 WorkManager (Background Sync)
+### 8.1 WorkManager (Background Sync)
 
 `SyncScheduler` enqueues a `PeriodicWorkRequest` with:
 - Default interval: 5 minutes (configurable).
 - Network constraint: `NetworkType.CONNECTED` (won't run without network).
 - Policy: `ExistingPeriodicWorkPolicy.KEEP` (doesn't restart if already scheduled).
 
-### 9.2 Settings
+### 8.2 Settings
 
 Sync configuration lives in `AppSettings.syncSettings`:
 - `syncEnabled`: Master toggle.
@@ -523,11 +504,11 @@ Sync configuration lives in `AppSettings.syncSettings`:
 - `syncedNotebookIds`: Set of notebook UUIDs from the last successful sync (used for local deletion detection).
 - Credentials are stored separately in `CredentialManager` (not in AppSettings).
 
-### 9.3 Editor Integration (Sync on Close)
+### 8.3 Editor Integration (Sync on Close)
 
 `EditorControlTower` can trigger `syncNotebook(notebookId)` when a note is closed, providing near-real-time sync without waiting for the periodic schedule.
 
-### 9.4 Dependencies
+### 8.4 Dependencies
 
 | Dependency | Version | Purpose |
 |-----------|---------|---------|
@@ -538,22 +519,47 @@ Sync configuration lives in `AppSettings.syncSettings`:
 
 ---
 
-## 10) Future Work
+## 9) Future Work
 
 Potential enhancements beyond the current implementation, roughly ordered by impact:
 
-1. **ETag-based change detection.** Replace timestamp comparison with HTTP ETags for determining whether a remote resource has changed. ETags are set by the server (not the client's clock), eliminating clock skew as a concern entirely. The flow would be: store the ETag from each PUT/GET response, and on the next sync, send `If-None-Match` with the stored ETag — a 304 means no change, avoiding a full download. This would make clock skew detection unnecessary and improve bandwidth efficiency.
-2. **Page-level sync granularity.** Compare and sync individual pages rather than whole notebooks to reduce bandwidth and improve conflict handling for multi-page notebooks.
-3. **Stroke-level merge.** When two devices edit different pages of the same notebook, merge non-overlapping changes instead of last-writer-wins at the notebook level.
-4. **Conflict UI.** Present both local and remote versions when a conflict is detected and let the user choose.
-5. **Selective sync.** Allow users to choose which notebooks sync to which devices.
-6. **Compression.** Gzip large JSON files before upload to reduce bandwidth.
-7. **Incremental page sync.** Track per-page timestamps and only upload/download pages that actually changed within a notebook.
-8. **Quick Pages sync.** Pages with `notebookId = null` (standalone pages not in any notebook) are not currently synced.
-9. **Sync progress UI.** Expose per-notebook progress during large syncs.
+1. **ETag-based optimistic locking for shared files.** `folders.json` and `deletions.json` are updated via read-modify-write with no coordination between devices. Using `If-Match` on PUT (and re-reading on 412) would eliminate the concurrent-write race described in section 5.7. Most WebDAV servers (including Nextcloud) return strong ETags on all resources.
+2. **ETag-based change detection.** Extend ETags to notebook manifests: store the ETag from each GET, send `If-None-Match` on the next sync -- a 304 avoids downloading the full manifest. This would also make clock skew detection unnecessary for change detection.
+3. **Page-level sync granularity.** Compare and sync individual pages rather than whole notebooks to reduce bandwidth and improve conflict handling for multi-page notebooks.
+4. **Pruning of deletions.json.** The file grows without bound. Entries older than a configurable threshold (e.g., 90 days) can be pruned, since any device that has not synced in that long should perform a full reconciliation regardless.
+5. **Stroke-level merge.** When two devices edit different pages of the same notebook, merge non-overlapping changes instead of last-writer-wins at the notebook level.
+6. **Conflict UI.** Present both local and remote versions when a conflict is detected and let the user choose.
+7. **Selective sync.** Allow users to choose which notebooks sync to which devices.
+8. **Compression.** Gzip large JSON files before upload to reduce bandwidth.
+9. **Quick Pages sync.** Pages with `notebookId = null` (standalone pages not in any notebook) are not currently synced.
 10. **Device screen size scaling.** Notes created on one Boox tablet size may need coordinate scaling on a different model.
 
 ---
 
-**Version**: 1.0
-**Last Updated**: 2026-02-27
+## Appendix: Design Rationale
+
+### A.1 Why Not CouchDB / Syncthing / Other Sync Frameworks?
+
+Notable targets Onyx Boox e-ink tablets, which are locked-down Android devices. The sync solution must:
+
+1. Work with servers the user already owns (Nextcloud is extremely common in this community).
+2. Require no server-side component installation.
+3. Run within a standard Android app without root or sideloaded services.
+4. Use only HTTP/HTTPS for network communication (no custom protocols, no peer-to-peer).
+
+WebDAV meets all four constraints. CouchDB would require server installation. Syncthing requires a background service and open ports. SFTP is not universally available. WebDAV is the lowest common denominator that actually works for this user base.
+
+### A.2 Why a Custom WebDAV Client
+
+[`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt) implements WebDAV operations directly on OkHttp rather than using an existing library. Evaluated alternatives:
+
+- **Sardine** (most popular Java WebDAV library): Depends on Apache HttpClient, removed from the Android SDK in API 23. The `android-sardine` fork is unmaintained since 2019.
+- **jackrabbit-webdav**: Heavyweight JCR dependency (~2MB+), also depends on Apache HttpClient.
+- **Milton**: Server-side WebDAV framework, not a client.
+
+Notable's WebDAV needs are narrow (PUT, GET, DELETE, MKCOL, PROPFIND, HEAD), so a purpose-built implementation on OkHttp (already a project dependency) is smaller than any of the above with zero added transitive dependencies. PROPFIND XML responses are parsed with Android's built-in `XmlPullParser`.
+
+---
+
+**Version**: 1.1
+**Last Updated**: 2026-02-28
