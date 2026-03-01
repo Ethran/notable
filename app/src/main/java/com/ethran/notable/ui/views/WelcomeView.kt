@@ -35,53 +35,78 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DoDisturb
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.navigation.NavController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ethran.notable.PACKAGE_NAME
 import com.ethran.notable.R
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.editor.utils.getCurRefreshModeString
 import com.ethran.notable.editor.utils.isRecommendedRefreshMode
 import com.ethran.notable.editor.utils.setRecommendedMode
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flow
+import com.ethran.notable.navigation.NavigationDestination
 
+
+object WelcomeDestination : NavigationDestination {
+    override val route = "welcome"
+}
 
 @Composable
-fun WelcomeView(navController: NavController) {
+fun WelcomeView(onContinue: () -> Unit = {}) {
     val context = LocalContext.current
-    val filePermissionGranted = remember { mutableStateOf(hasFilePermission(context)) }
-    val recommendedRefreshMode = remember { mutableStateOf(isRecommendedRefreshMode()) }
-    val refreshModeString = remember { mutableStateOf(getCurRefreshModeString()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    // For automatic permission state updates
-    LaunchedEffect(Unit) {
-        flow {
-            while (true) {
-                emit(Unit)
-                delay(500) // Check every 500ms
+    var filePermissionGranted by remember { mutableStateOf(hasFilePermission(context)) }
+    var recommendedRefreshMode by remember { mutableStateOf(isRecommendedRefreshMode()) }
+    var refreshModeString by remember { mutableStateOf(getCurRefreshModeString()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                filePermissionGranted = hasFilePermission(context)
+                recommendedRefreshMode = isRecommendedRefreshMode()
+                refreshModeString = getCurRefreshModeString()
             }
-        }.collect {
-            filePermissionGranted.value = hasFilePermission(context)
-            recommendedRefreshMode.value = isRecommendedRefreshMode()
-            refreshModeString.value = getCurRefreshModeString()
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // Call the stateless content view
+    WelcomeContent(
+        filePermissionGranted = filePermissionGranted,
+        recommendedRefreshMode = recommendedRefreshMode,
+        refreshModeString = refreshModeString,
+        onFilePermissionRequest = { requestPermissions(context) },
+        onRefreshModeRequest = { setRecommendedMode() },
+        onContinue = onContinue
+    )
+}
+
+@Composable
+fun WelcomeContent(
+    filePermissionGranted: Boolean,
+    recommendedRefreshMode: Boolean,
+    refreshModeString: String,
+    onFilePermissionRequest: () -> Unit,
+    onRefreshModeRequest: () -> Unit,
+    onContinue: () -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colors.background
@@ -89,34 +114,20 @@ fun WelcomeView(navController: NavController) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp), // Only horizontal padding for full height
+                .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
-            ) {
-                Text(
-                    stringResource(R.string.welcome_view_title),
-                    style = MaterialTheme.typography.h4,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                Text(
-                    stringResource(R.string.welcome_view_subtitle),
-                    style = MaterialTheme.typography.body1,
-                    textAlign = TextAlign.Center
-                )
-            }
+            WelcomeHeader()
 
+            // Pass values and callbacks down
             PermissionsRow(
-                context,
-                filePermissionGranted,
-                recommendedRefreshMode,
-                refreshModeString
+                isFilePermissionGranted = filePermissionGranted,
+                isRecommendedRefreshMode = recommendedRefreshMode,
+                refreshModeString = refreshModeString,
+                onFileClick = onFilePermissionRequest,
+                onRefreshClick = onRefreshModeRequest
             )
 
-            // SCROLLABLE instructions area
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -129,24 +140,50 @@ fun WelcomeView(navController: NavController) {
                 }
             }
 
-            // Spacer to push button up from the bottom
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Continue Button pinned near bottom
-            ContinueButton(context, navController, filePermissionGranted.value)
+            // Note: Continue button logic moved to the callback
+            Button(
+                onClick = onContinue,
+                enabled = filePermissionGranted,
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .padding(top = 24.dp)
+            ) {
+                Text(if (filePermissionGranted) "Continue" else "Complete setup first")
+            }
 
-            // Extra spacer to ensure button is not flush with bottom edge
             Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
 
 @Composable
+private fun WelcomeHeader() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
+    ) {
+        Text(
+            stringResource(R.string.welcome_view_title),
+            style = MaterialTheme.typography.h4,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            stringResource(R.string.welcome_view_subtitle),
+            style = MaterialTheme.typography.body1,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 fun PermissionsRow(
-    context: Context,
-    filePermissionGranted: MutableState<Boolean>,
-    recommendedRefreshMode: MutableState<Boolean>,
-    refreshModeString: MutableState<String>
+    isFilePermissionGranted: Boolean,
+    isRecommendedRefreshMode: Boolean,
+    refreshModeString: String,
+    onFileClick: () -> Unit,
+    onRefreshClick: () -> Unit
 ) {
     // Two-column layout for permissions and instructions
     Row(
@@ -163,16 +200,12 @@ fun PermissionsRow(
             PermissionItem(
                 title = stringResource(R.string.welcome_view_file_access),
                 description = stringResource(R.string.welcome_view_file_access_explanation),
-                isGranted = filePermissionGranted.value,
-                buttonText = if (filePermissionGranted.value) stringResource(R.string.welcome_view_permissions_granted) else stringResource(
+                isGranted = isFilePermissionGranted,
+                buttonText = if (isFilePermissionGranted) stringResource(R.string.welcome_view_permissions_granted) else stringResource(
                     R.string.welcome_view_permissions_button
                 ),
-                onClick = {
-                    if (!filePermissionGranted.value) {
-                        requestPermissions(context)
-                    }
-                },
-                enabled = !filePermissionGranted.value
+                onClick = onFileClick,
+                enabled = !isFilePermissionGranted
             )
         }
 
@@ -186,43 +219,20 @@ fun PermissionsRow(
             PermissionItem(
                 title = stringResource(R.string.welcome_view_refresh_mode),
                 description = stringResource(R.string.welcome_view_refresh_mode_details),
-                isGranted = recommendedRefreshMode.value,
-                buttonText = if (recommendedRefreshMode.value) stringResource(
-                    R.string.welcome_view_refresh_mode_applied, refreshModeString.value
+                isGranted = isRecommendedRefreshMode,
+                buttonText = if (isRecommendedRefreshMode) stringResource(
+                    R.string.welcome_view_refresh_mode_applied, refreshModeString
                 )
                 else stringResource(
-                    R.string.welcome_view_refresh_mode_set_hd_mode, refreshModeString.value
+                    R.string.welcome_view_refresh_mode_set_hd_mode, refreshModeString
                 ),
-                onClick = {
-                    setRecommendedMode()
-                },
-                enabled = !recommendedRefreshMode.value
+                onClick = onRefreshClick,
+                enabled = !isRecommendedRefreshMode
             )
         }
     }
 }
 
-@Composable
-fun ContinueButton(context: Context, navController: NavController, filePermissionGranted: Boolean) {
-    Button(
-        onClick = {
-            KvProxy(context).setAppSettings(
-                GlobalAppSettings.current.copy(showWelcome = false)
-            )
-            navController.navigate("library")
-        },
-        enabled = filePermissionGranted,
-        modifier = Modifier
-            .fillMaxWidth(0.8f)
-            .padding(top = 24.dp)
-    ) {
-        Text(
-            if (filePermissionGranted) stringResource(R.string.welcome_view_continue) else stringResource(
-                R.string.welcome_view_complete_setup_first
-            )
-        )
-    }
-}
 
 @Composable
 fun OnyxUnfreezeInstruction() {
@@ -458,4 +468,46 @@ private fun requestManageAllFilesPermission(context: Context) {
     intent.data = Uri.fromParts("package", PACKAGE_NAME, null)
     intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
     context.startActivity(intent)
+}
+
+
+// ----------------------------------- //
+// --------      Previews      ------- //
+// ----------------------------------- //
+
+
+@Preview(
+    showBackground = true,
+    name = "Setup Required"
+)
+@Composable
+fun WelcomePreviewSetup() {
+    MaterialTheme {
+        WelcomeContent(
+            filePermissionGranted = false,
+            recommendedRefreshMode = false,
+            refreshModeString = "Normal",
+            onFilePermissionRequest = {},
+            onRefreshModeRequest = {},
+            onContinue = {}
+        )
+    }
+}
+
+@Preview(
+    showBackground = true,
+    name = "Ready to Go"
+)
+@Composable
+fun WelcomePreviewReady() {
+    MaterialTheme {
+        WelcomeContent(
+            filePermissionGranted = true,
+            recommendedRefreshMode = true,
+            refreshModeString = "Extreme",
+            onFilePermissionRequest = {},
+            onRefreshModeRequest = {},
+            onContinue = {}
+        )
+    }
 }

@@ -23,19 +23,40 @@ import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.ui.EditorGestureReceiver
+import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
 import com.ethran.notable.io.exportToLinkedFile
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.Log
+
+
+
+
+object EditorDestination : NavigationDestination {
+    override val route = "editor"
+
+    const val PAGE_ID_ARG = "pageId"
+    const val BOOK_ID_ARG = "bookId"
+
+    // Unified route: editor/{pageId}?bookId={bookId}
+    val routeWithArgs = "$route/{$PAGE_ID_ARG}?$BOOK_ID_ARG={$BOOK_ID_ARG}"
+
+    /**
+     * Helper to create the path. If bookId is null, it just won't be appended.
+     */
+    fun createRoute(pageId: String, bookId: String? = null): String {
+        return "$route/$pageId" + if (bookId != null) "?$BOOK_ID_ARG=$bookId" else ""
+    }
+}
 
 
 @OptIn(ExperimentalComposeUiApi::class)

@@ -36,10 +36,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
+import com.ethran.notable.navigation.NavigationDestination
 import com.onyx.android.sdk.api.device.epd.EPDMode
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
@@ -47,6 +49,16 @@ import com.onyx.android.sdk.device.BaseDevice
 import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.style.StrokeStyle
 import java.io.File
+
+
+
+
+
+
+object SystemInformationDestination : NavigationDestination {
+    override val route = "SystemInformationView"
+}
+
 
 /**
  * THIS FILE WAS WRITTEN BY AI.
@@ -62,7 +74,8 @@ import java.io.File
  * Includes a Refresh button and auto-refresh on focus (Activity resume).
  */
 @Composable
-fun SystemInformationView(navController: NavController) {
+@Preview(showBackground = true)
+fun SystemInformationView(onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val device = remember { Device.currentDevice() }
@@ -108,7 +121,7 @@ fun SystemInformationView(navController: NavController) {
         ) {
             TitleBarSimple(
                 title = "System Information",
-                onBack = { navController.popBackStack() },
+                onBack = { onBack},
                 onRefresh = { refresh() }
             )
 

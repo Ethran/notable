@@ -28,7 +28,6 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Tab
 import androidx.compose.material.TabRow
 import androidx.compose.material.TabRowDefaults
-import androidx.compose.material.TabRowDefaults.Divider
 import androidx.compose.material.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -40,7 +39,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,35 +53,76 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.R
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.DebugSettings
 import com.ethran.notable.ui.components.GeneralSettings
 import com.ethran.notable.ui.components.GesturesSettings
-import com.ethran.notable.ui.showHint
-import com.ethran.notable.utils.isLatestVersion
+import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.ui.viewmodels.GestureRowModel
+import com.ethran.notable.ui.viewmodels.SettingsViewModel
 import com.ethran.notable.utils.isNext
-import kotlin.concurrent.thread
+
+
+object SettingsDestination : NavigationDestination {
+    override val route = "settings"
+}
 
 @Composable
 fun SettingsView(
-    goToWelcome: () -> Unit,
-    goBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToWelcome: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val kv = KvProxy(context)
-    val settings = GlobalAppSettings.current
+    val settings = viewModel.settings
 
-    // Tab titles
+    LaunchedEffect(Unit) {
+        viewModel.checkUpdate(context, force = false)
+    }
+
+    @Suppress("KotlinConstantConditions") val versionString = remember {
+        "v${BuildConfig.VERSION_NAME}${if (isNext) " [NEXT]" else ""}"
+    }
+
+    SettingsContent(
+        versionString = versionString,
+        settings = settings,
+        isLatestVersion = viewModel.isLatestVersion,
+        onBack = onBack,
+        onNavigateToWelcome = onNavigateToWelcome,
+        onCheckUpdate = { force ->
+            viewModel.checkUpdate(context, force)
+        },
+        onUpdateSettings = { viewModel.updateSettings(it) },
+        listOfGestures = viewModel.getGestureRows(),
+        availableGestures = viewModel.availableGestures
+    )
+}
+
+@Composable
+fun SettingsContent(
+    versionString: String,
+    settings: AppSettings,
+    isLatestVersion: Boolean,
+    onBack: () -> Unit,
+    onNavigateToWelcome: () -> Unit,
+    onCheckUpdate: (Boolean) -> Unit,
+    onUpdateSettings: (AppSettings) -> Unit,
+    selectedTabInitial: Int = 0,
+    listOfGestures: List<GestureRowModel> = emptyList(),
+    availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList()
+) {
+    var selectedTab by remember { mutableIntStateOf(selectedTabInitial) }
     val tabs = listOf(
         stringResource(R.string.settings_tab_general_name),
         stringResource(R.string.settings_tab_gestures_name),
         stringResource(R.string.settings_tab_debug_name)
     )
-    var selectedTab by remember { mutableIntStateOf(0) }
 
     Surface(
         modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background
@@ -93,43 +132,12 @@ fun SettingsView(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            TitleBar(context, goBack)
-            // Tabs
-            TabRow(
-                selectedTabIndex = selectedTab,
-                backgroundColor = MaterialTheme.colors.surface,
-                contentColor = MaterialTheme.colors.onSurface,
-                indicator = { tabPositions ->
-                    TabRowDefaults.Indicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.2f)
-                    )
-                },
-                divider = {
-                    Divider(
-                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.12f), thickness = 1.dp
-                    )
-                }) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = {
-                            Text(
-                                text = title,
-                                color = if (selectedTab == index) MaterialTheme.colors.onSurface
-                                else MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
-                            )
-                        },
-                        selectedContentColor = MaterialTheme.colors.onSurface,
-                        unselectedContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
+            SettingsTitleBar(versionString, onBack)
+
+            SettingsTabRow(tabs, selectedTab) { selectedTab = it }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // The scrollable tab content area, takes up all available space
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -137,17 +145,19 @@ fun SettingsView(
                     .verticalScroll(rememberScrollState())
             ) {
                 when (selectedTab) {
-                    0 -> GeneralSettings(kv, settings)
-                    1 -> GesturesSettings(context, kv, settings)
-                    2 -> DebugSettings(kv, settings, goToWelcome)
-                }
+                    0 -> GeneralSettings(settings, onUpdateSettings)
+                    1 -> GesturesSettings(
+                        settings, onUpdateSettings, listOfGestures, availableGestures
+                    )
 
+                    2 -> DebugSettings(settings, onUpdateSettings, onNavigateToWelcome)
+                }
             }
 
-            // Additional actions, only on main settings tab
             if (selectedTab == 0) {
                 Column(
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     GitHubSponsorButton(
                         Modifier
@@ -155,8 +165,8 @@ fun SettingsView(
                             .height(48.dp)
                             .fillMaxWidth()
                     )
-                    ShowUpdateButton(
-                        context = context,
+                    UpdateActions(
+                        isLatestVersion = isLatestVersion, onCheckUpdate = onCheckUpdate,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 30.dp, vertical = 8.dp)
@@ -168,10 +178,8 @@ fun SettingsView(
     }
 }
 
-
-
 @Composable
-fun TitleBar(context: Context, goBack: () -> Unit = {}) {
+private fun SettingsTitleBar(versionString: String, onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -179,9 +187,7 @@ fun TitleBar(context: Context, goBack: () -> Unit = {}) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        IconButton(
-            onClick = goBack, modifier = Modifier.size(40.dp)
-        ) {
+        IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
@@ -190,71 +196,77 @@ fun TitleBar(context: Context, goBack: () -> Unit = {}) {
         }
 
         Text(
-            text = context.getString(R.string.settings_title),
+            text = stringResource(R.string.settings_title),
             style = MaterialTheme.typography.h5,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center
         )
-
-        @Suppress("KotlinConstantConditions") Text(
-            text = "v${BuildConfig.VERSION_NAME}${if (isNext) " [NEXT]" else ""}",
-            style = MaterialTheme.typography.subtitle1,
-        )
+        Text(text = versionString, style = MaterialTheme.typography.subtitle1)
     }
 }
 
-
-
 @Composable
-fun GitHubSponsorButton(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-
-    Column(
-        modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .background(
-                    color = Color(0xFF24292E), shape = RoundedCornerShape(25.dp)
-                )
-                .clickable {
-                    openInBrowser(
-                        context, "https://github.com/sponsors/ethran"
-                    )
-                }, contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.Default.FavoriteBorder,
-                    contentDescription = "Heart Icon",
-                    tint = Color(0xFFEA4AAA),
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+private fun SettingsTabRow(tabs: List<String>, selectedTab: Int, onTabSelected: (Int) -> Unit) {
+    TabRow(
+        selectedTabIndex = selectedTab,
+        backgroundColor = MaterialTheme.colors.surface,
+        contentColor = MaterialTheme.colors.onSurface,
+        indicator = { tabPositions ->
+            TabRowDefaults.Indicator(
+                Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.2f)
+            )
+        },
+        divider = {
+            TabRowDefaults.Divider(
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.12f), thickness = 1.dp
+            )
+        }) {
+        tabs.forEachIndexed { index, title ->
+            Tab(selected = selectedTab == index, onClick = { onTabSelected(index) }, text = {
                 Text(
-                    text = stringResource(R.string.sponsor_button_text),
-                    color = Color.White,
-                    style = MaterialTheme.typography.button.copy(
-                        fontWeight = FontWeight.Bold, fontSize = 16.sp
-                    ),
+                    text = title,
+                    color = if (selectedTab == index) MaterialTheme.colors.onSurface
+                    else MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                 )
-            }
+            })
         }
     }
 }
 
+@Composable
+fun GitHubSponsorButton(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Box(
+        modifier = modifier
+            .background(color = Color(0xFF24292E), shape = RoundedCornerShape(25.dp))
+            .clickable { openInBrowser(context, "https://github.com/sponsors/ethran") },
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Default.FavoriteBorder,
+                contentDescription = null,
+                tint = Color(0xFFEA4AAA),
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.sponsor_button_text),
+                color = Color.White,
+                style = MaterialTheme.typography.button.copy(
+                    fontWeight = FontWeight.Bold, fontSize = 16.sp
+                ),
+            )
+        }
+    }
+}
 
 @Composable
-fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
-    var isLatestVersion by remember { mutableStateOf(true) }
-    LaunchedEffect(key1 = Unit, block = { thread { isLatestVersion = isLatestVersion(context) } })
-
+fun UpdateActions(
+    isLatestVersion: Boolean, onCheckUpdate: (Boolean) -> Unit, modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
     if (!isLatestVersion) {
         Column(modifier = modifier) {
             Text(
@@ -262,33 +274,18 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
                 fontStyle = FontStyle.Italic,
                 style = MaterialTheme.typography.h6,
             )
-
             Spacer(Modifier.height(10.dp))
-
             Button(
-                onClick = {
-                    openInBrowser(context, "https://github.com/ethran/notable/releases")
-                }, modifier = Modifier.fillMaxWidth()
+                onClick = { openInBrowser(context, "https://github.com/ethran/notable/releases") },
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Upgrade, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = stringResource(R.string.app_see_release))
             }
         }
-        Spacer(Modifier.height(10.dp))
     } else {
-        Button(
-            onClick = {
-                thread {
-                    isLatestVersion = isLatestVersion(context, true)
-                    if (isLatestVersion) {
-                        showHint(
-                            context.getString(R.string.app_latest_version), duration = 1000
-                        )
-                    }
-                }
-            }, modifier = modifier // Adjust the modifier as needed
-        ) {
+        Button(onClick = { onCheckUpdate(true) }, modifier = modifier) {
             Icon(Icons.Default.Update, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = stringResource(R.string.app_check_updates))
@@ -301,9 +298,7 @@ fun ShowUpdateButton(context: Context, modifier: Modifier = Modifier) {
 
 
 fun openInBrowser(context: Context, uriString: String) {
-    val urlIntent = Intent(
-        Intent.ACTION_VIEW, uriString.toUri()
-    )
+    val urlIntent = Intent(Intent.ACTION_VIEW, uriString.toUri())
     try {
         context.startActivity(urlIntent)
     } catch (_: ActivityNotFoundException) {
@@ -316,16 +311,67 @@ fun openInBrowser(context: Context, uriString: String) {
     }
 }
 
+// ----------------------------------- //
+// --------      Previews      ------- //
+// ----------------------------------- //
 
-@Preview(
-    showBackground = true,
-)
+
+@Preview(showBackground = true)
 @Composable
-fun SettingsPreview() {
-    MaterialTheme {
-        SettingsView (
-            goToWelcome = {},
-            goBack = {}
+fun SettingsPreviewGeneral() {
+    InkaTheme {
+        SettingsContent(
+            versionString = "v1.0.0",
+            settings = AppSettings(version = 1),
+            isLatestVersion = true,
+            onBack = {},
+            onNavigateToWelcome = {},
+            onCheckUpdate = {},
+            onUpdateSettings = {},
+            selectedTabInitial = 0
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsPreviewGestures() {
+    val dummyRows = listOf(
+        GestureRowModel(
+            R.string.gestures_double_tap_action, null, AppSettings.defaultDoubleTapAction
+        ) { }, GestureRowModel(
+            R.string.gestures_two_finger_tap_action,
+            AppSettings.GestureAction.Undo,
+            AppSettings.defaultTwoFingerTapAction
+        ) { })
+    InkaTheme {
+        SettingsContent(
+            versionString = "v1.0.0",
+            settings = AppSettings(version = 1),
+            isLatestVersion = true,
+            onBack = {},
+            onNavigateToWelcome = {},
+            onCheckUpdate = {},
+            onUpdateSettings = {},
+            selectedTabInitial = 1,
+            listOfGestures = dummyRows
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsPreviewDebug() {
+    InkaTheme {
+        SettingsContent(
+            versionString = "v1.0.0",
+            settings = AppSettings(version = 1),
+            isLatestVersion = true,
+            onBack = {},
+            onNavigateToWelcome = {},
+            onCheckUpdate = {},
+            onUpdateSettings = {},
+            selectedTabInitial = 2
         )
     }
 }

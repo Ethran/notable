@@ -39,14 +39,17 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.editor.EditorControlTower
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.ui.noRippleClickable
+import com.ethran.notable.ui.views.BugReportDestination
+import com.ethran.notable.ui.views.LibraryDestination
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
@@ -105,7 +108,8 @@ fun Toolbar(
     // Observe zoom level to decide button visibility
     val zoomLevel by state.pageView.zoomLevel.collectAsState()
 
-    val repository = remember { AppRepository(context).bookRepository }
+    val appRepository = remember { AppRepository(context) }
+    val repository = appRepository.bookRepository
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
@@ -492,14 +496,23 @@ fun Toolbar(
                             state.menuStates.isMenuOpen = !state.menuStates.isMenuOpen
                         }, iconId = R.drawable.menu, contentDescription = "menu"
                     )
-                    if (state.menuStates.isMenuOpen) ToolbarMenu(
-                        navController = navController,
-                        state = state,
-                        onClose = { state.menuStates.isMenuOpen = false },
-                        onBackgroundSelectorModalOpen = {
-                            toolbarLog.i("Opening page settings modal")
-                            state.menuStates.isBackgroundSelectorModalOpen = true
-                        })
+                    if (state.menuStates.isMenuOpen)
+                        ToolbarMenu(
+                            goToBugReport = { navController.navigate(BugReportDestination.route) },
+                            goToLibrary = {
+                                val parentFolder = appRepository.pageRepository.getById(state.currentPageId)?.getParentFolder(context)
+                                navController.navigate(
+                                    LibraryDestination.createRoute(parentFolder)
+                                )
+                            },
+                            currentPageId = state.currentPageId,
+                            currentBookId = state.bookId,
+                            onClose = { state.menuStates.isMenuOpen = false },
+                            onBackgroundSelectorModalOpen = {
+                                toolbarLog.i("Opening page settings modal")
+                                state.menuStates.isBackgroundSelectorModalOpen = true
+                            }
+                        )
                 }
             }
 

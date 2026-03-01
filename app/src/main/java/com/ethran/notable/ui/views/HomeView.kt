@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.R
@@ -54,16 +55,19 @@ import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.ui.toolbar.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.NotebookCard
 import com.ethran.notable.ui.components.ShowPagesRow
+import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.ui.dialogs.EmptyBookWarningHandler
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
 import com.ethran.notable.ui.dialogs.NotebookConfigDialog
@@ -83,10 +87,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.concurrent.thread
 
+
+object LibraryDestination : NavigationDestination {
+    override val route = "library"
+    const val FOLDER_ID_ARG = "folderId"
+
+    // Route: library?folderId={folderId}
+    val routeWithArgs = "$route?$FOLDER_ID_ARG={$FOLDER_ID_ARG}"
+
+    fun createRoute(folderId: String? = null): String {
+        return if (folderId != null) "$route?$FOLDER_ID_ARG=$folderId" else route
+    }
+}
 @ExperimentalFoundationApi
 @ExperimentalComposeUiApi
 @Composable
-fun Library(navController: NavController, folderId: String? = null) {
+fun Library(
+    navController: NavController,
+    folderId: String? = null,
+    goToPage: (String) -> Unit = {},
+    onCreateNewQuickPage: (String?) -> Unit = {}
+) {
     PageDataManager.cancelLoadingPages()
 
     val context = LocalContext.current
@@ -135,7 +156,8 @@ fun Library(navController: NavController, folderId: String? = null) {
             Row(
                 Modifier.padding(10.dp)
             ) {
-                BreadCrumb(folderId = folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
+                BreadCrumb(folders = getFolderList(context, folderId))
+                { navController.navigate(LibraryDestination.createRoute(it)) }
             }
 
         }
@@ -148,11 +170,12 @@ fun Library(navController: NavController, folderId: String? = null) {
 
             Spacer(Modifier.height(10.dp))
             ShowPagesRow(
-                singlePages,
-                navController,
-                appRepository,
-                folderId,
-                title = context.getString(R.string.home_quick_pages)
+                pages = singlePages,
+                currentPageId = null,
+                title = stringResource(R.string.home_quick_pages),
+                onSelectPage = { goToPage(it) },
+                showAddQuickPage = true,
+                onCreateNewQuickPage = { onCreateNewQuickPage(folderId) }
             )
 
             Spacer(Modifier.height(10.dp))
@@ -209,7 +232,7 @@ fun FolderList(
                     Modifier
                         .combinedClickable(
                             onClick = {
-                                navController.navigate("library?folderId=${folder.id}")
+                                navController.navigate(LibraryDestination.createRoute(folder.id))
                             },
                             onLongClick = {
                                 isFolderSettingsOpen = !isFolderSettingsOpen
@@ -276,7 +299,7 @@ fun NotebookGrid(
                     pageIds = book.pageIds,
                     openPageId = book.openPageId,
                     onOpen = { bookId, pageId ->
-                        navController.navigate("books/$bookId/pages/$pageId")
+                        navController.navigate(EditorDestination.createRoute(pageId, bookId))
                     },
                     onOpenSettings = { isSettingsOpen = true })
                 if (isSettingsOpen) NotebookConfigDialog(

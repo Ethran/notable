@@ -1,4 +1,4 @@
-package com.ethran.notable.editor.ui
+package com.ethran.notable.gestures
 
 import android.graphics.Rect
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -22,13 +22,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.state.DOUBLE_TAP_MIN_MS
-import com.ethran.notable.editor.state.DOUBLE_TAP_TIMEOUT_MS
-import com.ethran.notable.editor.state.GestureMode
-import com.ethran.notable.editor.state.GestureState
-import com.ethran.notable.editor.state.HOLD_THRESHOLD_MS
-import com.ethran.notable.editor.state.PINCH_ZOOM_THRESHOLD
-import com.ethran.notable.editor.state.SWIPE_THRESHOLD
+import com.ethran.notable.editor.ui.SelectionVisualCues
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope

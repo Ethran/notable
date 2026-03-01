@@ -49,15 +49,17 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.getPageIndex
-import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.deletePage
+import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.ui.toolbar.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.editor.utils.setAnimationMode
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.FastScroller
 import com.ethran.notable.ui.components.PageCard
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
 import com.ethran.notable.utils.InsertionSlot
 import com.ethran.notable.utils.ReorderableGridItem
@@ -65,6 +67,17 @@ import com.ethran.notable.utils.computeInsertionSlotRect
 import com.ethran.notable.utils.rememberReorderableGridState
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
+
+object PagesDestination : NavigationDestination {
+    override val route = "books"
+    const val BOOK_ID_ARG = "bookId"
+
+    // Route: books/{bookId}/pages
+    val routeWithArgs = "$route/{$BOOK_ID_ARG}/pages"
+
+    fun createRoute(bookId: String) = "$route/$bookId/pages"
+}
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -119,8 +132,8 @@ fun PagesView(navController: NavController, bookId: String) {
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BreadCrumb(folderId = bookFolder) {
-                    navController.navigate("library" + if (it == null) "" else "?folderId=$it")
+                BreadCrumb(folders = getFolderList(context, bookFolder)) {
+                    navController.navigate(LibraryDestination.createRoute(it))
                 }
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -186,7 +199,14 @@ fun PagesView(navController: NavController, bookId: String) {
                             isEditMode = isEditMode,
                             isReorderDragging = reorderState.draggingId == null,
                             touchModifier = touchMod,
-                            onOpen = { navController.navigate("books/$bookId/pages/$pageId") },
+                            onOpen = {
+                                navController.navigate(
+                                    EditorDestination.createRoute(
+                                        pageId,
+                                        bookId
+                                    )
+                                )
+                            },
                             onDelete = { pendingDeletePageId = pageId },
                             onDuplicate = { appRepository.duplicatePage(pageId) },
                             onAddAfter = {

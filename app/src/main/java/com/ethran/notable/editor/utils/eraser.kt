@@ -129,6 +129,7 @@ fun handleScribbleToErase(
     // If strokes were found, remove them and update history
     if (deletedStrokes.isNotEmpty()) {
         val deletedStrokeIds = deletedStrokes.map { it.id }
+        removeStroke(deletedStrokeIds)
         page.removeStrokes(deletedStrokeIds)
         history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
         val dirtyRect = strokeBounds(deletedStrokes)
@@ -166,6 +167,8 @@ fun handleErase(
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
+    removeStroke(deletedStrokeIds)
+
     if (deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 

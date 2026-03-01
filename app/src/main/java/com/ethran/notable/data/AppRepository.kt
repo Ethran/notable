@@ -25,7 +25,7 @@ class AppRepository(val context: Context) {
     val imageRepository = ImageRepository(context)
     val folderRepository = FolderRepository(context)
     val kvRepository = KvRepository(context)
-    val kvProxy = KvProxy(context)
+    val kvProxy = KvProxy(kvRepository)
 
     fun getNextPageIdFromBookAndPageOrCreate(
         notebookId: String,

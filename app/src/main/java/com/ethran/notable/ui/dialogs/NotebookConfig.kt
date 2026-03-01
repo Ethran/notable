@@ -63,6 +63,7 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
 
@@ -300,7 +301,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     Text("Size: TODO!")
                     Row {
                         Text(stringResource(R.string.details_notebook_in_folder))
-                        BreadCrumb(folderId = bookFolder, fontSize = 16) { }
+                        BreadCrumb(folders = getFolderList(context, bookFolder), fontSize = 16)  { }
                     }
                     Text(stringResource(R.string.details_notebook_created, formattedCreatedAt))
                     Text(stringResource(R.string.details_notebook_last_updated, formattedUpdatedAt))

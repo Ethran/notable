@@ -53,6 +53,7 @@ import androidx.navigation.NavController
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.getDbDir
+import com.ethran.notable.navigation.NavigationDestination
 import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.utils.ClipboardUtils.copyToClipboard
 import java.io.BufferedReader
@@ -369,7 +370,11 @@ class ReportData(
     }
 }
 
+object BugReportDestination : NavigationDestination {
+    override val route = "bugReport"
+}
 
+// TODO: refactor, improve code quality, maybe add ViewModel
 @Composable
 fun BugReportScreen(navController: NavController) {
     val context = LocalContext.current

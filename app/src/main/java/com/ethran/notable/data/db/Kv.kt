@@ -14,9 +14,11 @@ import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.ui.views.hasFilePermission
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import javax.inject.Inject
 
 
 @Entity
@@ -43,7 +45,7 @@ interface KvDao {
 
 }
 
-class KvRepository(context: Context) {
+class KvRepository @Inject constructor(@ApplicationContext context: Context) {
     var db = AppDatabase.getDatabase(context).kvDao()
 
     init {
@@ -70,8 +72,20 @@ class KvRepository(context: Context) {
 
 }
 
-class KvProxy(context: Context) {
-    private val kvRepository = KvRepository(context)
+
+
+/**
+ * A high-level proxy for the Key-Value database.
+ *
+ * This class handles:
+ * 1. Serialization: Automatically converts Kotlin objects (like [AppSettings]) to/from JSON strings.
+ * 2. State Management: Syncs database updates with [GlobalAppSettings] for immediate UI feedback.
+ * 3. Reactive updates: Provides [LiveData] streams for specific keys.
+ *
+ * Use this class instead of [KvRepository] for app-level data like settings and UI states.
+ */
+
+class KvProxy @Inject constructor(private val kvRepository: KvRepository) {
 
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
         return kvRepository.getLive(key).map {

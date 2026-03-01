@@ -44,6 +44,7 @@
     <string name="gesture_action_next_page">Next Page</string>
     <string name="gesture_action_toggle_pen_eraser">Toggle Pen / Eraser</string>
     <string name="gesture_action_toggle_zen_mode">Toggle Zen Mode</string>
+    <string name="gesture_action_select">Select</string>
     <string name="details_notebook_title">Title:</string>
     <string name="details_notebook_default_background_template">Default Background Template</string>
     <string name="details_notebook_pages">Pages: %1$d</string>

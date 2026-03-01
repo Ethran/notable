@@ -33,6 +33,7 @@ import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.ui.convertDpToPixel
 
@@ -123,7 +124,8 @@ fun EraserToolbarButton(
                                 .background(if (isChecked) Color.Black else Color.White)
                                 .clickable {
                                     isChecked = !isChecked
-                                    KvProxy(context).setAppSettings(
+                                    // TODO : change it!!
+                                    KvProxy(KvRepository(context)).setAppSettings(
                                         GlobalAppSettings.current.copy(scribbleToEraseEnabled = isChecked)
                                     )
                                 }
