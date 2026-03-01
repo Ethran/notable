@@ -12,15 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.data.PageDataManager
@@ -30,7 +23,6 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.reencodeStrokePointsToSB1
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.utils.WebSocketManager
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.NotableApp
@@ -52,7 +44,6 @@ var TAG = "MainActivity"
 const val APP_SETTINGS_KEY = "APP_SETTINGS"
 const val PACKAGE_NAME = "com.ethran.notable"
 
-lateinit var socketManager: WebSocketManager
 
 @AndroidEntryPoint
 @ExperimentalAnimationApi
@@ -70,8 +61,6 @@ class MainActivity : ComponentActivity() {
         )
 
         Log.i(TAG, "Notable started")
-        socketManager = WebSocketManager()
-        socketManager.connect()
 
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
