@@ -1,7 +1,5 @@
 package com.ethran.notable.ui.components
 
-import QuickNavUiState
-import QuickNavViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +30,8 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.ui.noRippleClickable
+import com.ethran.notable.ui.viewmodels.QuickNavUiState
+import com.ethran.notable.ui.viewmodels.QuickNavViewModel
 import io.shipbook.shipbooksdk.ShipBook
 
 private val logQuickNav = ShipBook.getLogger("QuickNav")
@@ -185,7 +185,7 @@ private fun QuickNavHeaderRow(
 }
 
 
-@Preview(showBackground = true)
+@Preview(showBackground = false)
 @Composable
 fun QuickNavContentPreview() {
     QuickNavContent(

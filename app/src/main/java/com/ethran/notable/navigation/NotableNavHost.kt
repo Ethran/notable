@@ -67,7 +67,7 @@ fun NotableNavHost(
         val pageId =
             appRepository.createNewQuickPage(parentFolderId = folderId)
                 ?: return
-        appNavState.navController.navigate("pages/${pageId}")
+        appNavState.navController.navigate(EditorDestination.createRoute(pageId, null))
     }
 
     NavHost(

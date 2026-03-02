@@ -68,6 +68,9 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // ----------------- //
+    // Gesture Settings
+    // ----------------- //
 
     fun getGestureRows(): List<GestureRowModel> = listOf(
         GestureRowModel(

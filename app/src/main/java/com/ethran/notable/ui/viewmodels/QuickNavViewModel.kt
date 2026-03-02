@@ -1,4 +1,6 @@
-// QuickNavViewModel.kt
+package com.ethran.notable.ui.viewmodels
+
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
@@ -17,7 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 
-data class QuickNavUiState( // where do you propose to put it?
+data class QuickNavUiState(
     val isLoading: Boolean = true,
     val currentPageId: String? = null,
     val folderId: String? = null,
