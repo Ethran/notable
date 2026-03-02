@@ -1,16 +1,19 @@
 package com.ethran.notable.ui.views
 
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -19,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.Card
 import androidx.compose.material.Checkbox
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -29,64 +33,91 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.ui.viewmodels.BugReportUiState
+import com.ethran.notable.ui.viewmodels.BugReportViewModel
+import com.onyx.android.sdk.utils.ClipboardUtils.copyToClipboard
+import java.net.URLEncoder
+
 
 
 object BugReportDestination : NavigationDestination {
     override val route = "bugReport"
 }
 
-// TODO: refactor, improve code quality, maybe add ViewModel
 @Composable
-fun BugReportScreen(navController: NavController) {
+fun BugReportScreen(
+    navController: NavController, viewModel: BugReportViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var description by remember { mutableStateOf("") }
-    var includeLogs by remember { mutableStateOf(true) }
-    val logTags =
-        listOf("PageDataManager", "PageViewCache", "GestureReceiver" /*, more if needed */)
-    var selectedTags by remember { mutableStateOf(logTags.associateWith { true }) }
-    var includeLibrariesLogs by remember { mutableStateOf(false) }
-    val reportData = ReportData(context, selectedTags, includeLibrariesLogs)
+
+    fun submitBugReport() {
+        try {
+            val title = viewModel.getIssueTitle()
+            val body = uiState.finalMarkdown
+            val url = "https://github.com/ethran/notable/issues/new?" +
+                    "title=${URLEncoder.encode("Bug: $title", "UTF-8")}" +
+                    "&body=${URLEncoder.encode(body, "UTF-8")}"
+
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+        } catch (e: Exception) {
+            Toast.makeText(context, "Failed to submit report", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun copyReportToClipboard() {
+        copyToClipboard(context, uiState.finalMarkdown)
+        Toast.makeText(context, "Report copied to clipboard", Toast.LENGTH_SHORT).show()
+    }
 
     BugReportScreenContent(
-        goBack = {navController.popBackStack()},
-        description = "TODO",
-        includeLogs = true,
-        reportData = reportData,
-        includeLibrariesLogs = includeLibrariesLogs,
-        submitBugReport = {}
+        uiState = uiState,
+        onBack = { navController.popBackStack() },
+        onDescriptionChange = viewModel::onDescriptionChange,
+        onIncludeLogsChange = viewModel::onIncludeLogsToggle,
+        onTagChange = viewModel::onTagToggle,
+        onIncludeLibrariesChange = viewModel::onIncludeLibrariesToggle,
+        onCopyClick = ::copyReportToClipboard,
+        onSubmitClick = ::submitBugReport
     )
 }
+
+
+// 2. STATELESS UI
 @Composable
-fun BugReportScreenContent(goBack: ()-> Unit,
-                           description: String,
-                           includeLogs: Boolean,
-                           reportData: ReportData,
-                           includeLibrariesLogs: Boolean,
-                           submitBugReport: () -> Unit
-                           ) {
+fun BugReportScreenContent(
+    uiState: BugReportUiState,
+    onBack: () -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onIncludeLogsChange: (Boolean) -> Unit,
+    onTagChange: (String, Boolean) -> Unit,
+    onIncludeLibrariesChange: (Boolean) -> Unit,
+    onCopyClick: () -> Unit,
+    onSubmitClick: () -> Unit
+) {
     val focusManager = LocalFocusManager.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .fillMaxHeight()
     ) {
         // Header
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = goBack) {
+            IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
             }
             Text("Report an Issue", style = MaterialTheme.typography.h6)
@@ -96,52 +127,47 @@ fun BugReportScreenContent(goBack: ()-> Unit,
 
         // Description field
         OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
+            value = uiState.description, onValueChange = onDescriptionChange,
             label = { Text("Issue description") },
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
         )
+
         Spacer(Modifier.height(8.dp))
+
         // Include logs toggle
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
-                checked = includeLogs,
-                onCheckedChange = { includeLogs = it }
+                checked = uiState.includeLogs, onCheckedChange = onIncludeLogsChange
             )
             Spacer(Modifier.width(8.dp))
             Text("Include diagnostic logs")
         }
-        if (includeLogs) {
+
+        // Tags Selection Row
+        if (uiState.includeLogs) {
             Spacer(Modifier.height(8.dp))
-            Text(
-                "Include logs from(leave default if unsure):",
-                style = MaterialTheme.typography.caption
-            )
+            Text("Include logs from:", style = MaterialTheme.typography.caption)
+
             Row(
                 Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
             ) {
-                logTags.forEach { tag ->
+                uiState.availableTags.forEach { tag ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
-                            checked = selectedTags[tag] == true,
-                            onCheckedChange = { checked ->
-                                selectedTags =
-                                    selectedTags.toMutableMap().apply { put(tag, checked) }
-                            }
+                            checked = uiState.selectedTags[tag] == true,
+                            onCheckedChange = { checked -> onTagChange(tag, checked) }
                         )
                         Text(tag, modifier = Modifier.padding(end = 8.dp))
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
-                        checked = includeLibrariesLogs,
-                        onCheckedChange = { checked ->
-                            includeLibrariesLogs = checked
-                        }
+                        checked = uiState.includeLibrariesLogs,
+                        onCheckedChange = onIncludeLibrariesChange
                     )
                     Text("Include libraries logs", modifier = Modifier.padding(end = 8.dp))
                 }
@@ -152,9 +178,7 @@ fun BugReportScreenContent(goBack: ()-> Unit,
 
         // Report Preview Card
         ReportPreviewCard(
-            reportData,
-            description.ifBlank { "_No description provided_" },
-            includeLogs
+            uiState = uiState, modifier = Modifier.weight(1f) // Grow to fill space above buttons
         )
 
         Spacer(Modifier.height(16.dp))
@@ -162,7 +186,7 @@ fun BugReportScreenContent(goBack: ()-> Unit,
         // Action buttons
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             OutlinedButton(
-                onClick = { reportData.copyReportToClipboard(context, description, includeLogs) },
+                onClick = onCopyClick,
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Copy Report")
@@ -171,11 +195,9 @@ fun BugReportScreenContent(goBack: ()-> Unit,
             Spacer(Modifier.width(16.dp))
 
             Button(
-                onClick = {
-                    reportData.submitBugReport(context, description, includeLogs)
-                },
+                onClick = onSubmitClick,
                 modifier = Modifier.weight(1f),
-                enabled = description.isNotBlank()
+                enabled = uiState.description.isNotBlank() && !uiState.isGenerating
             ) {
                 Text("Submit via GitHub")
             }
@@ -185,43 +207,43 @@ fun BugReportScreenContent(goBack: ()-> Unit,
 
 @Composable
 private fun ReportPreviewCard(
-    reportData: ReportData,
-    description: String,
-    includeLogs: Boolean,
+    uiState: BugReportUiState,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.7f),
+        modifier = modifier.fillMaxWidth(),
         elevation = 4.dp,
         backgroundColor = MaterialTheme.colors.surface
     ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-        ) {
-            Text("📋 Report Preview", style = MaterialTheme.typography.subtitle1)
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("📋 Report Preview", style = MaterialTheme.typography.subtitle1)
+                if (uiState.isGenerating) {
+                    Spacer(Modifier.width(8.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
 
-            // Description
             Text(
                 "📝 Description:",
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.primary
             )
-            Text(description, modifier = Modifier.padding(vertical = 4.dp))
+            Text(
+                uiState.description.ifBlank { "_No description provided_" },
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
 
-            // Device Info
             Text(
                 "📱 Device Info:",
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.primary
             )
-            Text(reportData.deviceInfo, modifier = Modifier.padding(vertical = 4.dp))
+            Text(uiState.deviceInfo, modifier = Modifier.padding(vertical = 4.dp))
 
-            // Logs - only this section should be scrollable
-            if (includeLogs) {
+            if (uiState.includeLogs) {
                 Text(
                     "📋 Logs:",
                     style = MaterialTheme.typography.caption,
@@ -229,15 +251,13 @@ private fun ReportPreviewCard(
                 )
                 Box(
                     modifier = Modifier
-                        .weight(1f) // Take remaining space
+                        .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
-                        reportData.formatLogsForDisplay(),
+                        text = uiState.formattedLogs,
                         modifier = Modifier.padding(vertical = 4.dp),
-                        style = MaterialTheme.typography.body2.copy(
-                            fontFamily = FontFamily.Monospace
-                        )
+                        style = MaterialTheme.typography.body2.copy(fontFamily = FontFamily.Monospace)
                     )
                 }
             }
@@ -245,3 +265,23 @@ private fun ReportPreviewCard(
     }
 }
 
+// 3. PREVIEWS
+@Preview(showBackground = true, name = "Report Screen - Logs Enabled")
+@Composable
+fun BugReportScreenPreview() {
+    BugReportScreenContent(
+        uiState = BugReportUiState(
+            description = "App crashes when I click the favorite button.",
+            includeLogs = true,
+            isGenerating = false,
+            deviceInfo = "• Device: Google Pixel 7\n• Memory: 150MB used",
+            formattedLogs = "🟢 12-01 10:15 PageDataManager: Saved successfully\n🔴 12-01 10:16 GestureReceiver: Crash on tap"
+        ),
+        onBack = {},
+        onDescriptionChange = {},
+        onIncludeLogsChange = {},
+        onTagChange = { _, _ -> },
+        onIncludeLibrariesChange = {},
+        onCopyClick = {},
+        onSubmitClick = {})
+}

@@ -44,7 +44,7 @@ class BugReportViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onDescriptionChange(newDesc: String) {
         _uiState.update { it.copy(description = newDesc) }
-        regenerateReport() // Optionally debounce this if typing gets slow
+        regenerateReport()
     }
 
     fun onIncludeLogsToggle(include: Boolean) {

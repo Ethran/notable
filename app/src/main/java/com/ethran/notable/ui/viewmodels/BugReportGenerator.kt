@@ -8,13 +8,10 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
-import android.widget.Toast
-import androidx.core.net.toUri
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.getDbDir
 import com.onyx.android.sdk.device.Device
-import com.onyx.android.sdk.utils.ClipboardUtils.copyToClipboard
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -25,7 +22,8 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.log10
 import kotlin.math.pow
-class ReportData(
+
+class BugReportGenerator(
     context: Context,
     selectedTags: Map<String, Boolean>,
     includeLibrariesLogs: Boolean
@@ -39,7 +37,7 @@ class ReportData(
             """^(\d{2}-\d{2} \d{2}:\d{2}:\d{2}.\d{3})\s+(\d+)\s+(\d+)\s([VDIWE])\s([^:]+):\s(.*)$"""
     }
 
-    private fun rapportMarkdown(includeLogs: Boolean, description: String): String {
+    fun rapportMarkdown(includeLogs: Boolean, description: String): String {
         val formattedLogs = formatLogsForDisplay()
         val baseReport = buildString {
             append("### Description\n")
@@ -116,8 +114,7 @@ class ReportData(
                         match,
                         selectedTags
                     )
-                }
-                    .toList()
+                }.toList()
             }
 
             // Take the most recent logs and reverse order (newest first)
@@ -303,26 +300,6 @@ class ReportData(
             }
         } catch (e: Exception) {
             "error: ${e.message ?: "unknown error"}"
-        }
-    }
-
-    fun copyReportToClipboard(context: Context, description: String, includeLogs: Boolean) {
-        copyToClipboard(
-            context,
-            rapportMarkdown(includeLogs, description.ifBlank { "_No description provided_" })
-        )
-        Toast.makeText(context, "Report copied to clipboard", Toast.LENGTH_SHORT).show()
-    }
-
-    fun submitBugReport(context: Context, description: String, includeLogs: Boolean) {
-        try {
-            val url = "https://github.com/ethran/notable/issues/new?" +
-                    "title=${URLEncoder.encode("Bug: ${getTitle(description)}", "UTF-8")}" +
-                    "&body=${URLEncoder.encode(rapportMarkdown(includeLogs, description), "UTF-8")}"
-
-            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-        } catch (e: Exception) {
-            Toast.makeText(context, "Failed to submit report", Toast.LENGTH_LONG).show()
         }
     }
 }
