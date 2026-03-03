@@ -3,12 +3,21 @@ package com.ethran.notable.ui.viewmodels
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.onyx.android.sdk.api.device.epd.EPDMode
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.BaseDevice
+import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.style.StrokeStyle
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
+import javax.inject.Inject
 
 
 /**
@@ -16,6 +25,11 @@ import java.io.File
  * All fields are nullable-safe for display; failures are recorded in [errors].
  */
 data class DeviceSnapshot(
+    //classes
+    val actualDeviceClass: String? = null,
+    val deviceClassHierarchy: String? = null,
+
+
     // Screen
     val epdMode: EPDMode?,
     val systemDefaultUpdateMode: UpdateMode?,
@@ -113,8 +127,26 @@ data class StrokeStyleInfo(
 )
 
 
+@HiltViewModel
+class SystemInformationViewModel @Inject constructor() : ViewModel() {
 
-class SystemInformationViewModel : ViewModel() {
+    private val _uiState = MutableStateFlow<SystemInfoUiState?>(null)
+    val uiState: StateFlow<SystemInfoUiState?> = _uiState.asStateFlow()
+
+    data class SystemInfoUiState(
+        val snapshot: DeviceSnapshot,
+        val strokeInfo: List<StrokeStyleInfo>
+    )
+
+    fun refresh(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val device = Device.currentDevice()
+            val snapshot = collectDeviceSnapshot(context, device)
+            val strokes = buildStrokeStyleInfo(device)
+            _uiState.value = SystemInfoUiState(snapshot, strokes)
+        }
+    }
+
 
 
     /**
@@ -136,6 +168,10 @@ class SystemInformationViewModel : ViewModel() {
             errors.add("$name failed: ${t.javaClass.simpleName}${t.message?.let { " - $it" } ?: ""}")
             null
         }
+
+        val actualDeviceClass = base.javaClass.name
+        val deviceClassHierarchy = generateSequence<Class<*>>(base.javaClass) { it.superclass }
+            .joinToString(" -> ") { it.simpleName }
 
         // Screen
         val epdMode = safeNullable("getEpdMode") { base.getEpdMode() }
@@ -258,6 +294,8 @@ class SystemInformationViewModel : ViewModel() {
         val fontMap = safeNullable("loadSystemFamilyPathMap") { base.loadSystemFamilyPathMap() }
 
         return DeviceSnapshot(
+            actualDeviceClass = actualDeviceClass,
+            deviceClassHierarchy = deviceClassHierarchy,
             epdMode = epdMode,
             systemDefaultUpdateMode = sysUpdateMode,
             appScopeRefreshMode = appRefreshMode,
@@ -340,9 +378,7 @@ class SystemInformationViewModel : ViewModel() {
 
 
     fun buildStrokeStyleInfo(
-        context: Context,
         base: BaseDevice,
-        snapshot: DeviceSnapshot?
     ): List<StrokeStyleInfo> {
         val styles = listOf(
             StrokeStyle.PENCIL to "PENCIL",
@@ -383,9 +419,4 @@ class SystemInformationViewModel : ViewModel() {
         }
     }
 
-    fun Boolean?.toYesNoNullable(): String? = when (this) {
-        null -> null
-        true -> "Yes"
-        false -> "No"
-    }
 }
