@@ -27,7 +27,7 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.NotableApp
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.ui.views.hasFilePermission
+import com.ethran.notable.utils.hasFilePermission
 import com.onyx.android.sdk.api.device.epd.EpdController
 import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log

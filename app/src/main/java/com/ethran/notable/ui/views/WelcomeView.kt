@@ -1,15 +1,5 @@
 package com.ethran.notable.ui.views
 
-import android.Manifest
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.Settings
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,17 +39,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.ethran.notable.PACKAGE_NAME
 import com.ethran.notable.R
 import com.ethran.notable.editor.utils.getCurRefreshModeString
 import com.ethran.notable.editor.utils.isRecommendedRefreshMode
 import com.ethran.notable.editor.utils.setRecommendedMode
 import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.ui.viewmodels.WelcomeViewModel
+import com.ethran.notable.utils.hasFilePermission
 
 
 object WelcomeDestination : NavigationDestination {
@@ -67,7 +57,11 @@ object WelcomeDestination : NavigationDestination {
 }
 
 @Composable
-fun WelcomeView(onContinue: () -> Unit = {}) {
+fun WelcomeView(
+    goToLibrary: () -> Unit = {},
+    viewModel: WelcomeViewModel = hiltViewModel()
+) {
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -92,9 +86,12 @@ fun WelcomeView(onContinue: () -> Unit = {}) {
         filePermissionGranted = filePermissionGranted,
         recommendedRefreshMode = recommendedRefreshMode,
         refreshModeString = refreshModeString,
-        onFilePermissionRequest = { requestPermissions(context) },
+        onFilePermissionRequest = { viewModel.requestPermissions(context) },
         onRefreshModeRequest = { setRecommendedMode() },
-        onContinue = onContinue
+        onContinue = {
+            viewModel.removeWelcome()
+            goToLibrary()
+        }
     )
 }
 
@@ -429,50 +426,6 @@ private fun PermissionItem(
     }
 }
 
-// Helper functions
-
-/**
- * Returns true if the app has "full file access" for your current storage model:
- * - < Android 11: WRITE_EXTERNAL_STORAGE is granted
- * - >= Android 11: MANAGE_EXTERNAL_STORAGE ("All files access") is granted
- */
-fun hasFilePermission(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        Environment.isExternalStorageManager()
-    } else {
-        ContextCompat.checkSelfPermission(
-            context, Manifest.permission.WRITE_EXTERNAL_STORAGE
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-}
-
-
-private fun requestPermissions(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                context as Activity,
-                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                1001
-            )
-        }
-    } else if (!Environment.isExternalStorageManager()) {
-        requestManageAllFilesPermission(context)
-    }
-}
-
-
-@RequiresApi(Build.VERSION_CODES.R)
-private fun requestManageAllFilesPermission(context: Context) {
-    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-    intent.data = Uri.fromParts("package", PACKAGE_NAME, null)
-    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-    context.startActivity(intent)
-}
 
 
 // ----------------------------------- //

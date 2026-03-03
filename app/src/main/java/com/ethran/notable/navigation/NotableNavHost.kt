@@ -13,7 +13,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.EditorView
 import com.ethran.notable.editor.utils.refreshScreen
@@ -97,11 +96,9 @@ fun NotableNavHost(
             route = WelcomeDestination.route,
         ) {
             WelcomeView(
-                onContinue = {
+                goToLibrary = {
                     // TODO: move the logic
-                    appRepository.kvProxy.setAppSettings(
-                        GlobalAppSettings.current.copy(showWelcome = false)
-                    )
+
                     appNavState.navController.navigate(LibraryDestination.route)
 
                 },
