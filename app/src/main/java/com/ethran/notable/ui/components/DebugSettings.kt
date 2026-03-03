@@ -8,7 +8,8 @@ import com.ethran.notable.data.datastore.AppSettings
 fun DebugSettings(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
-    goToWelcome: () -> Unit
+    goToWelcome: () -> Unit,
+    goToSystemInfo: () -> Unit
 ) {
     Column {
         SettingToggleRow(
@@ -22,7 +23,7 @@ fun DebugSettings(
             label = "Show System Information",
             value = false,
             onToggle = {
-                goToWelcome()
+                goToSystemInfo()
             }
         )
         SettingToggleRow(

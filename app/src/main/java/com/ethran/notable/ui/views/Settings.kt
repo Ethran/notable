@@ -75,7 +75,8 @@ object SettingsDestination : NavigationDestination {
 @Composable
 fun SettingsView(
     onBack: () -> Unit,
-    onNavigateToWelcome: () -> Unit,
+    goToWelcome: () -> Unit,
+    goToSystemInfo: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -94,7 +95,8 @@ fun SettingsView(
         settings = settings,
         isLatestVersion = viewModel.isLatestVersion,
         onBack = onBack,
-        onNavigateToWelcome = onNavigateToWelcome,
+        goToWelcome = goToWelcome,
+        goToSystemInfo = goToSystemInfo,
         onCheckUpdate = { force ->
             viewModel.checkUpdate(context, force)
         },
@@ -110,7 +112,8 @@ fun SettingsContent(
     settings: AppSettings,
     isLatestVersion: Boolean,
     onBack: () -> Unit,
-    onNavigateToWelcome: () -> Unit,
+    goToWelcome: () -> Unit,
+    goToSystemInfo: () -> Unit,
     onCheckUpdate: (Boolean) -> Unit,
     onUpdateSettings: (AppSettings) -> Unit,
     selectedTabInitial: Int = 0,
@@ -150,7 +153,7 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-                    2 -> DebugSettings(settings, onUpdateSettings, onNavigateToWelcome)
+                    2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
                 }
             }
 
@@ -325,7 +328,8 @@ fun SettingsPreviewGeneral() {
             settings = AppSettings(version = 1),
             isLatestVersion = true,
             onBack = {},
-            onNavigateToWelcome = {},
+            goToWelcome = {},
+            goToSystemInfo = {},
             onCheckUpdate = {},
             onUpdateSettings = {},
             selectedTabInitial = 0
@@ -350,7 +354,8 @@ fun SettingsPreviewGestures() {
             settings = AppSettings(version = 1),
             isLatestVersion = true,
             onBack = {},
-            onNavigateToWelcome = {},
+            goToWelcome = {},
+            goToSystemInfo = {},
             onCheckUpdate = {},
             onUpdateSettings = {},
             selectedTabInitial = 1,
@@ -368,7 +373,8 @@ fun SettingsPreviewDebug() {
             settings = AppSettings(version = 1),
             isLatestVersion = true,
             onBack = {},
-            onNavigateToWelcome = {},
+            goToWelcome = {},
+            goToSystemInfo = {},
             onCheckUpdate = {},
             onUpdateSettings = {},
             selectedTabInitial = 2

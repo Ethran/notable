@@ -183,7 +183,8 @@ fun NotableNavHost(
         ) {
             SettingsView(
                 onBack = { appNavState.navController.popBackStack() },
-                onNavigateToWelcome = { appNavState.navController.navigate(WelcomeDestination.route) },
+                goToWelcome = { appNavState.navController.navigate(WelcomeDestination.route) },
+                goToSystemInfo = { appNavState.navController.navigate(SystemInformationDestination.route) }
             )
             appNavState.currentPageId = null
         }
