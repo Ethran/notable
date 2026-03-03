@@ -163,7 +163,18 @@ fun NotableNavHost(
             }),
         ) {
             PagesView(
-                navController = appNavState.navController,
+                goToLibrary = { folderId ->
+                    appNavState.navController.navigate(
+                        LibraryDestination.createRoute(folderId)
+                    )
+                },
+                goToEditor = { pageId, bookId ->
+                    appNavState.navController.navigate(
+                        EditorDestination.createRoute(
+                            pageId, bookId
+                        )
+                    )
+                },
                 bookId = it.arguments?.getString("bookId")!!,
             )
         }

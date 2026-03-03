@@ -50,6 +50,7 @@ import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.PagesDestination
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
@@ -464,7 +465,9 @@ fun Toolbar(
                             text = "${pageNumber}/${totalPageNumber}",
                             fontWeight = FontWeight.Light,
                             modifier = Modifier.noRippleClickable {
-                                navController.navigate("books/${state.bookId}/pages")
+                                navController.navigate(
+                                    PagesDestination.createRoute(state.bookId)
+                                )
                             },
                             textAlign = TextAlign.Center
                         )
