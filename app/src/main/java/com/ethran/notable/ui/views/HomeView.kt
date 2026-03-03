@@ -320,45 +320,6 @@ fun NotebookImportPanel(
 ) {
     val snackManager = LocalSnackContext.current
 
-    fun onCreateNew() {
-        bookRepository.create(
-            Notebook(
-                parentFolderId = parentFolderId,
-                defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
-                defaultBackgroundType = BackgroundType.Native.key
-            )
-        )
-    }
-
-    fun onPdfFile(uri: Uri, copy: Boolean) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val snackText = if (copy) {
-                "Importing PDF background (copy)"
-            } else {
-                "Setting up observer for PDF"
-            }
-            onStartImport()
-            snackManager.runWithSnack(snackText) {
-                ImportEngine(context).import(
-                    uri,
-                    ImportOptions(folderId = parentFolderId, linkToExternalFile = !copy)
-                )
-            }
-            onEndImport()
-        }
-    }
-
-    fun onXoppFile(uri: Uri) {
-        CoroutineScope(Dispatchers.IO).launch {
-            onStartImport()
-            snackManager.showSnackDuring("importing from xopp file") {
-                ImportEngine(context).import(
-                    uri, ImportOptions(folderId = parentFolderId)
-                )
-            }
-            onEndImport()
-        }
-    }
 
 
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
