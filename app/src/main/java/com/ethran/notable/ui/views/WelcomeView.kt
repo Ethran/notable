@@ -142,7 +142,6 @@ fun WelcomeContent(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Note: Continue button logic moved to the callback
             Button(
                 onClick = onContinue,
                 enabled = filePermissionGranted,
@@ -150,7 +149,12 @@ fun WelcomeContent(
                     .fillMaxWidth(0.8f)
                     .padding(top = 24.dp)
             ) {
-                Text(if (filePermissionGranted) "Continue" else "Complete setup first")
+                Text(
+                    if (filePermissionGranted)
+                        stringResource(R.string.welcome_view_continue)
+                    else
+                        stringResource(R.string.welcome_view_complete_setup_first)
+                )
             }
 
             Spacer(modifier = Modifier.height(30.dp))
@@ -178,7 +182,7 @@ private fun WelcomeHeader() {
 }
 
 @Composable
-fun PermissionsRow(
+private fun PermissionsRow(
     isFilePermissionGranted: Boolean,
     isRecommendedRefreshMode: Boolean,
     refreshModeString: String,
