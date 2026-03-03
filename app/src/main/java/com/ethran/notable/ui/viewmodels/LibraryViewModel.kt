@@ -16,11 +16,11 @@ import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.isLatestVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,16 +35,23 @@ data class LibraryUiState(
     val isLatestVersion: Boolean = true,
     val isImporting: Boolean = false,
     val breadcrumbFolders: List<Folder> = emptyList(),
-    // Data from DB
     val folders: List<Folder> = emptyList(),
     val books: List<Notebook> = emptyList(),
-    val singlePages: List<Page> = emptyList() // Assuming it's a list of Page objects
+    val singlePages: List<Page> = emptyList()
 )
 
+// Private data class for clean Flow combining
+private data class LibraryDatabaseState(
+    val folders: List<Folder> = emptyList(),
+    val books: List<Notebook> = emptyList(),
+    val singlePages: List<Page> = emptyList()
+)
+
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    appRepository: AppRepository,
-    @param:ApplicationContext private val context: Context
+    private val appRepository: AppRepository,
+    @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
 
     private val bookRepository = appRepository.bookRepository
@@ -56,7 +63,7 @@ class LibraryViewModel @Inject constructor(
     private val _isLatestVersion = MutableStateFlow(true)
     private val _breadcrumbFolders = MutableStateFlow<List<Folder>>(emptyList())
 
-    // Convert LiveData to Flow and switch automatically when folderId changes
+    // 1. Convert LiveData to Flow and switch automatically when folderId changes
     private val _foldersFlow =
         _folderId.flatMapLatest { id -> folderRepository.getAllInFolder(id).asFlow() }
     private val _booksFlow =
@@ -64,14 +71,14 @@ class LibraryViewModel @Inject constructor(
     private val _singlePagesFlow =
         _folderId.flatMapLatest { id -> pageRepository.getSinglePagesInFolder(id).asFlow() }
 
-    // 1. Group the 3 database flows into a single Flow<Triple>
+    // 2. Group the 3 database flows semantically
     private val _dbDataFlow = combine(
         _foldersFlow, _booksFlow, _singlePagesFlow
     ) { folders, books, pages ->
-        Triple(folders, books, pages)
+        LibraryDatabaseState(folders, books, pages)
     }
 
-    // 2. Combine the remaining flows with the grouped DB flow (Total: 5 parameters)
+    // 3. Expose the final UI State
     val uiState: StateFlow<LibraryUiState> = combine(
         _folderId, _isLatestVersion, _isImporting, _breadcrumbFolders, _dbDataFlow
     ) { folderId, isLatestVersion, isImporting, breadcrumbs, dbData ->
@@ -80,9 +87,9 @@ class LibraryViewModel @Inject constructor(
             isLatestVersion = isLatestVersion,
             isImporting = isImporting,
             breadcrumbFolders = breadcrumbs,
-            folders = dbData.first,
-            books = dbData.second,
-            singlePages = dbData.third
+            folders = dbData.folders,
+            books = dbData.books,
+            singlePages = dbData.singlePages
         )
     }.stateIn(
         scope = viewModelScope,
@@ -104,10 +111,26 @@ class LibraryViewModel @Inject constructor(
 
         // Resolve breadcrumbs in background thread
         viewModelScope.launch(Dispatchers.IO) {
-            val breadcrumbs =
-                if (folderId != null) getFolderList(context, folderId).reversed() else emptyList()
-            _breadcrumbFolders.value = breadcrumbs
+            _breadcrumbFolders.value = resolveBreadcrumbs(folderId)
         }
+    }
+
+    private fun resolveBreadcrumbs(folderId: String?): List<Folder> {
+        if (folderId == null) return emptyList()
+
+        val list = mutableListOf<Folder>()
+        var currentId: String? = folderId
+
+        while (currentId != null) {
+            val folder = folderRepository.get(currentId) // Synchronous database read
+            if (folder != null) {
+                list.add(folder)
+                currentId = folder.parentFolderId
+            } else {
+                currentId = null
+            }
+        }
+        return list.reversed()
     }
 
     fun createNewFolder() {
@@ -125,8 +148,8 @@ class LibraryViewModel @Inject constructor(
 
     fun onCreateNewNotebook() {
         viewModelScope.launch(Dispatchers.IO) {
-            // Read settings from storage, not CompositionLocal!
             val settings = GlobalAppSettings.current
+
             bookRepository.create(
                 Notebook(
                     parentFolderId = _folderId.value,
@@ -146,6 +169,7 @@ class LibraryViewModel @Inject constructor(
             SnackState.globalSnackFlow.tryEmit(SnackConf(text = snackText, duration = 2000))
 
             try {
+                // Ideally, ImportEngine should be injected via Hilt rather than instantiated here
                 ImportEngine(context).import(
                     uri, ImportOptions(folderId = _folderId.value, linkToExternalFile = !copy)
                 )
@@ -163,14 +187,13 @@ class LibraryViewModel @Inject constructor(
             _isImporting.value = true
             SnackState.globalSnackFlow.tryEmit(
                 SnackConf(
-                    text = "Importing from xopp file...", duration = 2000
+                    text = "Importing from xopp file...",
+                    duration = 2000
                 )
             )
 
             try {
-                ImportEngine(context).import(
-                    uri, ImportOptions(folderId = _folderId.value)
-                )
+                ImportEngine(context).import(uri, ImportOptions(folderId = _folderId.value))
                 SnackState.globalSnackFlow.tryEmit(SnackConf(text = "XOPP Import Successful"))
             } catch (e: Exception) {
                 SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Import failed: ${e.message}"))
