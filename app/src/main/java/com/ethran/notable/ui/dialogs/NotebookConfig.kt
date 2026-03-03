@@ -67,7 +67,6 @@ import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
 
-@ExperimentalComposeUiApi
 @Composable
 fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
     val bookRepository = BookRepository(LocalContext.current)
