@@ -14,7 +14,6 @@ import androidx.navigation.navArgument
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.EditorView
-import com.ethran.notable.ui.components.QuickNav
 import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.BugReportScreen
 import com.ethran.notable.ui.views.Library
@@ -27,21 +26,19 @@ import com.ethran.notable.ui.views.SystemInformationDestination
 import com.ethran.notable.ui.views.SystemInformationView
 import com.ethran.notable.ui.views.WelcomeDestination
 import com.ethran.notable.ui.views.WelcomeView
-import io.shipbook.shipbooksdk.ShipBook
 
-private val logRouter = ShipBook.getLogger("Router")
 
 @Composable
 fun NotableNavHost(
     modifier: Modifier = Modifier,
-    appNavState: NotableAppState
+    appNavigator: NotableNavigator
 ) {
     val appRepository = AppRepository(LocalContext.current)
 
     Box(modifier = modifier.fillMaxSize()) {
         NavHost(
-            navController = appNavState.navController,
-            startDestination = appNavState.startDestination,
+            navController = appNavigator.navController,
+            startDestination = appNavigator.startDestination,
             enterTransition = { EnterTransition.None },
             exitTransition = { ExitTransition.None },
             popEnterTransition = { EnterTransition.None },
@@ -54,33 +51,33 @@ fun NotableNavHost(
                 }),
             ) {
                 Library(
-                    navController = appNavState.navController,
+                    navController = appNavigator.navController,
                     folderId = it.arguments?.getString(LibraryDestination.FOLDER_ID_ARG),
-                    goToPage = { pageId -> appNavState.goToPage(appRepository, pageId) },
+                    goToPage = { pageId -> appNavigator.goToPage(appRepository, pageId) },
                     onCreateNewQuickPage = { folderId ->
-                        appNavState.onCreateNewQuickPage(
+                        appNavigator.onCreateNewQuickPage(
                             appRepository,
                             folderId
                         )
                     }
                 )
-                appNavState.currentPageId = null
+                appNavigator.cleanCurrentPageId()
             }
             composable(
                 route = WelcomeDestination.route,
             ) {
                 WelcomeView(
-                    goToLibrary = { appNavState.goToLibrary(null) },
+                    goToLibrary = { appNavigator.goToLibrary(null) },
                 )
-                appNavState.currentPageId = null
+                appNavigator.cleanCurrentPageId()
             }
             composable(
                 route = SystemInformationDestination.route,
             ) {
                 SystemInformationView(
-                    onBack = { appNavState.goBack() },
+                    onBack = { appNavigator.goBack() },
                 )
-                appNavState.currentPageId = null
+                appNavigator.cleanCurrentPageId()
             }
 
             composable(
@@ -96,31 +93,17 @@ fun NotableNavHost(
             ) { backStackEntry ->
                 val bookId = backStackEntry.arguments?.getString(EditorDestination.BOOK_ID_ARG)
 
-                // Priority: SavedStateHandle (for process death/recomposition) > Nav Argument
-                val currentPageId =
-                    backStackEntry.savedStateHandle.get<String>(EditorDestination.PAGE_ID_ARG)
-                        ?: backStackEntry.arguments?.getString(EditorDestination.PAGE_ID_ARG)!!
-
-                // Sync state
-                appNavState.currentPageId = currentPageId
-                backStackEntry.savedStateHandle[EditorDestination.PAGE_ID_ARG] = currentPageId
+                val currentPageId = appNavigator.resolveAndSyncPageId(backStackEntry)
 
                 EditorView(
-                    navController = appNavState.navController,
+                    navController = appNavigator.navController,
                     bookId = bookId,
                     pageId = currentPageId,
                     onPageChange = { newPageId ->
-                        // SAVE new pageId in savedStateHandle - do not call navigate
-                        backStackEntry.savedStateHandle["pageId"] = newPageId
-                        if (backStackEntry.savedStateHandle.get<Int>("pageChangesSinceJump") == 2) {
-                            backStackEntry.savedStateHandle["pageChangesSinceJump"] = 1
-                        } else if (backStackEntry.savedStateHandle.get<Int>("pageChangesSinceJump") == 1) {
-                            backStackEntry.savedStateHandle.remove<Int>("pageChangesSinceJump")
-                            backStackEntry.savedStateHandle.remove<String>("quickNavSourcePageId")
-                        }
-                        appNavState.currentPageId = newPageId
-                        logRouter.d("Editor changed page -> saved pageId=$newPageId (no navigate, no recreate)")
-
+                        appNavigator.onPageChange(
+                            backStackEntry,
+                            newPageId
+                        )
                     }
                 )
             }
@@ -132,8 +115,8 @@ fun NotableNavHost(
                 }),
             ) {
                 PagesView(
-                    goToLibrary = { appNavState.goToLibrary(it) },
-                    goToEditor = { pageId, bId -> appNavState.goToEditor(pageId, bId) },
+                    goToLibrary = { folderId -> appNavigator.goToLibrary(folderId) },
+                    goToEditor = { pageId, bId -> appNavigator.goToEditor(pageId, bId) },
                     bookId = it.arguments?.getString(PagesDestination.BOOK_ID_ARG)!!,
                 )
             }
@@ -141,19 +124,18 @@ fun NotableNavHost(
                 route = SettingsDestination.route,
             ) {
                 SettingsView(
-                    onBack = { appNavState.goBack() },
-                    goToWelcome = { appNavState.goToWelcome() },
-                    goToSystemInfo = { appNavState.goToSystemInfo() }
+                    onBack = { appNavigator.goBack() },
+                    goToWelcome = { appNavigator.goToWelcome() },
+                    goToSystemInfo = { appNavigator.goToSystemInfo() }
                 )
-                appNavState.currentPageId = null
+                appNavigator.cleanCurrentPageId()
             }
             composable(
                 route = BugReportDestination.route,
             ) {
-                BugReportScreen(goBack = { appNavState.goBack() })
-                appNavState.currentPageId = null
+                BugReportScreen(goBack = { appNavigator.goBack() })
+                appNavigator.cleanCurrentPageId()
             }
         }
     }
-
 }

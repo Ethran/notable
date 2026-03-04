@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.ethran.notable.data.AppRepository
@@ -29,15 +30,15 @@ private val log = ShipBook.getLogger("NotableAppState")
 fun rememberNotableAppState(
     navController: NavHostController = rememberNavController(),
     coroutineScope: CoroutineScope = rememberCoroutineScope()
-): NotableAppState {
+): NotableNavigator {
     val context = LocalContext.current
     return remember(navController, context, coroutineScope) {
-        NotableAppState(navController, hasFilePermission(context), coroutineScope)
+        NotableNavigator(navController, hasFilePermission(context), coroutineScope)
     }
 }
 
 @Stable
-class NotableAppState(
+class NotableNavigator(
     val navController: NavHostController,
     private val hasFilePermission: Boolean,
     private val coroutineScope: CoroutineScope
@@ -130,5 +131,40 @@ class NotableAppState(
     fun onCreateNewQuickPage(appRepository: AppRepository, folderId: String?) {
         val pageId = appRepository.createNewQuickPage(parentFolderId = folderId) ?: return
         navController.navigate(EditorDestination.createRoute(pageId, null))
+    }
+
+
+    fun onPageChange(backStackEntry: NavBackStackEntry, newPageId: String) {
+        // SAVE new pageId in savedStateHandle - do not call navigate
+        backStackEntry.savedStateHandle["pageId"] = newPageId
+        if (backStackEntry.savedStateHandle.get<Int>("pageChangesSinceJump") == 2) {
+            backStackEntry.savedStateHandle["pageChangesSinceJump"] = 1
+        } else if (backStackEntry.savedStateHandle.get<Int>("pageChangesSinceJump") == 1) {
+            backStackEntry.savedStateHandle.remove<Int>("pageChangesSinceJump")
+            backStackEntry.savedStateHandle.remove<String>("quickNavSourcePageId")
+        }
+        currentPageId = newPageId
+        log.d("Editor changed page -> saved pageId=$newPageId (no navigate, no recreate)")
+    }
+
+    /**
+     * Resolves the pageId from the backStackEntry (prioritizing saved state),
+     * synchronizes the internal state, and ensures the SavedStateHandle is updated.
+     */
+    fun resolveAndSyncPageId(backStackEntry: NavBackStackEntry): String {
+
+        // Priority: SavedStateHandle (for process death/recomposition) > Nav Argument
+        val newCurrentPageId =
+            backStackEntry.savedStateHandle.get<String>(EditorDestination.PAGE_ID_ARG)
+                ?: backStackEntry.arguments?.getString(EditorDestination.PAGE_ID_ARG)!!
+
+        // Sync state
+        currentPageId = newCurrentPageId
+        backStackEntry.savedStateHandle[EditorDestination.PAGE_ID_ARG] = currentPageId
+        return newCurrentPageId
+    }
+
+    fun cleanCurrentPageId() {
+        currentPageId = null
     }
 }
