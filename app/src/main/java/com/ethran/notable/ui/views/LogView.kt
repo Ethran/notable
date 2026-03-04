@@ -59,7 +59,7 @@ object BugReportDestination : NavigationDestination {
 
 @Composable
 fun BugReportScreen(
-    navController: NavController, viewModel: BugReportViewModel = viewModel()
+    goBack: () -> Unit, viewModel: BugReportViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -85,7 +85,7 @@ fun BugReportScreen(
 
     BugReportScreenContent(
         uiState = uiState,
-        onBack = { navController.popBackStack() },
+        onBack = goBack,
         onDescriptionChange = viewModel::onDescriptionChange,
         onIncludeLogsChange = viewModel::onIncludeLogsToggle,
         onTagChange = viewModel::onTagToggle,

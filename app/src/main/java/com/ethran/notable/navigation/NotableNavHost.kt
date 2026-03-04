@@ -41,9 +41,21 @@ fun NotableNavHost(
     modifier: Modifier = Modifier,
     appNavState: NotableAppState
 ) {
-
-
     val appRepository = AppRepository(LocalContext.current)
+
+    // TODO: move to appNavState
+    fun gotToLibrary(folderId: String?) = appNavState.navController.navigate(LibraryDestination.createRoute(folderId))
+    fun goToEditor(pageId: String, bookId: String) =
+        appNavState.navController.navigate(
+            EditorDestination.createRoute(
+                pageId, bookId
+            )
+        )
+
+    fun goBack() = appNavState.navController.popBackStack()
+    fun goToWelcome() =  appNavState.navController.navigate(WelcomeDestination.route)
+    fun goToSystemInfo() =  appNavState.navController.navigate(SystemInformationDestination.route)
+
 
 
     fun goToPage(pageId: String) {
@@ -96,12 +108,7 @@ fun NotableNavHost(
             route = WelcomeDestination.route,
         ) {
             WelcomeView(
-                goToLibrary = {
-                    // TODO: move the logic
-
-                    appNavState.navController.navigate(LibraryDestination.route)
-
-                },
+                goToLibrary = {gotToLibrary (null)},
             )
             appNavState.currentPageId = null
         }
@@ -109,7 +116,7 @@ fun NotableNavHost(
             route = SystemInformationDestination.route,
         ) {
             SystemInformationView(
-                onBack = { appNavState.navController.popBackStack() },
+                onBack = ::goBack,
             )
             appNavState.currentPageId = null
         }
@@ -163,18 +170,8 @@ fun NotableNavHost(
             }),
         ) {
             PagesView(
-                goToLibrary = { folderId ->
-                    appNavState.navController.navigate(
-                        LibraryDestination.createRoute(folderId)
-                    )
-                },
-                goToEditor = { pageId, bookId ->
-                    appNavState.navController.navigate(
-                        EditorDestination.createRoute(
-                            pageId, bookId
-                        )
-                    )
-                },
+                goToLibrary =::gotToLibrary,
+                goToEditor = ::goToEditor,
                 bookId = it.arguments?.getString("bookId")!!,
             )
         }
@@ -182,16 +179,16 @@ fun NotableNavHost(
             route = SettingsDestination.route,
         ) {
             SettingsView(
-                onBack = { appNavState.navController.popBackStack() },
-                goToWelcome = { appNavState.navController.navigate(WelcomeDestination.route) },
-                goToSystemInfo = { appNavState.navController.navigate(SystemInformationDestination.route) }
+                onBack = ::goBack,
+                goToWelcome = ::goToWelcome,
+                goToSystemInfo = ::goToSystemInfo
             )
             appNavState.currentPageId = null
         }
         composable(
             route = BugReportDestination.route,
         ) {
-            BugReportScreen(navController = appNavState.navController)
+            BugReportScreen(goBack = ::goBack)
             appNavState.currentPageId = null
         }
     }
@@ -217,11 +214,8 @@ fun NotableNavHost(
 
                 refreshScreen()
             },
-            goToPage = {
-            },
-            goToFolder = {
-                appNavState.navController.navigate("library" + if (it == null) "" else "?folderId=$it")
-            }
+            goToPage = ::goToPage,
+            goToFolder = ::gotToLibrary
         )
     }
 

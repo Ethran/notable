@@ -39,15 +39,6 @@ fun NotableApp(snackState: SnackState) {
     ) {
         NotableNavHost(Modifier, appNavState)
 
-        if (appNavState.isQuickNavOpen)
-            QuickNav(
-                currentPageId = appNavState.currentPageId,
-                quickNavSourcePageId = appNavState.quickNavSourcePageId,
-                onClose = { appNavState.closeQuickNav() },
-                goToPage = {TODO()},
-                goToFolder = {TODO()}
-            )
-
         if (appNavState.shouldAnchorBeVisible()) {
             Anchor(
                 onClose = {
