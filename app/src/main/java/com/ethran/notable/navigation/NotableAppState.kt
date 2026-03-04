@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
@@ -15,26 +16,31 @@ import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.SystemInformationDestination
 import com.ethran.notable.ui.views.WelcomeDestination
 import com.ethran.notable.utils.hasFilePermission
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 private val log = ShipBook.getLogger("NotableAppState")
 
 @Composable
 fun rememberNotableAppState(
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    coroutineScope: CoroutineScope = rememberCoroutineScope()
 ): NotableAppState {
     val context = LocalContext.current
-    return remember(navController, context) {
-        NotableAppState(navController, hasFilePermission(context))
+    return remember(navController, context, coroutineScope) {
+        NotableAppState(navController, hasFilePermission(context), coroutineScope)
     }
 }
 
 @Stable
 class NotableAppState(
     val navController: NavHostController,
-    private val hasFilePermission: Boolean
+    private val hasFilePermission: Boolean,
+    private val coroutineScope: CoroutineScope
 ) {
     var isQuickNavOpen by mutableStateOf(false)
     var currentPageId by mutableStateOf<String?>(null)
@@ -52,10 +58,12 @@ class NotableAppState(
             "quickNavSourcePageId", currentPageId
         )
         isQuickNavOpen = true
+        updateDrawingState()
     }
 
     fun closeQuickNav() {
         isQuickNavOpen = false
+        updateDrawingState()
         if (quickNavSourcePageId == currentPageId) {
             // User didn't use the QuickNav, so remove the savedStateHandle
             navController.currentBackStackEntry?.savedStateHandle?.remove<String>("quickNavSourcePageId")
@@ -81,8 +89,46 @@ class NotableAppState(
     }
 
     // Updates the drawing state based on whether QuickNav is open
-    suspend fun updateDrawingState() {
-        log.d("Changing drawing state, isQuickNavOpen: $isQuickNavOpen")
-        CanvasEventBus.isDrawing.emit(!isQuickNavOpen)
+    fun updateDrawingState() {
+        coroutineScope.launch {
+            log.d("Changing drawing state, isQuickNavOpen: $isQuickNavOpen")
+            CanvasEventBus.isDrawing.emit(!isQuickNavOpen)
+        }
+    }
+
+    fun goToLibrary(folderId: String?) {
+        navController.navigate(LibraryDestination.createRoute(folderId))
+    }
+
+    fun goToEditor(pageId: String, bookId: String?) {
+        navController.navigate(EditorDestination.createRoute(pageId, bookId))
+    }
+
+    fun goBack() {
+        navController.popBackStack()
+    }
+
+    fun goToWelcome() {
+        navController.navigate(WelcomeDestination.route)
+    }
+
+    fun goToSystemInfo() {
+        navController.navigate(SystemInformationDestination.route)
+    }
+
+    fun goToPage(appRepository: AppRepository, pageId: String) {
+        val bookId = runCatching {
+            appRepository.pageRepository.getById(pageId)?.notebookId
+        }.onFailure {
+            log.d("failed to resolve bookId for $pageId", it)
+        }.getOrNull()
+        val url = EditorDestination.createRoute(pageId, bookId)
+        log.d("navigate -> $url")
+        navController.navigate(url)
+    }
+
+    fun onCreateNewQuickPage(appRepository: AppRepository, folderId: String?) {
+        val pageId = appRepository.createNewQuickPage(parentFolderId = folderId) ?: return
+        navController.navigate(EditorDestination.createRoute(pageId, null))
     }
 }

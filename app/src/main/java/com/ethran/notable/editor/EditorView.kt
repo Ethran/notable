@@ -59,9 +59,7 @@ object EditorDestination : NavigationDestination {
 }
 
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-@ExperimentalFoundationApi
 fun EditorView(
     navController: NavController, bookId: String?, pageId: String, onPageChange: (String) -> Unit
 ) {

@@ -39,6 +39,18 @@ fun NotableApp(snackState: SnackState) {
     ) {
         NotableNavHost(Modifier, appNavState)
 
+
+        // overlays
+        if (appNavState.isQuickNavOpen) {
+            QuickNav(
+                currentPageId = appNavState.currentPageId,
+                quickNavSourcePageId = appNavState.quickNavSourcePageId,
+                onClose = { appNavState.closeQuickNav() },
+                goToPage = { pageId -> appNavState.goToPage(appRepository, pageId) },
+                goToFolder = { folderId -> appNavState.goToLibrary(folderId) }
+            )
+        }
+
         if (appNavState.shouldAnchorBeVisible()) {
             Anchor(
                 onClose = {
