@@ -6,6 +6,41 @@
 
 ---
 
+## Code Review Guidelines
+
+When reviewing or producing code, apply these standards consistently:
+
+### General principles
+- **Correctness first** — code must do what it claims; edge cases and error paths must be handled.
+- **Idiomatic Kotlin** — prefer `val` over `var`, use data classes, extension functions, and scope functions (`let`, `apply`, `run`, `also`) where they improve clarity.
+- **No dead code** — remove unused imports, variables, parameters, and commented-out blocks.
+- **Clear naming** — names should be self-documenting; avoid single-letter variables outside short loops or lambdas.
+- **Keep functions small** — a function should do one thing. Extract logic into well-named helpers rather than writing long methods.
+
+### Structure and organisation
+- Follow the package layout in `docs/file-structure.md`. New code must go in the correct package.
+- Do **not** add code to `floatingEditor/` — this package is unused and kept for historical reference only.
+- Prefer feature-local utilities (e.g., `editor/utils/`) over adding to the top-level `utils/` package.
+- Reusable Compose components belong in `ui/components/`; one-off screen UI belongs in `ui/views/`.
+
+### Architecture
+- **MVVM + Hilt** — all ViewModels must be `@HiltViewModel`-annotated and injected; avoid passing context directly into ViewModels.
+- **State machine** — editor modes are modelled as a sealed class `EditorState`; new modes must follow the same pattern.
+- **Immutability** — prefer immutable data in state; use `copy()` on data classes instead of mutating fields.
+- **Coroutines / threading** — do not block the OpenGL render thread. Use coroutines for async work; post UI updates on the main dispatcher.
+- **Room migrations** — any change to a Room `@Entity` **requires**: bumping the DB version, adding a migration in `AppDatabase.kt`, and a new schema snapshot in `app/schemas/` (generated automatically on build). `MigrationTest` must pass.
+
+### Jetpack Compose
+- Use `remember` / `derivedStateOf` to avoid unnecessary recompositions.
+- Keep Composables stateless where possible; hoist state to the nearest appropriate ViewModel.
+- Preview functions must be top-level and annotated with `@Preview`.
+
+### Performance
+- The app targets e-ink hardware — responsiveness is critical. Avoid allocations in tight loops or render callbacks.
+- Never introduce synchronous I/O on the main thread or render thread.
+
+---
+
 ## Technology Stack
 
 | Area | Technology |
@@ -84,42 +119,14 @@ notable/
 
 ## Building
 
-### Local Debug Build (no signing required)
+For most tasks (code review, refactoring, adding features) a full build is not required. When a build is needed:
+
 ```bash
-./gradlew assembleDebug
+./gradlew assembleDebug   # local debug build — no signing required
+./gradlew test            # unit tests
 ```
 
-### Local Release Build (requires signing env vars)
-```bash
-export STORE_FILE=/path/to/keystore
-export STORE_PASSWORD=<password>
-export KEY_ALIAS=<alias>
-export KEY_PASSWORD=<key_password>
-./gradlew assembleRelease
-```
-
-### Print Version Name
-```bash
-./gradlew -q printVersionName
-```
-
-### Preview / "next" Build
-```bash
-./gradlew -PIS_NEXT=true assembleDebug
-```
-This appends a timestamp to the version name (e.g., `0.1.11-next-22.01.2025-14:30`).
-
-### Required JDK
-- Java 17+ (JDK 18 used in CI)
-- Gradle 8.5
-
-### Prerequisites for Full Builds
-The following are only needed for signed builds and are injected via CI secrets:
-- `STORE_FILE`, `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` — keystore for APK signing
-- `SHIPBOOK_APP_ID`, `SHIPBOOK_APP_KEY` — logging service credentials
-- `FIREBASE_CONFIG` — base64-encoded `google-services.json`
-
-For local development, a `google-services.json` stub must be present in `app/`. You can skip Firebase-related features for local builds; the build will fall back to `"default-secret"` for ShipBook credentials.
+Signed release builds and Firebase/ShipBook credentials are handled exclusively by CI. See `.github/workflows/` for details.
 
 ---
 
