@@ -77,33 +77,32 @@ class SettingsViewModel @Inject constructor(
             R.string.gestures_double_tap_action,
             settings.doubleTapAction,
             AppSettings.defaultDoubleTapAction
-        ) { a -> settings.copy(doubleTapAction = a) },
+        ) { a -> updateSettings(settings.copy(doubleTapAction = a)) },
         GestureRowModel(
             (R.string.gestures_two_finger_tap_action),
             settings.twoFingerTapAction,
             AppSettings.defaultTwoFingerTapAction,
-
-            ) { a -> settings.copy(twoFingerTapAction = a) },
+            ) { a -> updateSettings(settings.copy(twoFingerTapAction = a)) },
         GestureRowModel(
             (R.string.gestures_swipe_left_action),
             settings.swipeLeftAction,
             AppSettings.defaultSwipeLeftAction
-        ) { a -> settings.copy(swipeLeftAction = a) },
+        ) { a -> updateSettings(settings.copy(swipeLeftAction = a)) },
         GestureRowModel(
             (R.string.gestures_swipe_right_action),
             settings.swipeRightAction,
             AppSettings.defaultSwipeRightAction
-        ) { a -> settings.copy(swipeRightAction = a) },
+        ) { a -> updateSettings(settings.copy(swipeRightAction = a)) },
         GestureRowModel(
             (R.string.gestures_two_finger_swipe_left_action),
             settings.twoFingerSwipeLeftAction,
             AppSettings.defaultTwoFingerSwipeLeftAction
-        ) { a -> settings.copy(twoFingerSwipeLeftAction = a) },
+        ) { a -> updateSettings(settings.copy(twoFingerSwipeLeftAction = a)) },
         GestureRowModel(
             R.string.gestures_two_finger_swipe_right_action,
             settings.twoFingerSwipeRightAction,
             AppSettings.defaultTwoFingerSwipeRightAction
-        ) { a -> settings.copy(twoFingerSwipeRightAction = a) },
+        ) { a -> updateSettings(settings.copy(twoFingerSwipeRightAction = a)) },
     )
 
 
