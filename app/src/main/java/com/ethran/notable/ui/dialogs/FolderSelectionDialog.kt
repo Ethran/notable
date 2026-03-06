@@ -27,6 +27,7 @@ import androidx.compose.ui.window.Dialog
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.ui.components.BreadCrumb
+import com.ethran.notable.ui.components.getFolderList
 
 
 @Composable
@@ -63,7 +64,12 @@ fun ShowFolderSelectionDialog(
                 fontSize = 24.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            BreadCrumb(folderId = currentFolderId) { currentFolderId = it }
+            BreadCrumb(
+                folders = getFolderList(
+                    LocalContext.current,
+                    currentFolderId
+                )
+            ) { currentFolderId = it }
             // Folder List
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),

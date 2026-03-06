@@ -45,8 +45,6 @@ val strokeStyle = Stroke(
 )
 
 @Composable
-@ExperimentalComposeUiApi
-@ExperimentalFoundationApi
 fun SelectedBitmap(
     context: Context,
     controlTower: EditorControlTower

@@ -42,7 +42,6 @@ import com.ethran.notable.ui.noRippleClickable
 import io.shipbook.shipbooksdk.Log
 
 
-@ExperimentalComposeUiApi
 @Composable
 fun FolderConfigDialog(folderId: String, onClose: () -> Unit) {
     val folderRepository = FolderRepository(LocalContext.current)

@@ -12,15 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.data.PageDataManager
@@ -31,14 +24,15 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.reencodeStrokePointsToSB1
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.ui.LocalSnackContext
-import com.ethran.notable.ui.Router
-import com.ethran.notable.ui.SnackBar
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.components.NotableApp
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.ui.views.hasFilePermission
+import com.ethran.notable.utils.hasFilePermission
 import com.onyx.android.sdk.api.device.epd.EpdController
+import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -51,10 +45,14 @@ const val APP_SETTINGS_KEY = "APP_SETTINGS"
 const val PACKAGE_NAME = "com.ethran.notable"
 
 
+@AndroidEntryPoint
 @ExperimentalAnimationApi
 @ExperimentalComposeUiApi
 @ExperimentalFoundationApi
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var kvProxy: KvProxy
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableFullScreen()
@@ -63,7 +61,6 @@ class MainActivity : ComponentActivity() {
         )
 
         Log.i(TAG, "Notable started")
-
 
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
@@ -75,10 +72,12 @@ class MainActivity : ComponentActivity() {
         PageDataManager.registerComponentCallbacks(this)
         if (hasFilePermission(this)) {
             // Init app settings, also do migration
-            GlobalAppSettings.update(
-                KvProxy(this).get(APP_SETTINGS_KEY, AppSettings.serializer())
-                    ?: AppSettings(version = 1)
-            )
+
+            val savedSettings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+                ?: AppSettings(version = 1)
+
+            GlobalAppSettings.update(savedSettings)
+
             // Used to load up app settings, latter used in
             // class EditorState
             EditorSettingCacheManager.init(applicationContext)
@@ -93,21 +92,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             InkaTheme {
                 CompositionLocalProvider(LocalSnackContext provides snackState) {
-                    Box(
-                        Modifier
-                            .background(Color.White)
-                    ) {
-                        Router()
-                    }
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(Color.Black)
-                    )
-                    // TODO: maybe this snack is responsible for buttons not clickable on the button of screen?
-                    //  No, without it the issue still persists.
-                    SnackBar(state = snackState)
+                    NotableApp(snackState = snackState)
                 }
             }
         }

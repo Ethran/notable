@@ -5,8 +5,8 @@ plugins {
     id 'kotlin-parcelize'
     id 'com.google.gms.google-services'
     id 'org.jetbrains.kotlin.plugin.compose'
-
     id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'com.google.dagger.hilt.android'
 }
 
 android {
@@ -123,7 +123,6 @@ android {
 }
 
 dependencies {
-
     implementation 'androidx.core:core-ktx:1.17.0'
     implementation "androidx.compose.ui:ui:$compose_version"
     implementation "androidx.compose.material:material:$compose_version"
@@ -202,6 +201,11 @@ dependencies {
 
     // for PDF support:
     implementation("com.artifex.mupdf:fitz:1.26.10")
+
+    // Hilt
+    implementation "com.google.dagger:hilt-android:2.59.2"
+    ksp "com.google.dagger:hilt-compiler:2.59.2"
+    implementation "androidx.hilt:hilt-navigation-compose:1.3.0"
 
     // Added so that R8 optimization don't fail
     // SLF4J backend: provides a simple logger so (probably) ShipBook can output logs.

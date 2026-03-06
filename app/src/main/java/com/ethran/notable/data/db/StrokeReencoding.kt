@@ -6,7 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.views.hasFilePermission
+import com.ethran.notable.utils.hasFilePermission
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope

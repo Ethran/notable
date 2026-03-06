@@ -138,3 +138,14 @@ class PageRepository(context: Context) {
 fun Page.getBackgroundType(): BackgroundType {
     return BackgroundType.fromKey(backgroundType)
 }
+
+// TODO: make it better
+fun Page.getParentFolder(context: Context): String? {
+    return if (notebookId != null) {
+        val bookRepo = BookRepository(context)
+        val notebook = bookRepo.getById(notebookId)
+        notebook?.parentFolderId
+    } else {
+        this.parentFolderId
+    }
+}

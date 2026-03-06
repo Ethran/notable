@@ -35,38 +35,16 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
 import io.shipbook.shipbooksdk.ShipBook
 
-private val logPagesRow = ShipBook.getLogger("QuickNav")
 
 @Composable
 fun ShowPagesRow(
-    singlePages: List<Page>?,
-    navController: NavController,
-    appRepository: AppRepository,
-    folderId: String?,
-    showAddQuickPage: Boolean = true,
+    pages: List<Page>?,
     currentPageId: String? = null,
-    title: String? = "Quick Pages"
-) {
-
-    fun onSelectPage(pageId: String) {
-        // Navigate to selected page
-        val bookId = runCatching {
-            appRepository.pageRepository.getById(pageId)?.notebookId
-        }.onFailure {
-            logPagesRow.d(
-                "failed to resolve bookId for $pageId",
-                it
-            )
-        }.getOrNull()
-
-        val url = if (bookId == null) {
-            "pages/$pageId"
-        } else {
-            "books/$bookId/pages/$pageId"
-        }
-        logPagesRow.d("navigate -> $url")
-        navController.navigate(url)
-    }
+    title: String? = "Quick Pages",
+    onSelectPage: (String) -> Unit,
+    showAddQuickPage: Boolean = false,
+    onCreateNewQuickPage: () -> Unit = {},
+    ) {
 
     if (title != null) {
         Text(text = title)
@@ -89,10 +67,8 @@ fun ShowPagesRow(
                         .aspectRatio(3f / 4f)
                         .border(1.dp, Color.Gray, RectangleShape)
                         .noRippleClickable {
-                            val pageId =
-                                appRepository.createNewQuickPage(parentFolderId = folderId)
-                                    ?: return@noRippleClickable
-                            navController.navigate("pages/${pageId}")
+                            onCreateNewQuickPage()
+
                         }) {
                     Icon(
                         imageVector = FeatherIcons.FilePlus,
@@ -104,8 +80,8 @@ fun ShowPagesRow(
             }
         }
         // Render existing pages
-        if (!singlePages.isNullOrEmpty()) {
-            items(singlePages.reversed()) { page ->
+        if (!pages.isNullOrEmpty()) {
+            items(pages.reversed()) { page ->
                 val pageId = page.id
                 var isPageSelected by remember { mutableStateOf(false) }
                 Box {

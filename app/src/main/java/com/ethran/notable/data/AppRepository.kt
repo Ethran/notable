@@ -15,17 +15,19 @@ import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.onyx.android.sdk.extension.isNotNull
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
-class AppRepository(val context: Context) {
+class AppRepository @Inject constructor(@param:ApplicationContext val context: Context) {
     val bookRepository = BookRepository(context)
     val pageRepository = PageRepository(context)
     val strokeRepository = StrokeRepository(context)
     val imageRepository = ImageRepository(context)
     val folderRepository = FolderRepository(context)
     val kvRepository = KvRepository(context)
-    val kvProxy = KvProxy(context)
+    val kvProxy = KvProxy(kvRepository)
 
     fun getNextPageIdFromBookAndPageOrCreate(
         notebookId: String,

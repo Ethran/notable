@@ -50,6 +50,7 @@
     <string name="sponsor_button_text">Wesprzyj</string>
 
     <!-- Notebook details -->
+    <string name="gesture_action_select">Zaznaczenie</string>
     <string name="details_notebook_title">Tytuł:</string>
     <string name="details_notebook_default_background_template">Domyślny szablon tła</string>
     <string name="details_notebook_pages">Strony: %1$d</string>

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,16 +19,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import androidx.navigation.NavController
 import com.ethran.notable.R
-import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
@@ -42,20 +39,54 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ToolbarMenu(
-    navController: NavController,
-    state: EditorState,
+    goToBugReport: () -> Unit,
+    goToLibrary: () -> Unit,
+    currentPageId: String,
+    currentBookId: String?,
     onClose: () -> Unit,
     onBackgroundSelectorModalOpen: () -> Unit
 ) {
     val context = LocalContext.current
+
+    Popup(
+        alignment = Alignment.TopEnd,
+        onDismissRequest = { onClose() },
+        offset = IntOffset(
+            convertDpToPixel((-10).dp, context).toInt(), convertDpToPixel(50.dp, context).toInt()
+        ),
+        properties = PopupProperties(focusable = true),
+    ) {
+        ToolbarMenuContent(
+            goToBugReport = goToBugReport,
+            goToLibrary = goToLibrary,
+            currentPageId = currentPageId,
+            currentBookId = currentBookId,
+            onClose = onClose,
+            onBackgroundSelectorModalOpen = onBackgroundSelectorModalOpen
+        )
+    }
+}
+
+@Composable
+private fun ToolbarMenuContent(
+    goToBugReport: () -> Unit,
+    goToLibrary: () -> Unit,
+    currentPageId: String,
+    currentBookId: String?,
+    onClose: () -> Unit,
+    onBackgroundSelectorModalOpen: () -> Unit
+) {
+
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackManager = LocalSnackContext.current
-    val appRepository = remember { AppRepository(context) }
-    val page = appRepository.pageRepository.getById(state.currentPageId)!!
-    val book =
-        if (page.notebookId != null) appRepository.bookRepository.getById(page.notebookId) else null
-    val parentFolder = if (book != null) book.parentFolderId
-    else page.parentFolderId
+//    val appRepository = remember { AppRepository(context) }
+//    val page = appRepository.pageRepository.getById(currentPageId)!!
+//    val book =
+//        if (page.notebookId != null) appRepository.bookRepository.getById(page.notebookId) else null
+
+//    val parentFolder = if (book != null) book.parentFolderId
+//    else page.parentFolderId
 
     val exportingPageToPdfMsg = stringResource(R.string.exporting_the_page_to, "PDF")
     val exportingPageToPngMsg = stringResource(R.string.exporting_the_page_to, "PNG")
@@ -66,69 +97,97 @@ fun ToolbarMenu(
     val exportingBookToXoppMsg = stringResource(R.string.exporting_the_book_to, "xopp")
     val clearedAllStrokesMsg = stringResource(R.string.cleared_all_strokes)
 
-    Popup(
-        alignment = Alignment.TopEnd,
-        onDismissRequest = { onClose() },
-        offset = IntOffset(
-            convertDpToPixel((-10).dp, context).toInt(), convertDpToPixel(50.dp, context).toInt()
-        ),
-        properties = PopupProperties(focusable = true),
+    Column(
+        Modifier
+            .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
+            .border(1.dp, Color.Black, RectangleShape)
+            .background(Color.White)
+            .width(IntrinsicSize.Max)
     ) {
-        Column(
-            Modifier
-                .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
-                .border(1.dp, Color.Black, RectangleShape)
-                .background(Color.White)
-                .width(IntrinsicSize.Max)
-        ) {
-            // Library
-            MenuItem(stringResource(R.string.home_view_name)) {
-                navController.navigate(
-                    if (parentFolder != null) "library?folderId=$parentFolder" else "library"
-                )
-                onClose()
-            }
-            DividerCentered()
+        // Library
+        MenuItem(stringResource(R.string.home_view_name)) {
+//
+            goToLibrary()
+            onClose()
+        }
+        DividerCentered()
 
-            // Page exports
-            MenuItem(stringResource(R.string.export_page_to, "PDF")) {
+        // Page exports
+        MenuItem(stringResource(R.string.export_page_to, "PDF")) {
+            scope.launch(Dispatchers.IO) {
+                snackManager.runWithSnack(exportingPageToPdfMsg) {
+                    ExportEngine(context).export(
+                        target = ExportTarget.Page(pageId = currentPageId),
+                        format = ExportFormat.PDF
+                    )
+                }
+            }
+            onClose()
+        }
+        MenuItem(stringResource(R.string.export_page_to, "PNG")) {
+            scope.launch(Dispatchers.IO) {
+                snackManager.runWithSnack(exportingPageToPngMsg) {
+                    ExportEngine(context).export(
+                        target = ExportTarget.Page(pageId = currentPageId),
+                        format = ExportFormat.PNG
+                    )
+                }
+            }
+            onClose()
+        }
+        MenuItem(stringResource(R.string.export_page_to, "JPEG")) {
+            scope.launch(Dispatchers.IO) {
+                snackManager.runWithSnack(exportingPageToJpegMsg) {
+                    ExportEngine(context).export(
+                        target = ExportTarget.Page(pageId = currentPageId),
+                        format = ExportFormat.JPEG
+                    )
+                }
+            }
+            onClose()
+        }
+        MenuItem(stringResource(R.string.export_page_to, "xopp")) {
+            scope.launch(Dispatchers.IO) {
+                snackManager.runWithSnack(exportingPageToXoppMsg) {
+                    ExportEngine(context).export(
+                        target = ExportTarget.Page(pageId = currentPageId),
+                        format = ExportFormat.XOPP
+                    )
+                }
+            }
+            onClose()
+        }
+        DividerCentered()
+
+        // Book exports
+        if (currentBookId != null) {
+            MenuItem(stringResource(R.string.export_book_to, "PDF")) {
                 scope.launch(Dispatchers.IO) {
-                    snackManager.runWithSnack(exportingPageToPdfMsg) {
+                    snackManager.runWithSnack(exportingBookToPdfMsg) {
                         ExportEngine(context).export(
-                            target = ExportTarget.Page(pageId = state.currentPageId),
+                            target = ExportTarget.Book(bookId = currentBookId),
                             format = ExportFormat.PDF
                         )
                     }
                 }
                 onClose()
             }
-            MenuItem(stringResource(R.string.export_page_to, "PNG")) {
+            MenuItem(stringResource(R.string.export_book_to, "PNG")) {
                 scope.launch(Dispatchers.IO) {
-                    snackManager.runWithSnack(exportingPageToPngMsg) {
+                    snackManager.runWithSnack(exportingBookToPngMsg) {
                         ExportEngine(context).export(
-                            target = ExportTarget.Page(pageId = state.currentPageId),
+                            target = ExportTarget.Book(bookId = currentBookId),
                             format = ExportFormat.PNG
                         )
                     }
                 }
                 onClose()
             }
-            MenuItem(stringResource(R.string.export_page_to, "JPEG")) {
+            MenuItem(stringResource(R.string.export_book_to, "xopp")) {
                 scope.launch(Dispatchers.IO) {
-                    snackManager.runWithSnack(exportingPageToJpegMsg) {
+                    snackManager.runWithSnack(exportingBookToXoppMsg) {
                         ExportEngine(context).export(
-                            target = ExportTarget.Page(pageId = state.currentPageId),
-                            format = ExportFormat.JPEG
-                        )
-                    }
-                }
-                onClose()
-            }
-            MenuItem(stringResource(R.string.export_page_to, "xopp")) {
-                scope.launch(Dispatchers.IO) {
-                    snackManager.runWithSnack(exportingPageToXoppMsg) {
-                        ExportEngine(context).export(
-                            target = ExportTarget.Page(pageId = state.currentPageId),
+                            target = ExportTarget.Book(bookId = currentBookId),
                             format = ExportFormat.XOPP
                         )
                     }
@@ -136,67 +195,30 @@ fun ToolbarMenu(
                 onClose()
             }
             DividerCentered()
+        }
 
-            // Book exports
-            if (state.bookId != null && book != null) {
-                MenuItem(stringResource(R.string.export_book_to, "PDF")) {
-                    scope.launch(Dispatchers.IO) {
-                        snackManager.runWithSnack(exportingBookToPdfMsg) {
-                            ExportEngine(context).export(
-                                target = ExportTarget.Book(bookId = state.bookId),
-                                format = ExportFormat.PDF
-                            )
-                        }
-                    }
-                    onClose()
-                }
-                MenuItem(stringResource(R.string.export_book_to, "PNG")) {
-                    scope.launch(Dispatchers.IO) {
-                        snackManager.runWithSnack(exportingBookToPngMsg) {
-                            ExportEngine(context).export(
-                                target = ExportTarget.Book(bookId = state.bookId),
-                                format = ExportFormat.PNG
-                            )
-                        }
-                    }
-                    onClose()
-                }
-                MenuItem(stringResource(R.string.export_book_to, "xopp")) {
-                    scope.launch(Dispatchers.IO) {
-                        snackManager.runWithSnack(exportingBookToXoppMsg) {
-                            ExportEngine(context).export(
-                                target = ExportTarget.Book(bookId = state.bookId),
-                                format = ExportFormat.XOPP
-                            )
-                        }
-                    }
-                    onClose()
-                }
-                DividerCentered()
-            }
-
-            MenuItem(stringResource(R.string.clean_all_strokes)) {
-                scope.launch {
-                    CanvasEventBus.clearPageSignal.emit(Unit)
-                    snackManager.displaySnack(
-                        SnackConf(
-                            text = clearedAllStrokesMsg, duration = 3000
-                        )
+        MenuItem(stringResource(R.string.clean_all_strokes)) {
+            scope.launch {
+                CanvasEventBus.clearPageSignal.emit(Unit)
+                snackManager.displaySnack(
+                    SnackConf(
+                        text = clearedAllStrokesMsg, duration = 3000
                     )
-                }
-                onClose()
+                )
             }
-            DividerCentered()
+            onClose()
+        }
+        DividerCentered()
 
-            MenuItem(stringResource(R.string.change_background)) {
-                onBackgroundSelectorModalOpen()
-                onClose()
-            }
+        MenuItem(stringResource(R.string.change_background)) {
+            onBackgroundSelectorModalOpen()
+            onClose()
+        }
 
-            MenuItem(stringResource(R.string.bug_report)) {
-                navController.navigate("bugReport")
-                onClose()
-            }
+        MenuItem(stringResource(R.string.bug_report)) {
+//                navController.navigate("bugReport")
+            goToBugReport()
+            onClose()
         }
     }
 }
@@ -228,3 +250,19 @@ private fun ColumnScope.DividerCentered() {
             .background(Color(0xFF777777))
     )
 }
+
+
+// TODO: Fix it
+@Preview(showBackground = true)
+@Composable
+private fun ToolbarMenuPreview() {
+    ToolbarMenuContent(
+        goToBugReport = {},
+        goToLibrary = {},
+        currentPageId = "1",
+        currentBookId = "1",
+        onClose = {},
+        onBackgroundSelectorModalOpen = {}
+    )
+}
+
