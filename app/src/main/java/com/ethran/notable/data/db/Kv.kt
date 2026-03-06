@@ -19,6 +19,7 @@ import io.shipbook.shipbooksdk.Log
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
+import javax.inject.Singleton
 
 
 @Entity
@@ -45,7 +46,10 @@ interface KvDao {
 
 }
 
-class KvRepository @Inject constructor(@ApplicationContext context: Context) {
+@Singleton
+class KvRepository @Inject constructor(
+    @ApplicationContext context: Context
+) {
     var db = AppDatabase.getDatabase(context).kvDao()
 
     init {
@@ -84,8 +88,10 @@ class KvRepository @Inject constructor(@ApplicationContext context: Context) {
  *
  * Use this class instead of [KvRepository] for app-level data like settings and UI states.
  */
-
-class KvProxy @Inject constructor(private val kvRepository: KvRepository) {
+@Singleton
+class KvProxy @Inject constructor(
+    private val kvRepository: KvRepository
+) {
 
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
         return kvRepository.getLive(key).map {
