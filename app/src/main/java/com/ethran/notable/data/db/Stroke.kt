@@ -7,6 +7,7 @@ import com.ethran.notable.editor.utils.Pen
 import kotlinx.serialization.SerialName
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
 @kotlinx.serialization.Serializable
 data class StrokePoint(
@@ -76,8 +77,9 @@ interface StrokeDao {
 
 }
 
-class StrokeRepository(context: Context) {
-    var db = AppDatabase.getDatabase(context).strokeDao()
+class StrokeRepository @Inject constructor(
+    private val db: StrokeDao
+) {
 
     fun create(stroke: Stroke): Long {
         return db.create(stroke)

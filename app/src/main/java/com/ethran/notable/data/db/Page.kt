@@ -16,6 +16,7 @@ import androidx.room.Update
 import com.ethran.notable.data.model.BackgroundType
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
 @Entity(
     foreignKeys = [ForeignKey(
@@ -89,9 +90,10 @@ interface PageDao {
     fun delete(pageId: String)
 }
 
-class PageRepository(context: Context) {
-    var db = AppDatabase.getDatabase(context).pageDao()
-
+class PageRepository @Inject constructor(
+    private val notebookDao: NotebookDao,
+    private val db: PageDao
+) {
     fun create(page: Page): Long {
         return db.create(page)
     }
@@ -140,12 +142,11 @@ fun Page.getBackgroundType(): BackgroundType {
 }
 
 // TODO: make it better
-fun Page.getParentFolder(context: Context): String? {
+fun Page.getParentFolder(bookRepository: BookRepository): String? {
     return if (notebookId != null) {
-        val bookRepo = BookRepository(context)
-        val notebook = bookRepo.getById(notebookId)
+        val notebook = bookRepository.getById(notebookId)
         notebook?.parentFolderId
     } else {
-        this.parentFolderId
+        parentFolderId
     }
 }

@@ -21,7 +21,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.data.db.reencodeStrokePointsToSB1
+import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
@@ -53,6 +53,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var kvProxy: KvProxy
 
+    @Inject
+    lateinit var strokeMigrationHelper: StrokeMigrationHelper
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableFullScreen()
@@ -82,7 +85,7 @@ class MainActivity : ComponentActivity() {
             // class EditorState
             EditorSettingCacheManager.init(applicationContext)
             this.lifecycleScope.launch(Dispatchers.IO) {
-                reencodeStrokePointsToSB1(this@MainActivity)
+                strokeMigrationHelper.reencodeStrokePointsToSB1()
             }
         }
 

@@ -1,6 +1,5 @@
 package com.ethran.notable.data.db
 
-import android.content.Context
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
@@ -12,6 +11,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
 
 // Entity class for images
@@ -64,8 +64,9 @@ interface ImageDao {
 }
 
 // Repository for stroke operations
-class ImageRepository(context: Context) {
-    private val db = AppDatabase.getDatabase(context).ImageDao()
+class ImageRepository @Inject constructor(
+    private val db: ImageDao
+) {
 
     fun create(image: Image): Long {
         return db.create(image)

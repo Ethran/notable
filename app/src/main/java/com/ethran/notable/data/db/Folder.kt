@@ -1,6 +1,5 @@
 package com.ethran.notable.data.db
 
-import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.room.ColumnInfo
 import androidx.room.Dao
@@ -13,6 +12,7 @@ import androidx.room.Update
 import io.shipbook.shipbooksdk.Log
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
 @Entity(
     foreignKeys = [ForeignKey(
@@ -54,9 +54,9 @@ interface FolderDao {
     fun delete(id: String)
 }
 
-class FolderRepository(context: Context) {
-    var db = AppDatabase.getDatabase(context).folderDao()
-
+class FolderRepository @Inject constructor(
+    private val db: FolderDao
+) {
     fun create(folder: Folder) {
         db.create(folder)
     }

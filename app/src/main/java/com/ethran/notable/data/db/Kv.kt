@@ -48,12 +48,12 @@ interface KvDao {
 
 @Singleton
 class KvRepository @Inject constructor(
-    @ApplicationContext context: Context
+    private val db: KvDao,
+    @param:ApplicationContext private val context: Context
 ) {
-    var db = AppDatabase.getDatabase(context).kvDao()
 
     init {
-        if (!hasFilePermission(context)) {
+        if (!hasFilePermission(context)) { // how to fix it?
             throw IllegalStateException("Storage permission not granted or DB not accessible.")
         }
     }

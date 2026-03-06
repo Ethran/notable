@@ -19,16 +19,18 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Singleton
 
-class AppRepository @Inject constructor(@param:ApplicationContext val context: Context) {
-    val bookRepository = BookRepository(context)
-    val pageRepository = PageRepository(context)
-    val strokeRepository = StrokeRepository(context)
-    val imageRepository = ImageRepository(context)
-    val folderRepository = FolderRepository(context)
-    val kvRepository = KvRepository(context)
-    val kvProxy = KvProxy(kvRepository)
-
+@Singleton
+class AppRepository @Inject constructor(
+    val bookRepository: BookRepository,
+    val pageRepository: PageRepository,
+    val strokeRepository: StrokeRepository,
+    val imageRepository: ImageRepository,
+    val folderRepository: FolderRepository,
+    val kvRepository: KvRepository,
+    val kvProxy: KvProxy
+) {
     fun getNextPageIdFromBookAndPageOrCreate(
         notebookId: String,
         pageId: String
@@ -36,7 +38,7 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
         val index = getNextPageIdFromBookAndPage(notebookId, pageId)
         if (index.isNotNull())
             return index
-        val book = bookRepository.getById(notebookId = notebookId)
+        val book = bookRepository.getById(notebookId = notebookId) // Unresolved reference 'bookRepository'.
         // creating a new page
         val page = book!!.newPage()
         pageRepository.create(page)
