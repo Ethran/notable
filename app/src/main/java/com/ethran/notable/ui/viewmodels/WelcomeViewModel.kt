@@ -24,7 +24,7 @@ class WelcomeViewModel @Inject constructor(
     private val kvProxy: KvProxy,
 ) : ViewModel() {
 
-    fun removeWelcome() {
+    suspend fun removeWelcome() {
         kvProxy.setAppSettings(
             GlobalAppSettings.current.copy(showWelcome = false)
         )

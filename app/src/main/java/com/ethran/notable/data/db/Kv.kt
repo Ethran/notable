@@ -10,15 +10,13 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import com.ethran.notable.APP_SETTINGS_KEY
-import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.hasFilePermission
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
@@ -100,6 +98,7 @@ class KvProxy @Inject constructor(
     private val kvRepository: KvRepository
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val log = ShipBook.getLogger("KvProxy")
 
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
         return kvRepository.getLive(key).map {
@@ -117,15 +116,13 @@ class KvProxy @Inject constructor(
     }
 
 
-    fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
+    suspend fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
         val jsonValue = Json.encodeToString(serializer, value)
-        Log.i(TAG, jsonValue)
-        scope.launch {
-            kvRepository.set(Kv(key, jsonValue))
-        }
+        log.i("Setting $key to $value")
+        kvRepository.set(Kv(key, jsonValue))
     }
 
-    fun setAppSettings(value: AppSettings) {
+    suspend fun setAppSettings(value: AppSettings) {
         setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
         GlobalAppSettings.update(value)
     }

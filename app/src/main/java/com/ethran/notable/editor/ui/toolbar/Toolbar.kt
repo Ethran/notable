@@ -351,9 +351,11 @@ fun Toolbar(
                     value = state.eraser,
                     onChange = { state.eraser = it },
                     toggleScribbleToErase = {
-                        appRepository.kvProxy.setAppSettings(
-                            GlobalAppSettings.current.copy(scribbleToEraseEnabled = it)
-                        )
+                        scope.launch(Dispatchers.IO) {
+                            appRepository.kvProxy.setAppSettings(
+                                GlobalAppSettings.current.copy(scribbleToEraseEnabled = it)
+                            )
+                        }
                     }
                 )
                 Box(
