@@ -97,7 +97,6 @@ class KvRepository @Inject constructor(
 class KvProxy @Inject constructor(
     private val kvRepository: KvRepository
 ) {
-    private val scope = CoroutineScope(Dispatchers.IO)
     private val log = ShipBook.getLogger("KvProxy")
 
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
