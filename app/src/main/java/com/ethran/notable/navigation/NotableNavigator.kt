@@ -78,6 +78,11 @@ class NotableNavigator(
     }
 
     fun goToAnchor(appRepository: AppRepository){
+        val targetPageId = quickNavSourcePageId
+        if (targetPageId == null) {
+            log.e("QuickNav source pageId is null")
+            return
+        }
         coroutineScope.launch {
             val notebookId = runCatching {
                 withContext(Dispatchers.IO) {
@@ -86,7 +91,7 @@ class NotableNavigator(
             }.onFailure {
                 log.w("Failed to load page $quickNavSourcePageId", it)
             }.getOrNull()
-            navController.navigate(EditorDestination.createRoute(quickNavSourcePageId!!, notebookId))
+            navController.navigate(EditorDestination.createRoute(targetPageId, notebookId))
         }
     }
 
