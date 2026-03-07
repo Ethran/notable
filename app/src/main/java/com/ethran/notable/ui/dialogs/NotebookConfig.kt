@@ -28,6 +28,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowCircleRight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -35,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -57,8 +57,8 @@ import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.db.Folder
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.ui.LocalSnackContext
@@ -78,7 +78,6 @@ fun NotebookConfigDialog(
     val bookRepository  = appRepository.bookRepository
 
     val book by bookRepository.getByIdLive(bookId).observeAsState()
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackManager = LocalSnackContext.current
 
@@ -96,6 +95,10 @@ fun NotebookConfigDialog(
 
 
     var bookFolder by remember { mutableStateOf(book?.parentFolderId) }
+    var breadcrumbFolders by remember { mutableStateOf<List<Folder>>(emptyList()) }
+    LaunchedEffect(bookFolder) {
+        breadcrumbFolders = getFolderList(appRepository, bookFolder)
+    }
 
 
     if (showBackgroundSelector) {
@@ -110,14 +113,18 @@ fun NotebookConfigDialog(
                         val updatedBook = book!!.copy(
                             defaultBackgroundType = backgroundType
                         )
-                        bookRepository.update(updatedBook)
+                        scope.launch {
+                            bookRepository.update(updatedBook)
+                        }
                     }
                 } else if (book!!.defaultBackgroundType != backgroundType || book!!.defaultBackground != background) {
                     val updatedBook = book!!.copy(
                         defaultBackgroundType = backgroundType,
                         defaultBackground = background
                     )
-                    bookRepository.update(updatedBook)
+                    scope.launch {
+                        bookRepository.update(updatedBook)
+                    }
                 }
             }) {
             showBackgroundSelector = false
@@ -129,7 +136,9 @@ fun NotebookConfigDialog(
             title = "Confirm Deletion",
             message = "Are you sure you want to delete \"${book!!.title}\"?",
             onConfirm = {
-                bookRepository.delete(bookId)
+                scope.launch {
+                    bookRepository.delete(bookId)
+                }
                 showDeleteDialog = false
                 onClose()
             },
@@ -144,7 +153,6 @@ fun NotebookConfigDialog(
             exportEngine = exportEngine,
             snackManager = snackManager,
             bookId = bookId,
-            context = context,
             onConfirm = {
                 showExportDialog = false
                 onClose()
@@ -241,7 +249,9 @@ fun NotebookConfigDialog(
                                         Log.i(TAG, "loose focus")
                                         if (book!!.title != bookTitle) {
                                             val updatedBook = book!!.copy(title = bookTitle)
-                                            bookRepository.update(updatedBook)
+                                            scope.launch {
+                                                bookRepository.update(updatedBook)
+                                            }
                                         }
                                     }
                                 }
@@ -300,7 +310,9 @@ fun NotebookConfigDialog(
                         defaultPath = defaultPath,
                         onLinkChanged = { newUri ->
                             val updated = book!!.copy(linkedExternalUri = newUri)
-                            bookRepository.update(updated)
+                            scope.launch {
+                                bookRepository.update(updated)
+                            }
                         })
 
                     /* -------------- Other book info -----------*/
@@ -308,7 +320,7 @@ fun NotebookConfigDialog(
                     Text("Size: TODO!")
                     Row {
                         Text(stringResource(R.string.details_notebook_in_folder))
-                        BreadCrumb(folders = getFolderList(appRepository = appRepository, bookFolder), fontSize = 16)  { }
+                        BreadCrumb(folders = breadcrumbFolders, fontSize = 16)  { }
                     }
                     Text(stringResource(R.string.details_notebook_created, formattedCreatedAt))
                     Text(stringResource(R.string.details_notebook_last_updated, formattedUpdatedAt))

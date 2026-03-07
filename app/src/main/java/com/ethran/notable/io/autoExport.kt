@@ -23,9 +23,8 @@ import kotlinx.coroutines.launch
  * @param bookId The ID of the notebook to be exported. If null, the function does nothing.
  * @param bookRepository The repository to access notebook data, specifically to retrieve the linked file URI.
  */
-fun exportToLinkedFile(
+suspend fun exportToLinkedFile(
     exportEngine: ExportEngine,
-    context: Context,
     bookId: String?,
     bookRepository: BookRepository,
 ) {

@@ -55,29 +55,29 @@ interface NotebookDao {
     fun getByIdLive(notebookId: String): LiveData<Notebook>
 
     @Query("SELECT * FROM notebook WHERE id = (:notebookId)")
-    fun getById(notebookId: String): Notebook?
+    suspend fun getById(notebookId: String): Notebook?
 
     @Query("UPDATE notebook SET openPageId=:pageId WHERE id=:notebookId")
-    fun setOpenPageId(notebookId: String, pageId: String)
+    suspend fun setOpenPageId(notebookId: String, pageId: String)
 
     @Query("UPDATE notebook SET pageIds=:pageIds WHERE id=:id")
-    fun setPageIds(id: String, pageIds: List<String>)
+    suspend fun setPageIds(id: String, pageIds: List<String>)
 
     @Insert
-    fun create(notebook: Notebook): Long
+    suspend fun create(notebook: Notebook): Long
 
     @Update
-    fun update(notebook: Notebook)
+    suspend fun update(notebook: Notebook)
 
     @Query("DELETE FROM notebook WHERE id=:id")
-    fun delete(id: String)
+    suspend fun delete(id: String)
 }
 
 class BookRepository @Inject constructor(
     private val notebookDao: NotebookDao,
     private val pageDao: PageDao
 ) {
-    fun create(notebook: Notebook) {
+    suspend fun create(notebook: Notebook) {
         notebookDao.create(notebook)
         val page = Page(
             notebookId = notebook.id,
@@ -90,11 +90,11 @@ class BookRepository @Inject constructor(
         notebookDao.setOpenPageId(notebook.id, page.id)
     }
 
-    fun createEmpty(notebook: Notebook) {
+    suspend fun createEmpty(notebook: Notebook) {
         notebookDao.create(notebook)
     }
 
-    fun update(notebook: Notebook) {
+    suspend fun update(notebook: Notebook) {
         Log.i(TAG, "updating DB")
         val updatedNotebook = notebook.copy(updatedAt = Date())
         notebookDao.update(updatedNotebook)
@@ -104,7 +104,7 @@ class BookRepository @Inject constructor(
         return notebookDao.getAllInFolder(folderId)
     }
 
-    fun getById(notebookId: String): Notebook? {
+    suspend fun getById(notebookId: String): Notebook? {
         return notebookDao.getById(notebookId)
     }
 
@@ -112,18 +112,19 @@ class BookRepository @Inject constructor(
         return notebookDao.getByIdLive(notebookId)
     }
 
-    fun setOpenPageId(id: String, pageId: String) {
+    suspend fun setOpenPageId(id: String, pageId: String) {
         notebookDao.setOpenPageId(id, pageId)
     }
 
-    fun addPage(bookId: String, pageId: String, index: Int? = null) {
-        val pageIds = (notebookDao.getById(bookId) ?: return).pageIds.toMutableList()
+    suspend fun addPage(bookId: String, pageId: String, index: Int? = null) {
+        val notebook = notebookDao.getById(bookId) ?: return
+        val pageIds = notebook.pageIds.toMutableList()
         if (index != null) pageIds.add(index, pageId)
         else pageIds.add(pageId)
         notebookDao.setPageIds(bookId, pageIds)
     }
 
-    fun removePage(id: String, pageId: String) {
+    suspend fun removePage(id: String, pageId: String) {
         val notebook = notebookDao.getById(id) ?: return
         val updatedNotebook = notebook.copy(
             // remove the page
@@ -135,8 +136,9 @@ class BookRepository @Inject constructor(
         Log.i(TAG, "Cleaned $id $pageId")
     }
 
-    fun changePageIndex(id: String, pageId: String, index: Int) {
-        val pageIds = (notebookDao.getById(id) ?: return).pageIds.toMutableList()
+    suspend fun changePageIndex(id: String, pageId: String, index: Int) {
+        val notebook = notebookDao.getById(id) ?: return
+        val pageIds = notebook.pageIds.toMutableList()
         var correctedIndex = index
         if (correctedIndex < 0) correctedIndex = 0
         if (correctedIndex > pageIds.size - 1) correctedIndex = pageIds.size - 1
@@ -146,19 +148,21 @@ class BookRepository @Inject constructor(
         notebookDao.setPageIds(id, pageIds)
     }
 
-    fun getPageIndex(id: String, pageId: String): Int? {
-        val pageIds = (notebookDao.getById(id) ?: return null).pageIds
+    suspend fun getPageIndex(id: String, pageId: String): Int? {
+        val notebook = notebookDao.getById(id) ?: return null
+        val pageIds = notebook.pageIds
         val index = pageIds.indexOf(pageId)
         return if (index != -1) index else null
     }
 
-    fun getPageAtIndex(id: String, index: Int): String? {
-        val pageIds = (notebookDao.getById(id) ?: return null).pageIds
+    suspend fun getPageAtIndex(id: String, index: Int): String? {
+        val notebook = notebookDao.getById(id) ?: return null
+        val pageIds = notebook.pageIds
         if (index < 0 || index > pageIds.size - 1) return null
         return pageIds[index]
     }
 
-    fun delete(id: String) {
+    suspend fun delete(id: String) {
         notebookDao.delete(id)
     }
 

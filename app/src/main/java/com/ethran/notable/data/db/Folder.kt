@@ -1,6 +1,7 @@
 package com.ethran.notable.data.db
 
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.map
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
@@ -41,27 +42,30 @@ interface FolderDao {
     fun getChildrenFolders(folderId: String?): LiveData<List<Folder>>
 
     @Query("SELECT * FROM folder WHERE id IS :folderId")
-    fun get(folderId: String): Folder?
+    suspend fun get(folderId: String): Folder?
+
+    @Query("SELECT * FROM folder WHERE id IS :folderId")
+    fun getLive(folderId: String): LiveData<Folder?>
 
 
     @Insert
-    fun create(folder: Folder): Long
+    suspend fun create(folder: Folder): Long
 
     @Update
-    fun update(folder: Folder)
+    suspend fun update(folder: Folder)
 
     @Query("DELETE FROM folder WHERE id=:id")
-    fun delete(id: String)
+    suspend fun delete(id: String)
 }
 
 class FolderRepository @Inject constructor(
     private val db: FolderDao
 ) {
-    fun create(folder: Folder) {
+    suspend fun create(folder: Folder) {
         db.create(folder)
     }
 
-    fun update(folder: Folder) {
+    suspend fun update(folder: Folder) {
         db.update(folder)
     }
 
@@ -69,25 +73,33 @@ class FolderRepository @Inject constructor(
         return db.getChildrenFolders(folderId)
     }
 
-    fun getParent(folderId: String? = null): String? {
+    suspend fun getParent(folderId: String? = null): String? {
         if (folderId == null)
             return null
         val folder = db.get(folderId)
         return folder?.parentFolderId
     }
 
-    fun get(folderId: String): Folder? {
+    fun getParentLive(folderId: String? = null): LiveData<String?> {
+        if (folderId == null) {
+            val liveData = androidx.lifecycle.MutableLiveData<String?>(null)
+            return liveData
+        }
+        return db.getLive(folderId).map { it?.parentFolderId }
+    }
+
+    suspend fun get(folderId: String): Folder? {
         val folder = db.get(folderId)
         if (folder == null) Log.e("FolderRepository", "Folder not found: $folderId")
         return folder
     }
 
-    fun getWithChildren(folderId: String): Folder? {
+    suspend fun getWithChildren(folderId: String): Folder? {
         return db.get(folderId)
     }
 
 
-    fun delete(id: String) {
+    suspend fun delete(id: String) {
         db.delete(id)
     }
 

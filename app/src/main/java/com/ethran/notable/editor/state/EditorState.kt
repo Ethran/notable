@@ -48,7 +48,7 @@ class EditorState(
         private set
 
 
-    fun getNextPage(): String? {
+    suspend fun getNextPage(): String? {
         return if (bookId != null) {
             val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
                 pageId = currentPageId, notebookId = bookId
@@ -57,7 +57,7 @@ class EditorState(
         } else null
     }
 
-    fun getPreviousPage(): String? {
+    suspend fun getPreviousPage(): String? {
         return if (bookId != null) {
             val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
                 pageId = currentPageId, notebookId = bookId
@@ -67,7 +67,7 @@ class EditorState(
     }
 
 
-    fun updateOpenedPage(newPageId: String) {
+    suspend fun updateOpenedPage(newPageId: String) {
         Log.d("EditorView", "Update open page to $newPageId")
         if (bookId != null) {
             appRepository.bookRepository.setOpenPageId(bookId, newPageId)
@@ -148,7 +148,7 @@ class EditorState(
      *
      * @param id The unique identifier of the page to switch to.
      */
-    fun changePage(id: String) {
+    suspend fun changePage(id: String) {
         log.d("Changing page to $id, from $currentPageId")
         updateOpenedPage(id)
         closeAllMenus()

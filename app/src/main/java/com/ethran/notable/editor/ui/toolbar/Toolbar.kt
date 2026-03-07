@@ -19,8 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -38,6 +40,7 @@ import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.editor.EditorControlTower
@@ -60,6 +63,7 @@ import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val toolbarLog = ShipBook.getLogger("Toolbar")
 fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
@@ -455,8 +459,11 @@ fun Toolbar(
                         .background(Color.Black)
                 )
                 if (state.bookId != null) {
-                    val book = remember(state.bookId) {
-                        repository.getById(state.bookId)
+                    var book by remember(state.bookId) { mutableStateOf<Notebook?>(null) }
+                    LaunchedEffect(state.bookId) {
+                        withContext(Dispatchers.IO) {
+                            book = repository.getById(state.bookId)
+                        }
                     }
 
                     val pageNumber: String = remember(book?.id, state.currentPageId) {
@@ -513,12 +520,17 @@ fun Toolbar(
                             exportEngine = exportEngine,
                             goToBugReport = { navController.navigate(BugReportDestination.route) },
                             goToLibrary = {
-                                val parentFolder =
-                                    appRepository.pageRepository.getById(state.currentPageId)
-                                        ?.getParentFolder(appRepository.bookRepository)
-                                navController.navigate(
-                                    LibraryDestination.createRoute(parentFolder)
-                                )
+                                scope.launch {
+                                    val page = withContext(Dispatchers.IO) {
+                                        appRepository.pageRepository.getById(state.currentPageId)
+                                    }
+                                    val parentFolder = withContext(Dispatchers.IO) {
+                                        page?.getParentFolder(appRepository.bookRepository)
+                                    }
+                                    navController.navigate(
+                                        LibraryDestination.createRoute(parentFolder)
+                                    )
+                                }
                             },
                             currentPageId = state.currentPageId,
                             currentBookId = state.bookId,

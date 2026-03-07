@@ -118,14 +118,14 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun resolveBreadcrumbs(folderId: String?): List<Folder> {
+    private suspend fun resolveBreadcrumbs(folderId: String?): List<Folder> {
         if (folderId == null) return emptyList()
 
         val list = mutableListOf<Folder>()
         var currentId: String? = folderId
 
         while (currentId != null) {
-            val folder = folderRepository.get(currentId) // Synchronous database read
+            val folder = folderRepository.get(currentId)
             if (folder != null) {
                 list.add(folder)
                 currentId = folder.parentFolderId

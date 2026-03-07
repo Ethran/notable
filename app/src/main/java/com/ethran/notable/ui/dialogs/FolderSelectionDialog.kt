@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -19,13 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.db.Folder
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.getFolderList
 
@@ -42,10 +42,13 @@ fun ShowFolderSelectionDialog(
     var currentFolderId by remember { mutableStateOf(initialFolderId) }
     val availableFolders by appRepository.folderRepository.getAllInFolder(currentFolderId)
         .observeAsState()
-    val currentFolderName = currentFolderId?.let {
-        appRepository.folderRepository.get(it)?.title
-    } ?: "Library"
-    val parentFolder = appRepository.folderRepository.getParent(currentFolderId)
+
+    var breadcrumbFolders by remember { mutableStateOf<List<Folder>>(emptyList()) }
+    LaunchedEffect(currentFolderId) {
+        breadcrumbFolders = getFolderList(appRepository, currentFolderId)
+    }
+
+    val parentFolder = appRepository.folderRepository.getParentLive(currentFolderId).observeAsState().value
 
     Dialog(onDismissRequest = { onCancel() }) {
         Column(
@@ -63,10 +66,7 @@ fun ShowFolderSelectionDialog(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             BreadCrumb(
-                folders = getFolderList(
-                    appRepository,
-                    currentFolderId
-                )
+                folders = breadcrumbFolders
             ) { currentFolderId = it }
             // Folder List
             Column(

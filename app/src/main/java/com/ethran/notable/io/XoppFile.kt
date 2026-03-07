@@ -66,7 +66,7 @@ class XoppFile @Inject constructor(
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
     private val maxPressure = EpdController.getMaxTouchPressure()
 
-    fun writeToXoppStream(target: ExportTarget, output: OutputStream) {
+    suspend fun writeToXoppStream(target: ExportTarget, output: OutputStream) {
         // Build a temporary plain-XML file using existing writePage(), then gzip it into 'output'
         val tmp = File(
             context.cacheDir, when (target) {
@@ -110,7 +110,7 @@ class XoppFile @Inject constructor(
      * @param pageId The ID of the page to process.
      * @param writer The BufferedWriter to write XML data to.
      */
-    private fun writePage(pageId: String, writer: BufferedWriter) {
+    private suspend fun writePage(pageId: String, writer: BufferedWriter) {
         val (_, strokes) = pageRepo.getWithStrokeById(pageId)
         val (_, images) = pageRepo.getWithImageById(pageId)
 
@@ -230,7 +230,7 @@ class XoppFile @Inject constructor(
      * @param context The application context.
      * @param uri The URI of the `.xopp` file to import.
      */
-    fun importBook(uri: Uri, savePageToDatabase: (PageContent) -> Unit) {
+    suspend fun importBook(uri: Uri, savePageToDatabase: suspend (PageContent) -> Unit) {
         log.v("Importing book from $uri")
         ensureNotMainThread("xoppImportBook")
         val inputStream = context.contentResolver.openInputStream(uri) ?: return

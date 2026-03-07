@@ -47,32 +47,32 @@ data class Image(
 @Dao
 interface ImageDao {
     @Insert
-    fun create(image: Image): Long
+    suspend fun create(image: Image): Long
 
     @Insert
-    fun create(images: List<Image>)
+    suspend fun create(images: List<Image>)
 
     @Update
-    fun update(image: Image)
+    suspend fun update(image: Image)
 
     @Query("DELETE FROM Image WHERE id IN (:ids)")
-    fun deleteAll(ids: List<String>)
+    suspend fun deleteAll(ids: List<String>)
 
     @Transaction
     @Query("SELECT * FROM Image WHERE id = :imageId")
-    fun getById(imageId: String): Image
+    suspend fun getById(imageId: String): Image
 }
 
-// Repository for stroke operations
+// Repository for image operations
 class ImageRepository @Inject constructor(
     private val db: ImageDao
 ) {
 
-    fun create(image: Image): Long {
+    suspend fun create(image: Image): Long {
         return db.create(image)
     }
 
-    fun create(
+    suspend fun create(
         imageUri: String,
         //position on canvas
         x: Int,
@@ -96,21 +96,19 @@ class ImageRepository @Inject constructor(
         return db.create(imageToSave)
     }
 
-    fun create(images: List<Image>) {
+    suspend fun create(images: List<Image>) {
         db.create(images)
     }
 
-    fun update(image: Image) {
+    suspend fun update(image: Image) {
         db.update(image)
     }
 
-    fun deleteAll(ids: List<String>) {
+    suspend fun deleteAll(ids: List<String>) {
         db.deleteAll(ids)
     }
 
-    fun getImageWithPointsById(imageId: String): Image {
+    suspend fun getImageWithPointsById(imageId: String): Image {
         return db.getById(imageId)
     }
 }
-
-

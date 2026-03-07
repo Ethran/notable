@@ -67,6 +67,7 @@ class QuickNavViewModel(
             _uiState.update { state ->
                 state.copy(
                     folderId = page?.parentFolderId,
+                    breadcrumbFolders = folderList,
                     bookId = page?.notebookId,
                     isCurrentPageFavorite = isFavorite,
                     favoritePages = favoritePagesDb,
@@ -76,28 +77,10 @@ class QuickNavViewModel(
 
             // Load Scrubber data if it belongs to a book
             page?.notebookId?.let { loadBookData(it, currentPageId, favorites) }
-
-
-            viewModelScope.launch(Dispatchers.IO) {
-
-                _uiState.update { state ->
-                    state.copy(
-                        folderId = page?.parentFolderId,
-                        breadcrumbFolders = folderList, // <-- PASS TO STATE
-                        bookId = page?.notebookId,
-                        isCurrentPageFavorite = isFavorite,
-                        favoritePages = favoritePagesDb,
-                        isLoading = false
-                    )
-                }
-            }
         }
-
-
-
     }
 
-    private fun loadBookData(
+    private suspend fun loadBookData(
         bookId: String, currentPageId: String, favorites: List<String>
     ) {
         val book = bookRepository.getById(bookId)

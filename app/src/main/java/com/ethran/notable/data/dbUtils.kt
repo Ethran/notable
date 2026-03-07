@@ -8,8 +8,10 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.io.createFileFromContentUri
 import com.ethran.notable.io.isImageUri
 import com.ethran.notable.io.saveImageFromContentUri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.io.File
 
 fun getDbDir(): File {
@@ -76,40 +78,34 @@ fun copyImageToDatabase(context: Context, fileUri: Uri, subfolder: String? = nul
 
 
 // TODO move this to repository
-fun deletePage(appRepository: AppRepository, pageId: String, filesDir: File) {
-    val page = appRepository.pageRepository.getById(pageId) ?: return
+suspend fun deletePage(appRepository: AppRepository, pageId: String, filesDir: File) = withContext(Dispatchers.IO) {
+    val page = appRepository.pageRepository.getById(pageId) ?: return@withContext
     val proxy = appRepository.kvProxy
     val settings = proxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
 
+    // remove from book
+    if (page.notebookId != null) {
+        appRepository.bookRepository.removePage(page.notebookId, pageId)
+    }
 
-    runBlocking {
-        // remove from book
-        if (page.notebookId != null) {
-            appRepository.bookRepository.removePage(page.notebookId, pageId)
-        }
-
-        // remove from quick nav
-        if (settings != null && settings.quickNavPages.contains(pageId)) {
-            proxy.setKv(
-                APP_SETTINGS_KEY,
-                settings.copy(quickNavPages = settings.quickNavPages - pageId),
-                AppSettings.serializer()
-            )
-        }
-
+    // remove from quick nav
+    if (settings != null && settings.quickNavPages.contains(pageId)) {
+        proxy.setKv(
+            APP_SETTINGS_KEY,
+            settings.copy(quickNavPages = settings.quickNavPages - pageId),
+            AppSettings.serializer()
+        )
+    }
+    appRepository.pageRepository.delete(pageId)
+    coroutineScope {
         launch {
-            appRepository.pageRepository.delete(pageId)
-        }
-        launch {
-            val imgFile = File(filesDir, "pages/previews/thumbs/$pageId")
-            if (imgFile.exists()) {
-                imgFile.delete()
+            val imgFileThumb = File(filesDir, "pages/previews/thumbs/$pageId")
+            if (imgFileThumb.exists()) {
+                imgFileThumb.delete()
             }
-        }
-        launch {
-            val imgFile = File(filesDir, "pages/previews/full/$pageId")
-            if (imgFile.exists()) {
-                imgFile.delete()
+            val imgFileFull = File(filesDir, "pages/previews/full/$pageId")
+            if (imgFileFull.exists()) {
+                imgFileFull.delete()
             }
         }
 

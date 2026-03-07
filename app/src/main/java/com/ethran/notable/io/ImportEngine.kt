@@ -3,7 +3,6 @@ package com.ethran.notable.io
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.WorkerThread
-import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.ImageRepository
@@ -94,7 +93,7 @@ class ImportEngine @Inject constructor(
      * @return An [String] indicating success or failure.
      */
     @WorkerThread
-    fun import(
+    suspend fun import(
         uri: Uri,
         options: ImportOptions = ImportOptions()
     ): String {
@@ -125,7 +124,7 @@ class ImportEngine @Inject constructor(
         }
     }
 
-    private fun handleImportXopp(uri: Uri, options: ImportOptions): String {
+    private suspend fun handleImportXopp(uri: Uri, options: ImportOptions): String {
         log.d("Importing Xopp file...")
         require(options.bookTitle != null) { "bookTitle cannot be null when importing Xopp file" }
         val book = Notebook(
@@ -155,7 +154,7 @@ class ImportEngine @Inject constructor(
         return "Imported Xopp file"
     }
 
-    private fun handleImportPDF(uri: Uri, options: ImportOptions): String {
+    private suspend fun handleImportPDF(uri: Uri, options: ImportOptions): String {
         log.d("Importing Pdf file...")
         require(options.bookTitle != null) { "bookTitle cannot be null when importing Pdf file" }
 

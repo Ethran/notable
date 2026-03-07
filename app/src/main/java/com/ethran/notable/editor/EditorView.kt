@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
@@ -36,7 +38,11 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.ui.views.LibraryDestination
 import io.shipbook.shipbooksdk.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 object EditorDestination : NavigationDestination {
@@ -71,22 +77,35 @@ fun EditorView(
     val snackManager = LocalSnackContext.current
     val scope = rememberCoroutineScope()
 
-    // control if we do have a page
-    if (appRepository.pageRepository.getById(pageId) == null) {
-        if (bookId != null) {
-            // clean the book
-            Log.i(TAG, "Could not find page, Cleaning book")
-            SnackState.globalSnackFlow.tryEmit(
-                SnackConf(
-                    text = "Could not find page, cleaning book",
-                    duration = 4000
-                )
-            )
-            appRepository.bookRepository.removePage(bookId, pageId)
+    var pageExists by remember(pageId) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(pageId) {
+        val exists = withContext(Dispatchers.IO) {
+            appRepository.pageRepository.getById(pageId) != null
         }
-        navController.navigate("library")
-        return
+        pageExists = exists
+
+        if (!exists) {
+            // TODO: check if it is correct, and remove exeption throwing
+            throw Exception("Page does not exist")
+            if (bookId != null) {
+                // clean the book
+                Log.i(TAG, "Could not find page, Cleaning book")
+                SnackState.globalSnackFlow.tryEmit(
+                    SnackConf(
+                        text = "Could not find page, cleaning book",
+                        duration = 4000
+                    )
+                )
+                scope.launch(Dispatchers.IO) {
+                    appRepository.bookRepository.removePage(bookId, pageId)
+                }
+            }
+            navController.navigate(LibraryDestination.route)
+        }
     }
+
+
+    if (pageExists == null) return
 
     BoxWithConstraints {
         val height = convertDpToPixel(this.maxHeight, context).toInt()
@@ -97,10 +116,11 @@ fun EditorView(
             PageView(
                 context = context,
                 coroutineScope = scope,
+                appRepository = appRepository,
                 currentPageId = pageId,
                 viewWidth = width,
                 viewHeight = height,
-                snackManager = snackManager
+                snackManager = snackManager,
             )
         }
 
@@ -128,7 +148,9 @@ fun EditorView(
             onDispose {
                 // finish selection operation
                 editorState.selectionState.applySelectionDisplace(page)
-                exportToLinkedFile(exportEngine, context, bookId, appRepository.bookRepository)
+                scope.launch(Dispatchers.IO) {
+                    exportToLinkedFile(exportEngine, context, bookId, appRepository.bookRepository)
+                }
                 page.disposeOldPage()
             }
         }
@@ -139,6 +161,7 @@ fun EditorView(
             editorState.pen,
             editorState.penSettings,
             editorState.mode,
+            editorState.isToolbarOpen,
             editorState.eraser
         ) {
             Log.i(TAG, "EditorView: saving")
@@ -182,7 +205,6 @@ fun EditorView(
 }
 
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun PositionedToolbar(
     exportEngine: ExportEngine,

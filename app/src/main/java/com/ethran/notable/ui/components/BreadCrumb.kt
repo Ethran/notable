@@ -1,6 +1,5 @@
 package com.ethran.notable.ui.components
 
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -20,7 +19,6 @@ import androidx.compose.ui.unit.sp
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
-import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.theme.InkaTheme
@@ -64,21 +62,23 @@ fun BreadCrumb(
 }
 
 // TODO: Move it!!! And check the usage of it!!
-fun getFolderList(appRepository: AppRepository, folderId: String?): List<Folder> {
-    val folderRepository = appRepository.folderRepository
-    if (folderId == null) return emptyList()
-    @Suppress("USELESS_ELVIS") val folder =
-        folderRepository.get(folderId) ?: return emptyList()
-    val folderList = mutableListOf(folder)
-
-    val parentId = folder.parentFolderId
-    folderList.addAll(getFolderList(appRepository, parentId))
-
-
+suspend fun getFolderList(appRepository: AppRepository, folderId: String?): List<Folder> {
+    val folderList = mutableListOf<Folder>()
+    var currentId = folderId
+    while (currentId != null) {
+        val folder = appRepository.folderRepository.get(currentId)
+        if (folder != null) {
+            folderList.add(folder)
+            currentId = folder.parentFolderId
+        } else {
+            currentId = null
+        }
+    }
+    folderList.reverse()
     return folderList
 }
 
-fun getFolderList(appRepository: AppRepository, page: Page?): List<Folder> {
+suspend fun getFolderList(appRepository: AppRepository, page: Page?): List<Folder> {
     val folderList = mutableListOf<Folder>()
     var currentFolderId = page?.parentFolderId
     while (currentFolderId != null) {

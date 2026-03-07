@@ -221,7 +221,7 @@ class ExportEngine @Inject constructor(
      *
      * - If options.saveToUri is provided, it must point to a directory (tree/document folder Uri or file:// directory).
      */
-    fun createFileNameAndFolder(
+    suspend fun createFileNameAndFolder(
         target: ExportTarget, format: ExportFormat, options: ExportOptions
     ): Pair<Uri, String> {
         val fileName =
@@ -256,13 +256,12 @@ class ExportEngine @Inject constructor(
      *
      * @return A path without leading/trailing slashes, or an empty string.
      */
-    fun createSubfolderName(target: ExportTarget, format: ExportFormat): String {
+    suspend fun createSubfolderName(target: ExportTarget, format: ExportFormat): String {
         // Helper to build a full folder hierarchy path from a parent folder ID.
-        fun buildFolderPath(parentFolderId: String?): String {
+        suspend fun buildFolderPath(parentFolderId: String?): String {
             return parentFolderId?.let {
                 // Fetches folder hierarchy and joins their sanitized titles with "/".
                 getFolderList(appRepository, it)
-                    .reversed()
                     .joinToString("/") { folder -> sanitizeFileName(folder.title) }
             }.orEmpty()
         }
@@ -324,7 +323,7 @@ class ExportEngine @Inject constructor(
      * Page export in book: BookTitle-p<PageNumber> (or p?)
      * Quick page: quickpage-<timestamp>
      */
-    fun createFileName(target: ExportTarget): String {
+    suspend fun createFileName(target: ExportTarget): String {
         return when (target) {
             is ExportTarget.Book -> {
                 val book =
@@ -354,7 +353,7 @@ class ExportEngine @Inject constructor(
 
     /* -------------------- Shared Drawing & PDF Helpers -------------------- */
 
-    private fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int) {
+    private suspend fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int) {
         ensureNotMainThread("ExportPdf")
         val data = fetchPageData(pageId)
         val (_, contentHeightPx) = computeContentDimensions(data)
@@ -389,7 +388,7 @@ class ExportEngine @Inject constructor(
         }
     }
 
-    private fun renderBitmapForPage(pageId: String): Bitmap {
+    private suspend fun renderBitmapForPage(pageId: String): Bitmap {
         ensureNotMainThread("ExportBitmap")
         val data = fetchPageData(pageId)
         val (contentWidth, contentHeight) = computeContentDimensions(data)
@@ -405,7 +404,7 @@ class ExportEngine @Inject constructor(
         return bitmap
     }
 
-    private fun drawPage(
+    private suspend fun drawPage(
         canvas: Canvas, data: PageData, scroll: Offset, scaleFactor: Float
     ) {
         canvas.scale(scaleFactor, scaleFactor)
@@ -438,7 +437,7 @@ class ExportEngine @Inject constructor(
         val page: Page, val strokes: List<Stroke>, val images: List<Image>
     )
 
-    private fun fetchPageData(pageId: String): PageData {
+    private suspend fun fetchPageData(pageId: String): PageData {
         val (page, strokes) = pageRepo.getWithStrokeById(pageId)
         val (_, images) = pageRepo.getWithImageById(pageId)
         return PageData(page, strokes, images)
@@ -787,7 +786,7 @@ class ExportEngine @Inject constructor(
         parts.filter { it.isNotBlank() }
 
     // Retrieves the 0-based page number of a specific page within a book.
-    fun getPageNumber(bookId: String, id: String): Int {
+    suspend fun getPageNumber(bookId: String, id: String): Int {
         return appRepository.getPageNumber(bookId, id)
 
     }

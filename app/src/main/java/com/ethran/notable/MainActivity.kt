@@ -10,10 +10,22 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.data.AppRepository
@@ -36,6 +48,7 @@ import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 
@@ -48,9 +61,6 @@ const val PACKAGE_NAME = "com.ethran.notable"
 
 
 @AndroidEntryPoint
-@ExperimentalAnimationApi
-@ExperimentalComposeUiApi
-@ExperimentalFoundationApi
 class MainActivity : ComponentActivity() {
     @Inject
     lateinit var kvProxy: KvProxy
@@ -84,34 +94,41 @@ class MainActivity : ComponentActivity() {
         snackState.registerGlobalSnackObserver()
         snackState.registerCancelGlobalSnackObserver()
         PageDataManager.registerComponentCallbacks(this)
-        if (hasFilePermission(this)) {
-            // Init app settings, also do migration
-
-            val savedSettings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
-                ?: AppSettings(version = 1)
-
-            GlobalAppSettings.update(savedSettings)
-
-            // Used to load up app settings, latter used in
-            // class EditorState
-            editorSettingCacheManager.init()
-            this.lifecycleScope.launch(Dispatchers.IO) {
-                strokeMigrationHelper.reencodeStrokePointsToSB1()
-            }
-        }
-
         //EpdDeviceManager.enterAnimationUpdate(true);
 //        val intentData = intent.data?.lastPathSegment
 
         setContent {
+            var isInitialized by remember { mutableStateOf(false) }
+
+            LaunchedEffect(Unit) {
+                if (hasFilePermission(this@MainActivity)) {
+                    withContext(Dispatchers.IO) {
+                        // Init app settings, also do migration
+                        val savedSettings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+                            ?: AppSettings(version = 1)
+
+                        GlobalAppSettings.update(savedSettings)
+
+                        // Used to load up app settings, latter used in
+                        // class EditorState
+                        editorSettingCacheManager.init()
+                        strokeMigrationHelper.reencodeStrokePointsToSB1()
+                    }
+                }
+                isInitialized = true
+            }
+
             InkaTheme {
                 CompositionLocalProvider(LocalSnackContext provides snackState) {
-                    NotableApp(
-                        exportEngine = exportEngine,
-                        editorSettingCacheManager = editorSettingCacheManager,
-                        snackState = snackState,
-                        appRepository = appRepository
-                    )
+                    if (isInitialized) {
+                        NotableApp(
+                            exportEngine = exportEngine,
+                            editorSettingCacheManager = editorSettingCacheManager,
+                            snackState = snackState,
+                            appRepository = appRepository
+                        )
+                    } else
+                        ShowInitMessage()
                 }
             }
         }
@@ -206,4 +223,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+}
+
+@Composable
+@Preview(showBackground = true)
+fun ShowInitMessage() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Initializing...",
+            color = Color.Black,
+            fontSize = 30.sp
+        )
+    }
 }

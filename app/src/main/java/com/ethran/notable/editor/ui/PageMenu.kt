@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +21,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.deletePage
 import com.ethran.notable.ui.noRippleClickable
+import kotlinx.coroutines.launch
 
 
 @Composable
@@ -33,6 +34,7 @@ fun PageMenu(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     Popup(
         alignment = Alignment.TopStart,
         onDismissRequest = { onClose() },
@@ -49,11 +51,13 @@ fun PageMenu(
                     Modifier
                         .padding(10.dp)
                         .noRippleClickable {
-                            appRepository.bookRepository.changePageIndex(
-                                notebookId,
-                                pageId,
-                                index - 1
-                            )
+                            scope.launch {
+                                appRepository.bookRepository.changePageIndex(
+                                    notebookId,
+                                    pageId,
+                                    index - 1
+                                )
+                            }
                         }
                 ) {
                     Text("Move Left")
@@ -63,11 +67,13 @@ fun PageMenu(
                     Modifier
                         .padding(10.dp)
                         .noRippleClickable {
-                            appRepository.bookRepository.changePageIndex(
-                                notebookId,
-                                pageId,
-                                index + 1
-                            )
+                            scope.launch {
+                                appRepository.bookRepository.changePageIndex(
+                                    notebookId,
+                                    pageId,
+                                    index + 1
+                                )
+                            }
                         }) {
                     Text("Move right")
                 }
@@ -75,7 +81,9 @@ fun PageMenu(
                     Modifier
                         .padding(10.dp)
                         .noRippleClickable {
-                            appRepository.newPageInBook(notebookId, index + 1)
+                            scope.launch {
+                                appRepository.newPageInBook(notebookId, index + 1)
+                            }
                         }) {
                     Text("Insert after")
                 }
@@ -85,7 +93,9 @@ fun PageMenu(
                 Modifier
                     .padding(10.dp)
                     .noRippleClickable {
-                        appRepository.duplicatePage(pageId)
+                        scope.launch {
+                            appRepository.duplicatePage(pageId)
+                        }
                     }) {
                 Text("Duplicate")
             }
@@ -94,8 +104,9 @@ fun PageMenu(
                     Modifier
                         .padding(10.dp)
                         .noRippleClickable {
-                            // TODO: change it
-                            deletePage(appRepository, pageId, context.filesDir)
+                            scope.launch {
+                                deletePage(appRepository, pageId, context.filesDir)
+                            }
                         }) {
                     Text("Delete")
                 }
@@ -103,4 +114,3 @@ fun PageMenu(
         }
     }
 }
-
