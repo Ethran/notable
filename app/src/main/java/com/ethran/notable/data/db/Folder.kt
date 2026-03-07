@@ -1,6 +1,8 @@
 package com.ethran.notable.data.db
 
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.distinctUntilChanged
 import androidx.lifecycle.map
 import androidx.room.ColumnInfo
 import androidx.room.Dao
@@ -10,7 +12,7 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -61,6 +63,9 @@ interface FolderDao {
 class FolderRepository @Inject constructor(
     private val db: FolderDao
 ) {
+    private val log = ShipBook.getLogger("FolderRepository")
+    private val nullLiveData = MutableLiveData<String?>(null)
+
     suspend fun create(folder: Folder) {
         db.create(folder)
     }
@@ -82,15 +87,17 @@ class FolderRepository @Inject constructor(
 
     fun getParentLive(folderId: String? = null): LiveData<String?> {
         if (folderId == null) {
-            val liveData = androidx.lifecycle.MutableLiveData<String?>(null)
-            return liveData
+            log.w("getParentLive called with null folderId")
+            return nullLiveData
         }
-        return db.getLive(folderId).map { it?.parentFolderId }
+        return db.getLive(folderId)
+            .map { it?.parentFolderId }
+            .distinctUntilChanged()
     }
 
     suspend fun get(folderId: String): Folder? {
         val folder = db.get(folderId)
-        if (folder == null) Log.e("FolderRepository", "Folder not found: $folderId")
+        if (folder == null) log.e("Folder not found: $folderId")
         return folder
     }
 
