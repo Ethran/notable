@@ -148,9 +148,8 @@ fun EditorView(
             onDispose {
                 // finish selection operation
                 editorState.selectionState.applySelectionDisplace(page)
-                scope.launch(Dispatchers.IO) {
+                if (bookId != null)
                     exportToLinkedFile(exportEngine, bookId, appRepository.bookRepository)
-                }
                 page.disposeOldPage()
             }
         }
