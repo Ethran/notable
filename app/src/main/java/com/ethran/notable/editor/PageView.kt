@@ -357,6 +357,7 @@ class PageView(
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 dbStrokes.create(strokes)
+                updateParentNotebookTimestamp()
             } catch (_: SQLiteConstraintException) {
                 // There were some rare bugs when strokes weren't unique when inserting from history
                 // I'm not sure if it's still a problem, let's just show the message
@@ -372,6 +373,7 @@ class PageView(
     private fun saveImagesToPersistLayer(image: List<Image>) {
         coroutineScope.launch(Dispatchers.IO) {
             dbImages.create(image)
+            updateParentNotebookTimestamp()
         }
     }
 
@@ -416,12 +418,14 @@ class PageView(
     private fun removeStrokesFromPersistLayer(strokeIds: List<String>) {
         coroutineScope.launch(Dispatchers.IO) {
             appRepository.strokeRepository.deleteAll(strokeIds)
+            updateParentNotebookTimestamp()
         }
     }
 
     private fun removeImagesFromPersistLayer(imageIds: List<String>) {
         coroutineScope.launch(Dispatchers.IO) {
             appRepository.imageRepository.deleteAll(imageIds)
+            updateParentNotebookTimestamp()
         }
     }
 

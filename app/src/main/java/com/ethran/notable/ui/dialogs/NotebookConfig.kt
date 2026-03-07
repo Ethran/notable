@@ -141,6 +141,16 @@ fun NotebookConfigDialog(
                 }
                 showDeleteDialog = false
                 onClose()
+
+                // Auto-upload deletion to server (efficient - no full sync needed)
+                scope.launch {
+                    try {
+                        Log.i(TAG, "Uploading deletion for notebook: $deletedNotebookId")
+                        com.ethran.notable.sync.SyncEngine(context).uploadDeletion(deletedNotebookId)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Upload deletion failed: ${e.message}")
+                    }
+                }
             },
             onCancel = {
                 showDeleteDialog = false

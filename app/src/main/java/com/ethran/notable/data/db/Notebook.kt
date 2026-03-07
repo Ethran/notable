@@ -50,6 +50,9 @@ interface NotebookDao {
     @Query("SELECT * FROM notebook WHERE parentFolderId is :folderId")
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>>
 
+    @Query("SELECT * FROM notebook")
+    suspend fun getAll(): List<Notebook>
+
     @Query("SELECT * FROM notebook WHERE id = (:notebookId)")
     fun getByIdLive(notebookId: String): LiveData<Notebook>
 
@@ -101,6 +104,14 @@ class BookRepository @Inject constructor(
         notebookDao.update(updatedNotebook)
     }
 
+    /**
+     * Update notebook without modifying the timestamp.
+     * Used during sync when downloading from server to preserve remote timestamp.
+     */
+    fun updatePreservingTimestamp(notebook: Notebook) {
+        db.update(notebook)
+    }
+
     fun getAllInFolder(folderId: String? = null): LiveData<List<Notebook>> {
         return notebookDao.getAllInFolder(folderId)
     }
@@ -111,6 +122,10 @@ class BookRepository @Inject constructor(
 
     fun getByIdLive(notebookId: String): LiveData<Notebook> {
         return notebookDao.getByIdLive(notebookId)
+    }
+    
+    suspend fun getAll(): List<Notebook> {
+        return db.getAll()
     }
 
     suspend fun setOpenPageId(id: String, pageId: String) {

@@ -124,6 +124,7 @@ fun SettingsContent(
     val tabs = listOf(
         stringResource(R.string.settings_tab_general_name),
         stringResource(R.string.settings_tab_gestures_name),
+        stringResource(R.string.settings_tab_sync_name),
         stringResource(R.string.settings_tab_debug_name)
     )
 
@@ -152,7 +153,8 @@ fun SettingsContent(
                     1 -> GesturesSettings(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
-
+                    // TODO: fix it
+                    2 -> SyncSettings(kv, settings, context)
                     2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
                 }
             }

@@ -112,6 +112,22 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 isInitialized = true
+                
+              
+
+                // Trigger initial sync on app startup (fails silently if offline)
+                 withContext(Dispatchers.IO) {
+                    try {
+                        val settings = GlobalAppSettings.current
+                        if (settings.syncSettings.syncEnabled) {
+                            Log.i(TAG, "Triggering initial sync on app startup")
+                            com.ethran.notable.sync.SyncEngine(applicationContext).syncAllNotebooks()
+                        }
+                    } catch (e: Exception) {
+                        Log.i(TAG, "Initial sync failed (offline?): ${e.message}")
+                        // Fail silently - periodic sync will handle it later
+                    }
+                }
             }
 
             InkaTheme {
