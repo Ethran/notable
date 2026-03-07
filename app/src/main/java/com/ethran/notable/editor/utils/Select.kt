@@ -7,7 +7,6 @@ import android.graphics.RectF
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
-import com.ethran.notable.TAG
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
@@ -20,7 +19,7 @@ import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -33,6 +32,7 @@ enum class SelectPointPosition {
     CENTER
 }
 
+private val log = ShipBook.getLogger("Select")
 
 fun selectStrokesFromPath(strokes: List<Stroke>, path: Path): List<Stroke> {
     val bounds = RectF()
@@ -207,7 +207,7 @@ fun handleSelect(
         if (state.firstPageCut == null) {
             // this is the first page cut
             state.firstPageCut = completePoints
-            Log.i(TAG, "Registered first curt")
+            log.i("Registered first curt")
         } else {
             // this is the second page cut, we can also select the strokes
             // first lets have the cuts in the right order

@@ -76,7 +76,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import com.ethran.notable.R
-import com.ethran.notable.TAG
 import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.model.BackgroundType
@@ -90,12 +89,13 @@ import com.ethran.notable.io.getPdfPageCount
 import com.ethran.notable.ui.components.OnOffSwitch
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Loader
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
+private val log = ShipBook.getLogger("BackgroundSelector")
 
 @Composable
 fun BackgroundSelector(
@@ -149,31 +149,25 @@ fun BackgroundSelector(
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
             if (uri == null) {
-                Log.w(
-                    TAG,
-                    "PickVisualMedia: uri is null (user cancelled or provider returned null)"
-                )
+                log.w("PickVisualMedia: uri is null (user cancelled or provider returned null)")
                 return@rememberLauncherForActivityResult
             }
 
             val currentType = selectedToType()
-            Log.d(TAG, "PickVisualMedia: will copy to subfolder=\"$currentType\"")
+            log.d("PickVisualMedia: will copy to subfolder=\"$currentType\"")
 
             scope.launch(Dispatchers.IO) {
                 try {
                     val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
 
-                    Log.i(TAG, "PickVisualMedia: copied -> ${copiedFile.absolutePath}")
+                    log.i("PickVisualMedia: copied -> ${copiedFile.absolutePath}")
                     onChange(currentType.key, copiedFile.toString())
                     scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
                     pageBackground = copiedFile.toString()
-                    Log.d(
-                        TAG,
-                        "PickVisualMedia: UI updated, pageBackground=$pageBackground, type=${currentType.key}"
-                    )
+                    log.d("PickVisualMedia: UI updated, pageBackground=$pageBackground, type=${currentType.key}")
 
                 } catch (e: Exception) {
-                    Log.e(TAG, "PickVisualMedia: copy failed: ${e.message}", e)
+                    log.e("PickVisualMedia: copy failed: ${e.message}", e)
                 }
             }
         }
@@ -182,10 +176,7 @@ fun BackgroundSelector(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri == null) {
-            Log.w(
-                TAG,
-                "PickPdf: uri is null (user cancelled or provider returned null)"
-            )
+            log.w("PickPdf: uri is null (user cancelled or provider returned null)")
             return@rememberLauncherForActivityResult
         }
 
@@ -193,7 +184,7 @@ fun BackgroundSelector(
         context.contentResolver.takePersistableUriPermission(uri, flag)
 
         val currentType = selectedToType()
-        Log.d(TAG, "PickPdf: will copy to subfolder=\"$currentType\"")
+        log.d("PickPdf: will copy to subfolder=\"$currentType\"")
         scope.launch(Dispatchers.IO) {
             try {
                 val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
@@ -201,13 +192,10 @@ fun BackgroundSelector(
                 scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
                 pageBackground = copiedFile.toString()
                 pageBackgroundType = currentType
-                Log.i(
-                    TAG,
-                    "PDF was received and copied, it is now at:${copiedFile.toUri()}"
-                )
-                Log.i(TAG, "PageSettingsModal: $pageBackgroundType")
+                log.i("PDF was received and copied, it is now at:${copiedFile.toUri()}")
+                log.i("PageSettingsModal: $pageBackgroundType")
             } catch (e: Exception) {
-                Log.e(TAG, "PdfPicker: copy failed: ${e.message}", e)
+                log.e("PdfPicker: copy failed: ${e.message}", e)
             }
         }
     }
@@ -299,11 +287,11 @@ fun BackgroundSelector(
                             onBackgroundChange = { background, type ->
                                 onChange(type.key, background)
                                 pageBackground = background
-                                Log.e(TAG, "onBackgroundChange: $type")
+                                log.e("onBackgroundChange: $type")
                                 pageBackgroundType = type
                             },
                             onRequestFilePicker = {
-                                Log.e(TAG, "onRequestFilePicker: $pageBackgroundType")
+                                log.e("onRequestFilePicker: $pageBackgroundType")
                                 pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
                             }
                         )
@@ -337,7 +325,7 @@ fun BackgroundSelector(
                             currentBackgroundType = currentBackgroundType,
                             onBackgroundChange = ::onBackgroundChange,
                             onRequestFilePicker = {
-                                Log.e(TAG, "onRequestFilePicker: $pageBackgroundType")
+                                log.e("onRequestFilePicker: $pageBackgroundType")
                                 pickPdf.launch(arrayOf("application/pdf"))
                             }
                         )
@@ -780,7 +768,7 @@ fun PageNumberSelector(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(name)
-                        Log.d(TAG, "PageNumberSelector: $isSelected, $currentBackgroundType")
+                        log.d("PageNumberSelector: $isSelected, $currentBackgroundType")
                     }
                 }
             }

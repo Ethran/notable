@@ -9,9 +9,8 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
-import com.ethran.notable.TAG
 import com.ethran.notable.data.model.BackgroundType
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -77,6 +76,8 @@ class BookRepository @Inject constructor(
     private val notebookDao: NotebookDao,
     private val pageDao: PageDao
 ) {
+    private val log = ShipBook.getLogger("BookRepository")
+
     suspend fun create(notebook: Notebook) {
         notebookDao.create(notebook)
         val page = Page(
@@ -95,7 +96,7 @@ class BookRepository @Inject constructor(
     }
 
     suspend fun update(notebook: Notebook) {
-        Log.i(TAG, "updating DB")
+        log.i("updating DB")
         val updatedNotebook = notebook.copy(updatedAt = Date())
         notebookDao.update(updatedNotebook)
     }
@@ -133,7 +134,7 @@ class BookRepository @Inject constructor(
             openPageId = if (notebook.openPageId == pageId) null else notebook.openPageId
         )
         notebookDao.update(updatedNotebook)
-        Log.i(TAG, "Cleaned $id $pageId")
+        log.i("Cleaned $id $pageId")
     }
 
     suspend fun changePageIndex(id: String, pageId: String, index: Int) {

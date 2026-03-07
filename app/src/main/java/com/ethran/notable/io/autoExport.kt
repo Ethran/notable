@@ -1,14 +1,14 @@
 package com.ethran.notable.io
 
 import androidx.core.net.toUri
-import com.ethran.notable.TAG
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+private val log = ShipBook.getLogger("autoExport")
 
 /**
  * Exports a notebook to its externally linked file, if one is configured.
@@ -31,7 +31,7 @@ fun exportToLinkedFile(
         val uriStr = bookRepository.getById(bookId)?.linkedExternalUri
         if (!uriStr.isNullOrBlank()) {
             try {
-                Log.i(TAG, "Exporting page to linked file, dictionary: $uriStr")
+                log.i("Exporting page to linked file, dictionary: $uriStr")
                 exportEngine.export(
                     target = ExportTarget.Book(bookId),
                     format = ExportFormat.XOPP,
@@ -41,7 +41,7 @@ fun exportToLinkedFile(
                         overwrite = true
                     )
                 )
-                Log.i(TAG, "Export successful")
+                log.i("Export successful")
             } catch (e: Exception) {
                 logAndShowError(
                     "exportToLinkedFile",

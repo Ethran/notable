@@ -26,6 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.UUID
 
@@ -89,9 +90,16 @@ class EditorControlTower(
      * @param id The unique identifier of the page to switch to.
      */
     private suspend fun switchPage(id: String) {
-        state.changePage(id)
-        history.cleanHistory()
-        page.changePage(id)
+        // Switch to Main thread for Compose state mutations
+        withContext(Dispatchers.Main) {
+            state.changePage(id)
+            history.cleanHistory()
+        }
+
+        // Switch to (or ensure we are on) IO thread for Database operations
+        withContext(Dispatchers.IO) {
+            page.changePage(id)
+        }
     }
 
     fun setIsDrawing(value: Boolean) {

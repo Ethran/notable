@@ -35,14 +35,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.ethran.notable.TAG
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.noRippleClickable
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
 
+private val log = ShipBook.getLogger("FolderConfig")
 
 @Composable
 fun FolderConfigDialog(folderRepository: FolderRepository,
@@ -67,7 +67,7 @@ fun FolderConfigDialog(folderRepository: FolderRepository,
 
     Dialog(
         onDismissRequest = {
-            Log.i(TAG, "Closing Directory Dialog - upstream")
+            log.i("Closing Directory Dialog - upstream")
             onClose()
         }
     ) {

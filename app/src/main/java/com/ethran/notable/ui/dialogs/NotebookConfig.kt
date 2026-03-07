@@ -41,7 +41,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -55,7 +54,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ethran.notable.R
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Folder
@@ -66,8 +64,10 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.getFolderList
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
+
+private val log = ShipBook.getLogger("NotebookConfig")
 
 @Composable
 fun NotebookConfigDialog(
@@ -173,7 +173,7 @@ fun NotebookConfigDialog(
             onConfirm = { selectedFolder ->
                 showMoveDialog = false
                 onClose()
-                Log.i(TAG, "folder: $selectedFolder")
+                log.i("folder: $selectedFolder")
                 val updatedBook = book!!.copy(parentFolderId = selectedFolder)
                 bookFolder = selectedFolder
                 scope.launch {
@@ -246,7 +246,7 @@ fun NotebookConfigDialog(
                                 .padding(10.dp, 0.dp)
                                 .onFocusChanged { focusState ->
                                     if (!focusState.isFocused) {
-                                        Log.i(TAG, "loose focus")
+                                        log.i("loose focus")
                                         if (book!!.title != bookTitle) {
                                             val updatedBook = book!!.copy(title = bookTitle)
                                             scope.launch {

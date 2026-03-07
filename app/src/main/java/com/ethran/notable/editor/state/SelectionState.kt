@@ -11,7 +11,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
-import com.ethran.notable.TAG
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
@@ -23,10 +22,12 @@ import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.io.copyBitmapToClipboard
 import com.ethran.notable.ui.showHint
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import java.util.Date
 import java.util.UUID
+
+private val log = ShipBook.getLogger("SelectionState")
 
 class SelectionState {
     // all coordinates should be in page coordinates
@@ -128,14 +129,14 @@ class SelectionState {
         val selectedImagesToRemove = selectedImages
         if (!selectedImagesToRemove.isNullOrEmpty()) {
             val imageIds: List<String> = selectedImagesToRemove.map { it.id }
-            Log.i(TAG, "removing images")
+            log.i("removing images")
             page.removeImages(imageIds)
             operationList += Operation.AddImage(selectedImagesToRemove)
         }
         val selectedStrokesToRemove = selectedStrokes
         if (!selectedStrokesToRemove.isNullOrEmpty()) {
             val strokeIds: List<String> = selectedStrokesToRemove.map { it.id }
-            Log.i(TAG, "removing strokes")
+            log.i("removing strokes")
             page.removeStrokes(strokeIds)
             operationList += Operation.AddStroke(selectedStrokesToRemove)
         }
@@ -208,7 +209,7 @@ class SelectionState {
             }
         }
         if (!selectedImagesCopy.isNullOrEmpty()) {
-            Log.i(TAG, "Commit images to history.")
+            log.i("Commit images to history.")
 
             val displacedImages = selectedImagesCopy.map {
                 offsetImage(it, offset = offset.toOffset())
