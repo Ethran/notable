@@ -72,6 +72,7 @@ data class ToolbarUiState(
     val backgroundPath: String = "blank",
     val backgroundPageNumber: Int = 0,
     val notebookId: String? = null,
+    val pageId: String? = null,
     val currentPageNumber: Int = 0
 )
 
@@ -131,6 +132,7 @@ fun Toolbar(
         backgroundPath = state.pageView.pageFromDb?.background ?: "blank",
         backgroundPageNumber = state.pageView.getBackgroundPageNumber(),
         notebookId = state.pageView.pageFromDb?.notebookId,
+        pageId = state.pageView.pageFromDb?.notebookId,
         currentPageNumber = state.pageView.currentPageNumber
     )
 
@@ -495,11 +497,19 @@ fun ToolbarContent(
                     )
                     if (uiState.isMenuOpen)
                         ToolbarMenu(
-                            onExport = onExport,
+                            onExportPage = { format ->
+                                uiState.pageId?.let {
+                                    onExport(
+                                        ExportTarget.Page(it),
+                                        format
+                                    )
+                                } ?: "failed to export page, page Id is null"
+                            },
+                            onExportBook = uiState.notebookId?.let { bookId ->
+                                { format -> onExport(ExportTarget.Book(bookId), format) }
+                            },
                             goToBugReport = onNavigateToBugReport,
                             goToLibrary = onNavigateToLibrary,
-                            currentPageId = uiState.currentPageId,
-                            currentBookId = uiState.notebookId,
                             onClose = {
                                 if (uiState.isMenuOpen) {
                                     onMenuToggle()

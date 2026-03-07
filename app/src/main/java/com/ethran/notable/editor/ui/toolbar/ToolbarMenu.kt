@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -27,7 +28,6 @@ import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportFormat
-import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
@@ -37,11 +37,10 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ToolbarMenu(
-    onExport: suspend (ExportTarget, ExportFormat) -> String,
+    onExportPage: suspend (ExportFormat) -> String,
+    onExportBook: (suspend (ExportFormat) -> String)? = null,
     goToBugReport: () -> Unit,
     goToLibrary: () -> Unit,
-    currentPageId: String,
-    currentBookId: String?,
     onClose: () -> Unit,
     onBackgroundSelectorModalOpen: () -> Unit
 ) {
@@ -56,11 +55,10 @@ fun ToolbarMenu(
         properties = PopupProperties(focusable = true),
     ) {
         ToolbarMenuContent(
-            onExport = onExport,
+            onExportPage = onExportPage,
+            onExportBook = onExportBook,
             goToBugReport = goToBugReport,
             goToLibrary = goToLibrary,
-            currentPageId = currentPageId,
-            currentBookId = currentBookId,
             onClose = onClose,
             onBackgroundSelectorModalOpen = onBackgroundSelectorModalOpen
         )
@@ -69,11 +67,10 @@ fun ToolbarMenu(
 
 @Composable
 private fun ToolbarMenuContent(
-    onExport: suspend (ExportTarget, ExportFormat) -> String,
+    onExportPage: suspend (ExportFormat) -> String,
+    onExportBook: (suspend (ExportFormat) -> String)? = null,
     goToBugReport: () -> Unit,
     goToLibrary: () -> Unit,
-    currentPageId: String,
-    currentBookId: String?,
     onClose: () -> Unit,
     onBackgroundSelectorModalOpen: () -> Unit
 ) {
@@ -107,7 +104,7 @@ private fun ToolbarMenuContent(
         MenuItem(stringResource(R.string.export_page_to, "PDF")) {
             scope.launch(Dispatchers.IO) {
                 snackManager.runWithSnack(exportingPageToPdfMsg) {
-                    onExport(ExportTarget.Page(pageId = currentPageId), ExportFormat.PDF)
+                    onExportPage(ExportFormat.PDF)
                 }
             }
             onClose()
@@ -115,7 +112,7 @@ private fun ToolbarMenuContent(
         MenuItem(stringResource(R.string.export_page_to, "PNG")) {
             scope.launch(Dispatchers.IO) {
                 snackManager.runWithSnack(exportingPageToPngMsg) {
-                    onExport(ExportTarget.Page(pageId = currentPageId), ExportFormat.PNG)
+                    onExportPage(ExportFormat.PNG)
                 }
             }
             onClose()
@@ -123,7 +120,7 @@ private fun ToolbarMenuContent(
         MenuItem(stringResource(R.string.export_page_to, "JPEG")) {
             scope.launch(Dispatchers.IO) {
                 snackManager.runWithSnack(exportingPageToJpegMsg) {
-                    onExport(ExportTarget.Page(pageId = currentPageId), ExportFormat.JPEG)
+                    onExportPage(ExportFormat.JPEG)
                 }
             }
             onClose()
@@ -131,7 +128,7 @@ private fun ToolbarMenuContent(
         MenuItem(stringResource(R.string.export_page_to, "xopp")) {
             scope.launch(Dispatchers.IO) {
                 snackManager.runWithSnack(exportingPageToXoppMsg) {
-                    onExport(ExportTarget.Page(pageId = currentPageId), ExportFormat.XOPP)
+                    onExportPage(ExportFormat.XOPP)
                 }
             }
             onClose()
@@ -139,11 +136,11 @@ private fun ToolbarMenuContent(
         DividerCentered()
 
         // Book exports
-        if (currentBookId != null) {
+        if (onExportBook != null) {
             MenuItem(stringResource(R.string.export_book_to, "PDF")) {
                 scope.launch(Dispatchers.IO) {
                     snackManager.runWithSnack(exportingBookToPdfMsg) {
-                        onExport(ExportTarget.Book(bookId = currentBookId), ExportFormat.PDF)
+                        onExportBook(ExportFormat.PDF)
                     }
                 }
                 onClose()
@@ -151,7 +148,7 @@ private fun ToolbarMenuContent(
             MenuItem(stringResource(R.string.export_book_to, "PNG")) {
                 scope.launch(Dispatchers.IO) {
                     snackManager.runWithSnack(exportingBookToPngMsg) {
-                        onExport(ExportTarget.Book(bookId = currentBookId), ExportFormat.PNG)
+                        onExportBook(ExportFormat.PNG)
                     }
                 }
                 onClose()
@@ -159,7 +156,7 @@ private fun ToolbarMenuContent(
             MenuItem(stringResource(R.string.export_book_to, "xopp")) {
                 scope.launch(Dispatchers.IO) {
                     snackManager.runWithSnack(exportingBookToXoppMsg) {
-                        onExport(ExportTarget.Book(bookId = currentBookId), ExportFormat.XOPP)
+                        onExportBook(ExportFormat.XOPP)
                     }
                 }
                 onClose()
@@ -217,5 +214,18 @@ private fun ColumnScope.DividerCentered() {
             .align(Alignment.CenterHorizontally)
             .height(0.5.dp)
             .background(Color(0xFF777777))
+    )
+}
+
+@Composable
+@Preview(showBackground = true)
+fun ToolbarMenuPreview() {
+    ToolbarMenuContent(
+        onExportPage = { "Success" },
+        onExportBook = { "Success" },
+        goToBugReport = {},
+        goToLibrary = {},
+        onClose = {},
+        onBackgroundSelectorModalOpen = {}
     )
 }
