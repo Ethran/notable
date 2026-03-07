@@ -39,11 +39,12 @@ class PagesViewModel @Inject constructor(
         viewModelScope.launch {
             appRepository.bookRepository.getByIdLive(bookId).asFlow().collect { book ->
                 if (book != null) {
+                    val folderList = getFolderList(appRepository, book.parentFolderId)
                     _uiState.update { it.copy(
                         bookId = bookId,
                         pageIds = book.pageIds,
                         openPageId = book.openPageId,
-                        folderList = getFolderList(context, book.parentFolderId),
+                        folderList = folderList,
                         isLoading = false
                     ) }
                 }
@@ -59,7 +60,7 @@ class PagesViewModel @Inject constructor(
 
     fun deletePage(pageId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            com.ethran.notable.data.deletePage(context, pageId)
+            com.ethran.notable.data.deletePage(appRepository, pageId, context.filesDir)
         }
     }
 
@@ -70,6 +71,8 @@ class PagesViewModel @Inject constructor(
     }
 
     fun newPageInBook(bookId: String, index: Int) {
-        appRepository.newPageInBook(bookId, index)
+        viewModelScope.launch(Dispatchers.IO) {
+            appRepository.newPageInBook(bookId, index)
+        }
     }
 }

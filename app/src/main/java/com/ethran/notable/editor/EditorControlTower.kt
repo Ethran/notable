@@ -23,7 +23,6 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -89,7 +88,7 @@ class EditorControlTower(
      *
      * @param id The unique identifier of the page to switch to.
      */
-    private fun switchPage(id: String) {
+    private suspend fun switchPage(id: String) {
         state.changePage(id)
         history.cleanHistory()
         page.changePage(id)
@@ -120,18 +119,21 @@ class EditorControlTower(
     }
 
     fun goToNextPage() {
-        logEditorControlTower.i("Going to next page")
-        val next = state.getNextPage()
-        if (next != null)
-            switchPage(next)
-
+        scope.launch(Dispatchers.IO) {
+            logEditorControlTower.i("Going to next page")
+            val next = state.getNextPage()
+            if (next != null)
+                switchPage(next)
+        }
     }
 
     fun goToPreviousPage() {
-        logEditorControlTower.i("Going to previous page")
-        val previous = state.getPreviousPage()
-        if (previous != null)
-            switchPage(previous)
+        scope.launch(Dispatchers.IO) {
+            logEditorControlTower.i("Going to previous page")
+            val previous = state.getPreviousPage()
+            if (previous != null)
+                switchPage(previous)
+        }
     }
 
     fun undo() {

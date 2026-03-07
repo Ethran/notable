@@ -4,6 +4,9 @@ import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.db.BookRepository
+import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -26,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class CanvasObserverRegistry(
+    private val appRepository: AppRepository,
     private val coroutineScope: CoroutineScope,
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
@@ -255,7 +259,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
                 val pageNumber =
-                    AppRepository(drawCanvas.context).getPageNumber(page.pageFromDb?.notebookId!!, pageId)
+                   appRepository.getPageNumber(page.pageFromDb?.notebookId!!, pageId)
                 Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
 
                 val previewBitmap = withContext(Dispatchers.IO) {

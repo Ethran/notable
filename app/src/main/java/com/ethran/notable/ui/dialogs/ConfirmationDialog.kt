@@ -84,9 +84,9 @@ fun ShowConfirmationDialog(
 
 @Composable
 fun ShowExportDialog(
+    exportEngine: ExportEngine,
     snackManager: SnackState,
     bookId: String,
-    context: Context,
     onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -119,7 +119,7 @@ fun ShowExportDialog(
                             snackManager.runWithSnack(
                                 "Exporting book to PDF.."
                             ) {
-                                ExportEngine(context).export(
+                                exportEngine.export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.PDF,
                                     options = ExportOptions(
@@ -138,7 +138,7 @@ fun ShowExportDialog(
                             snackManager.runWithSnack(
                                 "Exporting the book to xopp..."
                             ) {
-                                ExportEngine(context).export(
+                               exportEngine.export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.XOPP,
                                 )

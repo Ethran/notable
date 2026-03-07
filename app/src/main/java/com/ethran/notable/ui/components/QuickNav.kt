@@ -40,6 +40,7 @@ private val logQuickNav = ShipBook.getLogger("QuickNav")
 
 @Composable
 fun QuickNav(
+    appRepository: AppRepository,
     currentPageId: String?,
     quickNavSourcePageId: String?,
     onClose: () -> Unit,
@@ -47,7 +48,6 @@ fun QuickNav(
     goToFolder: (String?) -> Unit,
 ) {
     val context = LocalContext.current
-    val appRepository = remember { AppRepository(context) }
 
     // Provide the ViewModel using a custom Factory to inject appRepository
     val viewModel: QuickNavViewModel = viewModel(factory = object : ViewModelProvider.Factory {
@@ -66,6 +66,7 @@ fun QuickNav(
     }
 
     QuickNavContent(
+        appRepository = appRepository,
         uiState = uiState,
         onClose = {
             logQuickNav.d("outside tap -> close")
@@ -83,6 +84,7 @@ fun QuickNav(
 
 @Composable
 fun QuickNavContent(
+    appRepository: AppRepository,
     uiState: QuickNavUiState,
     onClose: () -> Unit,
     onNavigateBreadcrumb: (String?) -> Unit,
@@ -131,6 +133,7 @@ fun QuickNavContent(
             )
 
             ShowPagesRow(
+                appRepository = appRepository,
                 pages = uiState.favoritePages,
                 currentPageId = uiState.currentPageId,
                 title = "Favorite pages",
@@ -188,24 +191,24 @@ private fun QuickNavHeaderRow(
 @Preview(showBackground = false)
 @Composable
 fun QuickNavContentPreview() {
-    QuickNavContent(
-        uiState = QuickNavUiState(
-            favoritePages = listOf(Page(id = "page1")),
-            isLoading = false,
-            currentPageId = "page1",
-            folderId = "folder1",
-            isCurrentPageFavorite = true,
-            bookPageCount = 10,
-            currentBookIndex = 4,
-            favoriteIndexesInBook = listOf(0, 4, 9)
-        ),
-        onClose = {},
-        onNavigateBreadcrumb = {},
-        onToggleFavorite = {},
-        onScrubStart = {},
-        onScrubPreview = {},
-        onScrubEnd = {},
-        onReturnClick = {},
-        goToPage = {},
-    )
+//    QuickNavContent(
+//        uiState = QuickNavUiState(
+//            favoritePages = listOf(Page(id = "page1")),
+//            isLoading = false,
+//            currentPageId = "page1",
+//            folderId = "folder1",
+//            isCurrentPageFavorite = true,
+//            bookPageCount = 10,
+//            currentBookIndex = 4,
+//            favoriteIndexesInBook = listOf(0, 4, 9)
+//        ),
+//        onClose = {},
+//        onNavigateBreadcrumb = {},
+//        onToggleFavorite = {},
+//        onScrubStart = {},
+//        onScrubPreview = {},
+//        onScrubEnd = {},
+//        onReturnClick = {},
+//        goToPage = {},
+//    )
 }

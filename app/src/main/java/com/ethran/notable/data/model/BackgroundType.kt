@@ -18,7 +18,7 @@ sealed class BackgroundType(val key: String, val folderName: String) {
     // Static page of pdf
     data class Pdf(val page: Int) : BackgroundType("pdf$page", "pdfs")
 
-    fun AutoPdf.getPage(appRepository: AppRepository, bookId: String?, pageId: String): Int? {
+    suspend fun AutoPdf.getPage(appRepository: AppRepository, bookId: String?, pageId: String): Int? {
         if (bookId == null) return 0
         return try {
             appRepository.getPageNumber(bookId, pageId)

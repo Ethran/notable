@@ -10,12 +10,14 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import com.ethran.notable.APP_SETTINGS_KEY
-import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.hasFilePermission
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -33,44 +35,47 @@ data class Kv(
 @Dao
 interface KvDao {
     @Query("SELECT * FROM kv WHERE `key`=:key")
-    fun get(key: String): Kv?
+    suspend fun get(key: String): Kv?
 
     @Query("SELECT * FROM kv WHERE `key`=:key")
     fun getLive(key: String): LiveData<Kv?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun set(kv: Kv)
+    suspend fun set(kv: Kv)
 
     @Query("DELETE FROM kv WHERE `key`=:key")
-    fun delete(key: String)
+    suspend fun delete(key: String)
 
 }
 
 @Singleton
 class KvRepository @Inject constructor(
-    @ApplicationContext context: Context
+    private val db: KvDao,
+    @param:ApplicationContext private val context: Context
 ) {
-    var db = AppDatabase.getDatabase(context).kvDao()
 
-    init {
+    private fun checkPermission() {
         if (!hasFilePermission(context)) {
             throw IllegalStateException("Storage permission not granted or DB not accessible.")
         }
     }
 
-    fun get(key: String): Kv? {
-        return db.get(key)
+    suspend fun get(key: String): Kv? = withContext(Dispatchers.IO) {
+        checkPermission()
+        db.get(key)
     }
 
     fun getLive(key: String): LiveData<Kv?> {
         return db.getLive(key)
     }
 
-    fun set(kv: Kv) {
-        return db.set(kv)
+    suspend fun set(kv: Kv) = withContext(Dispatchers.IO) {
+        checkPermission()
+        db.set(kv)
     }
 
-    fun delete(key: String) {
+    suspend fun delete(key: String) = withContext(Dispatchers.IO) {
+        checkPermission()
         db.delete(key)
     }
 
@@ -92,6 +97,7 @@ class KvRepository @Inject constructor(
 class KvProxy @Inject constructor(
     private val kvRepository: KvRepository
 ) {
+    private val log = ShipBook.getLogger("KvProxy")
 
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
         return kvRepository.getLive(key).map {
@@ -101,20 +107,21 @@ class KvProxy @Inject constructor(
         }
     }
 
-    fun <T> get(key: String, serializer: KSerializer<T>): T? {
-        val kv = kvRepository.get(key) ?: return null //returns null when there is no database
+    suspend fun <T> get(key: String, serializer: KSerializer<T>): T? = withContext(Dispatchers.IO) {
+        val kv = kvRepository.get(key)
+            ?: return@withContext null //returns null when there is no database
         val jsonValue = kv.value
-        return Json.decodeFromString(serializer, jsonValue)
+        Json.decodeFromString(serializer, jsonValue)
     }
 
 
-    fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
+    suspend fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
         val jsonValue = Json.encodeToString(serializer, value)
-        Log.i(TAG, jsonValue)
+        log.i("Setting $key to $value")
         kvRepository.set(Kv(key, jsonValue))
     }
 
-    fun setAppSettings(value: AppSettings) {
+    suspend fun setAppSettings(value: AppSettings) {
         setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
         GlobalAppSettings.update(value)
     }

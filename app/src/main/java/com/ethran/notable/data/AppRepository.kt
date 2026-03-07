@@ -1,6 +1,5 @@
 package com.ethran.notable.data
 
-import android.content.Context
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.FolderRepository
@@ -14,27 +13,26 @@ import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
-import com.onyx.android.sdk.extension.isNotNull
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Singleton
 
-class AppRepository @Inject constructor(@param:ApplicationContext val context: Context) {
-    val bookRepository = BookRepository(context)
-    val pageRepository = PageRepository(context)
-    val strokeRepository = StrokeRepository(context)
-    val imageRepository = ImageRepository(context)
-    val folderRepository = FolderRepository(context)
-    val kvRepository = KvRepository(context)
-    val kvProxy = KvProxy(kvRepository)
-
-    fun getNextPageIdFromBookAndPageOrCreate(
+@Singleton
+class AppRepository @Inject constructor(
+    val bookRepository: BookRepository,
+    val pageRepository: PageRepository,
+    val strokeRepository: StrokeRepository,
+    val imageRepository: ImageRepository,
+    val folderRepository: FolderRepository,
+    val kvProxy: KvProxy
+) {
+    suspend fun getNextPageIdFromBookAndPageOrCreate(
         notebookId: String,
         pageId: String
     ): String {
         val index = getNextPageIdFromBookAndPage(notebookId, pageId)
-        if (index.isNotNull())
+        if (index != null)
             return index
         val book = bookRepository.getById(notebookId = notebookId)
         // creating a new page
@@ -44,7 +42,7 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
         return page.id
     }
 
-    fun getNextPageIdFromBookAndPage(
+    suspend fun getNextPageIdFromBookAndPage(
         notebookId: String,
         pageId: String
     ): String? {
@@ -55,7 +53,7 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
         return book.pageIds[index + 1]
     }
 
-    fun getPreviousPageIdFromBookAndPage(
+    suspend fun getPreviousPageIdFromBookAndPage(
         notebookId: String,
         pageId: String
     ): String? {
@@ -67,7 +65,7 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
         return book.pageIds[index - 1]
     }
 
-    fun duplicatePage(pageId: String) {
+    suspend fun duplicatePage(pageId: String) {
         val pageWithStrokes = pageRepository.getWithStrokeById(pageId)
         val pageWithImages = pageRepository.getWithImageById(pageId)
         val duplicatedPage = pageWithStrokes.page.copy(
@@ -105,10 +103,10 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
         }
     }
 
-    fun isObservable(notebookId: String?): Boolean {
+    suspend fun isObservable(notebookId: String?): Boolean {
         if (notebookId == null) return false
         val book = bookRepository.getById(notebookId = notebookId) ?: return false
-        return BackgroundType.Companion.fromKey(book.defaultBackgroundType) == BackgroundType.AutoPdf
+        return BackgroundType.fromKey(book.defaultBackgroundType) == BackgroundType.AutoPdf
     }
 
     /**
@@ -119,7 +117,7 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
      * @return The 0-based index of the page within the notebook's page list. Returns -1 if the page is not found.
      * @throws NoSuchElementException if the notebook with the given notebookId is not found.
      */
-    fun getPageNumber(notebookId: String, pageId: String): Int {
+    suspend fun getPageNumber(notebookId: String, pageId: String): Int {
         // Fetch the book or throw an exception if it doesn't exist.
         val book = bookRepository.getById(notebookId)
             ?: throw NoSuchElementException("Notebook with ID '$notebookId' not found.")
@@ -127,7 +125,7 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
         return book.getPageIndex(pageId)
     }
 
-    fun createNewQuickPage(parentFolderId: String? = null) : String? {
+    suspend fun createNewQuickPage(parentFolderId: String? = null) : String? {
         val page = Page(
             notebookId = null,
             background = GlobalAppSettings.current.defaultNativeTemplate,
@@ -146,7 +144,7 @@ class AppRepository @Inject constructor(@param:ApplicationContext val context: C
         return page.id
     }
 
-    fun newPageInBook(notebookId: String, index: Int = 0): String? {
+    suspend fun newPageInBook(notebookId: String, index: Int = 0): String? {
         try {
             val book = bookRepository.getById(notebookId)
                 ?: return null

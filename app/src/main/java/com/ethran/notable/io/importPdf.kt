@@ -46,10 +46,10 @@ fun handleFileSaving(
 }
 
 @WorkerThread
-fun importPdf(
+suspend fun importPdf(
     fileToSave: File,
     options: ImportOptions,
-    savePageToDatabase: (PageContent) -> Unit
+    savePageToDatabase: suspend (PageContent) -> Unit
 ): String {
     Log.v(TAG, "Importing PDF from")
 

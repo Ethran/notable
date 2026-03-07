@@ -173,7 +173,7 @@ object PageDataManager {
         getOrStartLoadingJob(appRepository, pageId, bookId).join()
     }
 
-    private fun cancelUnnecessaryLoading(
+    private suspend fun cancelUnnecessaryLoading(
         appRepository: AppRepository,
         pageId: String,
         bookId: String
@@ -190,7 +190,7 @@ object PageDataManager {
         )
     }
 
-    fun cacheNeighbors(appRepository: AppRepository, pageId: String, bookId: String) {
+    suspend fun cacheNeighbors(appRepository: AppRepository, pageId: String, bookId: String) {
 
         // Only attempt to cache neighbors if we have memory to spare.
         if (!hasEnoughMemory(15)) return
@@ -239,7 +239,7 @@ object PageDataManager {
         }
     }
 
-    private fun preLoadBackground(appRepository: AppRepository, pageId: String) {
+    private suspend fun preLoadBackground(appRepository: AppRepository, pageId: String) {
         val pageFromDb = appRepository.pageRepository.getById(pageId) ?: return
         val backgroundType = pageFromDb.getBackgroundType()
         val background = pageFromDb.background
@@ -269,7 +269,7 @@ object PageDataManager {
                 preLoadBackground(appRepository, pageId)
             }
 
-            val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
+            val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(pageId)
             // What will happened if page isn't in repository?
             cacheStrokes(pageId, pageWithStrokes.strokes)
             val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)

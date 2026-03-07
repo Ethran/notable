@@ -22,7 +22,9 @@ import com.ethran.notable.ui.views.WelcomeDestination
 import com.ethran.notable.utils.hasFilePermission
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val log = ShipBook.getLogger("NotableAppState")
 
@@ -76,13 +78,21 @@ class NotableNavigator(
     }
 
     fun goToAnchor(appRepository: AppRepository){
-        val notebookId = runCatching {
-            appRepository.pageRepository.getById(quickNavSourcePageId?: return)?.notebookId
-        }.onFailure {
-            log.w("Failed to load page $quickNavSourcePageId", it)
-        }.getOrNull()
-        navController.navigate(EditorDestination.createRoute(quickNavSourcePageId!!, notebookId))
-
+        val targetPageId = quickNavSourcePageId
+        if (targetPageId == null) {
+            log.e("QuickNav source pageId is null")
+            return
+        }
+        coroutineScope.launch {
+            val notebookId = runCatching {
+                withContext(Dispatchers.IO) {
+                    appRepository.pageRepository.getById(quickNavSourcePageId ?: return@withContext null)?.notebookId
+                }
+            }.onFailure {
+                log.w("Failed to load page $quickNavSourcePageId", it)
+            }.getOrNull()
+            navController.navigate(EditorDestination.createRoute(targetPageId, notebookId))
+        }
     }
 
     fun shouldAnchorBeVisible(): Boolean {
@@ -118,19 +128,27 @@ class NotableNavigator(
     }
 
     fun goToPage(appRepository: AppRepository, pageId: String) {
-        val bookId = runCatching {
-            appRepository.pageRepository.getById(pageId)?.notebookId
-        }.onFailure {
-            log.d("failed to resolve bookId for $pageId", it)
-        }.getOrNull()
-        val url = EditorDestination.createRoute(pageId, bookId)
-        log.d("navigate -> $url")
-        navController.navigate(url)
+        coroutineScope.launch {
+            val bookId = runCatching {
+                withContext(Dispatchers.IO) {
+                    appRepository.pageRepository.getById(pageId)?.notebookId
+                }
+            }.onFailure {
+                log.d("failed to resolve bookId for $pageId", it)
+            }.getOrNull()
+            val url = EditorDestination.createRoute(pageId, bookId)
+            log.d("navigate -> $url")
+            navController.navigate(url)
+        }
     }
 
     fun onCreateNewQuickPage(appRepository: AppRepository, folderId: String?) {
-        val pageId = appRepository.createNewQuickPage(parentFolderId = folderId) ?: return
-        navController.navigate(EditorDestination.createRoute(pageId, null))
+        coroutineScope.launch {
+            val pageId = withContext(Dispatchers.IO) {
+                appRepository.createNewQuickPage(parentFolderId = folderId)
+            } ?: return@launch
+            navController.navigate(EditorDestination.createRoute(pageId, null))
+        }
     }
 
 
