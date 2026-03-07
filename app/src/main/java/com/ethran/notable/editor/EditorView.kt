@@ -240,9 +240,15 @@ fun PositionedToolbar(
         }
     }
 
-    val pageNumberInfo: String = remember(book?.id, editorState.currentPageId) {
-        book?.let { (it.getPageIndex(editorState.currentPageId) + 1).toString() } ?: "?"
-    } + "/" + (book?.pageIds?.size?.toString() ?: "?")
+    val pageNumberInfo: String = remember(
+        book?.id,
+        editorState.currentPageId,
+        book?.pageIds?.size
+    ) {
+        val currentPage = book?.let { (it.getPageIndex(editorState.currentPageId) + 1).toString() } ?: "?"
+        val totalPages = book?.pageIds?.size?.toString() ?: "?"
+        "$currentPage/$totalPages"
+    }
 
     val toolbar = @Composable {
         Toolbar(

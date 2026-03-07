@@ -53,7 +53,7 @@ import kotlinx.coroutines.launch
 private val log = ShipBook.getLogger("Toolbar")
 
 /**
- * UI State for the Toolbar to make it previable and decoupled from logic.
+ * UI State for the Toolbar to make it previewable and decoupled from logic.
  */
 data class ToolbarUiState(
     val isToolbarOpen: Boolean = true,
@@ -483,9 +483,13 @@ fun ToolbarContent(
                             onExport = onExport,
                             goToBugReport = onNavigateToBugReport,
                             goToLibrary = onNavigateToLibrary,
-                            currentPageId = "",
+                            currentPageId = uiState.currentPageId,
                             currentBookId = uiState.notebookId,
-                            onClose = onMenuToggle,
+                            onClose = {
+                                if (uiState.isMenuOpen) {
+                                    onMenuToggle()
+                                }
+                            },
                             onBackgroundSelectorModalOpen = {
                                 onBackgroundSelectorToggle(true)
                             }
@@ -540,7 +544,7 @@ fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
 
 @Composable
 @Preview(showBackground = true, widthDp = 1200)
-fun ToolbarPreview (){
+fun ToolbarPreview() {
     val uiState = ToolbarUiState(
         isToolbarOpen = true,
         mode = Mode.Draw,
