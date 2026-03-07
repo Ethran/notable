@@ -193,11 +193,11 @@ class SelectionState {
                 offsetStroke(it, offset = offset.toOffset())
             }
 
-            if (placementMode == PlacementMode.Move)
-                page.removeStrokes(selectedStrokesCopy.map { it.id })
-
-            page.addStrokes(displacedStrokes)
-
+            if (placementMode == PlacementMode.Move) {
+                page.updateStrokes(displacedStrokes)
+            } else {
+                page.addStrokes(displacedStrokes)
+            }
 
             if (offset.x != 0 || offset.y != 0 || placementMode == PlacementMode.Paste) {
                 // A displacement happened or this is a paste commit - create history for this

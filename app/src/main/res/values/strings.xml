@@ -33,6 +33,7 @@
     <string name="gestures_swipe_right_action">Swipe Right Action</string>
     <string name="gestures_two_finger_swipe_left_action">Two Finger Swipe Left Action</string>
     <string name="gestures_two_finger_swipe_right_action">Two Finger Swipe Right Action</string>
+    <string name="enable_quick_nav">Touch with three fingers to open QuickNav</string>
     <string name="work_in_progress">(work in progress)</string>
     <string name="toolbar_position_top">Top</string>
     <string name="toolbar_position_bottom">Bottom</string>
@@ -43,6 +44,7 @@
     <string name="gesture_action_next_page">Next Page</string>
     <string name="gesture_action_toggle_pen_eraser">Toggle Pen / Eraser</string>
     <string name="gesture_action_toggle_zen_mode">Toggle Zen Mode</string>
+    <string name="gesture_action_select">Select</string>
     <string name="details_notebook_title">Title:</string>
     <string name="details_notebook_default_background_template">Default Background Template</string>
     <string name="details_notebook_pages">Pages: %1$d</string>
@@ -100,6 +102,7 @@
     <string name="observe_pdf">Observe PDF</string>
     <string name="current_page">Current Page</string>
     <string name="toolbar_scribble_to_erase_two_lined_short">Scribble\nto Erase</string>
+    <string name="toolbar_position">Toolbar Position</string>
 
     <!-- Sync Settings Tab -->
     <string name="settings_tab_sync_name">Sync</string>

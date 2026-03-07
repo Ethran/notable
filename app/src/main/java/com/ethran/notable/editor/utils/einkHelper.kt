@@ -1,6 +1,7 @@
 package com.ethran.notable.editor.utils
 
 import android.graphics.Rect
+import android.os.Build
 import android.view.View
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -230,13 +231,15 @@ fun onSurfaceChanged(view: View) {
 }
 
 
-fun onSurfaceDestroy(view: View, touchHelper: TouchHelper) {
+fun onSurfaceDestroy(view: View, touchHelper: TouchHelper?) {
+    if(touchHelper == null) return
     einkLogger.v("onSurfaceDestroy, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
     touchHelper.setRawDrawingEnabled(false)
 }
 
 
-fun setupSurface(view: View, touchHelper: TouchHelper, toolbarHeight: Int) {
+fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
+    if(touchHelper == null) return
     // Takes at least 50ms on Note 4c,
     // and I don't think that we need it immediately
     einkLogger.i("Setup editable surface")
@@ -270,7 +273,8 @@ fun setupSurface(view: View, touchHelper: TouchHelper, toolbarHeight: Int) {
 
 }
 
-fun prepareForPartialUpdate(view: View, touchHelper: TouchHelper) {
+fun prepareForPartialUpdate(view: View, touchHelper: TouchHelper?) {
+    if(touchHelper == null) return
     EpdController.setDisplayScheme(SCHEME_SCRIBBLE)
 //    EpdController.useFastScheme() // the same as above
     EpdController.enableA2ForSpecificView(view)
@@ -313,7 +317,8 @@ fun restoreDefaults(view: View) {
 }
 
 
-fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelper) {
+fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelper?) {
+    if(touchHelper == null) return
     refreshScreenRegion(view, dirtyRect)
     resetScreenFreeze(touchHelper)
     // we need to wait before refreshing, as onyx library has its own buffer that needs to be updated. Otherwise we will refresh to correct, then  incorrect and then correct state.
@@ -321,7 +326,8 @@ fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelp
 //    resetScreenFreeze(touchHelper)
 }
 
-fun resetScreenFreeze(touchHelper: TouchHelper, view: View? = null) {
+fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
+    if(touchHelper == null) return
     touchHelper.isRawDrawingRenderEnabled = false
     touchHelper.isRawDrawingRenderEnabled = true
 //    setRawDrawingEnabled(false)
@@ -406,4 +412,28 @@ fun Modifier.autoEInkAnimationOnScroll(
     }
 
     this.nestedScroll(connection)
+}
+
+object DeviceCompat {
+    /**
+     * True when running on an ONYX BOOX device and Onyx SDK classes are present.
+     * Checks manufacturer/brand and that a core Onyx class exists at runtime.
+     */
+    val isOnyxDevice: Boolean by lazy {
+        isOnyxManufacturer() && isOnyxSdkAvailable()
+    }
+
+    private fun isOnyxManufacturer(): Boolean {
+        return "ONYX".equals(Build.MANUFACTURER, ignoreCase = true)
+                || "ONYX".equals(Build.BRAND, ignoreCase = true)
+    }
+
+    private fun isOnyxSdkAvailable(): Boolean {
+        return try {
+            Class.forName("com.onyx.android.sdk.pen.TouchHelper")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
 }

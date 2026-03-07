@@ -166,6 +166,7 @@ fun handleErase(
     val deletedStrokes = selectStrokesFromPath(page.strokes, outPath)
 
     val deletedStrokeIds = deletedStrokes.map { it.id }
+
     if (deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 

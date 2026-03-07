@@ -1,7 +1,5 @@
 package com.ethran.notable.ui.components
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
@@ -10,33 +8,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import coil.compose.rememberAsyncImagePainter
 import java.io.File
 
 @Composable
-fun PagePreview(modifier: Modifier, pageId: String) {
+fun PagePreview(modifier: Modifier = Modifier, pageId: String) {
+    val isPreview = LocalInspectionMode.current
     val context = LocalContext.current
+
+    // If we are in the Android Studio Preview, just draw a gray placeholder
+    if (isPreview) {
+        androidx.compose.foundation.layout.Box(
+            modifier = modifier.background(Color.LightGray)
+        )
+        return
+    }
+
+    // Pass the File directly to Coil.
+    // Coil automatically handles decoding the Bitmap on an IO thread!
     val imgFile = remember(pageId) {
         File(context.filesDir, "pages/previews/thumbs/$pageId")
     }
 
-    var imgBitmap: Bitmap? = null
-    if (imgFile.exists()) {
-        imgBitmap = remember(pageId) {
-            BitmapFactory.decodeFile(imgFile.absolutePath)
-        }
-    }
-
-    /*if(imgBitmap == null) {
-        Text("No preview available yet", modifier.then(
-                Modifier.padding(10.dp)
-            ))
-    }else {*/
     Image(
-        painter = rememberAsyncImagePainter(model = imgBitmap),
-        contentDescription = "Image",
+        painter = rememberAsyncImagePainter(model = imgFile),
+        contentDescription = "Page Preview",
         contentScale = ContentScale.FillWidth,
-        modifier = modifier.then(Modifier.background(Color.LightGray))
+        modifier = modifier.background(Color.LightGray)
     )
-    //}
 }

@@ -1,6 +1,5 @@
 package com.ethran.notable.io
 
-import android.content.Context
 import androidx.core.net.toUri
 import com.ethran.notable.TAG
 import com.ethran.notable.data.db.BookRepository
@@ -24,19 +23,16 @@ import kotlinx.coroutines.launch
  * @param bookRepository The repository to access notebook data, specifically to retrieve the linked file URI.
  */
 fun exportToLinkedFile(
-    context: Context,
-    bookId: String?,
+    exportEngine: ExportEngine,
+    bookId: String,
     bookRepository: BookRepository,
 ) {
-    if (bookId == null)
-        return
-
-    val uriStr = bookRepository.getById(bookId)?.linkedExternalUri
-    if (!uriStr.isNullOrBlank()) {
-        CoroutineScope(Dispatchers.IO).launch {
+    CoroutineScope(Dispatchers.IO).launch {
+        val uriStr = bookRepository.getById(bookId)?.linkedExternalUri
+        if (!uriStr.isNullOrBlank()) {
             try {
                 Log.i(TAG, "Exporting page to linked file, dictionary: $uriStr")
-                ExportEngine(context).export(
+                exportEngine.export(
                     target = ExportTarget.Book(bookId),
                     format = ExportFormat.XOPP,
                     options = ExportOptions(

@@ -6,41 +6,26 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
-import com.ethran.notable.data.AppRepository
 import com.ethran.notable.ui.noRippleClickable
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Anchor
-import io.shipbook.shipbooksdk.ShipBook
 
-private val logAnchor = ShipBook.getLogger("Anchor")
 
 @Composable
 fun Anchor(
-    navController: NavController,
-    currentPageId: String?,
-    quickNavSourcePageId: String?,
     onClose: () -> Unit,
     verticalOffsetPercent: Float = 0.10f // ~10% from top
 ) {
-    val shouldShow = quickNavSourcePageId != null && quickNavSourcePageId != currentPageId
-    if (!shouldShow) return
-
-    val context = LocalContext.current
-    val appRepository = remember { AppRepository(context) }
-
     val configuration = LocalConfiguration.current
     val screenHeightDp = configuration.screenHeightDp.dp
     val yOffset = screenHeightDp * verticalOffsetPercent
@@ -55,29 +40,16 @@ fun Anchor(
             .size(width = totalWidth, height = circleDiameter)
             .semantics { contentDescription = "Return to previous page" }
             .noRippleClickable {
-                val notebookId = runCatching {
-                    appRepository.pageRepository.getById(quickNavSourcePageId)?.notebookId
-                }.onFailure {
-                    logAnchor.w("Failed to load page $quickNavSourcePageId", it)
-                }.getOrNull()
-
-                val route = if (notebookId == null) {
-                    "pages/$quickNavSourcePageId"
-                } else {
-                    "books/$notebookId/pages/$quickNavSourcePageId"
-                }
-                logAnchor.d("Anchor navigate -> $route")
                 onClose()
-                navController.navigate(route)
             },
         contentAlignment = Alignment.Center
     ) {
-        drawAnchorLabel(totalWidth, circleDiameter, extensionWidthDp)
+        DrawAnchorLabel(totalWidth, circleDiameter, extensionWidthDp)
     }
 }
 
 @Composable
-fun drawAnchorLabel(totalWidth: Dp, circleDiameter: Dp, extensionWidthDp: Dp) {
+private fun DrawAnchorLabel(totalWidth: Dp, circleDiameter: Dp, extensionWidthDp: Dp) {
     Canvas(modifier = Modifier.size(width = totalWidth, height = circleDiameter)) {
 
         val extW = extensionWidthDp.toPx()

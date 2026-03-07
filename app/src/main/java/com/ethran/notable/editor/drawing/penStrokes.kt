@@ -10,7 +10,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.pressure
+import com.ethran.notable.editor.canvas.pressure
 import com.ethran.notable.editor.utils.pointsToPath
 import com.onyx.android.sdk.data.note.TouchPoint
 import io.shipbook.shipbooksdk.ShipBook

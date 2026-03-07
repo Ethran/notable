@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.HistoryBusActions
@@ -24,7 +25,6 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -43,14 +43,10 @@ class EditorControlTower(
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
 
 
-    companion object {
-        val changePage = MutableSharedFlow<String>(extraBufferCapacity = 1)
-
-    }
 
     fun registerObservers() {
         scope.launch {
-            changePage.collect { pageId ->
+            CanvasEventBus.changePage.collect { pageId ->
                 logEditorControlTower.d("Change to page $pageId")
                 switchPage(pageId)
                 page.changePage(pageId)
@@ -82,7 +78,7 @@ class EditorControlTower(
                     onPageScroll(-delta)
                 }
             }
-            DrawCanvas.refreshUiImmediately.emit(Unit)
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
         return Offset.Zero // All handled
     }
@@ -95,7 +91,8 @@ class EditorControlTower(
      *
      * @param id The unique identifier of the page to switch to.
      */
-    private fun switchPage(id: String) {
+    private suspend fun switchPage(id: String) {
+        // TODO: move it to seprate funtion
         // Trigger sync on the page we're leaving (if enabled)
         val settings = GlobalAppSettings.current
         if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose) {
@@ -153,25 +150,28 @@ class EditorControlTower(
     }
 
     fun goToNextPage() {
-        logEditorControlTower.i("Going to next page")
-        val next = state.getNextPage()
-        if (next != null)
-            switchPage(next)
-
+        scope.launch(Dispatchers.IO) {
+            logEditorControlTower.i("Going to next page")
+            val next = state.getNextPage()
+            if (next != null)
+                switchPage(next)
+        }
     }
 
     fun goToPreviousPage() {
-        logEditorControlTower.i("Going to previous page")
-        val previous = state.getPreviousPage()
-        if (previous != null)
-            switchPage(previous)
+        scope.launch(Dispatchers.IO) {
+            logEditorControlTower.i("Going to previous page")
+            val previous = state.getPreviousPage()
+            if (previous != null)
+                switchPage(previous)
+        }
     }
 
     fun undo() {
         scope.launch {
             logEditorControlTower.i("Undo called")
             history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
-//            DrawCanvas.refreshUi.emit(Unit)
+//            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
@@ -179,7 +179,7 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Redo called")
             history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
-//            DrawCanvas.refreshUi.emit(Unit)
+//            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
@@ -194,7 +194,7 @@ class EditorControlTower(
                 else
                     page.updateZoom(delta, center)
             }
-            DrawCanvas.refreshUiImmediately.emit(Unit)
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
     }
 
@@ -203,7 +203,7 @@ class EditorControlTower(
             page.scroll = Offset(0f, page.scroll.y)
             page.applyZoomAndRedraw(1f)
             // Request UI update
-            DrawCanvas.refreshUiImmediately.emit(Unit)
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
     }
 
@@ -256,7 +256,7 @@ class EditorControlTower(
             history.addOperationsToHistory(operationList)
         }
         scope.launch {
-            DrawCanvas.refreshUi.emit(Unit)
+            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
@@ -265,7 +265,7 @@ class EditorControlTower(
         history.addOperationsToHistory(operationList)
         state.isDrawing = true
         scope.launch {
-            DrawCanvas.refreshUi.emit(Unit)
+            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
@@ -276,7 +276,7 @@ class EditorControlTower(
             state.selectionState.resizeStrokes(scale, scope, page)
         // Emit a refresh signal to update UI
         scope.launch {
-            DrawCanvas.refreshUi.emit(Unit)
+            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 

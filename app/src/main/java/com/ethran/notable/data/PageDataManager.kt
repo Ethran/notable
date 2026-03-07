@@ -17,7 +17,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.persistBitmapFull
 import com.ethran.notable.editor.utils.persistBitmapThumbnail
 import com.ethran.notable.io.IN_IGNORED
@@ -173,7 +173,7 @@ object PageDataManager {
         getOrStartLoadingJob(appRepository, pageId, bookId).join()
     }
 
-    private fun cancelUnnecessaryLoading(
+    private suspend fun cancelUnnecessaryLoading(
         appRepository: AppRepository,
         pageId: String,
         bookId: String
@@ -190,7 +190,7 @@ object PageDataManager {
         )
     }
 
-    fun cacheNeighbors(appRepository: AppRepository, pageId: String, bookId: String) {
+    suspend fun cacheNeighbors(appRepository: AppRepository, pageId: String, bookId: String) {
 
         // Only attempt to cache neighbors if we have memory to spare.
         if (!hasEnoughMemory(15)) return
@@ -239,7 +239,7 @@ object PageDataManager {
         }
     }
 
-    private fun preLoadBackground(appRepository: AppRepository, pageId: String) {
+    private suspend fun preLoadBackground(appRepository: AppRepository, pageId: String) {
         val pageFromDb = appRepository.pageRepository.getById(pageId) ?: return
         val backgroundType = pageFromDb.getBackgroundType()
         val background = pageFromDb.background
@@ -269,7 +269,7 @@ object PageDataManager {
                 preLoadBackground(appRepository, pageId)
             }
 
-            val pageWithStrokes = appRepository.pageRepository.getWithStrokeByIdSuspend(pageId)
+            val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(pageId)
             // What will happened if page isn't in repository?
             cacheStrokes(pageId, pageWithStrokes.strokes)
             val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
@@ -451,6 +451,8 @@ object PageDataManager {
     fun setStrokes(pageId: String, strokes: List<Stroke>) {
         this.strokes[pageId] = strokes.toMutableList()
     }
+
+    fun getStrokesById(pageId: String): HashMap<String, Stroke> = strokesById[pageId] ?: hashMapOf()
 
     fun getImages(pageId: String): List<Image> = images[pageId] ?: emptyList()
 
@@ -642,7 +644,7 @@ object PageDataManager {
                         fileToPages[filePath]?.forEach { pid ->
                             invalidateBackground(pid)
                             if (pid == currentPage) {
-                                DrawCanvas.Companion.forceUpdate.emit(null)
+                                CanvasEventBus.forceUpdate.emit(null)
                                 SnackState.globalSnackFlow.emit(
                                     SnackConf(text = "Background file changed", duration = 4000)
                                 )

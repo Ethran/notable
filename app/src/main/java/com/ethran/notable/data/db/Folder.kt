@@ -1,7 +1,9 @@
 package com.ethran.notable.data.db
 
-import android.content.Context
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.distinctUntilChanged
+import androidx.lifecycle.map
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
@@ -10,8 +12,10 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
+import io.shipbook.shipbooksdk.ShipBook
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
 @Entity(
     foreignKeys = [ForeignKey(
@@ -40,29 +44,35 @@ interface FolderDao {
     fun getChildrenFolders(folderId: String?): LiveData<List<Folder>>
 
     @Query("SELECT * FROM folder WHERE id IS :folderId")
-    fun get(folderId: String): Folder
+    suspend fun get(folderId: String): Folder?
+
+    @Query("SELECT * FROM folder WHERE id IS :folderId")
+    fun getLive(folderId: String): LiveData<Folder?>
 
     @Query("SELECT * FROM folder")
     fun getAll(): List<Folder>
 
     @Insert
-    fun create(folder: Folder): Long
+    suspend fun create(folder: Folder): Long
 
     @Update
-    fun update(folder: Folder)
+    suspend fun update(folder: Folder)
 
     @Query("DELETE FROM folder WHERE id=:id")
-    fun delete(id: String)
+    suspend fun delete(id: String)
 }
 
-class FolderRepository(context: Context) {
-    var db = AppDatabase.getDatabase(context).folderDao()
+class FolderRepository @Inject constructor(
+    private val db: FolderDao
+) {
+    private val log = ShipBook.getLogger("FolderRepository")
+    private val nullLiveData = MutableLiveData<String?>(null)
 
-    fun create(folder: Folder) {
+    suspend fun create(folder: Folder) {
         db.create(folder)
     }
 
-    fun update(folder: Folder) {
+    suspend fun update(folder: Folder) {
         db.update(folder)
     }
 
@@ -74,19 +84,35 @@ class FolderRepository(context: Context) {
         return db.getChildrenFolders(folderId)
     }
 
-    fun getParent(folderId: String? = null): String? {
+    suspend fun getParent(folderId: String? = null): String? {
         if (folderId == null)
             return null
         val folder = db.get(folderId)
-        return folder.parentFolderId
+        return folder?.parentFolderId
     }
 
-    fun get(folderId: String): Folder {
+    fun getParentLive(folderId: String? = null): LiveData<String?> {
+        if (folderId == null) {
+            log.w("getParentLive called with null folderId")
+            return nullLiveData
+        }
+        return db.getLive(folderId)
+            .map { it?.parentFolderId }
+            .distinctUntilChanged()
+    }
+
+    suspend fun get(folderId: String): Folder? {
+        val folder = db.get(folderId)
+        if (folder == null) log.e("Folder not found: $folderId")
+        return folder
+    }
+
+    suspend fun getWithChildren(folderId: String): Folder? {
         return db.get(folderId)
     }
 
 
-    fun delete(id: String) {
+    suspend fun delete(id: String) {
         db.delete(id)
     }
 

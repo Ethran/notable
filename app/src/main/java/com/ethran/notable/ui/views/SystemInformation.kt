@@ -1,9 +1,6 @@
 package com.ethran.notable.ui.views
 
-import android.content.Context
 import android.os.Build
-import android.util.Log
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,28 +22,31 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.navigation.NavController
-import com.onyx.android.sdk.api.device.epd.EPDMode
-import com.onyx.android.sdk.api.device.epd.UpdateMode
-import com.onyx.android.sdk.api.device.epd.UpdateOption
-import com.onyx.android.sdk.device.BaseDevice
-import com.onyx.android.sdk.device.Device
-import com.onyx.android.sdk.pen.style.StrokeStyle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.ui.viewmodels.DeviceSnapshot
+import com.ethran.notable.ui.viewmodels.StrokeStyleInfo
+import com.ethran.notable.ui.viewmodels.SystemInformationViewModel
 import java.io.File
+
+
+object SystemInformationDestination : NavigationDestination {
+    override val route = "SystemInformationView"
+}
+
 
 /**
  * THIS FILE WAS WRITTEN BY AI.
@@ -62,106 +62,92 @@ import java.io.File
  * Includes a Refresh button and auto-refresh on focus (Activity resume).
  */
 @Composable
-fun SystemInformationView(navController: NavController) {
+fun SystemInformationView(
+    onBack: () -> Unit, viewModel: SystemInformationViewModel = hiltViewModel()
+) {
     val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    val device = remember { Device.currentDevice() }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    var info by remember { mutableStateOf<DeviceSnapshot?>(null) }
-    var strokeInfo by remember { mutableStateOf<List<StrokeStyleInfo>>(emptyList()) }
-
-    fun refresh() {
-        try {
-            val snapshot = collectDeviceSnapshot(context, device)
-            info = snapshot
-            strokeInfo = buildStrokeStyleInfo(context, device, snapshot)
-            Log.d("SystemInformationView", "Refreshed snapshot")
-        } catch (t: Throwable) {
-            Log.e("SystemInformationView", "Error refreshing snapshot: ${t.message}")
-        }
-    }
-
-    // Initial load
-    LaunchedEffect(Unit) {
-        refresh()
-    }
-
-    // Refresh on RESUME (focus gain)
+    // Auto-refresh on Resume
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                refresh()
+                viewModel.refresh(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color.White
-    ) {
+    SystemInformationContent(
+        uiState = uiState,
+        onBack = onBack,
+        onRefresh = { viewModel.refresh(context) },
+    )
+}
+
+@Composable
+fun SystemInformationContent(
+    uiState: SystemInformationViewModel.SystemInfoUiState?,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    Surface(modifier = Modifier.fillMaxSize(), color = Color.White) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
             TitleBarSimple(
-                title = "System Information",
-                onBack = { navController.popBackStack() },
-                onRefresh = { refresh() }
+                title = "System Information", onBack = onBack, onRefresh = onRefresh
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (uiState == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Loading device data...")
+                }
+            } else {
+                val info = uiState.snapshot
+                val strokeInfo = uiState.strokeInfo
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .background(Color.White)
-            ) {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     // 1) Basic system info
                     SectionTitle("Basic System Info")
                     InfoRow("Manufacturer", Build.MANUFACTURER)
                     InfoRow("Model", Build.MODEL)
                     InfoRow("Build Type", Build.TYPE)
                     InfoRow("SDK", Build.VERSION.SDK_INT.toString())
-                    InfoRow("Actual Device Class", device.javaClass.name)
+                    InfoRow("Actual Device Class", info.actualDeviceClass)
                     InfoRow(
-                        "Class Hierarchy",
-                        generateSequence<Class<*>>(device.javaClass) { it.superclass }
-                            .joinToString(" -> ") { it.simpleName }
+                        "Class Hierarchy", info.deviceClassHierarchy
                     )
-                    InfoRow("System Config Prefix", info?.systemConfigPrefix)
-                    InfoRow("Eng Build", info?.isEngBuild.toYesNoNullable())
-                    InfoRow("UserDebug Build", info?.isUserDebugBuild.toYesNoNullable())
-                    InfoRow("Boot Up Time (ms)", info?.bootUpTimeMs?.toString())
+                    InfoRow("System Config Prefix", info.systemConfigPrefix)
+                    InfoRow("Eng Build", info.isEngBuild.toYesNo())
+                    InfoRow("UserDebug Build", info.isUserDebugBuild.toYesNo())
+                    InfoRow("Boot Up Time (ms)", info.bootUpTimeMs?.toString())
                     InfoRow(
-                        "Reset Password Supported",
-                        info?.resetPasswordSupported.toYesNoNullable()
+                        "Reset Password Supported", info.resetPasswordSupported.toYesNo()
                     )
-                    InfoRow("Min Password Length", info?.minPasswordLength?.toString())
-                    InfoRow("Max Password Length", info?.maxPasswordLength?.toString())
+                    InfoRow("Min Password Length", info.minPasswordLength?.toString())
+                    InfoRow("Max Password Length", info.maxPasswordLength?.toString())
 
                     DividerMono()
 
                     // 2) Screen info
                     SectionTitle("Screen Info")
-                    InfoRow("EPD Mode", info?.epdMode?.name)
-                    InfoRow("System Default Update Mode", info?.systemDefaultUpdateMode?.name)
-                    InfoRow("App Scope Refresh Mode", info?.appScopeRefreshMode?.name)
-                    InfoRow("In System Fast Mode", info?.inSystemFastMode.toYesNoNullable())
-                    InfoRow("In App Fast Mode", info?.inAppFastMode.toYesNoNullable())
-                    InfoRow("In Fast Mode", info?.inFastMode.toYesNoNullable())
-                    InfoRow("Global Contrast", info?.globalContrast?.toString())
-                    InfoRow("Dither Threshold", info?.ditherThreshold?.toString())
-                    InfoRow("Color Type", info?.colorType?.toString())
-                    InfoRow("Support Night Mode", info?.supportNightMode.toYesNoNullable())
+                    InfoRow("EPD Mode", info.epdMode?.name)
+                    InfoRow("System Default Update Mode", info.systemDefaultUpdateMode?.name)
+                    InfoRow("App Scope Refresh Mode", info.appScopeRefreshMode?.name)
+                    InfoRow("In System Fast Mode", info.inSystemFastMode.toYesNo())
+                    InfoRow("In App Fast Mode", info.inAppFastMode.toYesNo())
+                    InfoRow("In Fast Mode", info.inFastMode.toYesNo())
+                    InfoRow("Global Contrast", info.globalContrast?.toString())
+                    InfoRow("Dither Threshold", info.ditherThreshold?.toString())
+                    InfoRow("Color Type", info.colorType?.toString())
+                    InfoRow("Support Night Mode", info.supportNightMode.toYesNo())
                     InfoRow(
-                        "Support Wide Color Gamut",
-                        info?.supportWideColorGamut.toYesNoNullable()
+                        "Support Wide Color Gamut", info.supportWideColorGamut.toYesNo()
                     )
 
                     DividerMono()
@@ -169,23 +155,22 @@ fun SystemInformationView(navController: NavController) {
                     // 3) Writing info (Input/Pen + Stroke Styles)
                     SectionTitle("Writing Info")
                     // Input / Pen
-                    InfoRow("Touchpad Enabled", info?.touchpadEnabled.toYesNoNullable())
-                    InfoRow("Support Active Pen", info?.supportActivePen.toYesNoNullable())
-                    InfoRow("Active Pen Enabled", info?.activePenEnabled.toYesNoNullable())
-                    InfoRow("Active Pen Battery", info?.activePenBattery?.toString())
-                    InfoRow("Active Pen MAC", info?.activePenMac)
+                    InfoRow("Touchpad Enabled", info.touchpadEnabled.toYesNo())
+                    InfoRow("Support Active Pen", info.supportActivePen.toYesNo())
+                    InfoRow("Active Pen Enabled", info.activePenEnabled.toYesNo())
+                    InfoRow("Active Pen Battery", info.activePenBattery?.toString())
+                    InfoRow("Active Pen MAC", info.activePenMac)
                     InfoRow(
-                        "Pen UI Visibility Enabled",
-                        info?.penUIVisibilityEnabled.toYesNoNullable()
+                        "Pen UI Visibility Enabled", info.penUIVisibilityEnabled.toYesNo()
                     )
-                    InfoRow("Pen Haptic Enabled", info?.penHapticEnabled.toYesNoNullable())
+                    InfoRow("Pen Haptic Enabled", info.penHapticEnabled.toYesNo())
                     // Touch / EPD geometry
-                    InfoRow("Touch Width", info?.touchWidth?.toString())
-                    InfoRow("Touch Height", info?.touchHeight?.toString())
-                    InfoRow("Max Touch Pressure", info?.maxTouchPressure?.toString())
-                    InfoRow("EPD Width", info?.epdWidth?.toString())
-                    InfoRow("EPD Height", info?.epdHeight?.toString())
-                    InfoRow("isValidPenState", info?.isValidPenState?.toString())
+                    InfoRow("Touch Width", info.touchWidth?.toString())
+                    InfoRow("Touch Height", info.touchHeight?.toString())
+                    InfoRow("Max Touch Pressure", info.maxTouchPressure?.toString())
+                    InfoRow("EPD Width", info.epdWidth?.toString())
+                    InfoRow("EPD Height", info.epdHeight?.toString())
+                    InfoRow("isValidPenState", info.isValidPenState?.toString())
 
 
                     // Stroke style details (separate function builds this list)
@@ -204,86 +189,82 @@ fun SystemInformationView(navController: NavController) {
 
                     // 4) Rest
                     SectionTitle("Connectivity")
-                    InfoRow("Has Wi-Fi", info?.hasWifi.toYesNoNullable())
-                    InfoRow("Has Bluetooth", info?.hasBluetooth.toYesNoNullable())
-                    InfoRow("Has Audio", info?.hasAudio.toYesNoNullable())
-                    InfoRow("Fixed Wi-Fi MAC", info?.fixedWifiMac)
-                    InfoRow("Bluetooth Address", info?.bluetoothAddress)
-                    InfoRow("Encrypted Device ID", info?.encryptedDeviceId)
+                    InfoRow("Has Wi-Fi", info.hasWifi.toYesNo())
+                    InfoRow("Has Bluetooth", info.hasBluetooth.toYesNo())
+                    InfoRow("Has Audio", info.hasAudio.toYesNo())
+                    InfoRow("Fixed Wi-Fi MAC", info.fixedWifiMac)
+                    InfoRow("Bluetooth Address", info.bluetoothAddress)
+                    InfoRow("Encrypted Device ID", info.encryptedDeviceId)
 
                     DividerMono()
 
                     SectionTitle("Light")
                     InfoRow(
-                        "Has Front Light Brightness",
-                        info?.hasFrontLightBrightness.toYesNoNullable()
+                        "Has Front Light Brightness", info.hasFrontLightBrightness.toYesNo()
                     )
-                    InfoRow("Has CTM Brightness", info?.hasCTMBrightness.toYesNoNullable())
-                    InfoRow("Light On", info?.isLightOn.toYesNoNullable())
-                    InfoRow("Front Light Min", info?.frontLightMin?.toString())
-                    InfoRow("Front Light Max", info?.frontLightMax?.toString())
-                    InfoRow("Front Light Default", info?.frontLightDefault?.toString())
-                    InfoRow("Front Light Config", info?.frontLightConfigValue?.toString())
-                    InfoRow("Warm Light Config", info?.warmLightConfigValue?.toString())
-                    InfoRow("Cold Light Config", info?.coldLightConfigValue?.toString())
-                    InfoRow("Check CTM Available", info?.checkCTM.toYesNoNullable())
-                    InfoRow("CTM BR Default", info?.brDefault?.toString())
-                    InfoRow("CTM CT Default", info?.ctDefault?.toString())
+                    InfoRow("Has CTM Brightness", info.hasCTMBrightness.toYesNo())
+                    InfoRow("Light On", info.isLightOn.toYesNo())
+                    InfoRow("Front Light Min", info.frontLightMin?.toString())
+                    InfoRow("Front Light Max", info.frontLightMax?.toString())
+                    InfoRow("Front Light Default", info.frontLightDefault?.toString())
+                    InfoRow("Front Light Config", info.frontLightConfigValue?.toString())
+                    InfoRow("Warm Light Config", info.warmLightConfigValue?.toString())
+                    InfoRow("Cold Light Config", info.coldLightConfigValue?.toString())
+                    InfoRow("Check CTM Available", info.checkCTM.toYesNo())
+                    InfoRow("CTM BR Default", info.brDefault?.toString())
+                    InfoRow("CTM CT Default", info.ctDefault?.toString())
 
                     DividerMono()
 
                     SectionTitle("Wireless Charging")
                     InfoRow(
-                        "Support Wireless Charging",
-                        info?.supportWirelessCharging.toYesNoNullable()
+                        "Support Wireless Charging", info.supportWirelessCharging.toYesNo()
                     )
-                    InfoRow("Wireless Charge Battery", info?.wirelessChargingBattery?.toString())
-                    InfoRow("Wireless Charge State", info?.wirelessChargingState?.toString())
-                    InfoRow("Wireless Chip ID", info?.wirelessChargingChipId)
-                    InfoRow("Wireless Chip Version", info?.wirelessChargingChipVersion)
+                    InfoRow("Wireless Charge Battery", info.wirelessChargingBattery?.toString())
+                    InfoRow("Wireless Charge State", info.wirelessChargingState?.toString())
+                    InfoRow("Wireless Chip ID", info.wirelessChargingChipId)
+                    InfoRow("Wireless Chip Version", info.wirelessChargingChipVersion)
 
                     DividerMono()
 
                     SectionTitle("Multi-Window")
-                    InfoRow("Origin Multi-Window", info?.originMultiWindow.toYesNoNullable())
-                    InfoRow("Current Multi-Screen Mode", info?.currentMultiScreenMode?.toString())
+                    InfoRow("Origin Multi-Window", info.originMultiWindow.toYesNo())
+                    InfoRow("Current Multi-Screen Mode", info.currentMultiScreenMode?.toString())
                     InfoRow(
-                        "Limited Multi-Screen Mode",
-                        info?.limitedMultiScreenMode.toYesNoNullable()
+                        "Limited Multi-Screen Mode", info.limitedMultiScreenMode.toYesNo()
                     )
                     InfoRow(
                         "Full Function Multi-Screen Mode",
-                        info?.fullFunctionMultiScreenMode.toYesNoNullable()
+                        info.fullFunctionMultiScreenMode.toYesNo()
                     )
 
                     DividerMono()
 
                     SectionTitle("Storage")
                     InfoRow(
-                        "Primary Storage Removable",
-                        info?.primaryStorageRemovable.toYesNoNullable()
+                        "Primary Storage Removable", info.primaryStorageRemovable.toYesNo()
                     )
-                    InfoRow("Storage Root", info?.storageRoot?.path)
-                    InfoRow("Removable SD Dirs", info?.removableSdDirs?.joinToString { it.path })
-                    InfoRow("USB Storage Present", info?.usbStoragePresent.toYesNoNullable())
+                    InfoRow("Storage Root", info.storageRoot?.path)
+                    InfoRow("Removable SD Dirs", info.removableSdDirs?.joinToString { it.path })
+                    InfoRow("USB Storage Present", info.usbStoragePresent.toYesNo())
 
                     DividerMono()
 
                     SectionTitle("System / Fonts")
-                    InfoRow("CPU ID", info?.cpuId ?: "-")
-                    InfoRow("Support External SD", info?.supportExternalSd.toYesNoNullable())
-                    InfoRow("Support Font Hot Reload", info?.supportFontHotReload.toYesNoNullable())
-                    info?.systemFontFamilyMap?.entries
+                    InfoRow("CPU ID", info.cpuId ?: "-")
+                    InfoRow("Support External SD", info.supportExternalSd.toYesNo())
+                    InfoRow("Support Font Hot Reload", info.supportFontHotReload.toYesNo())
+                    info.systemFontFamilyMap?.entries
                         ?.take(6)
                         ?.forEach { (family, path) ->
                             InfoRow("Font: $family", path)
                         }
 
                     // Errors section: show any failures for transparency
-                    if (!info?.errors.isNullOrEmpty()) {
+                    if (info.errors.isNotEmpty()) {
                         DividerMono()
                         SectionTitle("Errors")
-                        info?.errors?.forEach { err ->
+                        info.errors.forEach { err ->
                             InfoRow("Error", err, maxLines = 100)
                         }
                     }
@@ -381,352 +362,120 @@ private fun InfoRow(label: String, value: String?, maxLines: Int = 3) {
     }
 }
 
-/**
- * Snapshot for displaying read-only info gathered from BaseDevice (1.3.x).
- * All fields are nullable-safe for display; failures are recorded in [errors].
- */
-private data class DeviceSnapshot(
-    // Screen
-    val epdMode: EPDMode?,
-    val systemDefaultUpdateMode: UpdateMode?,
-    val appScopeRefreshMode: UpdateOption?,
-    val inSystemFastMode: Boolean?,
-    val inAppFastMode: Boolean?,
-    val inFastMode: Boolean?,
-    val globalContrast: Int?,
-    val ditherThreshold: Int?,
-    val colorType: Int?,
-    val supportNightMode: Boolean?,
-    val supportWideColorGamut: Boolean?,
+@Preview(showBackground = true, widthDp = 600)
+@Composable
+fun SystemInformationPreview() {
+    val mockSnapshot = DeviceSnapshot(
 
-    // Writing/Input
-    val touchpadEnabled: Boolean?,
-    val supportActivePen: Boolean?,
-    val activePenEnabled: Boolean?,
-    val activePenBattery: Int?,
-    val activePenMac: String?,
-    val penUIVisibilityEnabled: Boolean?,
-    val penHapticEnabled: Boolean?,
-    val touchWidth: Float?,
-    val touchHeight: Float?,
-    val maxTouchPressure: Float?,
-    val epdWidth: Float?,
-    val epdHeight: Float?,
-    val isValidPenState: Boolean?,
+        // Screen
+        epdMode = null,
+        systemDefaultUpdateMode = null,
+        appScopeRefreshMode = null,
+        inSystemFastMode = true,
+        inAppFastMode = false,
+        inFastMode = true,
+        globalContrast = 10,
+        ditherThreshold = 5,
+        colorType = 1,
+        supportNightMode = true,
+        supportWideColorGamut = false,
 
-    // Light
-    val hasFrontLightBrightness: Boolean?,
-    val hasCTMBrightness: Boolean?,
-    val isLightOn: Boolean?,
-    val frontLightMin: Int?,
-    val frontLightMax: Int?,
-    val frontLightDefault: Int?,
-    val frontLightConfigValue: Int?,
-    val warmLightConfigValue: Int?,
-    val coldLightConfigValue: Int?,
-    val checkCTM: Boolean?,
-    val brDefault: Int?,
-    val ctDefault: Int?,
+        // Writing/Input
+        touchpadEnabled = true,
+        supportActivePen = true,
+        activePenEnabled = true,
+        activePenBattery = 85,
+        activePenMac = "00:11:22:33:44:55",
+        penUIVisibilityEnabled = true,
+        penHapticEnabled = false,
+        touchWidth = 1080f,
+        touchHeight = 1440f,
+        maxTouchPressure = 1.0f,
+        epdWidth = 1072f,
+        epdHeight = 1448f,
+        isValidPenState = true,
 
-    // Basic system
-    val powerSavedMode: Boolean?,
-    val hallControlEnabled: Boolean?,
-    val bootUpTimeMs: Long?,
-    val isEngBuild: Boolean?,
-    val isUserDebugBuild: Boolean?,
-    val resetPasswordSupported: Boolean?,
-    val systemConfigPrefix: String?,
-    val minPasswordLength: Int?,
-    val maxPasswordLength: Int?,
+        // Light
+        hasFrontLightBrightness = true,
+        hasCTMBrightness = true,
+        isLightOn = true,
+        frontLightMin = 0,
+        frontLightMax = 100,
+        frontLightDefault = 50,
+        frontLightConfigValue = 60,
+        warmLightConfigValue = 40,
+        coldLightConfigValue = 30,
+        checkCTM = true,
+        brDefault = 50,
+        ctDefault = 45,
 
-    // Connectivity
-    val hasAudio: Boolean?,
-    val hasWifi: Boolean?,
-    val hasBluetooth: Boolean?,
-    val fixedWifiMac: String?,
-    val bluetoothAddress: String?,
-    val encryptedDeviceId: String?,
+        // Basic system
+        powerSavedMode = false,
+        hallControlEnabled = true,
+        bootUpTimeMs = 15000L,
+        isEngBuild = false,
+        isUserDebugBuild = false,
+        resetPasswordSupported = true,
+        systemConfigPrefix = "sys_",
+        minPasswordLength = 6,
+        maxPasswordLength = 16,
 
-    // Wireless charging
-    val supportWirelessCharging: Boolean?,
-    val wirelessChargingBattery: Int?,
-    val wirelessChargingState: Int?,
-    val wirelessChargingChipId: String?,
-    val wirelessChargingChipVersion: String?,
+        // Connectivity
+        hasAudio = true,
+        hasWifi = true,
+        hasBluetooth = true,
+        fixedWifiMac = "AA:BB:CC:DD:EE:FF",
+        bluetoothAddress = "11:22:33:44:55:66",
+        encryptedDeviceId = "encrypted-device-id-123",
 
-    // Multi-Window
-    val originMultiWindow: Boolean?,
-    val currentMultiScreenMode: Int?,
-    val limitedMultiScreenMode: Boolean?,
-    val fullFunctionMultiScreenMode: Boolean?,
+        // Wireless charging
+        supportWirelessCharging = false,
+        wirelessChargingBattery = null,
+        wirelessChargingState = null,
+        wirelessChargingChipId = null,
+        wirelessChargingChipVersion = null,
 
-    // Storage
-    val primaryStorageRemovable: Boolean?,
-    val storageRoot: File?,
-    val removableSdDirs: List<File>?,
-    val usbStoragePresent: Boolean?,
+        // Multi-Window
+        originMultiWindow = true,
+        currentMultiScreenMode = 1,
+        limitedMultiScreenMode = false,
+        fullFunctionMultiScreenMode = true,
 
-    // Fonts / Misc
-    val cpuId: String?,
-    val supportExternalSd: Boolean?,
-    val supportFontHotReload: Boolean?,
-    val systemFontFamilyMap: Map<String, String>?,
+        // Storage
+        primaryStorageRemovable = false,
+        storageRoot = File("/storage/emulated/0"),
+        removableSdDirs = listOf(File("/storage/sdcard1")),
+        usbStoragePresent = false,
 
-    val errors: List<String> = emptyList()
-)
+        // Fonts / Misc
+        cpuId = "CPU123456789",
+        supportExternalSd = true,
+        supportFontHotReload = false,
+        systemFontFamilyMap = mapOf(
+            "sans-serif" to "Roboto", "serif" to "Noto Serif"
+        ),
 
-/**
- * Exception-safe snapshot collection for BaseDevice (1.3.x).
- */
-@Suppress("UsePropertyAccessSyntax")
-private fun collectDeviceSnapshot(context: Context, base: BaseDevice): DeviceSnapshot {
-    val errors = mutableListOf<String>()
-    fun <T> safeNullable(name: String, call: () -> T?): T? = try {
-        call()
-    } catch (t: Throwable) {
-        errors.add("$name failed: ${t.javaClass.simpleName}${t.message?.let { " - $it" } ?: ""}")
-        null
-    }
+        errors = emptyList()
+    )
 
-    // Screen
-    val epdMode = safeNullable("getEpdMode") { base.getEpdMode() }
-    val sysUpdateMode =
-        safeNullable("getSystemDefaultUpdateMode") { base.getSystemDefaultUpdateMode() }
-    val appRefreshMode = safeNullable("getAppScopeRefreshMode") { base.getAppScopeRefreshMode() }
-    val inSysFast = safeNullable("isInSystemFastMode") { base.isInSystemFastMode() }
-    val inAppFast = safeNullable("isInAppFastMode") { base.isInAppFastMode() }
-    val inFast = safeNullable("isInFastMode") { base.isInFastMode() }
-    val globalContrast = safeNullable("getGlobalContrast") { base.getGlobalContrast() }
-    val dither = safeNullable("getDitherThreshold") { base.getDitherThreshold() }
-    val colorType = safeNullable("getColorType") { base.getColorType() }
-    val supportNight = safeNullable("isSupportNightMode") { base.isSupportNightMode() }
-    val wideCG = safeNullable("isSupportWidecg") { base.isSupportWidecg(context) }
-
-    // Writing/Input
-    val touchpadEnabled = safeNullable("isTouchpadEnable") { base.isTouchpadEnable() }
-    val supportActivePen = safeNullable("supportActivePen") { base.supportActivePen() }
-    val activePenEnabled = safeNullable("getActivePenEnable") { base.getActivePenEnable() }
-    val activePenBattery =
-        safeNullable("getActivePenBatteryLevel") { base.getActivePenBatteryLevel() }
-    val activePenMac = safeNullable("getActivePenMacAddress") { base.getActivePenMacAddress() }
-    val penUIVisibilityEnabled =
-        safeNullable("isPenUIVisibilityEnable") { base.isPenUIVisibilityEnable() }
-    val penHapticEnabled = safeNullable("isPenHapticEnabled") { base.isPenHapticEnabled() }
-    val touchWidth = safeNullable("getTouchWidth") { base.getTouchWidth() }
-    val touchHeight = safeNullable("getTouchHeight") { base.getTouchHeight() }
-    val maxTouchPressure = safeNullable("getMaxTouchPressure") { base.getMaxTouchPressure() }
-    val epdWidth = safeNullable("getEpdWidth") { base.getEpdWidth() }
-    val epdHeight = safeNullable("getEpdHeight") { base.getEpdHeight() }
-    val isValidPenState = safeNullable("isValidPenState") { base.isValidPenState() }
-
-
-    // Light
-    val hasFL = safeNullable("hasFLBrightness") { base.hasFLBrightness(context) }
-    val hasCTM = safeNullable("hasCTMBrightness") { base.hasCTMBrightness(context) }
-    val lightOn = safeNullable("isLightOn") { base.isLightOn(context) }
-    val flMin =
-        safeNullable("getFrontLightBrightnessMinimum") { base.getFrontLightBrightnessMinimum(context) }
-    val flMax =
-        safeNullable("getFrontLightBrightnessMaximum") { base.getFrontLightBrightnessMaximum(context) }
-    val flDef = safeNullable("getBrDefaultValue") { base.getBrDefaultValue() }
-    val flCfg = safeNullable("getFrontLightConfigValue") { base.getFrontLightConfigValue(context) }
-    val warmCfg = safeNullable("getWarmLightConfigValue") { base.getWarmLightConfigValue(context) }
-    val coldCfg = safeNullable("getColdLightConfigValue") { base.getColdLightConfigValue(context) }
-    val checkCTM = safeNullable("checkCTM") { base.checkCTM() }
-    val brDefault = safeNullable("getBrDefaultValue") { base.getBrDefaultValue() }
-    val ctDefault = safeNullable("getCtDefaultValue") { base.getCtDefaultValue() }
-
-    // Basic system
-    val powerSaved = safeNullable("isPowerSavedMode") { base.isPowerSavedMode(context) }
-    val hallEnabled = safeNullable("isHallControlEnable") { base.isHallControlEnable(context) }
-    val bootTime = safeNullable("getBootUpTime") { base.getBootUpTime() }
-    val isEng = safeNullable("isEngVersion") { base.isEngVersion() }
-    val isUserDebug = safeNullable("isUserDebugVersion") { base.isUserDebugVersion() }
-    val resetPwd = safeNullable("isResetPasswordSupported") { base.isResetPasswordSupported() }
-    val sysPrefix = safeNullable("getSystemConfigPrefix") { base.getSystemConfigPrefix(context) }
-    val minPwd = safeNullable("getMinPasswordLength") { base.getMinPasswordLength(context) }
-    val maxPwd = safeNullable("getMaxPasswordLength") { base.getMaxPasswordLength(context) }
-
-    // Connectivity
-    val hasAudio = safeNullable("hasAudio") { base.hasAudio(context) }
-    val hasWifi = safeNullable("hasWifi") { base.hasWifi(context) }
-    val hasBt = safeNullable("hasBluetooth") { base.hasBluetooth(context) }
-    val fixedWifiMac =
-        safeNullable("getFixedWifiMacAddress") { base.getFixedWifiMacAddress(context) }
-    val btAddr = safeNullable("getBluetoothAddress") { base.getBluetoothAddress() }
-    val encId = safeNullable("getEncryptedDeviceID") { base.getEncryptedDeviceID() }
-
-    // Wireless charging
-    val supportWireless = safeNullable("supportWirelessCharging") { base.supportWirelessCharging() }
-    val wirelessBattery =
-        safeNullable("getWirelessChargingBatteryLevel") { base.getWirelessChargingBatteryLevel() }
-    val wirelessState = safeNullable("getWirelessChargingState") { base.getWirelessChargingState() }
-    val wirelessChipId =
-        safeNullable("getWirelessChargingChipId") { base.getWirelessChargingChipId() }
-    val wirelessChipVer =
-        safeNullable("getWirelessChargingChipVersion") { base.getWirelessChargingChipVersion() }
-
-    // Multi-window
-    val originMW = safeNullable("isOriginMultiWindow") { base.isOriginMultiWindow() }
-    val currentMWMode =
-        safeNullable("getCurrentMultiScreenMode") { base.getCurrentMultiScreenMode(context) }
-    val limitedMW =
-        safeNullable("isLimitedMultiScreenMode") { base.isLimitedMultiScreenMode(context) }
-    val fullMW =
-        safeNullable("isFullFunctionMultiScreenMode") { base.isFullFunctionMultiScreenMode(context) }
-
-    // Storage
-    val storageRoot = safeNullable("getStorageRootDirectory") { base.getStorageRootDirectory() }
-    val primaryRemovable =
-        safeNullable("isPrimaryStorageRemovable") { base.isPrimaryStorageRemovable(context) }
-    val removableDirs = safeNullable("getRemovableSDCardDirs") { base.getRemovableSDCardDirs() }
-    val usbStorage =
-        safeNullable("isUSBStorage") { storageRoot?.path?.let { base.isUSBStorage(it) } }
-
-    // Fonts / Misc
-    val cpuId = safeNullable("getCpuId") { base.getCpuId() }
-    val externalSD = safeNullable("supportExternalSD") { base.supportExternalSD(context) }
-    val fontHotReload = safeNullable("supportFontHotReload") { base.supportFontHotReload() }
-    val fontMap = safeNullable("loadSystemFamilyPathMap") { base.loadSystemFamilyPathMap() }
-
-    return DeviceSnapshot(
-        epdMode = epdMode,
-        systemDefaultUpdateMode = sysUpdateMode,
-        appScopeRefreshMode = appRefreshMode,
-        inSystemFastMode = inSysFast,
-        inAppFastMode = inAppFast,
-        inFastMode = inFast,
-        globalContrast = globalContrast,
-        ditherThreshold = dither,
-        colorType = colorType,
-        supportNightMode = supportNight,
-        supportWideColorGamut = wideCG,
-
-        touchpadEnabled = touchpadEnabled,
-        supportActivePen = supportActivePen,
-        activePenEnabled = activePenEnabled,
-        activePenBattery = activePenBattery,
-        activePenMac = activePenMac,
-        penUIVisibilityEnabled = penUIVisibilityEnabled,
-        penHapticEnabled = penHapticEnabled,
-        touchWidth = touchWidth,
-        touchHeight = touchHeight,
-        maxTouchPressure = maxTouchPressure,
-        epdWidth = epdWidth,
-        epdHeight = epdHeight,
-        isValidPenState = isValidPenState,
-
-        hasFrontLightBrightness = hasFL,
-        hasCTMBrightness = hasCTM,
-        isLightOn = lightOn,
-        frontLightMin = flMin,
-        frontLightMax = flMax,
-        frontLightDefault = flDef,
-        frontLightConfigValue = flCfg,
-        warmLightConfigValue = warmCfg,
-        coldLightConfigValue = coldCfg,
-        checkCTM = checkCTM,
-        brDefault = brDefault,
-        ctDefault = ctDefault,
-
-        powerSavedMode = powerSaved,
-        hallControlEnabled = hallEnabled,
-        bootUpTimeMs = bootTime,
-        isEngBuild = isEng,
-        isUserDebugBuild = isUserDebug,
-        resetPasswordSupported = resetPwd,
-        systemConfigPrefix = sysPrefix,
-        minPasswordLength = minPwd,
-        maxPasswordLength = maxPwd,
-
-        hasAudio = hasAudio,
-        hasWifi = hasWifi,
-        hasBluetooth = hasBt,
-        fixedWifiMac = fixedWifiMac,
-        bluetoothAddress = btAddr,
-        encryptedDeviceId = encId,
-
-        supportWirelessCharging = supportWireless,
-        wirelessChargingBattery = wirelessBattery,
-        wirelessChargingState = wirelessState,
-        wirelessChargingChipId = wirelessChipId,
-        wirelessChargingChipVersion = wirelessChipVer,
-
-        originMultiWindow = originMW,
-        currentMultiScreenMode = currentMWMode,
-        limitedMultiScreenMode = limitedMW,
-        fullFunctionMultiScreenMode = fullMW,
-
-        primaryStorageRemovable = primaryRemovable,
-        storageRoot = storageRoot,
-        removableSdDirs = removableDirs,
-        usbStoragePresent = usbStorage,
-
-        cpuId = cpuId,
-        supportExternalSd = externalSD,
-        supportFontHotReload = fontHotReload,
-        systemFontFamilyMap = fontMap,
-        errors = errors
+    SystemInformationContent(
+        uiState = SystemInformationViewModel.SystemInfoUiState(
+            snapshot = mockSnapshot,
+            strokeInfo = listOf(StrokeStyleInfo(1, "PENCIL", listOf(1f, 2f)))
+        ),
+        onBack = {},
+        onRefresh = {},
     )
 }
 
-/**
- * Separate builder for the Stroke Styles section.
- * Iterates through StrokeStyle constants and fetches parameters via BaseDevice.getStrokeParameters(int),
- * guarding against exceptions. Adds simple notes where useful.
- */
-private data class StrokeStyleInfo(
-    val styleId: Int,
-    val styleName: String,
-    val parameters: List<Float>?,
-    val extraNotes: String? = null
-)
 
-private fun buildStrokeStyleInfo(
-    context: Context,
-    base: BaseDevice,
-    snapshot: DeviceSnapshot?
-): List<StrokeStyleInfo> {
-    val styles = listOf(
-        StrokeStyle.PENCIL to "PENCIL",
-        StrokeStyle.FOUNTAIN to "FOUNTAIN",
-        StrokeStyle.MARKER to "MARKER",
-        StrokeStyle.NEO_BRUSH to "NEO_BRUSH",
-        StrokeStyle.CHARCOAL to "CHARCOAL",
-        StrokeStyle.DASH to "DASH",
-        StrokeStyle.CHARCOAL_V2 to "CHARCOAL_V2",
-        StrokeStyle.SQUARE_PEN to "SQUARE_PEN"
-    )
-
-    fun <T> safe(name: String, call: () -> T?): T? = try {
-        call()
-    } catch (t: Throwable) {
-        Log.w("StrokeStyleInfo", "$name failed: ${t.javaClass.simpleName} ${t.message ?: ""}")
-        null
-    }
-
-    return styles.map { (id, name) ->
-        val params = safe("getStrokeParameters($name)") { base.getStrokeParameters(id) }?.toList()
-        val notes = buildString {
-            // Provide small hints based on known style behavior if possible.
-            // Without vendor docs, we keep notes minimal.
-            if (params != null) {
-                append("Parameters count=${params.size}")
-            } else {
-                append("No parameters available (SDK returned null or empty).")
-            }
-        }
-        StrokeStyleInfo(
-            styleId = id,
-            styleName = name,
-            parameters = params,
-            extraNotes = notes
-        )
-    }
-}
-
-private fun Boolean?.toYesNoNullable(): String? = when (this) {
-    null -> null
+private fun Boolean?.toYesNo(): String? = when (this) {
+    null -> "--"
     true -> "Yes"
     false -> "No"
 }
+
+
+
+
+

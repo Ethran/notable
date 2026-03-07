@@ -41,13 +41,14 @@ class EditorState(
     val pageId: String,
     val pageView: PageView,
     val appRepository: AppRepository,
+    persistedEditorSettings: EditorSettingCacheManager.EditorSettings?,
     val onPageChange: (String) -> Unit
 ) {
     var currentPageId by mutableStateOf(pageId)
         private set
 
 
-    fun getNextPage(): String? {
+    suspend fun getNextPage(): String? {
         return if (bookId != null) {
             val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
                 pageId = currentPageId, notebookId = bookId
@@ -56,7 +57,7 @@ class EditorState(
         } else null
     }
 
-    fun getPreviousPage(): String? {
+    suspend fun getPreviousPage(): String? {
         return if (bookId != null) {
             val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
                 pageId = currentPageId, notebookId = bookId
@@ -66,7 +67,7 @@ class EditorState(
     }
 
 
-    fun updateOpenedPage(newPageId: String) {
+    suspend fun updateOpenedPage(newPageId: String) {
         Log.d("EditorView", "Update open page to $newPageId")
         if (bookId != null) {
             appRepository.bookRepository.setOpenPageId(bookId, newPageId)
@@ -86,7 +87,6 @@ class EditorState(
 
 
     private val log = ShipBook.getLogger("EditorState")
-    private val persistedEditorSettings = EditorSettingCacheManager.getEditorSettings()
 
     var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw) // should save
     var pen by mutableStateOf(persistedEditorSettings?.pen ?: Pen.BALLPEN) // should save
@@ -148,7 +148,7 @@ class EditorState(
      *
      * @param id The unique identifier of the page to switch to.
      */
-    fun changePage(id: String) {
+    suspend fun changePage(id: String) {
         log.d("Changing page to $id, from $currentPageId")
         updateOpenedPage(id)
         closeAllMenus()

@@ -19,8 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -38,14 +40,21 @@ import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.db.getPageIndex
+import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.editor.EditorControlTower
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.ui.noRippleClickable
+import com.ethran.notable.ui.views.BugReportDestination
+import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.PagesDestination
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
@@ -54,6 +63,7 @@ import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val toolbarLog = ShipBook.getLogger("Toolbar")
 fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
@@ -94,9 +104,12 @@ private val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "
 
 
 @Composable
-@ExperimentalComposeUiApi
 fun Toolbar(
-    navController: NavController, state: EditorState, controlTower: EditorControlTower
+    exportEngine: ExportEngine,
+    navController: NavController,
+    appRepository: AppRepository,
+    state: EditorState,
+    controlTower: EditorControlTower
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -104,6 +117,7 @@ fun Toolbar(
     // Observe zoom level to decide button visibility
     val zoomLevel by state.pageView.zoomLevel.collectAsState()
 
+    val repository = appRepository.bookRepository
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
@@ -121,7 +135,7 @@ fun Toolbar(
 
                     // Set isImageLoaded to true
                     toolbarLog.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
-                    DrawCanvas.addImageByUri.value = copiedFile.toUri()
+                    CanvasEventBus.addImageByUri.value = copiedFile.toUri()
 
                 } catch (e: Exception) {
                     toolbarLog.e("ImagePicker: copy failed: ${e.message}", e)
@@ -182,7 +196,7 @@ fun Toolbar(
                         backgroundType = backgroundType
                     )
                 state.pageView.updatePageSettings(updatedPage)
-                scope.launch { DrawCanvas.refreshUi.emit(Unit) }
+                scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
             }
         ) {
             state.menuStates.isBackgroundSelectorModalOpen = false
@@ -335,7 +349,15 @@ fun Toolbar(
                     },
                     onMenuOpenChange = { state.menuStates.isStrokeSelectionOpen = it },
                     value = state.eraser,
-                    onChange = { state.eraser = it })
+                    onChange = { state.eraser = it },
+                    toggleScribbleToErase = {
+                        scope.launch(Dispatchers.IO) {
+                            appRepository.kvProxy.setAppSettings(
+                                GlobalAppSettings.current.copy(scribbleToEraseEnabled = it)
+                            )
+                        }
+                    }
+                )
                 Box(
                     Modifier
                         .fillMaxHeight()
@@ -438,14 +460,19 @@ fun Toolbar(
                         .width(0.5.dp)
                         .background(Color.Black)
                 )
-
                 if (state.bookId != null) {
-                    val book = AppRepository(context).bookRepository.getById(state.bookId)
+                    var book by remember(state.bookId) { mutableStateOf<Notebook?>(null) }
+                    LaunchedEffect(state.bookId) {
+                        val loadedBook = withContext(Dispatchers.IO) {
+                            repository.getById(state.bookId)
+                        }
+                        book = loadedBook
+                    }
 
-                    // TODO maybe have generic utils for this ?
-                    val pageNumber =
-                        remember(state.currentPageId) { book!!.pageIds.indexOf(state.currentPageId) + 1 }
-                    val totalPageNumber = book!!.pageIds.size
+                    val pageNumber: String = remember(book?.id, state.currentPageId) {
+                        book?.let { (it.getPageIndex(state.currentPageId) + 1).toString() } ?: "?"
+                    }
+                    val totalPageNumber: String = book?.pageIds?.size?.toString() ?: "?"
 
                     Box(
                         contentAlignment = Alignment.Center,
@@ -457,7 +484,9 @@ fun Toolbar(
                             text = "${pageNumber}/${totalPageNumber}",
                             fontWeight = FontWeight.Light,
                             modifier = Modifier.noRippleClickable {
-                                navController.navigate("books/${state.bookId}/pages")
+                                navController.navigate(
+                                    PagesDestination.createRoute(state.bookId)
+                                )
                             },
                             textAlign = TextAlign.Center
                         )
@@ -489,14 +518,31 @@ fun Toolbar(
                             state.menuStates.isMenuOpen = !state.menuStates.isMenuOpen
                         }, iconId = R.drawable.menu, contentDescription = "menu"
                     )
-                    if (state.menuStates.isMenuOpen) ToolbarMenu(
-                        navController = navController,
-                        state = state,
-                        onClose = { state.menuStates.isMenuOpen = false },
-                        onBackgroundSelectorModalOpen = {
-                            toolbarLog.i("Opening page settings modal")
-                            state.menuStates.isBackgroundSelectorModalOpen = true
-                        })
+                    if (state.menuStates.isMenuOpen)
+                        ToolbarMenu(
+                            exportEngine = exportEngine,
+                            goToBugReport = { navController.navigate(BugReportDestination.route) },
+                            goToLibrary = {
+                                scope.launch {
+                                    val page = withContext(Dispatchers.IO) {
+                                        appRepository.pageRepository.getById(state.currentPageId)
+                                    }
+                                    val parentFolder = withContext(Dispatchers.IO) {
+                                        page?.getParentFolder(appRepository.bookRepository)
+                                    }
+                                    navController.navigate(
+                                        LibraryDestination.createRoute(parentFolder)
+                                    )
+                                }
+                            },
+                            currentPageId = state.currentPageId,
+                            currentBookId = state.bookId,
+                            onClose = { state.menuStates.isMenuOpen = false },
+                            onBackgroundSelectorModalOpen = {
+                                toolbarLog.i("Opening page settings modal")
+                                state.menuStates.isBackgroundSelectorModalOpen = true
+                            }
+                        )
                 }
             }
 

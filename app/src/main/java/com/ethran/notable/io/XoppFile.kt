@@ -25,6 +25,7 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.ensureNotMainThread
 import com.onyx.android.sdk.api.device.epd.EpdController
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
@@ -44,6 +45,7 @@ import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.io.StringWriter
 import java.util.UUID
+import javax.inject.Inject
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.transform.OutputKeys
 import javax.xml.transform.TransformerFactory
@@ -55,15 +57,16 @@ import javax.xml.transform.stream.StreamResult
 private const val PRESSURE_FACTOR = 0.5f
 
 // https://github.com/xournalpp/xournalpp/issues/2124
-class XoppFile(
-    private val context: Context,
-    private val pageRepo: PageRepository = PageRepository(context),
+class XoppFile @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val pageRepo: PageRepository,
+    private val bookRepo: BookRepository
 ) {
     private val log = ShipBook.getLogger("XoppFile")
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
     private val maxPressure = EpdController.getMaxTouchPressure()
 
-    fun writeToXoppStream(target: ExportTarget, output: OutputStream) {
+    suspend fun writeToXoppStream(target: ExportTarget, output: OutputStream) {
         // Build a temporary plain-XML file using existing writePage(), then gzip it into 'output'
         val tmp = File(
             context.cacheDir, when (target) {
@@ -77,7 +80,7 @@ class XoppFile(
             writer.write("<xournal creator=\"Notable ${BuildConfig.VERSION_NAME}\" version=\"0.4\">\n")
             when (target) {
                 is ExportTarget.Book -> {
-                    val book = BookRepository(context).getById(target.bookId)
+                    val book = bookRepo.getById(target.bookId)
                         ?: throw IOException("Book not found: ${target.bookId}")
                     book.pageIds.forEach { pageId ->
                         writePage(pageId, writer)
@@ -107,7 +110,7 @@ class XoppFile(
      * @param pageId The ID of the page to process.
      * @param writer The BufferedWriter to write XML data to.
      */
-    private fun writePage(pageId: String, writer: BufferedWriter) {
+    private suspend fun writePage(pageId: String, writer: BufferedWriter) {
         val (_, strokes) = pageRepo.getWithStrokeById(pageId)
         val (_, images) = pageRepo.getWithImageById(pageId)
 
@@ -227,7 +230,7 @@ class XoppFile(
      * @param context The application context.
      * @param uri The URI of the `.xopp` file to import.
      */
-    fun importBook(uri: Uri, savePageToDatabase: (PageContent) -> Unit) {
+    suspend fun importBook(uri: Uri, savePageToDatabase: suspend (PageContent) -> Unit) {
         log.v("Importing book from $uri")
         ensureNotMainThread("xoppImportBook")
         val inputStream = context.contentResolver.openInputStream(uri) ?: return
@@ -332,7 +335,7 @@ class XoppFile(
 
             boundingBox.inset(-strokeSize, -strokeSize)
             val toolName = strokeElement.getAttribute("tool")
-            val tool = Pen.Companion.fromString(toolName)
+            val tool = Pen.fromString(toolName)
 
             val stroke = Stroke(
                 size = strokeSize,
@@ -438,12 +441,13 @@ class XoppFile(
      */
     private fun parseColor(colorString: String): Color {
         return when (colorString.lowercase()) {
-            "black" -> Color.Companion.Black
-            "blue" -> Color.Companion.Blue
-            "red" -> Color.Companion.Red
-            "green" -> Color.Companion.Green
-            "magenta" -> Color.Companion.Magenta
-            "yellow" -> Color.Companion.Yellow
+            "black" -> Color.Black
+            "blue" -> Color.Blue
+            "red" -> Color.Red
+            "green" -> Color.Green
+            "magenta" -> Color.Magenta
+            "yellow" -> Color.Yellow
+            "gray" -> Color.Gray
             // Convert "#RRGGBBAA" → "#AARRGGBB" → Android Color
             else -> {
                 if (colorString.startsWith("#") && colorString.length == 9) Color(
@@ -451,7 +455,7 @@ class XoppFile(
                 )
                 else {
                     log.e("Unknown color: $colorString")
-                    Color.Companion.Black
+                    Color.Black
                 }
             }
         }
@@ -465,13 +469,13 @@ class XoppFile(
      */
     private fun getColorName(color: Color): String {
         return when (color) {
-            Color.Companion.Black -> "black"
-            Color.Companion.Blue -> "blue"
-            Color.Companion.Red -> "red"
-            Color.Companion.Green -> "green"
-            Color.Companion.Magenta -> "magenta"
-            Color.Companion.Yellow -> "yellow"
-            Color.Companion.DarkGray, Color.Companion.Gray -> "gray"
+            Color.Black -> "black"
+            Color.Blue -> "blue"
+            Color.Red -> "red"
+            Color.Green -> "green"
+            Color.Magenta -> "magenta"
+            Color.Yellow -> "yellow"
+            Color.DarkGray, Color.Gray -> "gray"
             else -> {
                 val argb = color.toArgb()
                 // Convert ARGB (Android default) → RGBA
