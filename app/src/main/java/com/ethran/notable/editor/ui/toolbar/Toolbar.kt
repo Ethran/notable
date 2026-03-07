@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
@@ -35,6 +36,7 @@ import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportFormat
@@ -50,37 +52,28 @@ import kotlinx.coroutines.launch
 
 private val log = ShipBook.getLogger("Toolbar")
 
-fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
-    return when (mode) {
-        Mode.Draw -> {
-            when (pen) {
-                Pen.BALLPEN -> R.drawable.ballpen
-                Pen.REDBALLPEN -> R.drawable.ballpenred
-                Pen.BLUEBALLPEN -> R.drawable.ballpenblue
-                Pen.GREENBALLPEN -> R.drawable.ballpengreen
-                Pen.FOUNTAIN -> R.drawable.fountain
-                Pen.BRUSH -> R.drawable.brush
-                Pen.MARKER -> R.drawable.marker
-                Pen.PENCIL -> R.drawable.pencil
-                Pen.DASHED -> R.drawable.line_dashed
-            }
-        }
-
-        Mode.Erase -> R.drawable.eraser
-        Mode.Select -> R.drawable.lasso
-        Mode.Line -> R.drawable.line
-    }
-}
-
-fun isSelected(state: EditorState, penType: Pen): Boolean {
-    return if (state.mode == Mode.Draw && state.pen == penType) {
-        true
-    } else if (state.mode == Mode.Line && state.pen == penType) {
-        true
-    } else {
-        false
-    }
-}
+/**
+ * UI State for the Toolbar to make it previable and decoupled from logic.
+ */
+data class ToolbarUiState(
+    val isToolbarOpen: Boolean = true,
+    val mode: Mode = Mode.Draw,
+    val pen: Pen = Pen.BALLPEN,
+    val penSettings: Map<String, PenSetting> = emptyMap(),
+    val eraser: Eraser = Eraser.PEN,
+    val isMenuOpen: Boolean = false,
+    val isStrokeSelectionOpen: Boolean = false,
+    val isBackgroundSelectorModalOpen: Boolean = false,
+    val pageNumberInfo: String = "1/1",
+    val hasClipboard: Boolean = false,
+    val showResetView: Boolean = false,
+    // Background Selector specific data
+    val backgroundType: String = "native",
+    val backgroundPath: String = "blank",
+    val backgroundPageNumber: Int = 0,
+    val notebookId: String? = null,
+    val currentPageNumber: Int = 0
+)
 
 
 private val SIZES_STROKES_DEFAULT = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
@@ -104,6 +97,94 @@ fun Toolbar(
 
     // Observe zoom level to decide button visibility
     val zoomLevel by state.pageView.zoomLevel.collectAsState()
+    val showResetView = state.pageView.scroll != androidx.compose.ui.geometry.Offset.Zero || zoomLevel != 1.0f
+
+    val uiState = ToolbarUiState(
+        isToolbarOpen = state.isToolbarOpen,
+        mode = state.mode,
+        pen = state.pen,
+        penSettings = state.penSettings,
+        eraser = state.eraser,
+        isMenuOpen = state.menuStates.isMenuOpen,
+        isStrokeSelectionOpen = state.menuStates.isStrokeSelectionOpen,
+        isBackgroundSelectorModalOpen = state.menuStates.isBackgroundSelectorModalOpen,
+        pageNumberInfo = pageNumberInfo,
+        hasClipboard = state.clipboard != null,
+        showResetView = showResetView,
+        backgroundType = state.pageView.pageFromDb?.backgroundType ?: "native",
+        backgroundPath = state.pageView.pageFromDb?.background ?: "blank",
+        backgroundPageNumber = state.pageView.getBackgroundPageNumber(),
+        notebookId = state.pageView.pageFromDb?.notebookId,
+        currentPageNumber = state.pageView.currentPageNumber
+    )
+
+    ToolbarContent(
+        uiState = uiState,
+        onToggleToolbar = { state.isToolbarOpen = !state.isToolbarOpen },
+        onModeChange = { state.mode = it },
+        onPenChange = { pen ->
+            if (state.mode == Mode.Draw && state.pen == pen) {
+                state.menuStates.isStrokeSelectionOpen = true
+            } else {
+                state.mode = Mode.Draw
+                state.pen = pen
+            }
+        },
+        onPenSettingChange = { pen, setting ->
+            val settings = state.penSettings.toMutableMap()
+            settings[pen.penName] = setting
+            state.penSettings = settings
+        },
+        onEraserChange = { state.eraser = it },
+        onMenuToggle = { state.menuStates.isMenuOpen = !state.menuStates.isMenuOpen },
+        onBackgroundSelectorToggle = { state.menuStates.isBackgroundSelectorModalOpen = it },
+        onUndo = { controlTower.undo() },
+        onRedo = { controlTower.redo() },
+        onPaste = { controlTower.pasteFromClipboard() },
+        onResetView = { controlTower.resetZoomAndScroll() },
+        onNavigateToLibrary = onNavigateToLibrary,
+        onNavigateToBugReport = onNavigateToBugReport,
+        onNavigateToPages = onNavigateToPages,
+        onNavigateToHome = onNavigateToHome,
+        onToggleScribbleToErase = onToggleScribbleToErase,
+        onImagePicked = onImagePicked,
+        onExport = onExport,
+        onBackgroundChange = { type, path ->
+            val updatedPage = if (path == null)
+                state.pageView.pageFromDb!!.copy(backgroundType = type)
+            else state.pageView.pageFromDb!!.copy(background = path, backgroundType = type)
+            state.pageView.updatePageSettings(updatedPage)
+            scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
+        },
+        onDrawingStateCheck = { state.checkForSelectionsAndMenus() }
+    )
+}
+
+@Composable
+fun ToolbarContent(
+    uiState: ToolbarUiState,
+    onToggleToolbar: () -> Unit,
+    onModeChange: (Mode) -> Unit,
+    onPenChange: (Pen) -> Unit,
+    onPenSettingChange: (Pen, PenSetting) -> Unit,
+    onEraserChange: (Eraser) -> Unit,
+    onMenuToggle: () -> Unit,
+    onBackgroundSelectorToggle: (Boolean) -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onPaste: () -> Unit,
+    onResetView: () -> Unit,
+    onNavigateToLibrary: () -> Unit,
+    onNavigateToBugReport: () -> Unit,
+    onNavigateToPages: () -> Unit,
+    onNavigateToHome: () -> Unit,
+    onToggleScribbleToErase: (Boolean) -> Unit,
+    onImagePicked: (Uri) -> Unit,
+    onExport: suspend (ExportTarget, ExportFormat) -> String,
+    onBackgroundChange: (String, String?) -> Unit,
+    onDrawingStateCheck: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
 
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
@@ -116,63 +197,24 @@ fun Toolbar(
         }
 
     // on exit of toolbar, update drawing state
-    LaunchedEffect(state.menuStates.isBackgroundSelectorModalOpen, state.menuStates.isMenuOpen) {
+    LaunchedEffect(uiState.isBackgroundSelectorModalOpen, uiState.isMenuOpen) {
         log.i("Updating drawing state")
-        state.checkForSelectionsAndMenus()
-    }
-    fun handleChangePen(pen: Pen) {
-        if (state.mode == Mode.Draw && state.pen == pen) {
-            state.menuStates.isStrokeSelectionOpen = true
-        } else {
-            state.mode = Mode.Draw
-            state.pen = pen
-        }
+        onDrawingStateCheck()
     }
 
-    fun handleEraser() {
-        state.mode = Mode.Erase
-    }
-
-    fun handleSelection() {
-        state.mode = Mode.Select
-    }
-
-    fun handleLine() {
-        state.mode = Mode.Line
-    }
-
-    fun onChangeStrokeSetting(penName: String, setting: PenSetting) {
-        val settings = state.penSettings.toMutableMap()
-        settings[penName] = setting.copy()
-        state.penSettings = settings
-    }
-
-    if (state.menuStates.isBackgroundSelectorModalOpen) {
-        log.i("Opening page settings modal")
+    if (uiState.isBackgroundSelectorModalOpen) {
         BackgroundSelector(
-            initialPageBackgroundType = state.pageView.pageFromDb?.backgroundType ?: "native",
-            initialPageBackground = state.pageView.pageFromDb?.background ?: "blank",
-            initialPageNumberInPdf = state.pageView.getBackgroundPageNumber(),
-            notebookId = state.pageView.pageFromDb?.notebookId,
-            pageNumberInBook = state.pageView.currentPageNumber,
-            onChange = { backgroundType, background ->
-                val updatedPage =
-                    if (background == null)
-                        state.pageView.pageFromDb!!.copy(
-                            backgroundType = backgroundType
-                        )
-                    else state.pageView.pageFromDb!!.copy(
-                        background = background,
-                        backgroundType = backgroundType
-                    )
-                state.pageView.updatePageSettings(updatedPage)
-                scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
-            }
-        ) {
-            state.menuStates.isBackgroundSelectorModalOpen = false
-        }
+            initialPageBackgroundType = uiState.backgroundType,
+            initialPageBackground = uiState.backgroundPath,
+            initialPageNumberInPdf = uiState.backgroundPageNumber,
+            notebookId = uiState.notebookId,
+            pageNumberInBook = uiState.currentPageNumber,
+            onChange = onBackgroundChange,
+            onClose = { onBackgroundSelectorToggle(false) }
+        )
     }
-    if (state.isToolbarOpen) {
+
+    if (uiState.isToolbarOpen) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -194,9 +236,7 @@ fun Toolbar(
                     .fillMaxWidth()
             ) {
                 ToolbarButton(
-                    onSelect = {
-                        state.isToolbarOpen = !state.isToolbarOpen
-                    }, vectorIcon = FeatherIcons.EyeOff, contentDescription = "close toolbar"
+                    onSelect = onToggleToolbar, vectorIcon = FeatherIcons.EyeOff, contentDescription = "close toolbar"
                 )
                 Box(
                     Modifier
@@ -206,88 +246,80 @@ fun Toolbar(
                 )
 
                 PenToolbarButton(
-                    onStrokeMenuOpenChange = { state.isDrawing = !it },
                     pen = Pen.BALLPEN,
                     icon = R.drawable.ballpen,
-                    isSelected = isSelected(state, Pen.BALLPEN),
-                    onSelect = { handleChangePen(Pen.BALLPEN) },
+                    isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.BALLPEN,
+                    onSelect = { onPenChange(Pen.BALLPEN) },
                     sizes = SIZES_STROKES_DEFAULT,
-                    penSetting = state.penSettings[Pen.BALLPEN.penName] ?: return,
-                    onChangeSetting = { onChangeStrokeSetting(Pen.BALLPEN.penName, it) })
+                    penSetting = uiState.penSettings[Pen.BALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                    onChangeSetting = { onPenSettingChange(Pen.BALLPEN, it) })
 
                 if (!GlobalAppSettings.current.monochromeMode) {
                     PenToolbarButton(
-                        onStrokeMenuOpenChange = { state.isDrawing = !it },
                         pen = Pen.REDBALLPEN,
                         icon = R.drawable.ballpenred,
-                        isSelected = isSelected(state, Pen.REDBALLPEN),
-                        onSelect = { handleChangePen(Pen.REDBALLPEN) },
+                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.REDBALLPEN,
+                        onSelect = { onPenChange(Pen.REDBALLPEN) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = state.penSettings[Pen.REDBALLPEN.penName] ?: return,
-                        onChangeSetting = { onChangeStrokeSetting(Pen.REDBALLPEN.penName, it) },
+                        penSetting = uiState.penSettings[Pen.REDBALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.RED),
+                        onChangeSetting = { onPenSettingChange(Pen.REDBALLPEN, it) },
                     )
 
                     PenToolbarButton(
-                        onStrokeMenuOpenChange = { state.isDrawing = !it },
                         pen = Pen.BLUEBALLPEN,
                         icon = R.drawable.ballpenblue,
-                        isSelected = isSelected(state, Pen.BLUEBALLPEN),
-                        onSelect = { handleChangePen(Pen.BLUEBALLPEN) },
+                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.BLUEBALLPEN,
+                        onSelect = { onPenChange(Pen.BLUEBALLPEN) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = state.penSettings[Pen.BLUEBALLPEN.penName] ?: return,
-                        onChangeSetting = { onChangeStrokeSetting(Pen.BLUEBALLPEN.penName, it) },
+                        penSetting = uiState.penSettings[Pen.BLUEBALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.BLUE),
+                        onChangeSetting = { onPenSettingChange(Pen.BLUEBALLPEN, it) },
                     )
-//              Removed to make space for insert tool
                     PenToolbarButton(
-                        onStrokeMenuOpenChange = { state.isDrawing = !it },
                         pen = Pen.GREENBALLPEN,
                         icon = R.drawable.ballpengreen,
-                        isSelected = isSelected(state, Pen.GREENBALLPEN),
-                        onSelect = { handleChangePen(Pen.GREENBALLPEN) },
+                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.GREENBALLPEN,
+                        onSelect = { onPenChange(Pen.GREENBALLPEN) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = state.penSettings[Pen.GREENBALLPEN.penName] ?: return,
-                        onChangeSetting = { onChangeStrokeSetting(Pen.GREENBALLPEN.penName, it) },
+                        penSetting = uiState.penSettings[Pen.GREENBALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.GREEN),
+                        onChangeSetting = { onPenSettingChange(Pen.GREENBALLPEN, it) },
                     )
                 }
                 if (GlobalAppSettings.current.neoTools) {
                     PenToolbarButton(
-                        onStrokeMenuOpenChange = { state.isDrawing = !it },
                         pen = Pen.PENCIL,
                         icon = R.drawable.pencil,
-                        isSelected = isSelected(state, Pen.PENCIL),
-                        onSelect = { handleChangePen(Pen.PENCIL) }, // Neo-tool! Usage not recommended
+                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.PENCIL,
+                        onSelect = { onPenChange(Pen.PENCIL) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = state.penSettings[Pen.PENCIL.penName] ?: return,
-                        onChangeSetting = { onChangeStrokeSetting(Pen.PENCIL.penName, it) },
+                        penSetting = uiState.penSettings[Pen.PENCIL.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                        onChangeSetting = { onPenSettingChange(Pen.PENCIL, it) },
                     )
 
                     PenToolbarButton(
-                        onStrokeMenuOpenChange = { state.isDrawing = !it },
                         pen = Pen.BRUSH,
                         icon = R.drawable.brush,
-                        isSelected = isSelected(state, Pen.BRUSH),
-                        onSelect = { handleChangePen(Pen.BRUSH) }, // Neo-tool! Usage not recommended
+                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.BRUSH,
+                        onSelect = { onPenChange(Pen.BRUSH) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = state.penSettings[Pen.BRUSH.penName] ?: return,
-                        onChangeSetting = { onChangeStrokeSetting(Pen.BRUSH.penName, it) },
+                        penSetting = uiState.penSettings[Pen.BRUSH.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                        onChangeSetting = { onPenSettingChange(Pen.BRUSH, it) },
                     )
                 }
                 PenToolbarButton(
-                    onStrokeMenuOpenChange = { state.isDrawing = !it },
                     pen = Pen.FOUNTAIN,
                     icon = R.drawable.fountain,
-                    isSelected = isSelected(state, Pen.FOUNTAIN),
-                    onSelect = { handleChangePen(Pen.FOUNTAIN) },// Neo-tool! Usage not recommended
+                    isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.FOUNTAIN,
+                    onSelect = { onPenChange(Pen.FOUNTAIN) },
                     sizes = SIZES_STROKES_DEFAULT,
-                    penSetting = state.penSettings[Pen.FOUNTAIN.penName] ?: return,
-                    onChangeSetting = { onChangeStrokeSetting(Pen.FOUNTAIN.penName, it) },
+                    penSetting = uiState.penSettings[Pen.FOUNTAIN.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                    onChangeSetting = { onPenSettingChange(Pen.FOUNTAIN, it) },
                 )
 
                 LineToolbarButton(
-                    unSelect = { state.mode = Mode.Draw },
+                    unSelect = { onModeChange(Mode.Draw) },
                     icon = R.drawable.line,
-                    isSelected = state.mode == Mode.Line,
-                    onSelect = { handleLine() },
+                    isSelected = uiState.mode == Mode.Line,
+                    onSelect = { onModeChange(Mode.Line) },
                 )
 
                 Box(
@@ -298,14 +330,13 @@ fun Toolbar(
                 )
 
                 PenToolbarButton(
-                    onStrokeMenuOpenChange = { state.isDrawing = !it },
                     pen = Pen.MARKER,
                     icon = R.drawable.marker,
-                    isSelected = isSelected(state, Pen.MARKER),
-                    onSelect = { handleChangePen(Pen.MARKER) },
+                    isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.MARKER,
+                    onSelect = { onPenChange(Pen.MARKER) },
                     sizes = SIZES_MARKER_DEFAULT,
-                    penSetting = state.penSettings[Pen.MARKER.penName] ?: return,
-                    onChangeSetting = { onChangeStrokeSetting(Pen.MARKER.penName, it) })
+                    penSetting = uiState.penSettings[Pen.MARKER.penName] ?: PenSetting(40f, android.graphics.Color.LTGRAY),
+                    onChangeSetting = { onPenSettingChange(Pen.MARKER, it) })
                 Box(
                     Modifier
                         .fillMaxHeight()
@@ -313,14 +344,12 @@ fun Toolbar(
                         .background(Color.Black)
                 )
                 EraserToolbarButton(
-                    isSelected = state.mode == Mode.Erase,
-                    onSelect = {
-                        handleEraser()
-                    },
-                    onMenuOpenChange = { state.menuStates.isStrokeSelectionOpen = it },
-                    value = state.eraser,
-                    onChange = { state.eraser = it },
-                    toggleScribbleToErase = onToggleScribbleToErase
+                    isSelected = uiState.mode == Mode.Erase,
+                    onSelect = { onModeChange(Mode.Erase) },
+                    value = uiState.eraser,
+                    onChange = onEraserChange,
+                    toggleScribbleToErase = onToggleScribbleToErase,
+                    onMenuOpenChange = {}
                 )
                 Box(
                     Modifier
@@ -329,8 +358,8 @@ fun Toolbar(
                         .background(Color.Black)
                 )
                 ToolbarButton(
-                    isSelected = state.mode == Mode.Select,
-                    onSelect = { handleSelection() },
+                    isSelected = uiState.mode == Mode.Select,
+                    onSelect = { onModeChange(Mode.Select) },
                     iconId = R.drawable.lasso,
                     contentDescription = "lasso"
                 )
@@ -343,7 +372,7 @@ fun Toolbar(
 
                 ToolbarButton(
                     iconId = R.drawable.image,
-                    contentDescription = "library",
+                    contentDescription = "Image picker",
                     onSelect = {
                         // Call insertImage when the button is tapped
                         log.i("Launching image picker...")
@@ -357,13 +386,11 @@ fun Toolbar(
                         .background(Color.Black)
                 )
 
-                if (state.clipboard != null) {
+                if (uiState.hasClipboard) {
                     ToolbarButton(
                         vectorIcon = FeatherIcons.Clipboard,
                         contentDescription = "paste",
-                        onSelect = {
-                            controlTower.pasteFromClipboard()
-                        }
+                        onSelect = onPaste
                     )
                     Box(
                         Modifier
@@ -373,13 +400,11 @@ fun Toolbar(
                     )
                 }
 
-                // Show "Reset view" only when zoom != 1f or scroll != 0
-                val showResetView = state.pageView.scroll.x != 0f || zoomLevel != 1.0f
-                if (showResetView) {
+                if (uiState.showResetView) {
                     ToolbarButton(
                         vectorIcon = FeatherIcons.RefreshCcw,
                         contentDescription = "reset zoom and scroll",
-                        onSelect = { controlTower.resetZoomAndScroll() }
+                        onSelect = onResetView
                     )
                     Box(
                         Modifier
@@ -399,21 +424,13 @@ fun Toolbar(
                 )
 
                 ToolbarButton(
-                    onSelect = {
-                        scope.launch {
-                            controlTower.undo()
-                        }
-                    },
+                    onSelect = onUndo,
                     iconId = R.drawable.undo,
                     contentDescription = "undo"
                 )
 
                 ToolbarButton(
-                    onSelect = {
-                        scope.launch {
-                            controlTower.redo()
-                        }
-                    },
+                    onSelect = onRedo,
                     iconId = R.drawable.redo,
                     contentDescription = "redo"
                 )
@@ -424,7 +441,7 @@ fun Toolbar(
                         .width(0.5.dp)
                         .background(Color.Black)
                 )
-                if (state.bookId != null) {
+                if (uiState.notebookId != null) {
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
@@ -432,11 +449,9 @@ fun Toolbar(
                             .padding(10.dp, 0.dp)
                     ) {
                         Text(
-                            text = pageNumberInfo,
+                            text = uiState.pageNumberInfo,
                             fontWeight = FontWeight.Light,
-                            modifier = Modifier.noRippleClickable {
-                                onNavigateToPages()
-                            },
+                            modifier = Modifier.noRippleClickable(onNavigateToPages),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -449,7 +464,7 @@ fun Toolbar(
                 }
                 // Add Library Button
                 ToolbarButton(
-                    iconId = R.drawable.home, // Replace with your library icon resource
+                    iconId = R.drawable.home,
                     contentDescription = "library",
                     onSelect = onNavigateToHome
                 )
@@ -461,21 +476,18 @@ fun Toolbar(
                 )
                 Column {
                     ToolbarButton(
-                        onSelect = {
-                            state.menuStates.isMenuOpen = !state.menuStates.isMenuOpen
-                        }, iconId = R.drawable.menu, contentDescription = "menu"
+                        onSelect = onMenuToggle, iconId = R.drawable.menu, contentDescription = "menu"
                     )
-                    if (state.menuStates.isMenuOpen)
+                    if (uiState.isMenuOpen)
                         ToolbarMenu(
                             onExport = onExport,
                             goToBugReport = onNavigateToBugReport,
                             goToLibrary = onNavigateToLibrary,
-                            currentPageId = state.currentPageId,
-                            currentBookId = state.bookId,
-                            onClose = { state.menuStates.isMenuOpen = false },
+                            currentPageId = "",
+                            currentBookId = uiState.notebookId,
+                            onClose = onMenuToggle,
                             onBackgroundSelectorModalOpen = {
-                                log.i("Opening page settings modal")
-                                state.menuStates.isBackgroundSelectorModalOpen = true
+                                onBackgroundSelectorToggle(true)
                             }
                         )
                 }
@@ -491,12 +503,10 @@ fun Toolbar(
     } else {
         // Button to show Toolbar
         ToolbarButton(
-            onSelect = { state.isToolbarOpen = true },
-            iconId = presentlyUsedToolIcon(state.mode, state.pen),
-            penColor = if (state.mode != Mode.Erase) state.penSettings[state.pen.penName]?.color?.let {
-                Color(
-                    it
-                )
+            onSelect = onToggleToolbar,
+            iconId = presentlyUsedToolIcon(uiState.mode, uiState.pen),
+            penColor = if (uiState.mode != Mode.Erase) uiState.penSettings[uiState.pen.penName]?.color?.let {
+                Color(it)
             } else null,
             contentDescription = "open toolbar",
             modifier = Modifier
@@ -504,4 +514,66 @@ fun Toolbar(
                 .padding(bottom = 1.dp)
         )
     }
+}
+
+fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
+    return when (mode) {
+        Mode.Draw -> {
+            when (pen) {
+                Pen.BALLPEN -> R.drawable.ballpen
+                Pen.REDBALLPEN -> R.drawable.ballpenred
+                Pen.BLUEBALLPEN -> R.drawable.ballpenblue
+                Pen.GREENBALLPEN -> R.drawable.ballpengreen
+                Pen.FOUNTAIN -> R.drawable.fountain
+                Pen.BRUSH -> R.drawable.brush
+                Pen.MARKER -> R.drawable.marker
+                Pen.PENCIL -> R.drawable.pencil
+                Pen.DASHED -> R.drawable.line_dashed
+            }
+        }
+
+        Mode.Erase -> R.drawable.eraser
+        Mode.Select -> R.drawable.lasso
+        Mode.Line -> R.drawable.line
+    }
+}
+
+@Composable
+@Preview(showBackground = true, widthDp = 1200)
+fun ToolbarPreview (){
+    val uiState = ToolbarUiState(
+        isToolbarOpen = true,
+        mode = Mode.Draw,
+        pen = Pen.BALLPEN,
+        penSettings = mapOf(
+            Pen.BALLPEN.penName to PenSetting(5f, android.graphics.Color.BLACK),
+            Pen.MARKER.penName to PenSetting(40f, android.graphics.Color.LTGRAY)
+        ),
+        pageNumberInfo = "3/12",
+        notebookId = "dummy_book"
+    )
+
+    ToolbarContent(
+        uiState = uiState,
+        onToggleToolbar = {},
+        onModeChange = {},
+        onPenChange = {},
+        onPenSettingChange = { _, _ -> },
+        onEraserChange = {},
+        onMenuToggle = {},
+        onBackgroundSelectorToggle = {},
+        onUndo = {},
+        onRedo = {},
+        onPaste = {},
+        onResetView = {},
+        onNavigateToLibrary = {},
+        onNavigateToBugReport = {},
+        onNavigateToPages = {},
+        onNavigateToHome = {},
+        onToggleScribbleToErase = {},
+        onImagePicked = {},
+        onExport = { _, _ -> "" },
+        onBackgroundChange = { _, _ -> },
+        onDrawingStateCheck = {}
+    )
 }
