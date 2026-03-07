@@ -3,14 +3,19 @@ package com.ethran.notable
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
-import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,14 +61,15 @@ var SCREEN_HEIGHT = EpdController.getEpdWidth().toInt()
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    // Delay the init till we have the permisions required
     @Inject
-    lateinit var kvProxy: KvProxy
+    lateinit var kvProxy: dagger.Lazy<KvProxy>
 
     @Inject
-    lateinit var strokeMigrationHelper: StrokeMigrationHelper
+    lateinit var strokeMigrationHelper: dagger.Lazy<StrokeMigrationHelper>
 
     @Inject
-    lateinit var editorSettingCacheManager: EditorSettingCacheManager
+    lateinit var editorSettingCacheManager: dagger.Lazy<EditorSettingCacheManager>
 
     // 1. Use dagger.Lazy to defer DB initialization until after permissions
     @Inject
@@ -97,13 +103,13 @@ class MainActivity : ComponentActivity() {
                     withContext(Dispatchers.IO) {
                         // Init app settings, also do migration
                         val savedSettings =
-                            kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+                            kvProxy.get().get(APP_SETTINGS_KEY, AppSettings.serializer())
                                 ?: AppSettings(version = 1)
 
                         GlobalAppSettings.update(savedSettings)
 
-                        editorSettingCacheManager.init()
-                        strokeMigrationHelper.reencodeStrokePointsToSB1()
+                        editorSettingCacheManager.get().init()
+                        strokeMigrationHelper.get().reencodeStrokePointsToSB1()
                     }
                 }
                 isInitialized = true
@@ -115,7 +121,7 @@ class MainActivity : ComponentActivity() {
                         NotableApp(
                             // Call .get() here so they are only instantiated AFTER the permission check runs
                             exportEngine = exportEngineLazy.get(),
-                            editorSettingCacheManager = editorSettingCacheManager,
+                            editorSettingCacheManager = editorSettingCacheManager.get(),
                             snackState = snackState,
                             appRepository = appRepositoryLazy.get()
                         )
