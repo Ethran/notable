@@ -31,7 +31,7 @@ fun exportToLinkedFile(
         val uriStr = bookRepository.getById(bookId)?.linkedExternalUri
         if (!uriStr.isNullOrBlank()) {
             try {
-                log.i("Exporting page to linked file, dictionary: $uriStr")
+                log.i("Exporting page to linked file, uri: $uriStr")
                 exportEngine.export(
                     target = ExportTarget.Book(bookId),
                     format = ExportFormat.XOPP,

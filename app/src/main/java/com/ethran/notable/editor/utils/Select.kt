@@ -207,7 +207,7 @@ fun handleSelect(
         if (state.firstPageCut == null) {
             // this is the first page cut
             state.firstPageCut = completePoints
-            log.i("Registered first curt")
+            log.i("Registered first cut")
         } else {
             // this is the second page cut, we can also select the strokes
             // first lets have the cuts in the right order
