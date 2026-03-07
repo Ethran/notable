@@ -28,6 +28,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.data.db.reencodeStrokePointsToSB1
 import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.ui.LocalSnackContext
@@ -88,16 +89,7 @@ class MainActivity : ComponentActivity() {
 
             // Trigger initial sync on app startup (fails silently if offline)
             this.lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    val settings = GlobalAppSettings.current
-                    if (settings.syncSettings.syncEnabled) {
-                        Log.i(TAG, "Triggering initial sync on app startup")
-                        com.ethran.notable.sync.SyncEngine(applicationContext).syncAllNotebooks()
-                    }
-                } catch (e: Exception) {
-                    Log.i(TAG, "Initial sync failed (offline?): ${e.message}")
-                    // Fail silently - periodic sync will handle it later
-                }
+                triggerInitialSync()
             }
         }
 
@@ -127,6 +119,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
+    private suspend fun triggerInitialSync() {
+        try {
+            if (GlobalAppSettings.current.syncSettings.syncEnabled) {
+                Log.i(TAG, "Triggering initial sync on app startup")
+                SyncEngine(applicationContext).syncAllNotebooks()
+            }
+        } catch (e: Exception) {
+            Log.i(TAG, "Initial sync failed (offline?): ${e.message}")
+            // Fail silently — periodic sync will handle it later
+        }
+    }
 
     override fun onRestart() {
         super.onRestart()

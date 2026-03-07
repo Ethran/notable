@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit
  */
 object SyncScheduler {
 
-    private const val DEFAULT_SYNC_INTERVAL_MINUTES = 5L
+    // WorkManager enforces a minimum interval of 15 minutes for periodic work.
+    private const val DEFAULT_SYNC_INTERVAL_MINUTES = 15L
 
     /**
      * Enable periodic background sync.
@@ -22,6 +23,8 @@ object SyncScheduler {
      * @param wifiOnly If true, only run on unmetered (WiFi) connections
      */
     fun enablePeriodicSync(context: Context, intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES, wifiOnly: Boolean = false) {
+        // UNMETERED covers WiFi and ethernet but excludes metered mobile connections.
+        // This matches the intent of the "WiFi only" setting (avoid burning mobile data).
         val networkType = if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(networkType)

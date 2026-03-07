@@ -23,12 +23,13 @@ class ConnectivityChecker(private val context: Context) {
     }
 
     /**
-     * Check if connected to WiFi (for battery-conscious sync).
-     * @return true if connected via WiFi
+     * Check if on an unmetered connection (WiFi or ethernet, not metered mobile data).
+     * Mirrors WorkManager's NetworkType.UNMETERED so the in-process check stays consistent
+     * with the WorkManager constraint used in SyncScheduler.
      */
-    fun isWiFiConnected(): Boolean {
+    fun isUnmeteredConnected(): Boolean {
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
     }
 }

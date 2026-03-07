@@ -63,6 +63,7 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.sync.SyncEngine
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
 
@@ -122,16 +123,15 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
             title = "Confirm Deletion",
             message = "Are you sure you want to delete \"${book!!.title}\"?",
             onConfirm = {
-                val deletedNotebookId = bookId
-                bookRepository.delete(deletedNotebookId)
+                bookRepository.delete(bookId)
                 showDeleteDialog = false
                 onClose()
 
                 // Auto-upload deletion to server (efficient - no full sync needed)
                 scope.launch {
                     try {
-                        Log.i(TAG, "Uploading deletion for notebook: $deletedNotebookId")
-                        com.ethran.notable.sync.SyncEngine(context).uploadDeletion(deletedNotebookId)
+                        Log.i(TAG, "Uploading deletion for notebook: $bookId")
+                        SyncEngine(context).uploadDeletion(bookId)
                     } catch (e: Exception) {
                         Log.e(TAG, "Upload deletion failed: ${e.message}")
                     }

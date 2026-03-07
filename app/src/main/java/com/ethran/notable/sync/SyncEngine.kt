@@ -10,7 +10,6 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.ensureImagesFolder
-import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,16 +19,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 // Alias for cleaner code
 private val SLog = SyncLogger
-
-// WebDAV root directory name - used as subdirectory appended to server URL path
-private const val WEBDAV_ROOT_DIR = "notable"
 
 /**
  * Core sync engine orchestrating WebDAV synchronization.
@@ -48,16 +40,15 @@ class SyncEngine(private val context: Context) {
      * @return SyncResult indicating success or failure
      */
     suspend fun syncAllNotebooks(): SyncResult = withContext(Dispatchers.IO) {
-        // Try to acquire mutex - fail fast if already syncing
         if (!syncMutex.tryLock()) {
             SLog.w(TAG, "Sync already in progress, skipping")
             return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)
         }
 
         val startTime = System.currentTimeMillis()
-        var notebooksSynced = 0
-        var notebooksDownloaded = 0
-        var notebooksDeleted = 0
+        var notebooksSynced: Int
+        var notebooksDownloaded: Int
+        var notebooksDeleted: Int
 
         return@withContext try {
             SLog.i(TAG, "Starting full sync...")
@@ -67,12 +58,18 @@ class SyncEngine(private val context: Context) {
                 details = "Initializing sync..."
             ))
 
-            // Initialize sync client and settings
-            val (settings, webdavClient) = initializeSyncClient()
-                ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+            val initResult = initializeSyncClient()
+            if (initResult == null) {
+                updateState(SyncState.Error(
+                    error = SyncError.CONFIG_ERROR,
+                    step = SyncStep.INITIALIZING,
+                    canRetry = false
+                ))
+                return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+            }
+            val (settings, webdavClient) = initResult
 
-            // Enforce WiFi-only setting
-            if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isWiFiConnected()) {
+            if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isUnmeteredConnected()) {
                 SLog.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping")
                 updateState(SyncState.Error(
                     error = SyncError.WIFI_REQUIRED,
@@ -82,7 +79,6 @@ class SyncEngine(private val context: Context) {
                 return@withContext SyncResult.Failure(SyncError.WIFI_REQUIRED)
             }
 
-            // Check clock skew before proceeding
             val skewMs = checkClockSkew(webdavClient)
             if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
                 val skewSec = skewMs / 1000
@@ -95,7 +91,6 @@ class SyncEngine(private val context: Context) {
                 return@withContext SyncResult.Failure(SyncError.CLOCK_SKEW)
             }
 
-            // Ensure base directory structure exists on server
             ensureServerDirectories(webdavClient)
 
             // 1. Sync folders first (they're referenced by notebooks)
@@ -112,7 +107,7 @@ class SyncEngine(private val context: Context) {
                 progress = PROGRESS_APPLYING_DELETIONS,
                 details = "Applying remote deletions..."
             ))
-            val deletionsData = applyRemoteDeletions(webdavClient)
+            val tombstonedIds = applyRemoteDeletions(webdavClient)
 
             // 3. Sync existing local notebooks and capture pre-download snapshot
             updateState(SyncState.Syncing(
@@ -129,10 +124,10 @@ class SyncEngine(private val context: Context) {
                 progress = PROGRESS_DOWNLOADING_NEW,
                 details = "Downloading new notebooks..."
             ))
-            val newCount = downloadNewNotebooks(webdavClient, deletionsData, settings, preDownloadNotebookIds)
+            val newCount = downloadNewNotebooks(webdavClient, tombstonedIds, settings, preDownloadNotebookIds)
             notebooksDownloaded = newCount
 
-            // 5. Detect local deletions and upload to server
+            // 5. Detect local deletions and upload tombstones to server
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.UPLOADING_DELETIONS,
                 progress = PROGRESS_UPLOADING_DELETIONS,
@@ -141,10 +136,7 @@ class SyncEngine(private val context: Context) {
             val deletedCount = detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
             notebooksDeleted = deletedCount
 
-            // 6. Sync Quick Pages (pages with notebookId = null)
-            // TODO: Implement Quick Pages sync
-
-            // 7. Update synced notebook IDs for next sync
+            // 6. Update synced notebook IDs for next sync
             updateState(SyncState.Syncing(
                 currentStep = SyncStep.FINALIZING,
                 progress = PROGRESS_FINALIZING,
@@ -163,7 +155,6 @@ class SyncEngine(private val context: Context) {
             SLog.i(TAG, "✓ Full sync completed in ${duration}ms")
             updateState(SyncState.Success(summary))
 
-            // Auto-reset to Idle after a delay
             delay(SUCCESS_STATE_AUTO_RESET_MS)
             if (syncState.value is SyncState.Success) {
                 updateState(SyncState.Idle)
@@ -195,29 +186,44 @@ class SyncEngine(private val context: Context) {
 
     /**
      * Sync a single notebook with the WebDAV server.
+     * Called on note open/close. If a full sync is already running, this is silently skipped
+     * to avoid concurrent WebDAV operations. A proper per-notebook mutex would be more correct
+     * but is overkill for the single-user use case.
      * @param notebookId Notebook ID to sync
      * @return SyncResult indicating success or failure
      */
     suspend fun syncNotebook(notebookId: String): SyncResult = withContext(Dispatchers.IO) {
-        return@withContext try {
+        // Skip if a full sync is already holding the mutex
+        if (syncMutex.isLocked) {
+            SLog.i(TAG, "Full sync in progress, skipping per-notebook sync for $notebookId")
+            return@withContext SyncResult.Success
+        }
+        return@withContext syncNotebookImpl(notebookId)
+    }
+
+    /**
+     * Internal notebook sync — does not check the mutex. Called from both
+     * the public [syncNotebook] entry point and [syncExistingNotebooks] (which
+     * already runs inside the full-sync mutex context).
+     */
+    private fun syncNotebookImpl(notebookId: String): SyncResult {
+        return try {
             SLog.i(TAG, "Syncing notebook: $notebookId")
 
-            // Get sync settings and credentials
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
-                ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+                ?: return SyncResult.Failure(SyncError.CONFIG_ERROR)
 
             if (!settings.syncSettings.syncEnabled) {
-                return@withContext SyncResult.Success
+                return SyncResult.Success
             }
 
-            // Silently skip sync-on-close if not on WiFi — this isn't user-initiated
-            if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isWiFiConnected()) {
+            if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isUnmeteredConnected()) {
                 SLog.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping notebook sync")
-                return@withContext SyncResult.Success
+                return SyncResult.Success
             }
 
             val credentials = credentialManager.getCredentials()
-                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+                ?: return SyncResult.Failure(SyncError.AUTH_ERROR)
 
             val webdavClient = WebDAVClient(
                 settings.syncSettings.serverUrl,
@@ -225,26 +231,22 @@ class SyncEngine(private val context: Context) {
                 credentials.second
             )
 
-            // Check clock skew before proceeding
             val skewMs = checkClockSkew(webdavClient)
             if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
                 val skewSec = skewMs / 1000
                 SLog.w(TAG, "Clock skew too large for single-notebook sync: ${skewSec}s")
-                return@withContext SyncResult.Failure(SyncError.CLOCK_SKEW)
+                return SyncResult.Failure(SyncError.CLOCK_SKEW)
             }
 
-            // Get local notebook
             val localNotebook = appRepository.bookRepository.getById(notebookId)
-                ?: return@withContext SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+                ?: return SyncResult.Failure(SyncError.UNKNOWN_ERROR)
 
-            // Check if remote notebook exists
-            val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/manifest.json"
+            val remotePath = SyncPaths.manifestFile(notebookId)
             val remoteExists = webdavClient.exists(remotePath)
 
             SLog.i(TAG, "Checking: ${localNotebook.title}")
 
             if (remoteExists) {
-                // Fetch remote manifest and compare timestamps
                 val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
 
@@ -253,29 +255,24 @@ class SyncEngine(private val context: Context) {
                 SLog.i(TAG, "Local: ${localNotebook.updatedAt} (${localNotebook.updatedAt.time}ms)")
                 SLog.i(TAG, "Difference: ${diffMs}ms")
 
-                // Use tolerance to ignore millisecond precision differences
                 when {
                     remoteUpdatedAt == null -> {
                         SLog.i(TAG, "↑ No remote timestamp, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
                     diffMs < -TIMESTAMP_TOLERANCE_MS -> {
-                        // Remote is newer by more than tolerance - download
                         SLog.i(TAG, "↓ Remote newer, downloading ${localNotebook.title}")
                         downloadNotebook(notebookId, webdavClient)
                     }
                     diffMs > TIMESTAMP_TOLERANCE_MS -> {
-                        // Local is newer by more than tolerance - upload
                         SLog.i(TAG, "↑ Local newer, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
                     else -> {
-                        // Within tolerance - no significant change
                         SLog.i(TAG, "= No changes (within tolerance), skipping ${localNotebook.title}")
                     }
                 }
             } else {
-                // Remote doesn't exist - upload
                 SLog.i(TAG, "↑ New on server, uploading ${localNotebook.title}")
                 uploadNotebook(localNotebook, webdavClient)
             }
@@ -292,8 +289,18 @@ class SyncEngine(private val context: Context) {
     }
 
     /**
-     * Upload a notebook deletion to the server.
+     * Upload a notebook deletion to the server via a zero-byte tombstone file.
      * More efficient than full sync when you just deleted one notebook.
+     *
+     * Tombstone approach: PUT an empty file at SyncPaths.tombstone(notebookId).
+     * This replaces the old deletions.json aggregation file, eliminating the
+     * write-write race condition where two devices could overwrite each other.
+     * The server's own lastModified on the tombstone provides the deletion timestamp
+     * for conflict resolution on other devices.
+     *
+     * TODO: When ETag support is added, tombstones can be deprecated in favour of
+     * detecting deletions via known-ETag + missing remote file (RFC 2518 §9.4).
+     *
      * @param notebookId ID of the notebook that was deleted locally
      * @return SyncResult indicating success or failure
      */
@@ -301,11 +308,16 @@ class SyncEngine(private val context: Context) {
         return@withContext try {
             SLog.i(TAG, "Uploading deletion for notebook: $notebookId")
 
-            // Get sync settings and credentials
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
 
             if (!settings.syncSettings.syncEnabled) {
+                return@withContext SyncResult.Success
+            }
+
+            // Respect wifiOnly - uploading a tombstone is still a network operation
+            if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isUnmeteredConnected()) {
+                SLog.i(TAG, "WiFi-only sync enabled, deferring deletion upload to next WiFi sync")
                 return@withContext SyncResult.Success
             }
 
@@ -318,41 +330,16 @@ class SyncEngine(private val context: Context) {
                 credentials.second
             )
 
-            // Read current deletions.json from server
-            val remotePath = "/$WEBDAV_ROOT_DIR/deletions.json"
-            val deletionsSerializer = DeletionsSerializer
-            var deletionsData = if (webdavClient.exists(remotePath)) {
-                try {
-                    val deletionsJson = webdavClient.getFile(remotePath).decodeToString()
-                    deletionsSerializer.deserialize(deletionsJson)
-                } catch (e: Exception) {
-                    SLog.w(TAG, "Failed to parse deletions.json: ${e.message}")
-                    DeletionsData()
-                }
-            } else {
-                DeletionsData()
-            }
-
-            // Add this notebook to deletions with current timestamp
-            val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
-            val deletionTimestamp = iso8601Format.format(Date())
-            deletionsData = deletionsData.copy(
-                deletedNotebooks = deletionsData.deletedNotebooks + (notebookId to deletionTimestamp)
-            )
-
-            // Delete notebook directory from server
-            val notebookPath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId"
+            // Delete notebook content from server
+            val notebookPath = SyncPaths.notebookDir(notebookId)
             if (webdavClient.exists(notebookPath)) {
-                SLog.i(TAG, "✗ Deleting from server: $notebookId")
+                SLog.i(TAG, "✗ Deleting notebook content from server: $notebookId")
                 webdavClient.delete(notebookPath)
             }
 
-            // Upload updated deletions.json (pruning old entries before writing)
-            val deletionsJson = deletionsSerializer.serialize(deletionsData.pruned(DELETIONS_MAX_AGE_DAYS))
-            webdavClient.putFile(remotePath, deletionsJson.toByteArray(), "application/json")
-            SLog.i(TAG, "Updated deletions.json on server")
+            // Upload zero-byte tombstone file
+            webdavClient.putFile(SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream")
+            SLog.i(TAG, "✓ Tombstone uploaded for: $notebookId")
 
             // Update syncedNotebookIds (remove the deleted notebook)
             val updatedSyncedIds = settings.syncSettings.syncedNotebookIds - notebookId
@@ -375,28 +362,25 @@ class SyncEngine(private val context: Context) {
 
     /**
      * Sync folder hierarchy with the WebDAV server.
+     *
+     * Note: folders.json is a shared aggregation file and has the same theoretical
+     * write-write race condition as the old deletions.json. This is documented but
+     * deferred until ETag (If-Match) support is added, at which point server-enforced
+     * atomic writes will make this robust.
      */
-    private suspend fun syncFolders(webdavClient: WebDAVClient) {
-        Log.i(TAG, "Syncing folders...")
+    private fun syncFolders(webdavClient: WebDAVClient) {
+        SLog.i(TAG, "Syncing folders...")
 
         try {
-            // Get local folders
             val localFolders = appRepository.folderRepository.getAll()
 
-            // Check if remote folders.json exists
-            val remotePath = "/$WEBDAV_ROOT_DIR/folders.json"
+            val remotePath = SyncPaths.foldersFile()
             if (webdavClient.exists(remotePath)) {
-                // Download and merge
                 val remoteFoldersJson = webdavClient.getFile(remotePath).decodeToString()
                 val remoteFolders = folderSerializer.deserializeFolders(remoteFoldersJson)
 
-                // Simple merge: take newer version of each folder
                 val folderMap = mutableMapOf<String, Folder>()
-
-                // Add all remote folders
                 remoteFolders.forEach { folderMap[it.id] = it }
-
-                // Merge with local folders (take newer based on updatedAt)
                 localFolders.forEach { local ->
                     val remote = folderMap[local.id]
                     if (remote == null || local.updatedAt.after(remote.updatedAt)) {
@@ -404,29 +388,24 @@ class SyncEngine(private val context: Context) {
                     }
                 }
 
-                // Update local database with merged folders
                 val mergedFolders = folderMap.values.toList()
                 for (folder in mergedFolders) {
                     try {
                         appRepository.folderRepository.get(folder.id)
-                        // Folder exists, update it
                         appRepository.folderRepository.update(folder)
-                    } catch (e: Exception) {
-                        // Folder doesn't exist, create it
+                    } catch (_: Exception) {
                         appRepository.folderRepository.create(folder)
                     }
                 }
 
-                // Upload merged folders back to server
                 val updatedFoldersJson = folderSerializer.serializeFolders(mergedFolders)
                 webdavClient.putFile(remotePath, updatedFoldersJson.toByteArray(), "application/json")
-                Log.i(TAG, "Synced ${mergedFolders.size} folders")
+                SLog.i(TAG, "Synced ${mergedFolders.size} folders")
             } else {
-                // Remote doesn't exist - upload local folders
                 if (localFolders.isNotEmpty()) {
                     val foldersJson = folderSerializer.serializeFolders(localFolders)
                     webdavClient.putFile(remotePath, foldersJson.toByteArray(), "application/json")
-                    Log.i(TAG, "Uploaded ${localFolders.size} folders to server")
+                    SLog.i(TAG, "Uploaded ${localFolders.size} folders to server")
                 }
             }
         } catch (e: Exception) {
@@ -436,146 +415,100 @@ class SyncEngine(private val context: Context) {
     }
 
     /**
-     * Download deletions.json from server and delete any local notebooks that were deleted on other devices.
-     * This should be called EARLY in the sync process, before uploading local notebooks.
+     * Check for tombstone files on the server and delete any local notebooks that were
+     * deleted on other devices.
      *
-     * Conflict resolution: If a local notebook was modified AFTER it was deleted on the server,
-     * it's considered a resurrection - don't delete it locally, and it will be re-uploaded.
+     * Tombstones are zero-byte files at [SyncPaths.tombstone]. The server's lastModified
+     * on each tombstone provides the deletion timestamp for conflict resolution: if a local
+     * notebook was modified AFTER the tombstone was placed, it is treated as a resurrection
+     * and will be re-uploaded (overwriting the tombstone on the next full sync).
      *
-     * @return DeletionsData for filtering discovery
+     * @return Set of tombstoned notebook IDs (used to filter discovery in [downloadNewNotebooks])
      */
-    private suspend fun applyRemoteDeletions(webdavClient: WebDAVClient): DeletionsData {
+    private fun applyRemoteDeletions(webdavClient: WebDAVClient): Set<String> {
         SLog.i(TAG, "Applying remote deletions...")
 
-        val remotePath = "/$WEBDAV_ROOT_DIR/deletions.json"
-        val deletionsSerializer = DeletionsSerializer
+        val tombstonesPath = SyncPaths.tombstonesDir()
+        if (!webdavClient.exists(tombstonesPath)) return emptySet()
 
-        // Download deletions.json from server (if it exists)
-        val deletionsData = if (webdavClient.exists(remotePath)) {
-            try {
-                val deletionsJson = webdavClient.getFile(remotePath).decodeToString()
-                deletionsSerializer.deserialize(deletionsJson)
-            } catch (e: Exception) {
-                SLog.w(TAG, "Failed to parse deletions.json: ${e.message}")
-                DeletionsData()
-            }
-        } else {
-            DeletionsData()
-        }
+        val tombstones = webdavClient.listCollectionWithMetadata(tombstonesPath)
+        val tombstonedIds = tombstones.map { it.name }.toSet()
 
-        // Process deletions with conflict resolution
-        val allDeletedIds = deletionsData.getAllDeletedIds()
-        if (allDeletedIds.isNotEmpty()) {
-            SLog.i(TAG, "Server has ${allDeletedIds.size} deleted notebook(s)")
-            val localNotebooks = appRepository.bookRepository.getAll()
-            val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
+        if (tombstones.isNotEmpty()) {
+            SLog.i(TAG, "Server has ${tombstones.size} tombstone(s)")
+            for (tombstone in tombstones) {
+                val notebookId = tombstone.name
+                val deletedAt = tombstone.lastModified
 
-            for (notebook in localNotebooks) {
-                if (notebook.id in allDeletedIds) {
-                    // Check if we have a deletion timestamp for conflict resolution
-                    val deletionTimestamp = deletionsData.deletedNotebooks[notebook.id]
+                val localNotebook = appRepository.bookRepository.getById(notebookId) ?: continue
 
-                    if (deletionTimestamp != null) {
-                        try {
-                            val deletedAt = iso8601Format.parse(deletionTimestamp)
-                            val localUpdatedAt = notebook.updatedAt
+                // Conflict resolution: local modified AFTER tombstone → resurrection
+                if (deletedAt != null && localNotebook.updatedAt.after(deletedAt)) {
+                    SLog.i(TAG, "↻ Resurrecting '${localNotebook.title}' (modified after server deletion)")
+                    continue
+                }
 
-                            // Compare timestamps: was local notebook modified AFTER server deletion?
-                            if (localUpdatedAt != null && deletedAt != null && localUpdatedAt.after(deletedAt)) {
-                                // RESURRECTION: Local notebook was modified after deletion on server
-                                SLog.i(TAG, "↻ Resurrecting '${notebook.title}' (modified after server deletion)")
-                                SyncLogger.i(TAG, "Local updated: $localUpdatedAt, Deleted on server: $deletedAt")
-                                // Don't delete it - it will be re-uploaded during sync
-                                continue
-                            }
-                        } catch (e: Exception) {
-                            SLog.w(TAG, "Failed to parse deletion timestamp for ${notebook.id}: ${e.message}")
-                            // Fall through to delete if timestamp parsing fails
-                        }
-                    }
-
-                    // Safe to delete: either no timestamp, or local is older than deletion
-                    try {
-                        SLog.i(TAG, "✗ Deleting locally (deleted on server): ${notebook.title}")
-                        appRepository.bookRepository.delete(notebook.id)
-                    } catch (e: Exception) {
-                        SLog.e(TAG, "Failed to delete ${notebook.title}: ${e.message}")
-                    }
+                try {
+                    SLog.i(TAG, "✗ Deleting locally (tombstone on server): ${localNotebook.title}")
+                    appRepository.bookRepository.delete(notebookId)
+                } catch (e: Exception) {
+                    SLog.e(TAG, "Failed to delete ${localNotebook.title}: ${e.message}")
                 }
             }
         }
 
-        return deletionsData
+        // Prune stale tombstones. Safe to do after processing — the current device has
+        // already applied all deletions, so old tombstones are no longer needed by us.
+        // Devices that haven't synced in TOMBSTONE_MAX_AGE_DAYS need full reconciliation anyway.
+        val cutoff = java.util.Date(System.currentTimeMillis() - TOMBSTONE_MAX_AGE_DAYS * 86_400_000L)
+        val stale = tombstones.filter { it.lastModified != null && it.lastModified.before(cutoff) }
+        if (stale.isNotEmpty()) {
+            SLog.i(TAG, "Pruning ${stale.size} stale tombstone(s) older than $TOMBSTONE_MAX_AGE_DAYS days")
+            for (entry in stale) {
+                try {
+                    webdavClient.delete(SyncPaths.tombstone(entry.name))
+                } catch (e: Exception) {
+                    SLog.w(TAG, "Failed to prune tombstone ${entry.name}: ${e.message}")
+                }
+            }
+        }
+
+        return tombstonedIds
     }
 
     /**
-     * Detect notebooks that were deleted locally and upload deletions to server.
+     * Detect notebooks that were deleted locally and upload tombstone files to server.
      * @param preDownloadNotebookIds Snapshot of local notebook IDs BEFORE downloading new notebooks.
-     *        This is critical - if we use current state, we can't tell which notebooks were deleted
-     *        locally vs. just downloaded from server.
      * @return Number of notebooks deleted
      */
-    private suspend fun detectAndUploadLocalDeletions(
+    private fun detectAndUploadLocalDeletions(
         webdavClient: WebDAVClient,
         settings: AppSettings,
         preDownloadNotebookIds: Set<String>
     ): Int {
         SLog.i(TAG, "Detecting local deletions...")
 
-        val remotePath = "/$WEBDAV_ROOT_DIR/deletions.json"
-        val deletionsSerializer = DeletionsSerializer
-
-        // Get current deletions from server
-        var deletionsData = if (webdavClient.exists(remotePath)) {
-            try {
-                val deletionsJson = webdavClient.getFile(remotePath).decodeToString()
-                deletionsSerializer.deserialize(deletionsJson)
-            } catch (e: Exception) {
-                SLog.w(TAG, "Failed to parse deletions.json: ${e.message}")
-                DeletionsData()
-            }
-        } else {
-            DeletionsData()
-        }
-
-        // Detect local deletions by comparing with previously synced notebook IDs
-        // IMPORTANT: Use the pre-download snapshot, not current state
         val syncedNotebookIds = settings.syncSettings.syncedNotebookIds
         val deletedLocally = syncedNotebookIds - preDownloadNotebookIds
 
         if (deletedLocally.isNotEmpty()) {
             SLog.i(TAG, "Detected ${deletedLocally.size} local deletion(s)")
 
-            // Add local deletions to the deletions list with current timestamp
-            val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
-            val deletionTimestamp = iso8601Format.format(Date())
-            val newDeletions = deletedLocally.associateWith { deletionTimestamp }
-            deletionsData = deletionsData.copy(
-                deletedNotebooks = deletionsData.deletedNotebooks + newDeletions
-            )
-
-            // Delete from server
             for (notebookId in deletedLocally) {
                 try {
-                    val notebookPath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId"
+                    val notebookPath = SyncPaths.notebookDir(notebookId)
                     if (webdavClient.exists(notebookPath)) {
                         SLog.i(TAG, "✗ Deleting from server: $notebookId")
                         webdavClient.delete(notebookPath)
                     }
+
+                    // Upload zero-byte tombstone
+                    webdavClient.putFile(SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream")
+                    SLog.i(TAG, "✓ Tombstone uploaded for: $notebookId")
                 } catch (e: Exception) {
-                    SLog.e(TAG, "Failed to delete $notebookId from server: ${e.message}")
+                    SLog.e(TAG, "Failed to process local deletion $notebookId: ${e.message}")
                 }
             }
-
-            // Upload updated deletions.json (pruning old entries before writing)
-            val prunedDeletionsData = deletionsData.pruned(DELETIONS_MAX_AGE_DAYS)
-            val deletionsJson = deletionsSerializer.serialize(prunedDeletionsData)
-            webdavClient.putFile(remotePath, deletionsJson.toByteArray(), "application/json")
-            SLog.i(TAG, "Updated deletions.json on server with ${prunedDeletionsData.getAllDeletedIds().size} total deletion(s)")
         } else {
             SLog.i(TAG, "No local deletions detected")
         }
@@ -586,27 +519,27 @@ class SyncEngine(private val context: Context) {
     /**
      * Upload a notebook to the WebDAV server.
      */
-    private suspend fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
+    private fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
         val notebookId = notebook.id
         SLog.i(TAG, "Uploading: ${notebook.title} (${notebook.pageIds.size} pages)")
 
-        // Create remote directory structure
-        webdavClient.ensureParentDirectories("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/pages/")
-        webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/images")
-        webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/backgrounds")
+        webdavClient.ensureParentDirectories(SyncPaths.pagesDir(notebookId) + "/")
+        webdavClient.createCollection(SyncPaths.imagesDir(notebookId))
+        webdavClient.createCollection(SyncPaths.backgroundsDir(notebookId))
 
-        // Upload manifest.json
         val manifestJson = notebookSerializer.serializeManifest(notebook)
-        webdavClient.putFile(
-            "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/manifest.json",
-            manifestJson.toByteArray(),
-            "application/json"
-        )
+        webdavClient.putFile(SyncPaths.manifestFile(notebookId), manifestJson.toByteArray(), "application/json")
 
-        // Upload each page
         val pages = appRepository.pageRepository.getByIds(notebook.pageIds)
         for (page in pages) {
             uploadPage(page, notebookId, webdavClient)
+        }
+
+        // If a tombstone exists for this notebook (resurrection case), remove it
+        val tombstonePath = SyncPaths.tombstone(notebookId)
+        if (webdavClient.exists(tombstonePath)) {
+            webdavClient.delete(tombstonePath)
+            SLog.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
         }
 
         SLog.i(TAG, "✓ Uploaded: ${notebook.title}")
@@ -615,49 +548,44 @@ class SyncEngine(private val context: Context) {
     /**
      * Upload a single page with its strokes and images.
      */
-    private suspend fun uploadPage(page: Page, notebookId: String, webdavClient: WebDAVClient) {
-        // Get strokes and images for this page
+    private fun uploadPage(page: Page, notebookId: String, webdavClient: WebDAVClient) {
         val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(page.id)
         val pageWithImages = appRepository.pageRepository.getWithImageById(page.id)
 
-        // Serialize page to JSON with embedded base64-encoded SB1 binary stroke data
         val pageJson = notebookSerializer.serializePage(
             page,
             pageWithStrokes.strokes,
             pageWithImages.images
         )
 
-        // Upload page JSON (strokes are embedded as base64)
         webdavClient.putFile(
-            "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/pages/${page.id}.json",
+            SyncPaths.pageFile(notebookId, page.id),
             pageJson.toByteArray(),
             "application/json"
         )
 
-        // Upload referenced images
         for (image in pageWithImages.images) {
-            if (image.uri != null) {
+            if (!image.uri.isNullOrEmpty()) {
                 val localFile = File(image.uri)
                 if (localFile.exists()) {
-                    val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/images/${localFile.name}"
+                    val remotePath = SyncPaths.imageFile(notebookId, localFile.name)
                     if (!webdavClient.exists(remotePath)) {
                         webdavClient.putFile(remotePath, localFile, detectMimeType(localFile))
-                        Log.i(TAG, "Uploaded image: ${localFile.name}")
+                        SLog.i(TAG, "Uploaded image: ${localFile.name}")
                     }
                 } else {
-                    Log.w(TAG, "Image file not found: ${image.uri}")
+                    SLog.w(TAG, "Image file not found: ${image.uri}")
                 }
             }
         }
 
-        // Upload custom backgrounds (skip native templates)
         if (page.backgroundType != "native" && page.background != "blank") {
             val bgFile = File(ensureBackgroundsFolder(), page.background)
             if (bgFile.exists()) {
-                val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/backgrounds/${bgFile.name}"
+                val remotePath = SyncPaths.backgroundFile(notebookId, bgFile.name)
                 if (!webdavClient.exists(remotePath)) {
                     webdavClient.putFile(remotePath, bgFile, detectMimeType(bgFile))
-                    Log.i(TAG, "Uploaded background: ${bgFile.name}")
+                    SLog.i(TAG, "Uploaded background: ${bgFile.name}")
                 }
             }
         }
@@ -666,31 +594,26 @@ class SyncEngine(private val context: Context) {
     /**
      * Download a notebook from the WebDAV server.
      */
-    private suspend fun downloadNotebook(notebookId: String, webdavClient: WebDAVClient) {
+    private fun downloadNotebook(notebookId: String, webdavClient: WebDAVClient) {
         SLog.i(TAG, "Downloading notebook ID: $notebookId")
 
-        // Download and parse manifest
-        val manifestJson = webdavClient.getFile("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/manifest.json").decodeToString()
+        val manifestJson = webdavClient.getFile(SyncPaths.manifestFile(notebookId)).decodeToString()
         val notebook = notebookSerializer.deserializeManifest(manifestJson)
 
         SLog.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
 
-        // Create notebook in local database FIRST (pages have foreign key to notebook)
         val existingNotebook = appRepository.bookRepository.getById(notebookId)
         if (existingNotebook != null) {
-            // Preserve the remote timestamp when updating during sync
             appRepository.bookRepository.updatePreservingTimestamp(notebook)
         } else {
             appRepository.bookRepository.createEmpty(notebook)
         }
 
-        // Download each page (now that notebook exists)
         for (pageId in notebook.pageIds) {
             try {
                 downloadPage(pageId, notebookId, webdavClient)
             } catch (e: Exception) {
                 SLog.e(TAG, "Failed to download page $pageId: ${e.message}")
-                // Continue with other pages
             }
         }
 
@@ -700,14 +623,10 @@ class SyncEngine(private val context: Context) {
     /**
      * Download a single page with its strokes and images.
      */
-    private suspend fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
-        // Download page JSON (contains embedded base64-encoded SB1 binary stroke data)
-        val pageJson = webdavClient.getFile("/$WEBDAV_ROOT_DIR/notebooks/$notebookId/pages/$pageId.json").decodeToString()
-
-        // Deserialize page (strokes are embedded as base64 in JSON)
+    private fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
+        val pageJson = webdavClient.getFile(SyncPaths.pageFile(notebookId, pageId)).decodeToString()
         val (page, strokes, images) = notebookSerializer.deserializePage(pageJson)
 
-        // Download referenced images and update their URIs to local paths
         val updatedImages = images.map { image ->
             if (!image.uri.isNullOrEmpty()) {
                 try {
@@ -715,12 +634,10 @@ class SyncEngine(private val context: Context) {
                     val localFile = File(ensureImagesFolder(), filename)
 
                     if (!localFile.exists()) {
-                        val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/images/$filename"
-                        webdavClient.getFile(remotePath, localFile)
-                        Log.i(TAG, "Downloaded image: $filename")
+                        webdavClient.getFile(SyncPaths.imageFile(notebookId, filename), localFile)
+                        SLog.i(TAG, "Downloaded image: $filename")
                     }
 
-                    // Return image with updated local URI
                     image.copy(uri = localFile.absolutePath)
                 } catch (e: Exception) {
                     SLog.e(TAG, "Failed to download image ${image.uri}: ${e.message}\n${e.stackTraceToString()}")
@@ -731,26 +648,22 @@ class SyncEngine(private val context: Context) {
             }
         }
 
-        // Download custom backgrounds
         if (page.backgroundType != "native" && page.background != "blank") {
             try {
                 val filename = page.background
                 val localFile = File(ensureBackgroundsFolder(), filename)
 
                 if (!localFile.exists()) {
-                    val remotePath = "/$WEBDAV_ROOT_DIR/notebooks/$notebookId/backgrounds/$filename"
-                    webdavClient.getFile(remotePath, localFile)
-                    Log.i(TAG, "Downloaded background: $filename")
+                    webdavClient.getFile(SyncPaths.backgroundFile(notebookId, filename), localFile)
+                    SLog.i(TAG, "Downloaded background: $filename")
                 }
             } catch (e: Exception) {
                 SLog.e(TAG, "Failed to download background ${page.background}: ${e.message}\n${e.stackTraceToString()}")
             }
         }
 
-        // Save to local database
         val existingPage = appRepository.pageRepository.getById(page.id)
         if (existingPage != null) {
-            // Page exists - delete old strokes/images and replace
             val existingStrokes = appRepository.pageRepository.getWithStrokeById(page.id).strokes
             val existingImages = appRepository.pageRepository.getWithImageById(page.id).images
 
@@ -759,11 +672,9 @@ class SyncEngine(private val context: Context) {
 
             appRepository.pageRepository.update(page)
         } else {
-            // New page
             appRepository.pageRepository.create(page)
         }
 
-        // Create strokes and images (using updated images with local URIs)
         appRepository.strokeRepository.create(strokes)
         appRepository.imageRepository.create(updatedImages)
     }
@@ -788,14 +699,13 @@ class SyncEngine(private val context: Context) {
                 credentials.second
             )
 
-            // Delete existing notebooks on server (but keep /Notable structure)
             try {
-                if (webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
-                    val existingNotebooks = webdavClient.listCollection("/$WEBDAV_ROOT_DIR/notebooks")
+                if (webdavClient.exists(SyncPaths.notebooksDir())) {
+                    val existingNotebooks = webdavClient.listCollection(SyncPaths.notebooksDir())
                     SLog.i(TAG, "Deleting ${existingNotebooks.size} existing notebooks from server")
                     for (notebookDir in existingNotebooks) {
                         try {
-                            webdavClient.delete("/$WEBDAV_ROOT_DIR/notebooks/$notebookDir")
+                            webdavClient.delete(SyncPaths.notebookDir(notebookDir))
                         } catch (e: Exception) {
                             SLog.w(TAG, "Failed to delete $notebookDir: ${e.message}")
                         }
@@ -805,23 +715,23 @@ class SyncEngine(private val context: Context) {
                 SLog.w(TAG, "Error cleaning server notebooks: ${e.message}")
             }
 
-            // Ensure base structure exists
-            if (!webdavClient.exists("/$WEBDAV_ROOT_DIR")) {
-                webdavClient.createCollection("/$WEBDAV_ROOT_DIR")
+            if (!webdavClient.exists(SyncPaths.rootDir())) {
+                webdavClient.createCollection(SyncPaths.rootDir())
             }
-            if (!webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
-                webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks")
+            if (!webdavClient.exists(SyncPaths.notebooksDir())) {
+                webdavClient.createCollection(SyncPaths.notebooksDir())
+            }
+            if (!webdavClient.exists(SyncPaths.tombstonesDir())) {
+                webdavClient.createCollection(SyncPaths.tombstonesDir())
             }
 
-            // Upload all folders
             val folders = appRepository.folderRepository.getAll()
             if (folders.isNotEmpty()) {
                 val foldersJson = folderSerializer.serializeFolders(folders)
-                webdavClient.putFile("/$WEBDAV_ROOT_DIR/folders.json", foldersJson.toByteArray(), "application/json")
+                webdavClient.putFile(SyncPaths.foldersFile(), foldersJson.toByteArray(), "application/json")
                 SLog.i(TAG, "Uploaded ${folders.size} folders")
             }
 
-            // Upload all notebooks
             val notebooks = appRepository.bookRepository.getAll()
             SLog.i(TAG, "Uploading ${notebooks.size} local notebooks...")
             for (notebook in notebooks) {
@@ -861,7 +771,6 @@ class SyncEngine(private val context: Context) {
                 credentials.second
             )
 
-            // Delete all local folders and notebooks
             val localFolders = appRepository.folderRepository.getAll()
             for (folder in localFolders) {
                 appRepository.folderRepository.delete(folder.id)
@@ -873,9 +782,8 @@ class SyncEngine(private val context: Context) {
             }
             SLog.i(TAG, "Deleted ${localFolders.size} folders and ${localNotebooks.size} local notebooks")
 
-            // Download folders from server
-            if (webdavClient.exists("/$WEBDAV_ROOT_DIR/folders.json")) {
-                val foldersJson = webdavClient.getFile("/$WEBDAV_ROOT_DIR/folders.json").decodeToString()
+            if (webdavClient.exists(SyncPaths.foldersFile())) {
+                val foldersJson = webdavClient.getFile(SyncPaths.foldersFile()).decodeToString()
                 val folders = folderSerializer.deserializeFolders(foldersJson)
                 for (folder in folders) {
                     appRepository.folderRepository.create(folder)
@@ -883,15 +791,12 @@ class SyncEngine(private val context: Context) {
                 SLog.i(TAG, "Downloaded ${folders.size} folders from server")
             }
 
-            // Download all notebooks from server
-            if (webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
-                val notebookDirs = webdavClient.listCollection("/$WEBDAV_ROOT_DIR/notebooks")
+            if (webdavClient.exists(SyncPaths.notebooksDir())) {
+                val notebookDirs = webdavClient.listCollection(SyncPaths.notebooksDir())
                 SLog.i(TAG, "Found ${notebookDirs.size} notebook(s) on server")
-                SLog.i(TAG, "Notebook directories: $notebookDirs")
 
                 for (notebookDir in notebookDirs) {
                     try {
-                        // Extract notebook ID from directory name
                         val notebookId = notebookDir.trimEnd('/')
                         SLog.i(TAG, "Downloading notebook: $notebookId")
                         downloadNotebook(notebookId, webdavClient)
@@ -900,7 +805,7 @@ class SyncEngine(private val context: Context) {
                     }
                 }
             } else {
-                SLog.w(TAG, "/$WEBDAV_ROOT_DIR/notebooks doesn't exist on server")
+                SLog.w(TAG, "${SyncPaths.notebooksDir()} doesn't exist on server")
             }
 
             SLog.i(TAG, "✓ FORCE DOWNLOAD complete")
@@ -943,7 +848,7 @@ class SyncEngine(private val context: Context) {
      * Initialize sync client by getting settings and credentials.
      * @return Pair of (AppSettings, WebDAVClient) or null if initialization fails
      */
-    private suspend fun initializeSyncClient(): Pair<AppSettings, WebDAVClient>? {
+    private fun initializeSyncClient(): Pair<AppSettings, WebDAVClient>? {
         val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
             ?: return null
 
@@ -965,14 +870,44 @@ class SyncEngine(private val context: Context) {
     }
 
     /**
-     * Ensure required server directory structure exists.
+     * Ensure required server directory structure exists, and run one-time migration
+     * from the old deletions.json format to tombstone files.
      */
-    private suspend fun ensureServerDirectories(webdavClient: WebDAVClient) {
-        if (!webdavClient.exists("/$WEBDAV_ROOT_DIR")) {
-            webdavClient.createCollection("/$WEBDAV_ROOT_DIR")
+    private fun ensureServerDirectories(webdavClient: WebDAVClient) {
+        if (!webdavClient.exists(SyncPaths.rootDir())) {
+            webdavClient.createCollection(SyncPaths.rootDir())
         }
-        if (!webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
-            webdavClient.createCollection("/$WEBDAV_ROOT_DIR/notebooks")
+        if (!webdavClient.exists(SyncPaths.notebooksDir())) {
+            webdavClient.createCollection(SyncPaths.notebooksDir())
+        }
+        if (!webdavClient.exists(SyncPaths.tombstonesDir())) {
+            webdavClient.createCollection(SyncPaths.tombstonesDir())
+        }
+        migrateDeletionsJsonToTombstones(webdavClient)
+    }
+
+    /**
+     * One-time migration: convert old deletions.json entries to individual tombstone files,
+     * then delete the legacy file.
+     */
+    private fun migrateDeletionsJsonToTombstones(webdavClient: WebDAVClient) {
+        if (!webdavClient.exists(LEGACY_DELETIONS_FILE)) return
+
+        try {
+            val json = webdavClient.getFile(LEGACY_DELETIONS_FILE).decodeToString()
+            val data = DeletionsSerializer.deserialize(json)
+
+            for (notebookId in data.getAllDeletedIds()) {
+                val tombstonePath = SyncPaths.tombstone(notebookId)
+                if (!webdavClient.exists(tombstonePath)) {
+                    webdavClient.putFile(tombstonePath, ByteArray(0), "application/octet-stream")
+                }
+            }
+
+            webdavClient.delete(LEGACY_DELETIONS_FILE)
+            SLog.i(TAG, "Migrated ${data.getAllDeletedIds().size} entries from deletions.json to tombstones")
+        } catch (e: Exception) {
+            SLog.w(TAG, "Failed to migrate deletions.json: ${e.message}")
         }
     }
 
@@ -980,18 +915,16 @@ class SyncEngine(private val context: Context) {
      * Sync all existing local notebooks.
      * @return Set of notebook IDs that existed before any new downloads
      */
-    private suspend fun syncExistingNotebooks(): Set<String> {
-        // IMPORTANT: Snapshot local notebook IDs BEFORE downloading to detect deletions correctly
+    private fun syncExistingNotebooks(): Set<String> {
         val localNotebooks = appRepository.bookRepository.getAll()
         val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
         SLog.i(TAG, "Found ${localNotebooks.size} local notebooks")
 
         for (notebook in localNotebooks) {
             try {
-                syncNotebook(notebook.id)
+                syncNotebookImpl(notebook.id)
             } catch (e: Exception) {
                 SLog.e(TAG, "Failed to sync ${notebook.title}: ${e.message}")
-                // Continue with other notebooks even if one fails
             }
         }
 
@@ -1000,31 +933,28 @@ class SyncEngine(private val context: Context) {
 
     /**
      * Discover and download new notebooks from server that don't exist locally.
+     * @param tombstonedIds Notebook IDs that have tombstones — skip these, they were intentionally deleted
      * @return Number of notebooks downloaded
      */
-    private suspend fun downloadNewNotebooks(
+    private fun downloadNewNotebooks(
         webdavClient: WebDAVClient,
-        deletionsData: DeletionsData,
+        tombstonedIds: Set<String>,
         settings: AppSettings,
         preDownloadNotebookIds: Set<String>
     ): Int {
         SLog.i(TAG, "Checking server for new notebooks...")
 
-        if (!webdavClient.exists("/$WEBDAV_ROOT_DIR/notebooks")) {
+        if (!webdavClient.exists(SyncPaths.notebooksDir())) {
             return 0
         }
 
-        val serverNotebookDirs = webdavClient.listCollection("/$WEBDAV_ROOT_DIR/notebooks")
-        SLog.i(TAG, "DEBUG: Server returned ${serverNotebookDirs.size} items: $serverNotebookDirs")
-        SLog.i(TAG, "DEBUG: Local notebook IDs (before download): $preDownloadNotebookIds")
+        val serverNotebookDirs = webdavClient.listCollection(SyncPaths.notebooksDir())
 
         val newNotebookIds = serverNotebookDirs
             .map { it.trimEnd('/') }
             .filter { it !in preDownloadNotebookIds }
-            .filter { it !in deletionsData.getAllDeletedIds() }  // Skip deleted notebooks
-            .filter { it !in settings.syncSettings.syncedNotebookIds }  // Skip previously synced notebooks (they're local deletions, not new)
-
-        SLog.i(TAG, "DEBUG: New notebook IDs after filtering: $newNotebookIds")
+            .filter { it !in tombstonedIds }
+            .filter { it !in settings.syncSettings.syncedNotebookIds }
 
         if (newNotebookIds.isNotEmpty()) {
             SLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
@@ -1046,7 +976,7 @@ class SyncEngine(private val context: Context) {
     /**
      * Update the list of synced notebook IDs in settings.
      */
-    private suspend fun updateSyncedNotebookIds(settings: AppSettings) {
+    private fun updateSyncedNotebookIds(settings: AppSettings) {
         val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
         kvProxy.setAppSettings(
             settings.copy(
@@ -1059,6 +989,9 @@ class SyncEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "SyncEngine"
+
+        // Path to the legacy deletions.json file, used only for one-time migration
+        private const val LEGACY_DELETIONS_FILE = "/notable/deletions.json"
 
         // Progress percentages for each sync step
         private const val PROGRESS_INITIALIZING = 0.0f
@@ -1073,13 +1006,16 @@ class SyncEngine(private val context: Context) {
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
         private const val TIMESTAMP_TOLERANCE_MS = 1000L
         private const val CLOCK_SKEW_THRESHOLD_MS = 30_000L
-        private const val DELETIONS_MAX_AGE_DAYS = 90L
+
+        // Tombstones older than this are pruned at the end of applyRemoteDeletions().
+        // Any device that hasn't synced in this long will need full reconciliation anyway.
+        private const val TOMBSTONE_MAX_AGE_DAYS = 90L
 
         // Shared state across all SyncEngine instances
         private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
         val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
 
-        // Mutex to prevent concurrent syncs
+        // Mutex to prevent concurrent full syncs
         private val syncMutex = Mutex()
 
         /**
@@ -1088,11 +1024,6 @@ class SyncEngine(private val context: Context) {
         internal fun updateState(state: SyncState) {
             _syncState.value = state
         }
-
-        /**
-         * Check if sync mutex is locked.
-         */
-        fun isSyncInProgress(): Boolean = syncMutex.isLocked
     }
 }
 
@@ -1111,8 +1042,6 @@ enum class SyncError {
     NETWORK_ERROR,
     AUTH_ERROR,
     CONFIG_ERROR,
-    SERVER_ERROR,
-    CONFLICT_ERROR,
     CLOCK_SKEW,
     WIFI_REQUIRED,
     SYNC_IN_PROGRESS,
@@ -1123,37 +1052,18 @@ enum class SyncError {
  * Represents the current state of a sync operation.
  */
 sealed class SyncState {
-    /**
-     * No sync is currently running.
-     */
     object Idle : SyncState()
 
-    /**
-     * Sync is currently in progress.
-     * @param currentStep Which step of the sync process we're in
-     * @param progress Overall progress from 0.0 to 1.0
-     * @param details Human-readable description of current activity
-     */
     data class Syncing(
         val currentStep: SyncStep,
         val progress: Float,
         val details: String
     ) : SyncState()
 
-    /**
-     * Sync completed successfully.
-     * @param summary Statistics about what was synced
-     */
     data class Success(
         val summary: SyncSummary
     ) : SyncState()
 
-    /**
-     * Sync failed with an error.
-     * @param error The type of error that occurred
-     * @param step Which step failed
-     * @param canRetry Whether this error is potentially recoverable
-     */
     data class Error(
         val error: SyncError,
         val step: SyncStep,

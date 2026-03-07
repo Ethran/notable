@@ -1,5 +1,6 @@
 package com.ethran.notable.sync
 
+import io.shipbook.shipbooksdk.Log
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -15,9 +16,15 @@ import java.io.InputStream
 import java.io.StringReader
 import java.net.HttpURLConnection
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
+
+/**
+ * A remote WebDAV collection entry with its name and last-modified timestamp.
+ */
+data class RemoteEntry(val name: String, val lastModified: Date?)
 
 /**
  * Wrapper for streaming file downloads that properly manages the underlying HTTP response.
@@ -71,7 +78,7 @@ class WebDAVClient(
      */
     fun testConnection(): Boolean {
         return try {
-            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "Testing connection to: $serverUrl")
+            Log.i(TAG, "Testing connection to: $serverUrl")
             val request = Request.Builder()
                 .url(serverUrl)
                 .head()
@@ -79,11 +86,11 @@ class WebDAVClient(
                 .build()
 
             client.newCall(request).execute().use { response ->
-                io.shipbook.shipbooksdk.Log.i("WebDAVClient", "Response code: ${response.code}")
+                Log.i(TAG, "Response code: ${response.code}")
                 response.isSuccessful
             }
         } catch (e: Exception) {
-            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Connection test failed: ${e.message}", e)
+            Log.e(TAG, "Connection test failed: ${e.message}", e)
             false
         }
     }
@@ -107,7 +114,7 @@ class WebDAVClient(
                 parseHttpDate(dateHeader)
             }
         } catch (e: Exception) {
-            io.shipbook.shipbooksdk.Log.w("WebDAVClient", "Failed to get server time: ${e.message}")
+            Log.w(TAG, "Failed to get server time: ${e.message}")
             null
         }
     }
@@ -130,6 +137,7 @@ class WebDAVClient(
                 response.code == HttpURLConnection.HTTP_OK
             }
         } catch (e: Exception) {
+            Log.w(TAG, "exists($path) check failed: ${e.message}")
             false
         }
     }
@@ -360,31 +368,58 @@ class WebDAVClient(
             }
 
             val responseBody = response.body?.string() ?: return emptyList()
-
-            // DEBUG: Log the raw response
-            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "PROPFIND response for $path (first $DEBUG_LOG_MAX_CHARS chars):")
-            io.shipbook.shipbooksdk.Log.i("WebDAVClient", responseBody.take(DEBUG_LOG_MAX_CHARS))
-
-            // Parse XML response using XmlPullParser to properly handle namespaces and CDATA
             val allHrefs = parseHrefsFromXml(responseBody)
-            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "Found ${allHrefs.size} hrefs: $allHrefs")
 
-            val filtered = allHrefs.filter { it != path && !it.endsWith("/$path") }
-            io.shipbook.shipbooksdk.Log.i("WebDAVClient", "After filtering (exclude $path): $filtered")
-
-            return filtered.map { href ->
-                    // Extract just the filename/dirname from the full path
-                    href.trimEnd('/').substringAfterLast('/')
-                }
-                .filter { filename ->
-                    // Only include valid UUIDs
-                    filename.length == UUID_LENGTH &&
-                    filename[UUID_DASH_POS_1] == '-' &&
-                    filename[UUID_DASH_POS_2] == '-' &&
-                    filename[UUID_DASH_POS_3] == '-' &&
-                    filename[UUID_DASH_POS_4] == '-'
-                }
+            return allHrefs
+                .filter { it != path && !it.endsWith("/$path") }
+                .map { href -> href.trimEnd('/').substringAfterLast('/') }
+                .filter { isValidUuid(it) }
                 .toList()
+        }
+    }
+
+    /**
+     * List resources in a collection with their last-modified timestamps.
+     * Used for tombstone-based deletion tracking where we need the server's
+     * own timestamp for conflict resolution.
+     * @param path Collection path relative to server URL
+     * @return List of RemoteEntry objects; empty if collection doesn't exist
+     * @throws IOException if PROPFIND fails for a reason other than 404
+     */
+    fun listCollectionWithMetadata(path: String): List<RemoteEntry> {
+        val url = buildUrl(path)
+
+        val propfindXml = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <D:propfind xmlns:D="DAV:">
+                <D:prop>
+                    <D:getlastmodified/>
+                </D:prop>
+            </D:propfind>
+        """.trimIndent()
+
+        val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
+
+        val request = Request.Builder()
+            .url(url)
+            .method("PROPFIND", requestBody)
+            .header("Authorization", credentials)
+            .header("Depth", "1")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (response.code == HttpURLConnection.HTTP_NOT_FOUND) return emptyList()
+            if (!response.isSuccessful) {
+                throw IOException("Failed to list collection: ${response.code} ${response.message}")
+            }
+
+            val responseBody = response.body?.string() ?: return emptyList()
+            return parseEntriesFromXml(responseBody)
+                .filter { (href, _) -> href != path && !href.endsWith("/$path") }
+                .mapNotNull { (href, lastModified) ->
+                    val name = href.trimEnd('/').substringAfterLast('/')
+                    if (isValidUuid(name)) RemoteEntry(name, lastModified) else null
+                }
         }
     }
 
@@ -446,7 +481,7 @@ class WebDAVClient(
             }
             null
         } catch (e: Exception) {
-            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Failed to parse XML for last modified: ${e.message}")
+            Log.e(TAG, "Failed to parse XML for last modified: ${e.message}")
             null
         }
     }
@@ -481,19 +516,71 @@ class WebDAVClient(
             }
             hrefs
         } catch (e: Exception) {
-            io.shipbook.shipbooksdk.Log.e("WebDAVClient", "Failed to parse XML for hrefs: ${e.message}")
+            Log.e(TAG, "Failed to parse XML for hrefs: ${e.message}")
             emptyList()
         }
     }
 
+    /**
+     * Parse <response> blocks from a PROPFIND XML response, returning each
+     * resource's href paired with its last-modified date (null if absent).
+     */
+    private fun parseEntriesFromXml(xml: String): List<Pair<String, Date?>> {
+        return try {
+            val factory = XmlPullParserFactory.newInstance()
+            factory.isNamespaceAware = true
+            val parser = factory.newPullParser()
+            parser.setInput(StringReader(xml))
+
+            val entries = mutableListOf<Pair<String, Date?>>()
+            var currentHref: String? = null
+            var currentLastModified: Date? = null
+            var inResponse = false
+
+            var eventType = parser.eventType
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                when (eventType) {
+                    XmlPullParser.START_TAG -> when (parser.name.lowercase()) {
+                        "response" -> {
+                            inResponse = true
+                            currentHref = null
+                            currentLastModified = null
+                        }
+                        "href" -> if (inResponse && parser.next() == XmlPullParser.TEXT) {
+                            currentHref = parser.text.trim()
+                        }
+                        "getlastmodified" -> if (inResponse && parser.next() == XmlPullParser.TEXT) {
+                            currentLastModified = parseHttpDate(parser.text.trim())?.let { Date(it) }
+                        }
+                    }
+                    XmlPullParser.END_TAG -> if (parser.name.lowercase() == "response" && inResponse) {
+                        currentHref?.let { entries.add(it to currentLastModified) }
+                        inResponse = false
+                    }
+                }
+                eventType = parser.next()
+            }
+            entries
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse XML entries: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private fun isValidUuid(name: String): Boolean =
+        name.length == UUID_LENGTH &&
+        name[UUID_DASH_POS_1] == '-' &&
+        name[UUID_DASH_POS_2] == '-' &&
+        name[UUID_DASH_POS_3] == '-' &&
+        name[UUID_DASH_POS_4] == '-'
+
     companion object {
+        private const val TAG = "WebDAVClient"
+
         // Timeout constants
         private const val CONNECT_TIMEOUT_SECONDS = 30L
         private const val READ_TIMEOUT_SECONDS = 60L
         private const val WRITE_TIMEOUT_SECONDS = 60L
-
-        // Debug logging
-        private const val DEBUG_LOG_MAX_CHARS = 1500
 
         // UUID validation constants
         private const val UUID_LENGTH = 36
@@ -538,6 +625,7 @@ class WebDAVClient(
                 }
                 Pair(connected, clockSkewMs)
             } catch (e: Exception) {
+                Log.e(TAG, "Connection test failed: ${e.message}", e)
                 Pair(false, null)
             }
         }

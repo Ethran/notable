@@ -85,11 +85,19 @@ object FolderSerializer {
      * Parse ISO 8601 date string to Date object.
      */
     private fun parseIso8601(dateString: String): Date {
-        return iso8601Format.parse(dateString) ?: Date()
+        return try {
+            iso8601Format.parse(dateString) ?: Date()
+        } catch (e: Exception) {
+            Date()
+        }
     }
 
     /**
      * Data transfer object for folder in JSON format.
+     *
+     * This deliberately duplicates the fields of the Folder Room entity. The Room entity uses
+     * Java Date for timestamps and carries Room annotations; FolderDto uses plain Strings so
+     * it can be handled by kotlinx.serialization without a custom serializer.
      */
     @Serializable
     private data class FolderDto(

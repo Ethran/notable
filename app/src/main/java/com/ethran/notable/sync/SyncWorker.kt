@@ -10,7 +10,7 @@ import io.shipbook.shipbooksdk.Log
 
 /**
  * Background worker for periodic WebDAV synchronization.
- * Runs via WorkManager on a periodic schedule (e.g., every 5 minutes).
+ * Runs via WorkManager on a periodic schedule (minimum 15 minutes per WorkManager constraints).
  */
 class SyncWorker(
     context: Context,
@@ -27,11 +27,10 @@ class SyncWorker(
             return Result.retry()
         }
 
-        // Check WiFi-only setting (WorkManager constraint already handles this, but be explicit)
         val kvProxy = KvProxy(applicationContext)
         val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
-        if (settings?.syncSettings?.wifiOnly == true && !connectivityChecker.isWiFiConnected()) {
-            Log.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping")
+        if (settings?.syncSettings?.wifiOnly == true && !connectivityChecker.isUnmeteredConnected()) {
+            Log.i(TAG, "WiFi-only sync enabled but not on unmetered network, skipping")
             return Result.success()
         }
 
@@ -39,7 +38,7 @@ class SyncWorker(
         val credentialManager = CredentialManager(applicationContext)
         if (!credentialManager.hasCredentials()) {
             Log.w(TAG, "No credentials stored, skipping sync")
-            return Result.failure()
+            return Result.success()
         }
 
         // Perform sync

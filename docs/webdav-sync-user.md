@@ -198,8 +198,9 @@ Notable stores your data on the WebDAV server in the following structure:
 
 ```
 /notable/
-├── deletions.json           # Tracks deleted notebooks
 ├── folders.json             # Folder hierarchy
+├── tombstones/              # Tracks deleted notebooks (zero-byte files)
+│   └── {notebook-id}
 └── notebooks/
     ├── {notebook-id-1}/
     │   ├── manifest.json    # Notebook metadata
@@ -221,7 +222,7 @@ Notable stores your data on the WebDAV server in the following structure:
 
 ## Privacy & Security
 
-- **Credentials**: Stored securely in Android's CredentialManager (encrypted storage)
+- **Credentials**: Stored securely using Android's `EncryptedSharedPreferences` (AES-256-GCM, backed by Android Keystore)
 - **Data in transit**: Uses HTTPS for secure communication (recommended)
 - **Data at rest**: Depends on your WebDAV provider's security
 - **No third-party cloud service**: Your data only goes to the WebDAV server you specify
@@ -253,5 +254,5 @@ For developers interested in how sync works internally, see:
 
 ---
 
-**Version**: 1.0
-**Last Updated**: 2026-01-18
+**Version**: 1.1
+**Last Updated**: 2026-03-06

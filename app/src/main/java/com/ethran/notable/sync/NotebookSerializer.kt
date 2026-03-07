@@ -202,8 +202,8 @@ class NotebookSerializer(private val context: Context) {
      * Convert absolute file URI to relative path for WebDAV storage.
      * Example: /storage/emulated/0/Documents/notabledb/images/abc123.jpg -> images/abc123.jpg
      */
-    private fun convertToRelativeUri(absoluteUri: String?): String {
-        if (absoluteUri == null) return ""
+    private fun convertToRelativeUri(absoluteUri: String?): String? {
+        if (absoluteUri == null) return null
 
         // Extract just the filename and parent directory
         val file = File(absoluteUri)
@@ -308,7 +308,7 @@ class NotebookSerializer(private val context: Context) {
         val y: Int,
         val width: Int,
         val height: Int,
-        val uri: String,
+        val uri: String?,  // Nullable — images can be uploaded before they have a local URI
         val createdAt: String,
         val updatedAt: String
     )

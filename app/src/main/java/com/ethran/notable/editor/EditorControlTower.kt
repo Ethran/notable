@@ -17,6 +17,7 @@ import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.strokeBounds
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.showHint
@@ -41,6 +42,7 @@ class EditorControlTower(
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
+    private val appRepository = AppRepository(context)
 
 
     companion object {
@@ -117,7 +119,6 @@ class EditorControlTower(
         if (pageId == null) return
 
         try {
-            val appRepository = com.ethran.notable.data.AppRepository(context)
             val pageEntity = appRepository.pageRepository.getById(pageId) ?: return
             pageEntity.notebookId?.let { notebookId ->
                 SyncLogger.i("EditorSync", "Auto-syncing on page close")

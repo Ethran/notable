@@ -66,7 +66,7 @@ All sync code lives in `com.ethran.notable.sync`. The components and their respo
 | [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt) | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. Streaming downloads. |
 | [`NotebookSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSerializer.kt) | Serializes/deserializes notebooks, pages, strokes, and images to/from JSON. Stroke points are embedded as base64-encoded [SB1 binary](database-structure.md) data. |
 | [`FolderSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/FolderSerializer.kt) | Serializes/deserializes the folder hierarchy to/from `folders.json`. |
-| [`DeletionsSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/DeletionsSerializer.kt) | Manages `deletions.json`, which tracks deleted notebook IDs with timestamps for conflict resolution. |
+| [`DeletionsSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/DeletionsSerializer.kt) | Deserializes the legacy `deletions.json` format. Used only by the one-time migration that converts old entries to tombstone files; not written by new code. |
 | [`SyncWorker.kt`](../app/src/main/java/com/ethran/notable/sync/SyncWorker.kt) | `CoroutineWorker` for WorkManager integration. Checks connectivity and credentials before delegating to `SyncEngine`. |
 | [`SyncScheduler.kt`](../app/src/main/java/com/ethran/notable/sync/SyncScheduler.kt) | Schedules/cancels periodic sync via WorkManager. |
 | [`CredentialManager.kt`](../app/src/main/java/com/ethran/notable/sync/CredentialManager.kt) | Stores WebDAV credentials in `EncryptedSharedPreferences` (AES-256-GCM). |
@@ -94,11 +94,11 @@ A full sync executes the following steps in order. A coroutine `Mutex` prevents 
    └── PUT /notable/folders.json (merged result)
 
 3. APPLY REMOTE DELETIONS
-   ├── GET /notable/deletions.json (if exists)
-   ├── For each deleted notebook ID:
-   │   ├── If local notebook was modified AFTER the deletion timestamp → SKIP (resurrection)
+   ├── PROPFIND /notable/tombstones/ (Depth 1) → list of tombstone files with lastModified
+   ├── For each tombstone (filename = deleted notebook UUID):
+   │   ├── If local notebook was modified AFTER the tombstone's lastModified → SKIP (resurrection)
    │   └── Otherwise → delete local notebook
-   └── Return DeletionsData for use in later steps
+   └── Return tombstonedIds set for use in later steps
 
 4. SYNC EXISTING LOCAL NOTEBOOKS
    ├── Snapshot local notebook IDs (the "pre-download set")
@@ -122,7 +122,7 @@ A full sync executes the following steps in order. A coroutine `Mutex` prevents 
    ├── Compare syncedNotebookIds (from last sync) against pre-download snapshot
    ├── Missing IDs = locally deleted notebooks
    ├── For each: DELETE /notable/notebooks/{id}/ on server
-   └── PUT updated /notable/deletions.json with new entries + timestamps
+   └── PUT zero-byte file to /notable/tombstones/{id} (tombstone for other devices)
 
 7. FINALIZE
    ├── Update syncedNotebookIds = current set of all local notebook IDs
@@ -177,11 +177,9 @@ Used for sync-on-close (triggered when the user closes the editor). Follows the 
 
 When a notebook is deleted locally, a targeted operation can immediately propagate the deletion to the server without running a full sync:
 
-1. GET `deletions.json` from server.
-2. Add the notebook ID with current ISO 8601 timestamp.
-3. DELETE the notebook's directory from server.
-4. PUT updated `deletions.json`.
-5. Remove notebook ID from `syncedNotebookIds`.
+1. DELETE the notebook's directory from server.
+2. PUT a zero-byte file to `/notable/tombstones/{id}` (the server's own `lastModified` on this file serves as the deletion timestamp for other devices' conflict resolution).
+3. Remove notebook ID from `syncedNotebookIds`.
 
 ---
 
@@ -190,9 +188,10 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 ### 4.1 Server Directory Structure
 
 ```
-/notable/                           ← WEBDAV_ROOT_DIR, appended to user's server URL
-├── deletions.json                  ← Tracks deleted notebooks with timestamps
+/notable/                           ← Appended to user's server URL
 ├── folders.json                    ← Complete folder hierarchy
+├── tombstones/                     ← Deletion tracking (zero-byte files)
+│   └── {uuid}                      ← One per deleted notebook; server lastModified = deletion time
 └── notebooks/
     └── {uuid}/                     ← One directory per notebook, named by UUID
         ├── manifest.json           ← Notebook metadata
@@ -299,20 +298,13 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 - `parentFolderId`: References another folder's `id` for nesting, or `null` for root-level folders.
 - Folder hierarchy must be synced before notebooks because notebooks reference `parentFolderId`.
 
-### 4.5 deletions.json
+### 4.5 Tombstone Files (`tombstones/{uuid}`)
 
-```json
-{
-    "deletedNotebooks": {
-        "notebook-uuid-1": "2025-12-20T14:22:33Z",
-        "notebook-uuid-2": "2025-12-21T08:00:00Z"
-    },
-    "deletedNotebookIds": []
-}
-```
+Each deleted notebook has a zero-byte file at `/notable/tombstones/{notebook-uuid}`. The file has no content; the server's own `lastModified` timestamp on the file provides the deletion time used for conflict resolution (section 5.3).
 
-- `deletedNotebooks`: Map of notebook UUID to ISO 8601 deletion timestamp. The timestamp is critical for conflict resolution (see section 5).
-- `deletedNotebookIds`: Legacy field from an earlier format that did not track timestamps. Retained for backward compatibility. New deletions always use the timestamped map.
+**Why tombstones instead of a shared `deletions.json`?** Two devices syncing simultaneously would both read `deletions.json`, append their entry, and write back — the second writer clobbers the first. With tombstones, each deletion is an independent PUT to a unique path, so there is nothing to race over.
+
+**Migration**: A one-time migration in `SyncEngine.migrateDeletionsJsonToTombstones()` reads any existing `deletions.json` from the server, creates tombstone files for each entry, and then deletes the old file. After migration, `deletions.json` is not written by new code.
 
 ### 4.6 JSON Configuration
 
@@ -350,13 +342,15 @@ The 1-second tolerance exists because timestamps pass through ISO 8601 serializa
 
 The most dangerous conflict in any sync system is: device A deletes a notebook while device B (offline) edits it. Without careful handling, the edit is silently lost.
 
-Notable handles this with **timestamped deletions and resurrection**:
+Notable handles this with **tombstone-based resurrection**:
 
-1. When a notebook is deleted, the deletion timestamp is recorded in `deletions.json`.
-2. During sync, when applying remote deletions to local data:
-   - If the local notebook's `updatedAt` is **after** the deletion timestamp, the notebook is **resurrected** (not deleted locally, and it will be re-uploaded during the upload phase).
-   - If the local notebook's `updatedAt` is **before** the deletion timestamp, the notebook is deleted locally (it was not edited after deletion -- safe to remove).
+1. When a notebook is deleted, a zero-byte tombstone file is PUT to `/notable/tombstones/{id}`. The server records a `lastModified` timestamp on the tombstone at the time of the PUT.
+2. During sync, when applying remote tombstones:
+   - If the local notebook's `updatedAt` is **after** the tombstone's `lastModified`, the notebook is **resurrected** (not deleted locally, and it will be re-uploaded during the upload phase; the tombstone is deleted from the server).
+   - If the local notebook's `updatedAt` is **before** the tombstone's `lastModified`, the notebook is deleted locally (safe to remove).
 3. This ensures that edits made after a deletion are never silently discarded.
+
+**Prior art**: This is the same technique used by [Saber](https://github.com/saber-notes/saber) (`lib/data/nextcloud/saber_syncer.dart`), which treats any zero-byte remote file as a tombstone. The key property is that tombstones are independent per-notebook files, so two devices can write tombstones simultaneously without racing over a shared file.
 
 ### 5.4 Folder Merge
 
@@ -384,8 +378,8 @@ This comparison uses a **pre-download snapshot** of local notebook IDs -- taken 
 
 - **Page-level conflicts are not merged.** If two devices edit different pages of the same notebook, the entire notebook is overwritten by the newer version. Stroke-level or page-level merging is a potential future enhancement.
 - **No conflict UI.** There is no mechanism to present both versions to the user and let them choose. Last-writer-wins is applied automatically.
-- **Folder deletion is not cascaded across devices.** Deleting a folder locally does not propagate to other devices via `deletions.json` (only notebook deletions are tracked).
-- **Concurrent syncs from two devices are not atomic.** The shared files `folders.json` and `deletions.json` are updated via read-modify-write cycles with no server-side locking. If two devices sync simultaneously, one device's write can clobber the other's merge. The next sync will self-heal the data, but a folder rename or deletion could be lost in the narrow window. ETag-based optimistic locking (see section 9) would eliminate this race.
+- **Folder deletion is not cascaded across devices.** Deleting a folder locally does not propagate to other devices (only notebook deletions are tracked via tombstones).
+- **`folders.json` writes are not atomic.** This shared file is updated via read-modify-write with no server-side locking. If two devices sync simultaneously, one device's write can clobber the other's merge. The next sync will self-heal, but a folder rename or deletion could be lost in the narrow window. Notebook deletions do not have this problem — they use per-notebook tombstones. ETag-based optimistic locking (see section 9) would eliminate the `folders.json` race.
 - **Depends on reasonably synchronized device clocks.** Timestamp comparison is the foundation of conflict resolution. If two devices have significantly different clock settings, the wrong version may win. This is mitigated by the clock skew detection described in 5.8, which blocks sync when the device clock differs from the server by more than 30 seconds.
 
 ### 5.8 Clock Skew Detection
@@ -435,8 +429,6 @@ enum class SyncError {
     NETWORK_ERROR,      // IOException - connection failed, timeout, DNS resolution
     AUTH_ERROR,         // Credentials missing or invalid
     CONFIG_ERROR,       // Settings missing or sync disabled
-    SERVER_ERROR,       // Unexpected server response
-    CONFLICT_ERROR,     // (Reserved for future use)
     CLOCK_SKEW,         // Device clock differs from server by >30s (see 5.8)
     SYNC_IN_PROGRESS,   // Another sync is already running (mutex held)
     UNKNOWN_ERROR       // Catch-all for unexpected exceptions
@@ -492,7 +484,7 @@ Idle → Syncing(step, progress, details) → Success(summary) → Idle
 ### 8.1 WorkManager (Background Sync)
 
 `SyncScheduler` enqueues a `PeriodicWorkRequest` with:
-- Default interval: 5 minutes (configurable).
+- Default interval: 15 minutes (WorkManager enforces a hard minimum of 15 minutes).
 - Network constraint: `NetworkType.CONNECTED` (won't run without network).
 - Policy: `ExistingPeriodicWorkPolicy.KEEP` (doesn't restart if already scheduled).
 
@@ -523,16 +515,15 @@ Sync configuration lives in `AppSettings.syncSettings`:
 
 Potential enhancements beyond the current implementation, roughly ordered by impact:
 
-1. **ETag-based optimistic locking for shared files.** `folders.json` and `deletions.json` are updated via read-modify-write with no coordination between devices. Using `If-Match` on PUT (and re-reading on 412) would eliminate the concurrent-write race described in section 5.7. Most WebDAV servers (including Nextcloud) return strong ETags on all resources.
+1. **ETag-based optimistic locking for `folders.json`.** This shared file is updated via read-modify-write with no coordination between devices. Using `If-Match` on PUT (and re-reading on 412 Precondition Failed) would eliminate the concurrent-write race described in section 5.7. Most WebDAV servers (including Nextcloud) return strong ETags on all resources. Tombstones already solved this problem for notebook deletions; `folders.json` is the last remaining shared mutable file.
 2. **ETag-based change detection.** Extend ETags to notebook manifests: store the ETag from each GET, send `If-None-Match` on the next sync -- a 304 avoids downloading the full manifest. This would also make clock skew detection unnecessary for change detection.
 3. **Page-level sync granularity.** Compare and sync individual pages rather than whole notebooks to reduce bandwidth and improve conflict handling for multi-page notebooks.
-4. **Pruning of deletions.json.** The file grows without bound. Entries older than a configurable threshold (e.g., 90 days) can be pruned, since any device that has not synced in that long should perform a full reconciliation regardless.
-5. **Stroke-level merge.** When two devices edit different pages of the same notebook, merge non-overlapping changes instead of last-writer-wins at the notebook level.
-6. **Conflict UI.** Present both local and remote versions when a conflict is detected and let the user choose.
-7. **Selective sync.** Allow users to choose which notebooks sync to which devices.
-8. **Compression.** Gzip large JSON files before upload to reduce bandwidth.
-9. **Quick Pages sync.** Pages with `notebookId = null` (standalone pages not in any notebook) are not currently synced.
-10. **Device screen size scaling.** Notes created on one Boox tablet size may need coordinate scaling on a different model.
+4. **Stroke-level merge.** When two devices edit different pages of the same notebook, merge non-overlapping changes instead of last-writer-wins at the notebook level.
+5. **Conflict UI.** Present both local and remote versions when a conflict is detected and let the user choose.
+6. **Selective sync.** Allow users to choose which notebooks sync to which devices.
+7. **Compression.** Gzip large JSON files before upload to reduce bandwidth.
+8. **Quick Pages sync.** Pages with `notebookId = null` (standalone pages not in any notebook) are not currently synced.
+9. **Device screen size scaling.** Notes created on one Boox tablet size may need coordinate scaling on a different model.
 
 ---
 
@@ -561,5 +552,5 @@ Notable's WebDAV needs are narrow (PUT, GET, DELETE, MKCOL, PROPFIND, HEAD), so 
 
 ---
 
-**Version**: 1.1
-**Last Updated**: 2026-02-28
+**Version**: 1.2
+**Last Updated**: 2026-03-06
