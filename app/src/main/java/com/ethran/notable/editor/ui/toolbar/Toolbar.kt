@@ -461,9 +461,10 @@ fun Toolbar(
                 if (state.bookId != null) {
                     var book by remember(state.bookId) { mutableStateOf<Notebook?>(null) }
                     LaunchedEffect(state.bookId) {
-                        withContext(Dispatchers.IO) {
-                            book = repository.getById(state.bookId)
+                        val loadedBook = withContext(Dispatchers.IO) {
+                            repository.getById(state.bookId)
                         }
+                        book = loadedBook
                     }
 
                     val pageNumber: String = remember(book?.id, state.currentPageId) {
