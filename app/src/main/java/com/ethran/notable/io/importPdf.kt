@@ -9,7 +9,6 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.ensureNotMainThread
-import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
 

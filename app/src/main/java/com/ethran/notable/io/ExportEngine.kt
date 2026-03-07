@@ -60,7 +60,7 @@ data class ExportOptions(
 )
 
 class ExportEngine @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val appRepository: AppRepository,
     private val pageRepo: PageRepository,
     private val bookRepo: BookRepository
@@ -339,7 +339,7 @@ class ExportEngine @Inject constructor(
                     // Page inside a book
                     val bookTitle = sanitizeFileName(book.title)
                     val pageNumber = getPageNumber(book.id, page.id).plus(1)
-                    val pageToken = if ((pageNumber ?: 0) >= 1) "p$pageNumber" else "p_"
+                    val pageToken = if (pageNumber >= 1) "p$pageNumber" else "p_"
                     "$bookTitle-$pageToken"
                 } else {
                     val timeStamp = getReadableUtcTimestamp()
