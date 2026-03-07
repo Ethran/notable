@@ -14,7 +14,6 @@ import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
@@ -32,7 +31,6 @@ import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,7 +60,7 @@ data class ExportOptions(
 )
 
 class ExportEngine @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val appRepository: AppRepository,
     private val pageRepo: PageRepository,
     private val bookRepo: BookRepository
@@ -176,7 +174,7 @@ class ExportEngine @Inject constructor(
                     }
                 }
                 if (options.copyToClipboard) {
-                    Log.w(TAG, "Can't copy book links or images to clipboard -- batch export.")
+                    log.w("Can't copy book links or images to clipboard -- batch export.")
                 }
                 return "Book exported: ${book.title} (${book.pageIds.size} pages)"
             }
@@ -341,7 +339,7 @@ class ExportEngine @Inject constructor(
                     // Page inside a book
                     val bookTitle = sanitizeFileName(book.title)
                     val pageNumber = getPageNumber(book.id, page.id).plus(1)
-                    val pageToken = if ((pageNumber ?: 0) >= 1) "p$pageNumber" else "p_"
+                    val pageToken = if (pageNumber >= 1) "p$pageNumber" else "p_"
                     "$bookTitle-$pageToken"
                 } else {
                     val timeStamp = getReadableUtcTimestamp()
@@ -558,7 +556,7 @@ class ExportEngine @Inject constructor(
 
             "Saved $displayName"
         } catch (e: Exception) {
-            Log.e(TAG, "Save error: ${e.message}")
+            log.e("Save error: ${e.message}")
             "Error saving $displayName"
         }
     }

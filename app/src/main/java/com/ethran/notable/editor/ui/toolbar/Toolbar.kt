@@ -24,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -34,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.R
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.AppSettings
@@ -59,13 +57,13 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.RefreshCcw
-import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val toolbarLog = ShipBook.getLogger("Toolbar")
+private val log = ShipBook.getLogger("Toolbar")
+
 fun presentlyUsedToolIcon(mode: Mode, pen: Pen): Int {
     return when (mode) {
         Mode.Draw -> {
@@ -122,10 +120,7 @@ fun Toolbar(
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
             if (uri == null) {
-                Log.w(
-                    TAG,
-                    "PickVisualMedia: uri is null (user cancelled or provider returned null)"
-                )
+                log.w("PickVisualMedia: uri is null (user cancelled or provider returned null)")
                 return@rememberLauncherForActivityResult
             }
             scope.launch(Dispatchers.IO) {
@@ -134,11 +129,11 @@ fun Toolbar(
                     val copiedFile = copyImageToDatabase(context, uri)
 
                     // Set isImageLoaded to true
-                    toolbarLog.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
+                    log.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
                     CanvasEventBus.addImageByUri.value = copiedFile.toUri()
 
                 } catch (e: Exception) {
-                    toolbarLog.e("ImagePicker: copy failed: ${e.message}", e)
+                    log.e("ImagePicker: copy failed: ${e.message}", e)
                 }
             }
 
@@ -147,7 +142,7 @@ fun Toolbar(
     // on exit of toolbar, update drawing state
     LaunchedEffect(state.menuStates.isBackgroundSelectorModalOpen, state.menuStates.isMenuOpen) {
         // TODO: move it to menuState.
-        toolbarLog.i("Updating drawing state")
+        log.i("Updating drawing state")
         state.checkForSelectionsAndMenus()
     }
     fun handleChangePen(pen: Pen) {
@@ -178,7 +173,7 @@ fun Toolbar(
     }
 
     if (state.menuStates.isBackgroundSelectorModalOpen) {
-        toolbarLog.i("Opening page settings modal")
+        log.i("Opening page settings modal")
         BackgroundSelector(
             initialPageBackgroundType = state.pageView.pageFromDb?.backgroundType ?: "native",
             initialPageBackground = state.pageView.pageFromDb?.background ?: "blank",
@@ -382,7 +377,7 @@ fun Toolbar(
                     contentDescription = "library",
                     onSelect = {
                         // Call insertImage when the button is tapped
-                        toolbarLog.i("Launching image picker...")
+                        log.i("Launching image picker...")
                         pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
                     }
                 )
@@ -539,7 +534,7 @@ fun Toolbar(
                             currentBookId = state.bookId,
                             onClose = { state.menuStates.isMenuOpen = false },
                             onBackgroundSelectorModalOpen = {
-                                toolbarLog.i("Opening page settings modal")
+                                log.i("Opening page settings modal")
                                 state.menuStates.isBackgroundSelectorModalOpen = true
                             }
                         )

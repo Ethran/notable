@@ -3,8 +3,9 @@ package com.ethran.notable.editor.ui.toolbar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import com.ethran.notable.TAG
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
+
+private val log = ShipBook.getLogger("LineToolbarButton")
 
 @Composable
 fun LineToolbarButton(
@@ -21,11 +22,11 @@ fun LineToolbarButton(
             onSelect = {
                 if (isSelected) {
                     // If it's already selected, deselect it
-                    Log.d(TAG, "Deselecting line")
+                    log.d("Deselecting line")
                     unSelect()
                 } else {
                     // Otherwise, select it
-                    Log.d(TAG, "Selecting line")
+                    log.d("Selecting line")
                     onSelect()
                 }
             },
