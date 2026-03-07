@@ -1,32 +1,24 @@
 package com.ethran.notable
 
-
 import android.content.Intent
 import android.content.res.Configuration
-import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
@@ -52,30 +44,33 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 
-var SCREEN_WIDTH = EpdController.getEpdHeight().toInt()
-var SCREEN_HEIGHT = EpdController.getEpdWidth().toInt()
-
-var TAG = "MainActivity"
+// TODO: Make it private
+const val TAG = "MainActivity"
 const val APP_SETTINGS_KEY = "APP_SETTINGS"
 const val PACKAGE_NAME = "com.ethran.notable"
 
+// TODO: Check if migrating to LocalConfiguration in Compose is good idea
+var SCREEN_WIDTH = EpdController.getEpdHeight().toInt()
+var SCREEN_HEIGHT = EpdController.getEpdWidth().toInt()
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
     @Inject
     lateinit var kvProxy: KvProxy
 
     @Inject
     lateinit var strokeMigrationHelper: StrokeMigrationHelper
+
     @Inject
     lateinit var editorSettingCacheManager: EditorSettingCacheManager
 
+    // 1. Use dagger.Lazy to defer DB initialization until after permissions
     @Inject
-    lateinit var appRepository: AppRepository
-
+    lateinit var appRepositoryLazy: dagger.Lazy<AppRepository>
 
     @Inject
-    lateinit var exportEngine: ExportEngine
+    lateinit var exportEngineLazy: dagger.Lazy<ExportEngine>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,13 +84,10 @@ class MainActivity : ComponentActivity() {
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
 
-
         val snackState = SnackState()
         snackState.registerGlobalSnackObserver()
         snackState.registerCancelGlobalSnackObserver()
         PageDataManager.registerComponentCallbacks(this)
-        //EpdDeviceManager.enterAnimationUpdate(true);
-//        val intentData = intent.data?.lastPathSegment
 
         setContent {
             var isInitialized by remember { mutableStateOf(false) }
@@ -104,13 +96,12 @@ class MainActivity : ComponentActivity() {
                 if (hasFilePermission(this@MainActivity)) {
                     withContext(Dispatchers.IO) {
                         // Init app settings, also do migration
-                        val savedSettings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
-                            ?: AppSettings(version = 1)
+                        val savedSettings =
+                            kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
+                                ?: AppSettings(version = 1)
 
                         GlobalAppSettings.update(savedSettings)
 
-                        // Used to load up app settings, latter used in
-                        // class EditorState
                         editorSettingCacheManager.init()
                         strokeMigrationHelper.reencodeStrokePointsToSB1()
                     }
@@ -122,18 +113,19 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(LocalSnackContext provides snackState) {
                     if (isInitialized) {
                         NotableApp(
-                            exportEngine = exportEngine,
+                            // Call .get() here so they are only instantiated AFTER the permission check runs
+                            exportEngine = exportEngineLazy.get(),
                             editorSettingCacheManager = editorSettingCacheManager,
                             snackState = snackState,
-                            appRepository = appRepository
+                            appRepository = appRepositoryLazy.get()
                         )
-                    } else
+                    } else {
                         ShowInitMessage()
+                    }
                 }
             }
         }
     }
-
 
     override fun onRestart() {
         super.onRestart()
@@ -147,7 +139,6 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
-
             CanvasEventBus.refreshUi.emit(Unit)
         }
     }
@@ -175,54 +166,26 @@ class MainActivity : ComponentActivity() {
         }
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
-        // Not necessary, done in CanvasEventBus.surfaceChanged()
-//        this.lifecycleScope.launch {
-//            CanvasEventBus.restartAfterConfChange.emit(Unit)
-//        }
     }
 
-
-    // written by GPT, but it works
-    // needs to be checked if it is ok approach.
     private fun enableFullScreen() {
-        // Turn on onyx optimization, no idea what it does.
-        // https://github.com/onyx-intl/OnyxAndroidDemo/blob/3290434f0edba751ec907d777fe95208378ae752/app/OnyxAndroidDemo/src/main/java/com/android/onyx/demo/AppOptimizeActivity.java#L4
-        Intent().apply {
-            action = "com.onyx.app.optimize.setting"
+        // Clearer intent broadcasting syntax
+        val optimizeIntent = Intent("com.onyx.app.optimize.setting").apply {
             putExtra("optimize_fullScreen", true)
-            putExtra("optimize_pkgName", "com.ethran.notable")
-            sendBroadcast(this)
+            putExtra(
+                "optimize_pkgName", packageName
+            ) // Use Context.packageName instead of hardcoding
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // For Android 11 and above
-            // 'setDecorFitsSystemWindows(Boolean): Unit' is deprecated. Deprecated in Java
-//            window.setDecorFitsSystemWindows(false)
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-//            if (window.insetsController != null) {
-//                window.insetsController!!.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-//                window.insetsController!!.systemBarsBehavior =
-//                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-//            }
-            // Safely access the WindowInsetsController
-            val controller = window.decorView.windowInsetsController
-            if (controller != null) {
-                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                controller.systemBarsBehavior =
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                Log.e(TAG, "WindowInsetsController is null")
-            }
-        } else {
-            // For Android 10 and below
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (
-                    View.SYSTEM_UI_FLAG_FULLSCREEN or
-                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    )
-        }
-    }
+        sendBroadcast(optimizeIntent)
 
+        // Modern, backwards-compatible AndroidX way to handle fullscreen / insets
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+
+        windowInsetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+    }
 }
 
 @Composable
