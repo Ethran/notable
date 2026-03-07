@@ -90,6 +90,16 @@ class EditorControlTower(
      * @param id The unique identifier of the page to switch to.
      */
     private suspend fun switchPage(id: String) {
+        // TODO: Check if this is a problem:
+        //`switchPage()` now calls `page.changePage(id)` inside `withContext(Dispatchers.IO)`,
+        // but `PageView.changePage()` mutates in-memory state (e.g., `currentPageId`,
+        // `zoomLevel.value`) before it does its own IO work. Calling it from IO risks
+        // off-main state mutations and also makes it easier for callers to accidentally
+        // invoke `page.changePage()` twice (which currently happens in `registerObservers()`).
+        // Prefer calling `page.changePage(id)` from the main thread (or let
+        // `PageView.changePage()` manage its own dispatching) and ensure callers don’t call
+        // it again after `switchPage()`.
+
         // Switch to Main thread for Compose state mutations
         withContext(Dispatchers.Main) {
             state.changePage(id)
