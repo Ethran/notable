@@ -3,11 +3,10 @@ package com.ethran.notable.editor.drawing
 import android.graphics.Color
 import android.graphics.Rect
 import android.opengl.GLES20
-import android.util.Log
-import com.ethran.notable.TAG
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.canvas.DrawCanvas
 import com.ethran.notable.editor.utils.refreshScreenRegion
+import io.shipbook.shipbooksdk.ShipBook
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -15,6 +14,7 @@ import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.math.min
 
+private val log = ShipBook.getLogger("LineRenderer")
 
 class LineRenderer {
 
@@ -88,7 +88,7 @@ class LineRenderer {
         color: Color,
         viewModel: DrawCanvas
     ) {
-        Log.d("LineRenderer", "drawSimpleLine")
+        log.d("drawSimpleLine")
         GLES20.glUseProgram(glProgram)
         GLES20.glLineWidth(40.0f)
         GLES20.glEnableVertexAttribArray(positionHandle)
@@ -140,7 +140,7 @@ class LineRenderer {
         GLES20.glDisableVertexAttribArray(positionHandle)
         val error = GLES20.glGetError()
         if (error != GLES20.GL_NO_ERROR) {
-            Log.e(TAG, "GL error: $error")
+            log.e("GL error: $error")
         }
     }
 

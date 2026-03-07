@@ -17,7 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
@@ -41,11 +40,12 @@ import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.views.LibraryDestination
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private val log = ShipBook.getLogger("EditorView")
 
 object EditorDestination : NavigationDestination {
     override val route = "editor"
@@ -91,7 +91,7 @@ fun EditorView(
             throw Exception("Page does not exist")
             if (bookId != null) {
                 // clean the book
-                Log.i(TAG, "Could not find page, Cleaning book")
+                log.i("Could not find page, Cleaning book")
                 SnackState.globalSnackFlow.tryEmit(
                     SnackConf(
                         text = "Could not find page, cleaning book",
@@ -179,7 +179,7 @@ fun EditorView(
             editorState.isToolbarOpen,
             editorState.eraser
         ) {
-            Log.i(TAG, "EditorView: saving")
+            log.i("EditorView: saving")
             editorSettingCacheManager.setEditorSettings(
                 EditorSettingCacheManager.EditorSettings(
                     isToolbarOpen = editorState.isToolbarOpen,

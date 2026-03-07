@@ -4,14 +4,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.annotation.WorkerThread
-import com.ethran.notable.TAG
 import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.ensureNotMainThread
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
+
+private val log = ShipBook.getLogger("importPdf")
 
 fun isPdfFile(mimeType: String?, fileName: String?): Boolean {
     return mimeType == "application/pdf" || fileName?.endsWith(
@@ -51,7 +52,7 @@ suspend fun importPdf(
     options: ImportOptions,
     savePageToDatabase: suspend (PageContent) -> Unit
 ): String {
-    Log.v(TAG, "Importing PDF from")
+    log.v("Importing PDF from")
 
     val numberOfPages = getPdfPageCount(fileToSave.toString())
 

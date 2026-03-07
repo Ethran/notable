@@ -48,7 +48,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.R
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
@@ -75,7 +74,7 @@ import compose.icons.feathericons.Folder
 import compose.icons.feathericons.FolderPlus
 import compose.icons.feathericons.Settings
 import compose.icons.feathericons.Upload
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 
 
 object LibraryDestination : NavigationDestination {
@@ -87,6 +86,7 @@ object LibraryDestination : NavigationDestination {
     }
 }
 
+private val log = ShipBook.getLogger("HomeView")
 
 @Composable
 fun Library(
@@ -241,7 +241,7 @@ fun FolderList(
                     appRepository.folderRepository,
                     folderId = folder.id,
                     onClose = {
-                        Log.i(TAG, "Closing Directory Dialog")
+                        log.i("Closing Directory Dialog")
                         isFolderSettingsOpen = false
                     })
                 Row(
@@ -373,16 +373,13 @@ fun NotebookImportPanel(
                 contract = ActivityResultContracts.OpenDocument()
             ) { uri: Uri? ->
                 if (uri == null) {
-                    Log.w(
-                        TAG,
-                        "PickVisualMedia: uri is null (user cancelled or provider returned null)"
-                    )
+                    log.w("PickVisualMedia: uri is null (user cancelled or provider returned null)")
                     return@rememberLauncherForActivityResult
                 }
                 try {
 
                     val mimeType = context.contentResolver.getType(uri)
-                    Log.d(TAG, "Selected file mimeType: $mimeType, uri: $uri")
+                    log.d("Selected file mimeType: $mimeType, uri: $uri")
                     if (mimeType == "application/pdf" || uri.toString()
                             .endsWith(".pdf", ignoreCase = true)
                     ) {
@@ -391,7 +388,7 @@ fun NotebookImportPanel(
                         onImportXopp(uri)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "contentPicker failed: ${e.message}", e)
+                    log.e("contentPicker failed: ${e.message}", e)
                     SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Importing failed: ${e.message}"))
                 }
             }

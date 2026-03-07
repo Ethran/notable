@@ -49,8 +49,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 
-// TODO: Make it private
-const val TAG = "MainActivity"
+private const val TAG = "MainActivity"
 const val APP_SETTINGS_KEY = "APP_SETTINGS"
 const val PACKAGE_NAME = "com.ethran.notable"
 
