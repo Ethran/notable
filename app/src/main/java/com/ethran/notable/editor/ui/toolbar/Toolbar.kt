@@ -75,6 +75,22 @@ data class ToolbarUiState(
     val currentPageNumber: Int = 0
 )
 
+private fun isSelected(state: ToolbarUiState, penType: Pen): Boolean {
+    return when (state.mode) {
+        Mode.Draw if state.pen == penType -> {
+            true
+        }
+
+        Mode.Line if state.pen == penType -> {
+            true
+        }
+
+        else -> {
+            false
+        }
+    }
+}
+
 
 private val SIZES_STROKES_DEFAULT = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
 private val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "XXL" to 80f)
@@ -184,7 +200,6 @@ fun ToolbarContent(
     onBackgroundChange: (String, String?) -> Unit,
     onDrawingStateCheck: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
 
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
@@ -248,7 +263,7 @@ fun ToolbarContent(
                 PenToolbarButton(
                     pen = Pen.BALLPEN,
                     icon = R.drawable.ballpen,
-                    isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.BALLPEN,
+                    isSelected = isSelected(uiState, Pen.BALLPEN),
                     onSelect = { onPenChange(Pen.BALLPEN) },
                     sizes = SIZES_STROKES_DEFAULT,
                     penSetting = uiState.penSettings[Pen.BALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
@@ -258,7 +273,7 @@ fun ToolbarContent(
                     PenToolbarButton(
                         pen = Pen.REDBALLPEN,
                         icon = R.drawable.ballpenred,
-                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.REDBALLPEN,
+                        isSelected = isSelected(uiState, Pen.REDBALLPEN),
                         onSelect = { onPenChange(Pen.REDBALLPEN) },
                         sizes = SIZES_STROKES_DEFAULT,
                         penSetting = uiState.penSettings[Pen.REDBALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.RED),
@@ -268,7 +283,7 @@ fun ToolbarContent(
                     PenToolbarButton(
                         pen = Pen.BLUEBALLPEN,
                         icon = R.drawable.ballpenblue,
-                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.BLUEBALLPEN,
+                        isSelected = isSelected(uiState, Pen.BLUEBALLPEN),
                         onSelect = { onPenChange(Pen.BLUEBALLPEN) },
                         sizes = SIZES_STROKES_DEFAULT,
                         penSetting = uiState.penSettings[Pen.BLUEBALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.BLUE),
@@ -277,7 +292,7 @@ fun ToolbarContent(
                     PenToolbarButton(
                         pen = Pen.GREENBALLPEN,
                         icon = R.drawable.ballpengreen,
-                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.GREENBALLPEN,
+                        isSelected = isSelected(uiState, Pen.GREENBALLPEN),
                         onSelect = { onPenChange(Pen.GREENBALLPEN) },
                         sizes = SIZES_STROKES_DEFAULT,
                         penSetting = uiState.penSettings[Pen.GREENBALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.GREEN),
@@ -288,7 +303,7 @@ fun ToolbarContent(
                     PenToolbarButton(
                         pen = Pen.PENCIL,
                         icon = R.drawable.pencil,
-                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.PENCIL,
+                        isSelected = isSelected(uiState, Pen.PENCIL),
                         onSelect = { onPenChange(Pen.PENCIL) },
                         sizes = SIZES_STROKES_DEFAULT,
                         penSetting = uiState.penSettings[Pen.PENCIL.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
@@ -298,7 +313,7 @@ fun ToolbarContent(
                     PenToolbarButton(
                         pen = Pen.BRUSH,
                         icon = R.drawable.brush,
-                        isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.BRUSH,
+                        isSelected = isSelected(uiState, Pen.BRUSH),
                         onSelect = { onPenChange(Pen.BRUSH) },
                         sizes = SIZES_STROKES_DEFAULT,
                         penSetting = uiState.penSettings[Pen.BRUSH.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
@@ -308,7 +323,7 @@ fun ToolbarContent(
                 PenToolbarButton(
                     pen = Pen.FOUNTAIN,
                     icon = R.drawable.fountain,
-                    isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.FOUNTAIN,
+                    isSelected = isSelected(uiState, Pen.FOUNTAIN),
                     onSelect = { onPenChange(Pen.FOUNTAIN) },
                     sizes = SIZES_STROKES_DEFAULT,
                     penSetting = uiState.penSettings[Pen.FOUNTAIN.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
@@ -332,7 +347,7 @@ fun ToolbarContent(
                 PenToolbarButton(
                     pen = Pen.MARKER,
                     icon = R.drawable.marker,
-                    isSelected = uiState.mode == Mode.Draw && uiState.pen == Pen.MARKER,
+                    isSelected = isSelected(uiState, Pen.MARKER),
                     onSelect = { onPenChange(Pen.MARKER) },
                     sizes = SIZES_MARKER_DEFAULT,
                     penSetting = uiState.penSettings[Pen.MARKER.penName] ?: PenSetting(40f, android.graphics.Color.LTGRAY),
