@@ -1,6 +1,7 @@
 package com.ethran.notable.editor.ui.toolbar
 
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
@@ -19,48 +20,33 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
-import androidx.navigation.NavController
 import com.ethran.notable.R
-import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.Notebook
-import com.ethran.notable.data.db.getPageIndex
-import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
-import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.ExportFormat
+import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.ui.noRippleClickable
-import com.ethran.notable.ui.views.BugReportDestination
-import com.ethran.notable.ui.views.LibraryDestination
-import com.ethran.notable.ui.views.PagesDestination
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.RefreshCcw
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private val log = ShipBook.getLogger("Toolbar")
 
@@ -103,19 +89,22 @@ private val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "
 
 @Composable
 fun Toolbar(
-    exportEngine: ExportEngine,
-    navController: NavController,
-    appRepository: AppRepository,
     state: EditorState,
-    controlTower: EditorControlTower
+    controlTower: EditorControlTower,
+    pageNumberInfo: String,
+    onNavigateToLibrary: () -> Unit,
+    onNavigateToBugReport: () -> Unit,
+    onNavigateToPages: () -> Unit,
+    onNavigateToHome: () -> Unit,
+    onToggleScribbleToErase: (Boolean) -> Unit,
+    onImagePicked: (Uri) -> Unit,
+    onExport: suspend (ExportTarget, ExportFormat) -> String
 ) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
 
     // Observe zoom level to decide button visibility
     val zoomLevel by state.pageView.zoomLevel.collectAsState()
 
-    val repository = appRepository.bookRepository
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
         rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
@@ -123,25 +112,11 @@ fun Toolbar(
                 log.w("PickVisualMedia: uri is null (user cancelled or provider returned null)")
                 return@rememberLauncherForActivityResult
             }
-            scope.launch(Dispatchers.IO) {
-                try {
-                    //  copy image to documents/notabledb/images/filename
-                    val copiedFile = copyImageToDatabase(context, uri)
-
-                    // Set isImageLoaded to true
-                    log.i("Image was received and copied, it is now at:${copiedFile.toUri()}")
-                    CanvasEventBus.addImageByUri.value = copiedFile.toUri()
-
-                } catch (e: Exception) {
-                    log.e("ImagePicker: copy failed: ${e.message}", e)
-                }
-            }
-
+            onImagePicked(uri)
         }
 
     // on exit of toolbar, update drawing state
     LaunchedEffect(state.menuStates.isBackgroundSelectorModalOpen, state.menuStates.isMenuOpen) {
-        // TODO: move it to menuState.
         log.i("Updating drawing state")
         state.checkForSelectionsAndMenus()
     }
@@ -345,13 +320,7 @@ fun Toolbar(
                     onMenuOpenChange = { state.menuStates.isStrokeSelectionOpen = it },
                     value = state.eraser,
                     onChange = { state.eraser = it },
-                    toggleScribbleToErase = {
-                        scope.launch(Dispatchers.IO) {
-                            appRepository.kvProxy.setAppSettings(
-                                GlobalAppSettings.current.copy(scribbleToEraseEnabled = it)
-                            )
-                        }
-                    }
+                    toggleScribbleToErase = onToggleScribbleToErase
                 )
                 Box(
                     Modifier
@@ -456,19 +425,6 @@ fun Toolbar(
                         .background(Color.Black)
                 )
                 if (state.bookId != null) {
-                    var book by remember(state.bookId) { mutableStateOf<Notebook?>(null) }
-                    LaunchedEffect(state.bookId) {
-                        val loadedBook = withContext(Dispatchers.IO) {
-                            repository.getById(state.bookId)
-                        }
-                        book = loadedBook
-                    }
-
-                    val pageNumber: String = remember(book?.id, state.currentPageId) {
-                        book?.let { (it.getPageIndex(state.currentPageId) + 1).toString() } ?: "?"
-                    }
-                    val totalPageNumber: String = book?.pageIds?.size?.toString() ?: "?"
-
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
@@ -476,12 +432,10 @@ fun Toolbar(
                             .padding(10.dp, 0.dp)
                     ) {
                         Text(
-                            text = "${pageNumber}/${totalPageNumber}",
+                            text = pageNumberInfo,
                             fontWeight = FontWeight.Light,
                             modifier = Modifier.noRippleClickable {
-                                navController.navigate(
-                                    PagesDestination.createRoute(state.bookId)
-                                )
+                                onNavigateToPages()
                             },
                             textAlign = TextAlign.Center
                         )
@@ -497,9 +451,7 @@ fun Toolbar(
                 ToolbarButton(
                     iconId = R.drawable.home, // Replace with your library icon resource
                     contentDescription = "library",
-                    onSelect = {
-                        navController.navigate("library") // Navigate to main library
-                    }
+                    onSelect = onNavigateToHome
                 )
                 Box(
                     Modifier
@@ -515,21 +467,9 @@ fun Toolbar(
                     )
                     if (state.menuStates.isMenuOpen)
                         ToolbarMenu(
-                            exportEngine = exportEngine,
-                            goToBugReport = { navController.navigate(BugReportDestination.route) },
-                            goToLibrary = {
-                                scope.launch {
-                                    val page = withContext(Dispatchers.IO) {
-                                        appRepository.pageRepository.getById(state.currentPageId)
-                                    }
-                                    val parentFolder = withContext(Dispatchers.IO) {
-                                        page?.getParentFolder(appRepository.bookRepository)
-                                    }
-                                    navController.navigate(
-                                        LibraryDestination.createRoute(parentFolder)
-                                    )
-                                }
-                            },
+                            onExport = onExport,
+                            goToBugReport = onNavigateToBugReport,
+                            goToLibrary = onNavigateToLibrary,
                             currentPageId = state.currentPageId,
                             currentBookId = state.bookId,
                             onClose = { state.menuStates.isMenuOpen = false },

@@ -16,11 +16,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.db.getPageIndex
+import com.ethran.notable.data.db.getParentFolder
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.ui.EditorSurface
@@ -37,7 +43,9 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.PagesDestination
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -197,7 +205,13 @@ fun EditorView(
                 Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(state = editorState)
             }
-            PositionedToolbar(exportEngine,navController, appRepository, editorState, editorControlTower)
+            PositionedToolbar(
+                exportEngine,
+                navController,
+                appRepository,
+                editorState,
+                editorControlTower
+            )
             HorizontalScrollIndicator(state = editorState)
         }
     }
@@ -213,13 +227,72 @@ fun PositionedToolbar(
     editorControlTower: EditorControlTower
 ) {
     val position = GlobalAppSettings.current.toolbarPosition
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var book by remember(editorState.bookId) { mutableStateOf<Notebook?>(null) }
+    LaunchedEffect(editorState.bookId) {
+        if (editorState.bookId != null) {
+            val loadedBook = withContext(Dispatchers.IO) {
+                appRepository.bookRepository.getById(editorState.bookId)
+            }
+            book = loadedBook
+        }
+    }
+
+    val pageNumberInfo: String = remember(book?.id, editorState.currentPageId) {
+        book?.let { (it.getPageIndex(editorState.currentPageId) + 1).toString() } ?: "?"
+    } + "/" + (book?.pageIds?.size?.toString() ?: "?")
+
+    val toolbar = @Composable {
+        Toolbar(
+            state = editorState,
+            controlTower = editorControlTower,
+            pageNumberInfo = pageNumberInfo,
+            onNavigateToLibrary = {
+                scope.launch {
+                    val page = withContext(Dispatchers.IO) {
+                        appRepository.pageRepository.getById(editorState.currentPageId)
+                    }
+                    val parentFolder = withContext(Dispatchers.IO) {
+                        page?.getParentFolder(appRepository.bookRepository)
+                    }
+                    navController.navigate(LibraryDestination.createRoute(parentFolder))
+                }
+            },
+            onNavigateToBugReport = { navController.navigate(BugReportDestination.route) },
+            onNavigateToPages = {
+                if (editorState.bookId != null) {
+                    navController.navigate(PagesDestination.createRoute(editorState.bookId))
+                }
+            },
+            onNavigateToHome = { navController.navigate("library") },
+            onToggleScribbleToErase = { enabled ->
+                scope.launch(Dispatchers.IO) {
+                    appRepository.kvProxy.setAppSettings(
+                        GlobalAppSettings.current.copy(scribbleToEraseEnabled = enabled)
+                    )
+                }
+            },
+            onImagePicked = { uri ->
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val copiedFile = copyImageToDatabase(context, uri)
+                        CanvasEventBus.addImageByUri.value = copiedFile.toUri()
+                    } catch (e: Exception) {
+                        log.e("ImagePicker: copy failed: ${e.message}", e)
+                    }
+                }
+            },
+            onExport = { target, format ->
+                exportEngine.export(target, format)
+            }
+        )
+    }
 
     when (position) {
         AppSettings.Position.Top -> {
-            Toolbar(
-                exportEngine,
-                navController, appRepository, editorState, editorControlTower
-            )
+            toolbar()
         }
 
         AppSettings.Position.Bottom -> {
@@ -229,7 +302,7 @@ fun PositionedToolbar(
                     .fillMaxHeight()
             ) {
                 Spacer(modifier = Modifier.weight(1f))
-                Toolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
+                toolbar()
             }
         }
     }
