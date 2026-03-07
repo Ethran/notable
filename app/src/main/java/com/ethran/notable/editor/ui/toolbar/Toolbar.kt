@@ -46,6 +46,7 @@ import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.ui.dialogs.BackgroundSelector
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.views.BugReportDestination
@@ -99,9 +100,12 @@ private val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "
 
 
 @Composable
-@ExperimentalComposeUiApi
 fun Toolbar(
-    navController: NavController, state: EditorState, controlTower: EditorControlTower
+    exportEngine: ExportEngine,
+    navController: NavController,
+    appRepository: AppRepository,
+    state: EditorState,
+    controlTower: EditorControlTower
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -109,7 +113,6 @@ fun Toolbar(
     // Observe zoom level to decide button visibility
     val zoomLevel by state.pageView.zoomLevel.collectAsState()
 
-    val appRepository = remember { AppRepository(context) }
     val repository = appRepository.bookRepository
     // Create an activity result launcher for picking visual media (images in this case)
     val pickMedia =
@@ -342,7 +345,13 @@ fun Toolbar(
                     },
                     onMenuOpenChange = { state.menuStates.isStrokeSelectionOpen = it },
                     value = state.eraser,
-                    onChange = { state.eraser = it })
+                    onChange = { state.eraser = it },
+                    toggleScribbleToErase = {
+                        appRepository.kvProxy.setAppSettings(
+                            GlobalAppSettings.current.copy(scribbleToEraseEnabled = it)
+                        )
+                    }
+                )
                 Box(
                     Modifier
                         .fillMaxHeight()
@@ -501,9 +510,12 @@ fun Toolbar(
                     )
                     if (state.menuStates.isMenuOpen)
                         ToolbarMenu(
+                            exportEngine = exportEngine,
                             goToBugReport = { navController.navigate(BugReportDestination.route) },
                             goToLibrary = {
-                                val parentFolder = appRepository.pageRepository.getById(state.currentPageId)?.getParentFolder(context)
+                                val parentFolder =
+                                    appRepository.pageRepository.getById(state.currentPageId)
+                                        ?.getParentFolder(appRepository.bookRepository)
                                 navController.navigate(
                                     LibraryDestination.createRoute(parentFolder)
                                 )

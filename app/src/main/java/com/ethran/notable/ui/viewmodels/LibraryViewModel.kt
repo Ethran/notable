@@ -12,6 +12,7 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
 import com.ethran.notable.ui.SnackConf
@@ -50,7 +51,9 @@ private data class LibraryDatabaseState(
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val appRepository: AppRepository,
+    val appRepository: AppRepository,
+    val importEngine: ImportEngine,
+    val exportEngine: ExportEngine,
     @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
 
@@ -170,7 +173,7 @@ class LibraryViewModel @Inject constructor(
 
             try {
                 // Ideally, ImportEngine should be injected via Hilt rather than instantiated here
-                ImportEngine(context).import(
+                importEngine.import(
                     uri, ImportOptions(folderId = _folderId.value, linkToExternalFile = !copy)
                 )
                 SnackState.globalSnackFlow.tryEmit(SnackConf(text = "PDF Import Successful"))
@@ -193,7 +196,7 @@ class LibraryViewModel @Inject constructor(
             )
 
             try {
-                ImportEngine(context).import(uri, ImportOptions(folderId = _folderId.value))
+                importEngine.import(uri, ImportOptions(folderId = _folderId.value))
                 SnackState.globalSnackFlow.tryEmit(SnackConf(text = "XOPP Import Successful"))
             } catch (e: Exception) {
                 SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Import failed: ${e.message}"))

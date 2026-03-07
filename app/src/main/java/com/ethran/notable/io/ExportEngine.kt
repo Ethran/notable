@@ -31,6 +31,7 @@ import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.ensureNotMainThread
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,7 @@ import java.io.IOException
 import java.io.OutputStream
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import javax.inject.Inject
 
 /* ---------------------------- Public API ---------------------------- */
 
@@ -59,12 +61,16 @@ data class ExportOptions(
     val fileName: String? = null
 )
 
-class ExportEngine(
-    private val context: Context,
-    private val pageRepo: PageRepository = PageRepository(context),
-    private val bookRepo: BookRepository = BookRepository(context)
+class ExportEngine @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val appRepository: AppRepository,
+    private val pageRepo: PageRepository,
+    private val bookRepo: BookRepository
 ) {
     private val log = ShipBook.getLogger("ExportEngine")
+
+    @Inject
+    lateinit var xoppFile : XoppFile
 
     suspend fun export(
         target: ExportTarget, format: ExportFormat, options: ExportOptions = ExportOptions()
@@ -191,7 +197,7 @@ class ExportEngine(
             mimeType = "application/x-xopp",
             overwrite = options.overwrite
         ) { out ->
-            XoppFile(context).writeToXoppStream(target, out)
+            xoppFile.writeToXoppStream(target, out)
         }
     }
 
@@ -255,7 +261,7 @@ class ExportEngine(
         fun buildFolderPath(parentFolderId: String?): String {
             return parentFolderId?.let {
                 // Fetches folder hierarchy and joins their sanitized titles with "/".
-                getFolderList(context, it)
+                getFolderList(appRepository, it)
                     .reversed()
                     .joinToString("/") { folder -> sanitizeFileName(folder.title) }
             }.orEmpty()
@@ -782,7 +788,7 @@ class ExportEngine(
 
     // Retrieves the 0-based page number of a specific page within a book.
     fun getPageNumber(bookId: String, id: String): Int {
-        return AppRepository(context).getPageNumber(bookId, id)
+        return appRepository.getPageNumber(bookId, id)
 
     }
 

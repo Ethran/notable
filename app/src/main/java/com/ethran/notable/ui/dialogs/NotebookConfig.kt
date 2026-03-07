@@ -56,8 +56,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.TAG
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
@@ -68,8 +70,13 @@ import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.launch
 
 @Composable
-fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
-    val bookRepository = BookRepository(LocalContext.current)
+fun NotebookConfigDialog(
+    appRepository: AppRepository,
+    exportEngine: ExportEngine,
+    bookId: String,
+    onClose: () -> Unit) {
+    val bookRepository  = appRepository.bookRepository
+
     val book by bookRepository.getByIdLive(bookId).observeAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -134,6 +141,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
     // Confirmation Dialog for Deletion
     if (showExportDialog) {
         ShowExportDialog(
+            exportEngine = exportEngine,
             snackManager = snackManager,
             bookId = bookId,
             context = context,
@@ -150,7 +158,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
     if (showMoveDialog) {
 
         ShowFolderSelectionDialog(
-            book = book!!,
+            appRepository = appRepository,
             notebookName = book!!.title,
             initialFolderId = book!!.parentFolderId,
             onCancel = { showMoveDialog = false },
@@ -300,7 +308,7 @@ fun NotebookConfigDialog(bookId: String, onClose: () -> Unit) {
                     Text("Size: TODO!")
                     Row {
                         Text(stringResource(R.string.details_notebook_in_folder))
-                        BreadCrumb(folders = getFolderList(context, bookFolder), fontSize = 16)  { }
+                        BreadCrumb(folders = getFolderList(appRepository = appRepository, bookFolder), fontSize = 16)  { }
                     }
                     Text(stringResource(R.string.details_notebook_created, formattedCreatedAt))
                     Text(stringResource(R.string.details_notebook_last_updated, formattedUpdatedAt))

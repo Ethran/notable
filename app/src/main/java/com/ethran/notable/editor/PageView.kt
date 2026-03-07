@@ -49,6 +49,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -78,7 +79,8 @@ class PageView(
     private var loadingJob: Job? = null
 
 
-    private val appRepository = AppRepository(context)
+    @Inject
+    lateinit var appRepository: AppRepository
 
     @Volatile
     var windowedBitmap = createBitmap(viewWidth, viewHeight)
@@ -137,8 +139,8 @@ class PageView(
 
     var pageFromDb = appRepository.pageRepository.getById(currentPageId)
 
-    private var dbStrokes = AppDatabase.getDatabase(context).strokeDao()
-    private var dbImages = AppDatabase.getDatabase(context).ImageDao()
+    private var dbStrokes = appRepository.strokeRepository
+    private var dbImages = appRepository.imageRepository
 
     val currentPageNumber: Int
         get() = pageFromDb?.notebookId
@@ -210,7 +212,7 @@ class PageView(
             updateOnExit(oldId)
             persistBitmapDebounced(oldId)
         }
-        pageFromDb = AppRepository(context).pageRepository.getById(currentPageId)
+        pageFromDb =appRepository.pageRepository.getById(currentPageId)
         PageDataManager.setPage(newPageId)
         zoomLevel.value = PageDataManager.getPageZoom(currentPageId)
         PageDataManager.getCachedBitmap(newPageId)?.let { cached ->

@@ -16,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
@@ -23,6 +24,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.NotableApp
@@ -32,9 +34,9 @@ import com.onyx.android.sdk.api.device.epd.EpdController
 import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
-import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 
 var SCREEN_WIDTH = EpdController.getEpdHeight().toInt()
@@ -55,6 +57,15 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var strokeMigrationHelper: StrokeMigrationHelper
+    @Inject
+    lateinit var editorSettingCacheManager: EditorSettingCacheManager
+
+    @Inject
+    lateinit var appRepository: AppRepository
+
+
+    @Inject
+    lateinit var exportEngine: ExportEngine
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,7 +94,7 @@ class MainActivity : ComponentActivity() {
 
             // Used to load up app settings, latter used in
             // class EditorState
-            EditorSettingCacheManager.init(applicationContext)
+            editorSettingCacheManager.init()
             this.lifecycleScope.launch(Dispatchers.IO) {
                 strokeMigrationHelper.reencodeStrokePointsToSB1()
             }
@@ -95,7 +106,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             InkaTheme {
                 CompositionLocalProvider(LocalSnackContext provides snackState) {
-                    NotableApp(snackState = snackState)
+                    NotableApp(
+                        exportEngine = exportEngine,
+                        editorSettingCacheManager = editorSettingCacheManager,
+                        snackState = snackState,
+                        appRepository = appRepository
+                    )
                 }
             }
         }

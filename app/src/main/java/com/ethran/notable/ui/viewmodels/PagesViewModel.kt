@@ -43,7 +43,7 @@ class PagesViewModel @Inject constructor(
                         bookId = bookId,
                         pageIds = book.pageIds,
                         openPageId = book.openPageId,
-                        folderList = getFolderList(context, book.parentFolderId),
+                        folderList = getFolderList(appRepository, book.parentFolderId),
                         isLoading = false
                     ) }
                 }
@@ -59,7 +59,7 @@ class PagesViewModel @Inject constructor(
 
     fun deletePage(pageId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            com.ethran.notable.data.deletePage(context, pageId)
+            com.ethran.notable.data.deletePage(appRepository, pageId, context.filesDir)
         }
     }
 

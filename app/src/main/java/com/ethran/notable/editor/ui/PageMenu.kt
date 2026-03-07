@@ -25,6 +25,7 @@ import com.ethran.notable.ui.noRippleClickable
 
 @Composable
 fun PageMenu(
+    appRepository: AppRepository,
     notebookId: String? = null,
     pageId: String,
     index: Int? = null,
@@ -32,7 +33,6 @@ fun PageMenu(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
-    val appRepository = remember { AppRepository(context) }
     Popup(
         alignment = Alignment.TopStart,
         onDismissRequest = { onClose() },
@@ -94,7 +94,8 @@ fun PageMenu(
                     Modifier
                         .padding(10.dp)
                         .noRippleClickable {
-                            deletePage(context, pageId)
+                            // TODO: change it
+                            deletePage(appRepository, pageId, context.filesDir)
                         }) {
                     Text("Delete")
                 }

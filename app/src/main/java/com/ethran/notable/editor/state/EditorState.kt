@@ -41,6 +41,7 @@ class EditorState(
     val pageId: String,
     val pageView: PageView,
     val appRepository: AppRepository,
+    persistedEditorSettings: EditorSettingCacheManager.EditorSettings?,
     val onPageChange: (String) -> Unit
 ) {
     var currentPageId by mutableStateOf(pageId)
@@ -86,7 +87,6 @@ class EditorState(
 
 
     private val log = ShipBook.getLogger("EditorState")
-    private val persistedEditorSettings = EditorSettingCacheManager.getEditorSettings()
 
     var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw) // should save
     var pen by mutableStateOf(persistedEditorSettings?.pen ?: Pen.BALLPEN) // should save

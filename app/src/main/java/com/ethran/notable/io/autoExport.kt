@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
  * @param bookRepository The repository to access notebook data, specifically to retrieve the linked file URI.
  */
 fun exportToLinkedFile(
+    exportEngine: ExportEngine,
     context: Context,
     bookId: String?,
     bookRepository: BookRepository,
@@ -36,7 +37,7 @@ fun exportToLinkedFile(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 Log.i(TAG, "Exporting page to linked file, dictionary: $uriStr")
-                ExportEngine(context).export(
+               exportEngine.export(
                     target = ExportTarget.Book(bookId),
                     format = ExportFormat.XOPP,
                     options = ExportOptions(

@@ -9,6 +9,7 @@ import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
@@ -36,6 +37,7 @@ var referencedSurfaceView: String = ""
 @SuppressLint("ViewConstructor") // we never execute constructor from XML
 class DrawCanvas(
     context: Context,
+    appRepository: AppRepository,
     val coroutineScope: CoroutineScope,
     val state: EditorState,
     val page: PageView,
@@ -88,6 +90,7 @@ class DrawCanvas(
 
 
     private val observers = CanvasObserverRegistry(
+        appRepository,
         coroutineScope, this, page, state, history, inputHandler, refreshManager
     )
 

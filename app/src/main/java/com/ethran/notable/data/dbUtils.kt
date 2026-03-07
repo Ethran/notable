@@ -76,8 +76,7 @@ fun copyImageToDatabase(context: Context, fileUri: Uri, subfolder: String? = nul
 
 
 // TODO move this to repository
-fun deletePage(context: Context, pageId: String) {
-    val appRepository = AppRepository(context)
+fun deletePage(appRepository: AppRepository, pageId: String, filesDir: File) {
     val page = appRepository.pageRepository.getById(pageId) ?: return
     val proxy = appRepository.kvProxy
     val settings = proxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
@@ -102,13 +101,13 @@ fun deletePage(context: Context, pageId: String) {
             appRepository.pageRepository.delete(pageId)
         }
         launch {
-            val imgFile = File(context.filesDir, "pages/previews/thumbs/$pageId")
+            val imgFile = File(filesDir, "pages/previews/thumbs/$pageId")
             if (imgFile.exists()) {
                 imgFile.delete()
             }
         }
         launch {
-            val imgFile = File(context.filesDir, "pages/previews/full/$pageId")
+            val imgFile = File(filesDir, "pages/previews/full/$pageId")
             if (imgFile.exists()) {
                 imgFile.delete()
             }

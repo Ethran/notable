@@ -43,7 +43,8 @@ fun EraserToolbarButton(
     onChange: (Eraser) -> Unit,
     onMenuOpenChange: ((Boolean) -> Unit)?,
     isSelected: Boolean,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
+    toggleScribbleToErase: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     var isMenuOpen by remember { mutableStateOf(false) }
@@ -124,10 +125,7 @@ fun EraserToolbarButton(
                                 .background(if (isChecked) Color.Black else Color.White)
                                 .clickable {
                                     isChecked = !isChecked
-                                    // TODO : change it!!
-                                    KvProxy(KvRepository(context)).setAppSettings(
-                                        GlobalAppSettings.current.copy(scribbleToEraseEnabled = isChecked)
-                                    )
+                                    toggleScribbleToErase(isChecked)
                                 }
                         )
                     }

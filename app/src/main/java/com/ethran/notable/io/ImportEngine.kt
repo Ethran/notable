@@ -6,13 +6,17 @@ import androidx.annotation.WorkerThread
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
+import javax.inject.Inject
 
 
 /**
@@ -70,12 +74,16 @@ data class ImportOptions(
  * The engine responsible for handling the logic of importing files into the app.
  * It is agnostic of the UI and operates on URIs provided to it.
  */
-class ImportEngine(
-    private val context: Context,
-    private val pageRepo: PageRepository = PageRepository(context),
-    private val bookRepo: BookRepository = BookRepository(context)
+class ImportEngine @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val pageRepo: PageRepository,
+    private val bookRepo: BookRepository,
+    private val strokeRepo: StrokeRepository,
+    private val imageRepo: ImageRepository
 ) {
     private val log = ShipBook.getLogger("ImportEngine")
+    @Inject
+    lateinit var xoppFile : XoppFile
 
     /**
      * Imports a notebook from the given URI. It recognizes the file type and
@@ -129,9 +137,8 @@ class ImportEngine(
         bookRepo.createEmpty(book)
 
 
-        val strokeRepo = AppDatabase.getDatabase(context).strokeDao()
-        val imageRepo = AppDatabase.getDatabase(context).ImageDao()
-        XoppFile(context).importBook(uri) { pageData ->
+
+        xoppFile.importBook(uri) { pageData ->
             try {
                 // TODO: handle conflict with existing pages, make sure that we won't insert the same strokes that already exist.
                 pageRepo.create(pageData.page.copy(notebookId = book.id))
@@ -165,8 +172,7 @@ class ImportEngine(
         )
         bookRepo.createEmpty(book)
 
-        val strokeRepo = AppDatabase.getDatabase(context).strokeDao()
-        val imageRepo = AppDatabase.getDatabase(context).ImageDao()
+
         importPdf(fileToSave, options) { pageData ->
             try {
                 pageRepo.create(pageData.page.copy(notebookId = book.id))

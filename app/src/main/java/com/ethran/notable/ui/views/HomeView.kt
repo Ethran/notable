@@ -49,11 +49,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.TAG
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.ui.toolbar.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
@@ -101,6 +103,8 @@ fun Library(
     }
 
     LibraryContent(
+        appRepository = viewModel.appRepository,
+        exportEngine = viewModel.exportEngine,
         uiState = uiState,
         onNavigateToFolder = { id -> navController.navigate(LibraryDestination.createRoute(id)) },
         onNavigateToSettings = { navController.navigate("settings") },
@@ -114,6 +118,7 @@ fun Library(
         onCreateNewNotebook = viewModel::onCreateNewNotebook,
         onImportPdf = viewModel::onPdfFile,
         onImportXopp = viewModel::onXoppFile
+
     )
 }
 
@@ -121,6 +126,8 @@ fun Library(
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 fun LibraryContent(
+    appRepository: AppRepository,
+    exportEngine: ExportEngine,
     uiState: LibraryUiState,
     onNavigateToFolder: (String?) -> Unit,
     onNavigateToSettings: () -> Unit,
@@ -164,6 +171,7 @@ fun LibraryContent(
             Spacer(Modifier.height(10.dp))
 
             FolderList(
+                appRepository = appRepository,
                 folders = uiState.folders,
                 onNavigateToFolder = onNavigateToFolder,
                 onCreateNewFolder = onCreateNewFolder
@@ -171,6 +179,7 @@ fun LibraryContent(
 
             Spacer(Modifier.height(10.dp))
             ShowPagesRow(
+                appRepository = appRepository,
                 pages = uiState.singlePages,
                 currentPageId = null,
                 title = stringResource(R.string.home_quick_pages), onSelectPage = goToPage,
@@ -180,6 +189,8 @@ fun LibraryContent(
             Spacer(Modifier.height(10.dp))
 
             NotebookGrid(
+                appRepository = appRepository,
+                exportEngine = exportEngine,
                 books = uiState.books,
                 isImporting = uiState.isImporting,
                 onNavigateToEditor = onNavigateToEditor,
@@ -196,7 +207,9 @@ fun LibraryContent(
 
 @Composable
 fun FolderList(
-    folders: List<Folder>, onNavigateToFolder: (String) -> Unit, onCreateNewFolder: () -> Unit
+    appRepository: AppRepository,
+    folders: List<Folder>,
+    onNavigateToFolder: (String) -> Unit, onCreateNewFolder: () -> Unit
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -225,7 +238,9 @@ fun FolderList(
             items(folders) { folder ->
                 var isFolderSettingsOpen by remember { mutableStateOf(false) }
                 if (isFolderSettingsOpen) FolderConfigDialog(
-                    folderId = folder.id, onClose = {
+                    appRepository.folderRepository,
+                    folderId = folder.id,
+                    onClose = {
                         Log.i(TAG, "Closing Directory Dialog")
                         isFolderSettingsOpen = false
                     })
@@ -251,6 +266,8 @@ fun FolderList(
 
 @Composable
 fun NotebookGrid(
+    appRepository: AppRepository,
+    exportEngine: ExportEngine,
     books: List<Notebook>,
     isImporting: Boolean,
     onNavigateToEditor: (String, String) -> Unit,
@@ -296,7 +313,10 @@ fun NotebookGrid(
                     onOpenSettings = { isSettingsOpen = true })
 
                 if (isSettingsOpen) {
-                    NotebookConfigDialog(bookId = book.id, onClose = { isSettingsOpen = false })
+                    NotebookConfigDialog(
+                        appRepository,
+                        exportEngine = exportEngine,
+                        bookId = book.id, onClose = { isSettingsOpen = false })
                 }
             }
         }
@@ -438,18 +458,18 @@ fun LibraryContentPreview() {
     )
 
     // 2. Render the stateless component with empty lambdas
-    LibraryContent(
-        uiState = mockUiState,
-        onNavigateToFolder = {},
-        onNavigateToSettings = {},
-        onNavigateToEditor = { _, _ -> },
-        goToPage = {},
-        onCreateNewQuickPage = {},
-        onCreateNewFolder = {},
-        onDeleteEmptyBook = {},
-        onCreateNewNotebook = {},
-        onImportPdf = { _, _ -> },
-        onImportXopp = {})
+//    LibraryContent(
+//        uiState = mockUiState,
+//        onNavigateToFolder = {},
+//        onNavigateToSettings = {},
+//        onNavigateToEditor = { _, _ -> },
+//        goToPage = {},
+//        onCreateNewQuickPage = {},
+//        onCreateNewFolder = {},
+//        onDeleteEmptyBook = {},
+//        onCreateNewNotebook = {},
+//        onImportPdf = { _, _ -> },
+//        onImportXopp = {})
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
@@ -466,16 +486,16 @@ fun LibraryContentUpdatePreview() {
         singlePages = emptyList()
     )
 
-    LibraryContent(
-        uiState = mockUiState,
-        onNavigateToFolder = {},
-        onNavigateToSettings = {},
-        onNavigateToEditor = { _, _ -> },
-        goToPage = {},
-        onCreateNewQuickPage = {},
-        onCreateNewFolder = {},
-        onDeleteEmptyBook = {},
-        onCreateNewNotebook = {},
-        onImportPdf = { _, _ -> },
-        onImportXopp = {})
+//    LibraryContent(
+//        uiState = mockUiState,
+//        onNavigateToFolder = {},
+//        onNavigateToSettings = {},
+//        onNavigateToEditor = { _, _ -> },
+//        goToPage = {},
+//        onCreateNewQuickPage = {},
+//        onCreateNewFolder = {},
+//        onDeleteEmptyBook = {},
+//        onCreateNewNotebook = {},
+//        onImportPdf = { _, _ -> },
+//        onImportXopp = {})
 }

@@ -1,6 +1,5 @@
 package com.ethran.notable.data
 
-import android.content.Context
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.FolderRepository
@@ -15,7 +14,6 @@ import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.onyx.android.sdk.extension.isNotNull
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -38,7 +36,7 @@ class AppRepository @Inject constructor(
         val index = getNextPageIdFromBookAndPage(notebookId, pageId)
         if (index.isNotNull())
             return index
-        val book = bookRepository.getById(notebookId = notebookId) // Unresolved reference 'bookRepository'.
+        val book = bookRepository.getById(notebookId = notebookId)
         // creating a new page
         val page = book!!.newPage()
         pageRepository.create(page)

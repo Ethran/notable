@@ -38,6 +38,7 @@ import io.shipbook.shipbooksdk.ShipBook
 
 @Composable
 fun ShowPagesRow(
+    appRepository: AppRepository,
     pages: List<Page>?,
     currentPageId: String? = null,
     title: String? = "Quick Pages",
@@ -105,6 +106,7 @@ fun ShowPagesRow(
                         pageId = pageId
                     )
                     if (isPageSelected) PageMenu(
+                        appRepository = appRepository,
                         pageId = pageId, canDelete = true, onClose = { isPageSelected = false })
                 }
             }

@@ -43,8 +43,9 @@ import io.shipbook.shipbooksdk.Log
 
 
 @Composable
-fun FolderConfigDialog(folderId: String, onClose: () -> Unit) {
-    val folderRepository = FolderRepository(LocalContext.current)
+fun FolderConfigDialog(folderRepository: FolderRepository,
+                       folderId: String,
+                       onClose: () -> Unit) {
     val folder = folderRepository.get(folderId)
     if (folder == null) {
         logAndShowError("FolderConfigDialog", "Folder not found")

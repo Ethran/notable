@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportOptions
@@ -84,6 +85,7 @@ fun ShowConfirmationDialog(
 
 @Composable
 fun ShowExportDialog(
+    exportEngine: ExportEngine,
     snackManager: SnackState,
     bookId: String,
     context: Context,
@@ -119,7 +121,7 @@ fun ShowExportDialog(
                             snackManager.runWithSnack(
                                 "Exporting book to PDF.."
                             ) {
-                                ExportEngine(context).export(
+                                exportEngine.export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.PDF,
                                     options = ExportOptions(
@@ -138,7 +140,7 @@ fun ShowExportDialog(
                             snackManager.runWithSnack(
                                 "Exporting the book to xopp..."
                             ) {
-                                ExportEngine(context).export(
+                               exportEngine.export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.XOPP,
                                 )

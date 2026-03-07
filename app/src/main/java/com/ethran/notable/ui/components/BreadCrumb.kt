@@ -64,14 +64,15 @@ fun BreadCrumb(
 }
 
 // TODO: Move it!!! And check the usage of it!!
-fun getFolderList(context: Context, folderId: String?): List<Folder> {
+fun getFolderList(appRepository: AppRepository, folderId: String?): List<Folder> {
+    val folderRepository = appRepository.folderRepository
     if (folderId == null) return emptyList()
     @Suppress("USELESS_ELVIS") val folder =
-        FolderRepository(context).get(folderId) ?: return emptyList()
+        folderRepository.get(folderId) ?: return emptyList()
     val folderList = mutableListOf(folder)
 
     val parentId = folder.parentFolderId
-    folderList.addAll(getFolderList(context, parentId))
+    folderList.addAll(getFolderList(appRepository, parentId))
 
 
     return folderList

@@ -1,6 +1,5 @@
 package com.ethran.notable.editor
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,12 +22,13 @@ import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.Toolbar
+import com.ethran.notable.gestures.EditorGestureReceiver
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
@@ -37,8 +37,6 @@ import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.Log
-
-
 
 
 object EditorDestination : NavigationDestination {
@@ -61,12 +59,17 @@ object EditorDestination : NavigationDestination {
 
 @Composable
 fun EditorView(
-    navController: NavController, bookId: String?, pageId: String, onPageChange: (String) -> Unit
+    editorSettingCacheManager: EditorSettingCacheManager,
+    exportEngine: ExportEngine,
+    navController: NavController,
+    appRepository: AppRepository,
+    bookId: String?,
+    pageId: String,
+    onPageChange: (String) -> Unit
 ) {
     val context = LocalContext.current
     val snackManager = LocalSnackContext.current
     val scope = rememberCoroutineScope()
-    val appRepository = remember { AppRepository(context) }
 
     // control if we do have a page
     if (appRepository.pageRepository.getById(pageId) == null) {
@@ -104,11 +107,12 @@ fun EditorView(
         val editorState =
             remember {
                 EditorState(
+                    appRepository = appRepository,
                     bookId = bookId,
                     pageId = pageId,
                     pageView = page,
-                    appRepository,
-                    onPageChange
+                    persistedEditorSettings = editorSettingCacheManager.getEditorSettings(),
+                    onPageChange = onPageChange
                 )
             }
 
@@ -124,7 +128,7 @@ fun EditorView(
             onDispose {
                 // finish selection operation
                 editorState.selectionState.applySelectionDisplace(page)
-                exportToLinkedFile(context, bookId, appRepository.bookRepository)
+                exportToLinkedFile(exportEngine, context, bookId, appRepository.bookRepository)
                 page.disposeOldPage()
             }
         }
@@ -138,8 +142,7 @@ fun EditorView(
             editorState.eraser
         ) {
             Log.i(TAG, "EditorView: saving")
-            EditorSettingCacheManager.setEditorSettings(
-                context,
+            editorSettingCacheManager.setEditorSettings(
                 EditorSettingCacheManager.EditorSettings(
                     isToolbarOpen = editorState.isToolbarOpen,
                     mode = editorState.mode,
@@ -155,7 +158,10 @@ fun EditorView(
         InkaTheme {
             EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                state = editorState, page = page, history = history
+                appRepository = appRepository,
+                state = editorState,
+                page = page,
+                history = history
             )
             SelectedBitmap(
                 context = context,
@@ -169,7 +175,7 @@ fun EditorView(
                 Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(state = editorState)
             }
-            PositionedToolbar(navController, editorState, editorControlTower)
+            PositionedToolbar(exportEngine,navController, appRepository, editorState, editorControlTower)
             HorizontalScrollIndicator(state = editorState)
         }
     }
@@ -179,13 +185,20 @@ fun EditorView(
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun PositionedToolbar(
-    navController: NavController, editorState: EditorState, editorControlTower: EditorControlTower
+    exportEngine: ExportEngine,
+    navController: NavController,
+    appRepository: AppRepository,
+    editorState: EditorState,
+    editorControlTower: EditorControlTower
 ) {
     val position = GlobalAppSettings.current.toolbarPosition
 
     when (position) {
         AppSettings.Position.Top -> {
-            Toolbar(navController, editorState, editorControlTower)
+            Toolbar(
+                exportEngine,
+                navController, appRepository, editorState, editorControlTower
+            )
         }
 
         AppSettings.Position.Bottom -> {
@@ -195,7 +208,7 @@ fun PositionedToolbar(
                     .fillMaxHeight()
             ) {
                 Spacer(modifier = Modifier.weight(1f))
-                Toolbar(navController, editorState, editorControlTower)
+                Toolbar(exportEngine, navController, appRepository, editorState, editorControlTower)
             }
         }
     }

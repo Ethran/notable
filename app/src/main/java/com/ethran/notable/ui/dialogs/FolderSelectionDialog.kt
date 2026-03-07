@@ -32,14 +32,12 @@ import com.ethran.notable.ui.components.getFolderList
 
 @Composable
 fun ShowFolderSelectionDialog(
-    book: Notebook,
+    appRepository: AppRepository,
     notebookName: String,
     initialFolderId: String?,
     onCancel: () -> Unit,
     onConfirm: (String?) -> Unit
 ) {
-    val appRepository = AppRepository(LocalContext.current)
-
 
     var currentFolderId by remember { mutableStateOf(initialFolderId) }
     val availableFolders by appRepository.folderRepository.getAllInFolder(currentFolderId)
@@ -66,7 +64,7 @@ fun ShowFolderSelectionDialog(
             )
             BreadCrumb(
                 folders = getFolderList(
-                    LocalContext.current,
+                    appRepository,
                     currentFolderId
                 )
             ) { currentFolderId = it }
