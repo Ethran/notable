@@ -45,6 +45,10 @@ object CanvasEventBus {
     // For cleaning whole page, activated from toolbar menu
     val clearPageSignal = MutableSharedFlow<Unit>()
 
+    // Signal to UI to close any open menus/modals,
+    // observed in EditorView
+    val closeMenusSignal = MutableSharedFlow<Unit>()
+
 
     // For QuickNav scrolling with previews
     val saveCurrent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)

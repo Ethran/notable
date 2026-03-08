@@ -15,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -157,6 +156,7 @@ fun EditorView(
                     is EditorUiEvent.ResetView -> editorControlTower.resetZoomAndScroll()
                     is EditorUiEvent.ClearAllStrokes -> {
                         CanvasEventBus.clearPageSignal.emit(Unit)
+                        snackManager.displaySnack(SnackConf(text = "Cleared all strokes"))
                     }
                     is EditorUiEvent.NavigateToLibrary -> {
                         navController.navigate(LibraryDestination.createRoute(event.folderId))
@@ -175,9 +175,6 @@ fun EditorView(
                     }
                     EditorUiEvent.RefreshCanvas -> {
                         CanvasEventBus.reloadFromDb.emit(Unit)
-                    }
-                    EditorUiEvent.CheckDrawingState -> {
-                        editorState.checkForSelectionsAndMenus()
                     }
                     is EditorUiEvent.ModeChanged -> {
                         editorState.mode = event.mode
@@ -200,11 +197,39 @@ fun EditorView(
             }
         }
 
+        // Handle Canvas signals in UI
+        LaunchedEffect(Unit) {
+            CanvasEventBus.closeMenusSignal.collect {
+                log.e("Closing all menus")
+                viewModel.onToolbarAction(ToolbarAction.CloseAllMenus)
+            }
+        }
+
+        // Handle focus changes from Canvas
+        LaunchedEffect(Unit) {
+            CanvasEventBus.onFocusChange.collect { hasFocus ->
+                log.e("Canvas has focus: $hasFocus")
+                viewModel.onFocusChanged(hasFocus)
+            }
+        }
+
         // Sync legacy state to ViewModel for Toolbar rendering
         val zoomLevel by page.zoomLevel.collectAsState()
-        LaunchedEffect(zoomLevel, page.scroll, editorState.clipboard, editorState.isToolbarOpen, editorState.mode, editorState.pen, editorState.eraser, editorState.penSettings) {
+        val selectionActive = editorState.selectionState.isNonEmpty()
+        LaunchedEffect(
+            zoomLevel,
+            page.scroll,
+            editorState.clipboard,
+            editorState.isToolbarOpen,
+            editorState.mode,
+            editorState.pen,
+            editorState.eraser,
+            editorState.penSettings,
+            selectionActive
+        ) {
             viewModel.setHasClipboard(editorState.clipboard != null)
-            viewModel.setShowResetView(page.scroll != Offset.Zero || zoomLevel != 1.0f)
+            viewModel.setShowResetView(zoomLevel != 1.0f) // page.scroll != Offset.Zero
+            viewModel.setSelectionActive(selectionActive)
             viewModel.updateToolbarSettings(ToolbarUiState(
                 isToolbarOpen = editorState.isToolbarOpen,
                 mode = editorState.mode,
@@ -268,7 +293,7 @@ fun EditorView(
             }
             PositionedToolbar(
                 viewModel = viewModel,
-                onDrawingStateCheck = { editorState.checkForSelectionsAndMenus() }
+                onDrawingStateCheck = { viewModel.updateDrawingState() }
             )
             HorizontalScrollIndicator(state = editorState)
         }

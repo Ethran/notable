@@ -10,6 +10,7 @@ import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -19,6 +20,7 @@ import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +31,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+
+private val log = ShipBook.getLogger("EditorViewModel")
+
 
 /**
  * Toolbar Actions (Intents) representing user interactions.
@@ -61,6 +67,8 @@ sealed class ToolbarAction {
     object NavigateToBugReport : ToolbarAction()
     object NavigateToPages : ToolbarAction()
     object NavigateToHome : ToolbarAction()
+
+    object CloseAllMenus : ToolbarAction()
 }
 
 /**
@@ -80,9 +88,6 @@ sealed class EditorUiEvent {
     object ClearAllStrokes : EditorUiEvent()
     object RefreshCanvas : EditorUiEvent()
     data class CopyImageToCanvas(val uri: Uri) : EditorUiEvent()
-    
-    // Signal to check if drawing should be enabled (e.g. menus changed)
-    object CheckDrawingState : EditorUiEvent()
 
     // Sync state back to EditorState
     data class ModeChanged(val mode: Mode) : EditorUiEvent()
@@ -107,6 +112,7 @@ data class ToolbarUiState(
     val pageNumberInfo: String = "1/1",
     val hasClipboard: Boolean = false,
     val showResetView: Boolean = false,
+    val isSelectionActive: Boolean = false,
     
     // Context needed for visibility rules in UI
     val notebookId: String? = null,
@@ -143,27 +149,27 @@ class EditorViewModel @Inject constructor(
                 val newVisible = !_toolbarState.value.isToolbarOpen
                 _toolbarState.update { it.copy(isToolbarOpen = newVisible) }
                 sendUiEvent(EditorUiEvent.ToolbarVisibilityChanged(newVisible))
-                sendUiEvent(EditorUiEvent.CheckDrawingState)
+                updateDrawingState()
             }
             is ToolbarAction.ChangeMode -> {
                 _toolbarState.update { it.copy(mode = action.mode) }
                 sendUiEvent(EditorUiEvent.ModeChanged(action.mode))
-                sendUiEvent(EditorUiEvent.CheckDrawingState)
+                updateDrawingState()
             }
             is ToolbarAction.ChangePen -> handlePenChange(action.pen)
             is ToolbarAction.ChangePenSetting -> handlePenSettingChange(action.pen, action.setting)
             is ToolbarAction.ChangeEraser -> {
                 _toolbarState.update { it.copy(eraser = action.eraser) }
                 sendUiEvent(EditorUiEvent.EraserChanged(action.eraser))
-                sendUiEvent(EditorUiEvent.CheckDrawingState)
+                updateDrawingState()
             }
             is ToolbarAction.ToggleMenu -> {
                 _toolbarState.update { it.copy(isMenuOpen = !it.isMenuOpen) }
-                sendUiEvent(EditorUiEvent.CheckDrawingState)
+                updateDrawingState()
             }
             is ToolbarAction.ToggleBackgroundSelector -> {
                 _toolbarState.update { it.copy(isBackgroundSelectorModalOpen = action.isOpen) }
-                sendUiEvent(EditorUiEvent.CheckDrawingState)
+                updateDrawingState()
             }
 
             is ToolbarAction.ToggleScribbleToErase -> updateScribbleToErase(action.enabled)
@@ -184,6 +190,8 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.NavigateToBugReport -> sendUiEvent(EditorUiEvent.NavigateToBugReport)
             ToolbarAction.NavigateToPages -> handleNavigateToPages()
             ToolbarAction.NavigateToHome -> sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
+
+            ToolbarAction.CloseAllMenus -> handleCloseAllMenus()
         }
     }
 
@@ -201,7 +209,40 @@ class EditorViewModel @Inject constructor(
                 state.copy(mode = Mode.Draw, pen = pen)
             }
         }
-        sendUiEvent(EditorUiEvent.CheckDrawingState)
+        updateDrawingState()
+    }
+
+    private fun handleCloseAllMenus() {
+        log.e("Closing all menus in EditorViewModel")
+        _toolbarState.update {
+            it.copy(
+                isMenuOpen = false,
+                isStrokeSelectionOpen = false,
+                isBackgroundSelectorModalOpen = false
+            )
+        }
+        updateDrawingState()
+    }
+
+    /**
+     * Re-evaluates whether drawing should be enabled based on menu and selection states.
+     * Also handles switching back to drawing mode when menus are closed.
+     */
+    fun updateDrawingState() {
+        val state = _toolbarState.value
+        val anyMenuOpen =
+            state.isMenuOpen || state.isStrokeSelectionOpen || state.isBackgroundSelectorModalOpen
+        val shouldBeDrawing = !anyMenuOpen && !_toolbarState.value.isSelectionActive
+        log.e("Drawing state: $shouldBeDrawing")
+        viewModelScope.launch {
+            CanvasEventBus.isDrawing.emit(shouldBeDrawing)
+        }
+    }
+
+    fun onFocusChanged(isFocused: Boolean) {
+        if (isFocused) {
+            updateDrawingState()
+        }
     }
 
     private fun handlePenSettingChange(pen: Pen, setting: PenSetting) {
@@ -312,6 +353,13 @@ class EditorViewModel @Inject constructor(
 
     fun setShowResetView(showResetView: Boolean) {
         _toolbarState.update { it.copy(showResetView = showResetView) }
+    }
+
+    fun setSelectionActive(active: Boolean) {
+        if (_toolbarState.value.isSelectionActive != active) {
+            _toolbarState.update { it.copy(isSelectionActive = active) }
+            updateDrawingState()
+        }
     }
 
     fun updateToolbarSettings(state: ToolbarUiState) {

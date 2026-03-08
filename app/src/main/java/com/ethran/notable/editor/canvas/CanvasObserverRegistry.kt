@@ -103,7 +103,6 @@ class CanvasObserverRegistry(
             CanvasEventBus.onFocusChange.collect { hasFocus ->
                 logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
-                    state.checkForSelectionsAndMenus()
                     inputHandler.updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvas.drawCanvasToView(null)
                 } else {
@@ -202,9 +201,7 @@ class CanvasObserverRegistry(
                 logCanvasObserver.v("isDrawing change to $it")
                 // We need to close all menus
                 if (it) {
-//                    logCallStack("Closing all menus")
-                    state.closeAllMenus()
-//                    EpdController.waitForUpdateFinished() // it does not work.
+                    CanvasEventBus.closeMenusSignal.emit(Unit)
                     waitForEpdRefresh()
                 }
                 inputHandler.updateIsDrawing()
