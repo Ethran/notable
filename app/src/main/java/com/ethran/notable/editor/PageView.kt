@@ -797,17 +797,15 @@ class PageView(
 
 
     // updates page setting in db, (for instance type of background)
-// and redraws page to vew.
-    fun updatePageSettings(page: Page) {
-        coroutineScope.launch(Dispatchers.IO) {
-            appRepository.pageRepository.update(page)
-            pageFromDb = appRepository.pageRepository.getById(currentPageId)
-            log.i("Page settings updated, ${pageFromDb?.background} | ${page.background}")
-            withContext(Dispatchers.Main) {
-                drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
-                persistBitmapDebounced()
-            }
+    // and redraws page to vew.
+    suspend fun refreshCurrentPage() {
+        pageFromDb = appRepository.pageRepository.getById(currentPageId)
+        log.i("Refresh current page, bacground: ${pageFromDb?.background}")
+        withContext(Dispatchers.Main) {
+            drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
+            persistBitmapDebounced()
         }
+
     }
 
     fun updateDimensions(newWidth: Int, newHeight: Int) {

@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
         super.onRestart()
         // redraw after device sleep
         this.lifecycleScope.launch {
-            CanvasEventBus.restartAfterConfChange.emit(Unit)
+            CanvasEventBus.reinitSignal.emit(Unit)
         }
     }
 

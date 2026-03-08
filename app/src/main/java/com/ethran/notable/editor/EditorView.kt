@@ -174,7 +174,7 @@ fun EditorView(
                         CanvasEventBus.addImageByUri.value = event.uri
                     }
                     EditorUiEvent.RefreshCanvas -> {
-                        CanvasEventBus.refreshUi.emit(Unit)
+                        CanvasEventBus.reloadFromDb.emit(Unit)
                     }
                     EditorUiEvent.CheckDrawingState -> {
                         editorState.checkForSelectionsAndMenus()

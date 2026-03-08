@@ -4,9 +4,6 @@ import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.db.BookRepository
-import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -51,6 +48,7 @@ class CanvasObserverRegistry(
         observeSelectionGesture()
         observeClearPage()
         observeRestartAfterConfChange()
+        observeReloadFromDb()
         observePenChanges()
         observeIsDrawingSnapshot()
         observeToolbar()
@@ -157,10 +155,19 @@ class CanvasObserverRegistry(
 
     private fun observeRestartAfterConfChange() {
         coroutineScope.launch {
-            CanvasEventBus.restartAfterConfChange.collect {
+            CanvasEventBus.reinitSignal.collect {
                 logCanvasObserver.v("Configuration changed!")
                 drawCanvas.init()
                 drawCanvas.drawCanvasToView(null)
+            }
+        }
+    }
+
+    private fun observeReloadFromDb(){
+        coroutineScope.launch {
+            CanvasEventBus.reloadFromDb.collect {
+                page.refreshCurrentPage()
+                refreshManager.refreshUiSuspend()
             }
         }
     }
