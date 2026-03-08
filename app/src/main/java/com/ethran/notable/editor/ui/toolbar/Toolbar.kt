@@ -33,6 +33,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorControlTower
+import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
@@ -52,29 +53,7 @@ import kotlinx.coroutines.launch
 
 private val log = ShipBook.getLogger("Toolbar")
 
-/**
- * UI State for the Toolbar to make it previewable and decoupled from logic.
- */
-data class ToolbarUiState(
-    val isToolbarOpen: Boolean = true,
-    val mode: Mode = Mode.Draw,
-    val pen: Pen = Pen.BALLPEN,
-    val penSettings: Map<String, PenSetting> = emptyMap(),
-    val eraser: Eraser = Eraser.PEN,
-    val isMenuOpen: Boolean = false,
-    val isStrokeSelectionOpen: Boolean = false,
-    val isBackgroundSelectorModalOpen: Boolean = false,
-    val pageNumberInfo: String = "1/1",
-    val hasClipboard: Boolean = false,
-    val showResetView: Boolean = false,
-    // Background Selector specific data
-    val backgroundType: String = "native",
-    val backgroundPath: String = "blank",
-    val backgroundPageNumber: Int = 0,
-    val notebookId: String? = null,
-    val pageId: String? = null,
-    val currentPageNumber: Int = 0
-)
+
 
 private fun isSelected(state: ToolbarUiState, penType: Pen): Boolean {
     return when (state.mode) {

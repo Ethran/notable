@@ -15,6 +15,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
@@ -68,7 +69,8 @@ fun EditorView(
     appRepository: AppRepository,
     bookId: String?,
     pageId: String,
-    onPageChange: (String) -> Unit
+    onPageChange: (String) -> Unit,
+    viewModel: EditorViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val snackManager = LocalSnackContext.current
@@ -100,6 +102,8 @@ fun EditorView(
             navController.navigate(LibraryDestination.route)
         }
     }
+
+    val toolbarState by viewModel.toolbarState.collectAsState()
 
 
     if (pageExists == null) return
