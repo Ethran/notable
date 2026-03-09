@@ -20,22 +20,7 @@ enum class Mode {
     Draw, Erase, Select, Line
 }
 
-@Stable
-class MenuStates {
-    var isStrokeSelectionOpen by mutableStateOf(false)
-    var isMenuOpen by mutableStateOf(false)
-    var isBackgroundSelectorModalOpen by mutableStateOf(false)
-    fun closeAll() {
-        isStrokeSelectionOpen = false
-        isMenuOpen = false
-        isBackgroundSelectorModalOpen = false
-    }
-
-    val anyMenuOpen: Boolean
-        get() = isStrokeSelectionOpen || isMenuOpen || isBackgroundSelectorModalOpen
-}
-
-
+ // TODO: move to EditorViewModel, or somewhere else, this code shouldnt be here.
 class EditorState(
     val bookId: String? = null,
     val pageId: String,
@@ -85,7 +70,6 @@ class EditorState(
     }
 
 
-
     private val log = ShipBook.getLogger("EditorState")
 
     var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw) // should save
@@ -126,22 +110,11 @@ class EditorState(
         get() = _clipboard
         set(value) {
             this._clipboard = value
-
             // The clipboard content must survive the EditorState, so we store a copy in
             // a singleton that lives outside of the EditorState
             Clipboard.content = value
         }
 
-    val menuStates = MenuStates()
-    fun closeAllMenus() = menuStates.closeAll()
-
-    fun checkForSelectionsAndMenus() {
-        val shouldBeDrawing = !menuStates.anyMenuOpen && !selectionState.isNonEmpty()
-        if (isDrawing != shouldBeDrawing) {
-            log.d("Drawing state should be: $shouldBeDrawing (menus open: ${menuStates.anyMenuOpen}, selection active: ${selectionState.isNonEmpty()})")
-            isDrawing = shouldBeDrawing
-        }
-    }
 
     /**
      * Changes the current page to the one with the specified [id].
@@ -151,15 +124,13 @@ class EditorState(
     suspend fun changePage(id: String) {
         log.d("Changing page to $id, from $currentPageId")
         updateOpenedPage(id)
-        closeAllMenus()
         selectionState.reset()
     }
 }
 
 // if state is Move then applySelectionDisplace() will delete original strokes and images
 enum class PlacementMode {
-    Move,
-    Paste
+    Move, Paste
 }
 
 object Clipboard {

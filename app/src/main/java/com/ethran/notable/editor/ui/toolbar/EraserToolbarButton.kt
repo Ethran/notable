@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,8 +31,6 @@ import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.ui.convertDpToPixel
 
@@ -41,27 +38,19 @@ import com.ethran.notable.ui.convertDpToPixel
 fun EraserToolbarButton(
     value: Eraser,
     onChange: (Eraser) -> Unit,
-    onMenuOpenChange: ((Boolean) -> Unit)?,
+    isMenuOpen: Boolean,
+    onMenuOpenChange: (Boolean) -> Unit,
     isSelected: Boolean,
     onSelect: () -> Unit,
     toggleScribbleToErase: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
-    var isMenuOpen by remember { mutableStateOf(false) }
-
-    if (onMenuOpenChange != null) {
-        LaunchedEffect(isMenuOpen) {
-            onMenuOpenChange(isMenuOpen)
-        }
-    }
-
 
     Box {
-
         ToolbarButton(
             isSelected = isSelected,
             onSelect = {
-                if (isSelected) isMenuOpen = !isMenuOpen
+                if (isSelected) onMenuOpenChange(!isMenuOpen)
                 else onSelect()
             },
             iconId = if (value == Eraser.PEN) R.drawable.eraser else R.drawable.eraser_select,
@@ -72,7 +61,7 @@ fun EraserToolbarButton(
             Popup(
                 offset = IntOffset(0, convertDpToPixel(43.dp, context).toInt()),
                 onDismissRequest = {
-                    isMenuOpen = false
+                    onMenuOpenChange(false)
                 },
                 properties = PopupProperties(focusable = true),
                 alignment = Alignment.TopCenter

@@ -20,8 +20,11 @@ object CanvasEventBus {
     val refreshUiImmediately = MutableSharedFlow<Unit>(
         replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
+    val reinitSignal = MutableSharedFlow<Unit>()
+    val reloadFromDb = MutableSharedFlow<Unit>()
+
+
     val isDrawing = MutableSharedFlow<Boolean>()
-    val restartAfterConfChange = MutableSharedFlow<Unit>()
 
     // used for managing drawing state on regain focus
     val onFocusChange = MutableSharedFlow<Boolean>()
@@ -41,6 +44,10 @@ object CanvasEventBus {
 
     // For cleaning whole page, activated from toolbar menu
     val clearPageSignal = MutableSharedFlow<Unit>()
+
+    // Signal to UI to close any open menus/modals,
+    // observed in EditorView
+    val closeMenusSignal = MutableSharedFlow<Unit>()
 
 
     // For QuickNav scrolling with previews

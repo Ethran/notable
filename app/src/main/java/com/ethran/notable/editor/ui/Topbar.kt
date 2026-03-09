@@ -1,4 +1,4 @@
-package com.ethran.notable.editor.ui.toolbar
+package com.ethran.notable.editor.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box

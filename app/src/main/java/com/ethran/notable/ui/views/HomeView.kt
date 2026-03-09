@@ -52,7 +52,7 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.editor.EditorDestination
-import com.ethran.notable.editor.ui.toolbar.Topbar
+import com.ethran.notable.editor.ui.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.NavigationDestination

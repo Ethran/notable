@@ -95,6 +95,7 @@ class PageView(
         get() = PageDataManager.getImages(currentPageId)
         set(value) = PageDataManager.setImages(currentPageId, value)
 
+    // warning: The setter is delayed!
     private var currentBackground: CachedBackground
         get() = PageDataManager.getBackground(currentPageId)
         set(value) {
@@ -146,10 +147,16 @@ class PageView(
         If pageNumber is -1, its assumed that the background is image type.
      */
     fun getOrLoadBackground(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
-        if (!currentBackground.matches(filePath, pageNumber, scale))
+        val cached = currentBackground
+        if (cached.matches(filePath, pageNumber, scale)) {
+            log.i("Background bitmap (cached): ${cached.bitmap}")
+            return cached.bitmap
+        }
         // 0.1 to avoid constant rerender on zoom.
-            currentBackground = CachedBackground(filePath, pageNumber, scale + 0.1f)
-        return currentBackground.bitmap
+        val newBackground = CachedBackground(filePath, pageNumber, scale + 0.1f)
+        currentBackground = newBackground
+        log.i("Background bitmap: ${newBackground.bitmap}")
+        return newBackground.bitmap
     }
 
     fun getBackgroundPageNumber(): Int {
@@ -797,17 +804,15 @@ class PageView(
 
 
     // updates page setting in db, (for instance type of background)
-// and redraws page to vew.
-    fun updatePageSettings(page: Page) {
-        coroutineScope.launch(Dispatchers.IO) {
-            appRepository.pageRepository.update(page)
-            pageFromDb = appRepository.pageRepository.getById(currentPageId)
-            log.i("Page settings updated, ${pageFromDb?.background} | ${page.background}")
-            withContext(Dispatchers.Main) {
-                drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
-                persistBitmapDebounced()
-            }
+    // and redraws page to view.
+    suspend fun refreshCurrentPage() {
+        pageFromDb = appRepository.pageRepository.getById(currentPageId)
+        log.i("Refresh current page, background: ${pageFromDb?.background}")
+        withContext(Dispatchers.Main) {
+            drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
+            persistBitmapDebounced()
         }
+
     }
 
     fun updateDimensions(newWidth: Int, newHeight: Int) {

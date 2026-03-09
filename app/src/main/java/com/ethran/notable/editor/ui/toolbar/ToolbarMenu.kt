@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -25,217 +24,126 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
-import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.BUTTON_SIZE
-import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.editor.ToolbarAction
+import com.ethran.notable.editor.ToolbarUiState
+import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.utils.Pen
+import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportFormat
-import com.ethran.notable.io.ExportTarget
-import com.ethran.notable.ui.LocalSnackContext
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.noRippleClickable
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
+/**
+ * Menu for the toolbar, providing export options and other page-level actions.
+ * Centralizes actions via [ToolbarAction].
+ */
 @Composable
 fun ToolbarMenu(
-    exportEngine: ExportEngine,
-    goToBugReport: () -> Unit,
-    goToLibrary: () -> Unit,
-    currentPageId: String,
-    currentBookId: String?,
-    onClose: () -> Unit,
-    onBackgroundSelectorModalOpen: () -> Unit
+    uiState: ToolbarUiState,
+    onAction: (ToolbarAction) -> Unit
 ) {
     val context = LocalContext.current
 
     Popup(
         alignment = Alignment.TopEnd,
-        onDismissRequest = { onClose() },
+        onDismissRequest = { onAction(ToolbarAction.ToggleMenu) },
         offset = IntOffset(
-            convertDpToPixel((-10).dp, context).toInt(), convertDpToPixel(50.dp, context).toInt()
+            convertDpToPixel((-10).dp, context).toInt(),
+            convertDpToPixel(50.dp, context).toInt()
         ),
         properties = PopupProperties(focusable = true),
     ) {
         ToolbarMenuContent(
-            exportEngine = exportEngine,
-            goToBugReport = goToBugReport,
-            goToLibrary = goToLibrary,
-            currentPageId = currentPageId,
-            currentBookId = currentBookId,
-            onClose = onClose,
-            onBackgroundSelectorModalOpen = onBackgroundSelectorModalOpen
+            uiState = uiState,
+            onAction = onAction
         )
     }
 }
 
 @Composable
 private fun ToolbarMenuContent(
-    exportEngine: ExportEngine,
-    goToBugReport: () -> Unit,
-    goToLibrary: () -> Unit,
-    currentPageId: String,
-    currentBookId: String?,
-    onClose: () -> Unit,
-    onBackgroundSelectorModalOpen: () -> Unit
+    uiState: ToolbarUiState,
+    onAction: (ToolbarAction) -> Unit
 ) {
-
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val snackManager = LocalSnackContext.current
-//    val appRepository = remember { AppRepository(context) }
-//    val page = appRepository.pageRepository.getById(currentPageId)!!
-//    val book =
-//        if (page.notebookId != null) appRepository.bookRepository.getById(page.notebookId) else null
-
-//    val parentFolder = if (book != null) book.parentFolderId
-//    else page.parentFolderId
-
-    val exportingPageToPdfMsg = stringResource(R.string.exporting_the_page_to, "PDF")
-    val exportingPageToPngMsg = stringResource(R.string.exporting_the_page_to, "PNG")
-    val exportingPageToJpegMsg = stringResource(R.string.exporting_the_page_to, "JPEG")
-    val exportingPageToXoppMsg = stringResource(R.string.exporting_the_page_to, "xopp")
-    val exportingBookToPdfMsg = stringResource(R.string.exporting_the_book_to, "PDF")
-    val exportingBookToPngMsg = stringResource(R.string.exporting_the_book_to, "PNG")
-    val exportingBookToXoppMsg = stringResource(R.string.exporting_the_book_to, "xopp")
-    val clearedAllStrokesMsg = stringResource(R.string.cleared_all_strokes)
-
     Column(
         Modifier
-            .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
+            .padding(bottom = (BUTTON_SIZE + 5).dp)
             .border(1.dp, Color.Black, RectangleShape)
             .background(Color.White)
             .width(IntrinsicSize.Max)
     ) {
-        // Library
+        // Home / Library
         MenuItem(stringResource(R.string.home_view_name)) {
-//
-            goToLibrary()
-            onClose()
+            onAction(ToolbarAction.NavigateToLibrary)
+            onAction(ToolbarAction.ToggleMenu)
         }
         DividerCentered()
 
         // Page exports
         MenuItem(stringResource(R.string.export_page_to, "PDF")) {
-            scope.launch(Dispatchers.IO) {
-                snackManager.runWithSnack(exportingPageToPdfMsg) {
-                   exportEngine.export(
-                        target = ExportTarget.Page(pageId = currentPageId),
-                        format = ExportFormat.PDF
-                    )
-                }
-            }
-            onClose()
+            onAction(ToolbarAction.ExportPage(ExportFormat.PDF))
+            onAction(ToolbarAction.ToggleMenu)
         }
         MenuItem(stringResource(R.string.export_page_to, "PNG")) {
-            scope.launch(Dispatchers.IO) {
-                snackManager.runWithSnack(exportingPageToPngMsg) {
-                   exportEngine.export(
-                        target = ExportTarget.Page(pageId = currentPageId),
-                        format = ExportFormat.PNG
-                    )
-                }
-            }
-            onClose()
+            onAction(ToolbarAction.ExportPage(ExportFormat.PNG))
+            onAction(ToolbarAction.ToggleMenu)
         }
         MenuItem(stringResource(R.string.export_page_to, "JPEG")) {
-            scope.launch(Dispatchers.IO) {
-                snackManager.runWithSnack(exportingPageToJpegMsg) {
-                   exportEngine.export(
-                        target = ExportTarget.Page(pageId = currentPageId),
-                        format = ExportFormat.JPEG
-                    )
-                }
-            }
-            onClose()
+            onAction(ToolbarAction.ExportPage(ExportFormat.JPEG))
+            onAction(ToolbarAction.ToggleMenu)
         }
         MenuItem(stringResource(R.string.export_page_to, "xopp")) {
-            scope.launch(Dispatchers.IO) {
-                snackManager.runWithSnack(exportingPageToXoppMsg) {
-                   exportEngine.export(
-                        target = ExportTarget.Page(pageId = currentPageId),
-                        format = ExportFormat.XOPP
-                    )
-                }
-            }
-            onClose()
+            onAction(ToolbarAction.ExportPage(ExportFormat.XOPP))
+            onAction(ToolbarAction.ToggleMenu)
         }
         DividerCentered()
 
         // Book exports
-        if (currentBookId != null) {
+        if (uiState.notebookId != null) {
             MenuItem(stringResource(R.string.export_book_to, "PDF")) {
-                scope.launch(Dispatchers.IO) {
-                    snackManager.runWithSnack(exportingBookToPdfMsg) {
-                       exportEngine.export(
-                            target = ExportTarget.Book(bookId = currentBookId),
-                            format = ExportFormat.PDF
-                        )
-                    }
-                }
-                onClose()
+                onAction(ToolbarAction.ExportBook(ExportFormat.PDF))
+                onAction(ToolbarAction.ToggleMenu)
             }
             MenuItem(stringResource(R.string.export_book_to, "PNG")) {
-                scope.launch(Dispatchers.IO) {
-                    snackManager.runWithSnack(exportingBookToPngMsg) {
-                       exportEngine.export(
-                            target = ExportTarget.Book(bookId = currentBookId),
-                            format = ExportFormat.PNG
-                        )
-                    }
-                }
-                onClose()
+                onAction(ToolbarAction.ExportBook(ExportFormat.PNG))
+                onAction(ToolbarAction.ToggleMenu)
             }
             MenuItem(stringResource(R.string.export_book_to, "xopp")) {
-                scope.launch(Dispatchers.IO) {
-                    snackManager.runWithSnack(exportingBookToXoppMsg) {
-                       exportEngine.export(
-                            target = ExportTarget.Book(bookId = currentBookId),
-                            format = ExportFormat.XOPP
-                        )
-                    }
-                }
-                onClose()
+                onAction(ToolbarAction.ExportBook(ExportFormat.XOPP))
+                onAction(ToolbarAction.ToggleMenu)
             }
             DividerCentered()
         }
 
         MenuItem(stringResource(R.string.clean_all_strokes)) {
-            scope.launch {
-                CanvasEventBus.clearPageSignal.emit(Unit)
-                snackManager.displaySnack(
-                    SnackConf(
-                        text = clearedAllStrokesMsg, duration = 3000
-                    )
-                )
-            }
-            onClose()
+            onAction(ToolbarAction.ClearAllStrokes)
+            onAction(ToolbarAction.ToggleMenu)
         }
         DividerCentered()
 
         MenuItem(stringResource(R.string.change_background)) {
-            onBackgroundSelectorModalOpen()
-            onClose()
+            onAction(ToolbarAction.ToggleBackgroundSelector(true))
+            onAction(ToolbarAction.ToggleMenu)
         }
 
         MenuItem(stringResource(R.string.bug_report)) {
-//                navController.navigate("bugReport")
-            goToBugReport()
-            onClose()
+            onAction(ToolbarAction.NavigateToBugReport)
+            onAction(ToolbarAction.ToggleMenu)
         }
     }
 }
 
 @Composable
 private fun MenuItem(
-    label: String, onClick: () -> Unit
+    label: String,
+    onClick: () -> Unit
 ) {
     Box(
         Modifier
-            .fillMaxWidth()                                 // occupy the menu's width
-            .noRippleClickable { onClick() }                // click covers entire box
-            .padding(horizontal = 10.dp, vertical = 8.dp)   // inner spacing
+            .fillMaxWidth()
+            .noRippleClickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
         Text(
             text = label,
@@ -255,11 +163,17 @@ private fun ColumnScope.DividerCentered() {
     )
 }
 
-
-// TODO: Fix it
-@Preview(showBackground = true)
 @Composable
-private fun ToolbarMenuPreview() {
-
+@Preview(showBackground = true)
+fun ToolbarMenuPreview() {
+    ToolbarMenuContent(
+        uiState = ToolbarUiState(
+            isMenuOpen = true,
+            notebookId = "book1",
+            mode = Mode.Draw,
+            pen = Pen.BALLPEN,
+            penSettings = mapOf(Pen.BALLPEN.penName to PenSetting(5f, android.graphics.Color.BLACK))
+        ),
+        onAction = {}
+    )
 }
-

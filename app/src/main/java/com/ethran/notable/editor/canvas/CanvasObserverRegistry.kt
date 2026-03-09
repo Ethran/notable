@@ -4,9 +4,6 @@ import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.db.BookRepository
-import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -51,6 +48,7 @@ class CanvasObserverRegistry(
         observeSelectionGesture()
         observeClearPage()
         observeRestartAfterConfChange()
+        observeReloadFromDb()
         observePenChanges()
         observeIsDrawingSnapshot()
         observeToolbar()
@@ -105,7 +103,6 @@ class CanvasObserverRegistry(
             CanvasEventBus.onFocusChange.collect { hasFocus ->
                 logCanvasObserver.v("App has focus: $hasFocus")
                 if (hasFocus) {
-                    state.checkForSelectionsAndMenus()
                     inputHandler.updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvas.drawCanvasToView(null)
                 } else {
@@ -157,10 +154,19 @@ class CanvasObserverRegistry(
 
     private fun observeRestartAfterConfChange() {
         coroutineScope.launch {
-            CanvasEventBus.restartAfterConfChange.collect {
+            CanvasEventBus.reinitSignal.collect {
                 logCanvasObserver.v("Configuration changed!")
                 drawCanvas.init()
                 drawCanvas.drawCanvasToView(null)
+            }
+        }
+    }
+
+    private fun observeReloadFromDb() {
+        coroutineScope.launch {
+            CanvasEventBus.reloadFromDb.collect {
+                page.refreshCurrentPage()
+                refreshManager.refreshUiSuspend()
             }
         }
     }
@@ -195,9 +201,7 @@ class CanvasObserverRegistry(
                 logCanvasObserver.v("isDrawing change to $it")
                 // We need to close all menus
                 if (it) {
-//                    logCallStack("Closing all menus")
-                    state.closeAllMenus()
-//                    EpdController.waitForUpdateFinished() // it does not work.
+                    CanvasEventBus.closeMenusSignal.emit(Unit)
                     waitForEpdRefresh()
                 }
                 inputHandler.updateIsDrawing()
@@ -259,7 +263,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
                 val pageNumber =
-                   appRepository.getPageNumber(page.pageFromDb?.notebookId!!, pageId)
+                    appRepository.getPageNumber(page.pageFromDb?.notebookId!!, pageId)
                 Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
 
                 val previewBitmap = withContext(Dispatchers.IO) {
