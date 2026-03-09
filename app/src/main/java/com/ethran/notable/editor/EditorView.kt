@@ -209,7 +209,7 @@ fun EditorView(
         // Handle Canvas signals in UI
         LaunchedEffect(Unit) {
             CanvasEventBus.closeMenusSignal.collect {
-                log.e("Closing all menus")
+                log.d("Closing all menus")
                 viewModel.onToolbarAction(ToolbarAction.CloseAllMenus)
             }
         }
@@ -217,7 +217,7 @@ fun EditorView(
         // Handle focus changes from Canvas
         LaunchedEffect(Unit) {
             CanvasEventBus.onFocusChange.collect { hasFocus ->
-                log.e("Canvas has focus: $hasFocus")
+                log.d("Canvas has focus: $hasFocus")
                 viewModel.onFocusChanged(hasFocus)
             }
         }
