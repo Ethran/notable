@@ -87,8 +87,6 @@ data class ToolbarUiState(
                 !isSelectionActive
 }
 
-/** Backward-compatible alias used by ToolbarMenu and other components. */
-typealias EditorUiState = ToolbarUiState
 
 // --------------------------------------------------------
 // 2. USER ACTIONS (Intents)
@@ -124,8 +122,6 @@ sealed class ToolbarAction {
     object CloseAllMenus : ToolbarAction()
 }
 
-/** Backward-compatible alias used by ToolbarMenu. */
-typealias EditorAction = ToolbarAction
 
 // --------------------------------------------------------
 // 3. CANVAS COMMANDS (Imperative drawing actions)

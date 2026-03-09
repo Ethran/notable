@@ -3,7 +3,6 @@ package com.ethran.notable.editor.state
 import androidx.compose.runtime.Stable
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.Mode
-import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -17,7 +16,6 @@ import com.ethran.notable.editor.utils.PenSetting
 @Stable
 class EditorState(
     val viewModel: EditorViewModel,
-    val pageView: PageView
 ) {
 
     // Delegate to ViewModel
@@ -61,8 +59,4 @@ class EditorState(
         set(value) {
             viewModel.isDrawing = value
         }
-
-    suspend fun getNextPage(): String? = viewModel.getNextPage()
-    suspend fun getPreviousPage(): String? = viewModel.getPreviousPage()
-    suspend fun changePage(id: String) = viewModel.changePage(id)
 }

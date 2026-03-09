@@ -24,7 +24,7 @@ fun EditorSurface(
     log.i("recompose surface")
 
     // Create EditorState wrapper for backward compatibility with DrawCanvas
-    val editorState = EditorState(viewModel, page)
+    val editorState = EditorState(viewModel)
 
     AndroidView(
         factory = { ctx ->

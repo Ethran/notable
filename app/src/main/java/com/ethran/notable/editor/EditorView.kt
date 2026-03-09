@@ -131,7 +131,7 @@ fun EditorView(
 
         // Create EditorState wrapper for backward compatibility
         val editorState = remember(viewModel, page) {
-            EditorState(viewModel, page)
+            EditorState(viewModel)
         }
 
         // Initialize ViewModel with persisted settings on first composition
