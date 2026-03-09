@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.ui.convertDpToPixel
@@ -27,6 +29,7 @@ import kotlin.math.max
  */
 @Composable
 fun ScrollIndicator(viewModel: EditorViewModel, page: PageView) {
+    val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
     BoxWithConstraints(
         modifier = Modifier
             .width(5.dp)
@@ -43,7 +46,7 @@ fun ScrollIndicator(viewModel: EditorViewModel, page: PageView) {
         val indicatorSizeDp = (viewportHeightPx / virtualHeight.toFloat()) * this.maxHeight.value
         val indicatorPositionDp = (page.scroll.y / virtualHeight.toFloat()) * this.maxHeight.value
 
-        if (!viewModel.isToolbarOpen) return@BoxWithConstraints
+        if (!toolbarState.isToolbarOpen) return@BoxWithConstraints
 
         Box(
             modifier = Modifier
@@ -63,6 +66,7 @@ fun ScrollIndicator(viewModel: EditorViewModel, page: PageView) {
  */
 @Composable
 fun HorizontalScrollIndicator(viewModel: EditorViewModel, page: PageView) {
+    val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
         BoxWithConstraints(
@@ -81,7 +85,7 @@ fun HorizontalScrollIndicator(viewModel: EditorViewModel, page: PageView) {
             val indicatorSizeDp = (viewportWidthPx / virtualWidth.toFloat()) * this.maxWidth.value
             val indicatorPositionDp = (page.scroll.x / virtualWidth.toFloat()) * this.maxWidth.value
 
-            if (!viewModel.isToolbarOpen) return@BoxWithConstraints
+            if (!toolbarState.isToolbarOpen) return@BoxWithConstraints
 
             Box(
                 modifier = Modifier

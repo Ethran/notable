@@ -13,7 +13,7 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.PlacementMode
+import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.editor.state.EditorState

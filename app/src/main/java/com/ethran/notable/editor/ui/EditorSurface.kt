@@ -6,7 +6,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.canvas.DrawCanvas
 import com.ethran.notable.editor.state.EditorState
@@ -18,13 +17,12 @@ private val log = ShipBook.getLogger("EditorSurface")
 @Composable
 fun EditorSurface(
     appRepository: AppRepository,
-    viewModel: EditorViewModel, page: PageView, history: History
+    state: EditorState,
+    page: PageView,
+    history: History
 ) {
     val coroutineScope = rememberCoroutineScope()
     log.i("recompose surface")
-
-    // Create EditorState wrapper for backward compatibility with DrawCanvas
-    val editorState = EditorState(viewModel)
 
     AndroidView(
         factory = { ctx ->
@@ -32,7 +30,7 @@ fun EditorSurface(
                 context = ctx,
                 appRepository = appRepository,
                 coroutineScope = coroutineScope,
-                state = editorState,
+                state = state,
                 page = page,
                 history = history
             ).apply {

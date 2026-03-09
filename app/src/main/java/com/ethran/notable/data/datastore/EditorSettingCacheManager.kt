@@ -2,7 +2,7 @@ package com.ethran.notable.data.datastore
 
 import com.ethran.notable.data.db.Kv
 import com.ethran.notable.data.db.KvRepository
-import com.ethran.notable.editor.Mode
+import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.NamedSettings
 import com.ethran.notable.editor.utils.Pen
