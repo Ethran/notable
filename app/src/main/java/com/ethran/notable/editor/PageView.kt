@@ -800,7 +800,7 @@ class PageView(
     // and redraws page to vew.
     suspend fun refreshCurrentPage() {
         pageFromDb = appRepository.pageRepository.getById(currentPageId)
-        log.i("Refresh current page, bacground: ${pageFromDb?.background}")
+        log.i("Refresh current page, background: ${pageFromDb?.background}")
         withContext(Dispatchers.Main) {
             drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
             persistBitmapDebounced()
