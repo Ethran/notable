@@ -203,15 +203,24 @@ class EditorViewModel @Inject constructor(
     }
 
     private fun handlePenChange(pen: Pen) {
+        var penChanged = false
+        var modeChanged = false
+
         _toolbarState.update { state ->
             if (state.mode == Mode.Draw && state.pen == pen) {
                 state.copy(isStrokeSelectionOpen = true)
             } else {
-                sendUiEvent(EditorUiEvent.PenChanged(pen))
-                if (state.mode != Mode.Draw) sendUiEvent(EditorUiEvent.ModeChanged(Mode.Draw))
+                penChanged = true
+                if (state.mode != Mode.Draw) {
+                    modeChanged = true
+                }
                 state.copy(mode = Mode.Draw, pen = pen)
             }
         }
+        // Fire side-effects outside the update block
+        if (penChanged) sendUiEvent(EditorUiEvent.PenChanged(pen))
+        if (modeChanged) sendUiEvent(EditorUiEvent.ModeChanged(Mode.Draw))
+
         updateDrawingState()
     }
 
@@ -259,9 +268,9 @@ class EditorViewModel @Inject constructor(
         _toolbarState.update { state ->
             val newSettings = state.penSettings.toMutableMap()
             newSettings[pen.penName] = setting
-            sendUiEvent(EditorUiEvent.PenSettingChanged(pen, setting))
             state.copy(penSettings = newSettings)
         }
+        sendUiEvent(EditorUiEvent.PenSettingChanged(pen, setting))
     }
 
     private fun updateScribbleToErase(enabled: Boolean) {
