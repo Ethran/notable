@@ -223,7 +223,7 @@ class EditorViewModel @Inject constructor(
 
 
     private fun handleCloseAllMenus() {
-        log.e("Closing all menus in EditorViewModel")
+        log.d("Closing all menus in EditorViewModel")
         _toolbarState.update {
             it.copy(
                 isMenuOpen = false,
@@ -243,7 +243,7 @@ class EditorViewModel @Inject constructor(
         val anyMenuOpen =
             state.isMenuOpen || state.isStrokeSelectionOpen || state.isBackgroundSelectorModalOpen
         val shouldBeDrawing = !anyMenuOpen && !_toolbarState.value.isSelectionActive
-        log.e("Drawing state: $shouldBeDrawing")
+        log.d("Drawing state: $shouldBeDrawing")
         viewModelScope.launch {
             CanvasEventBus.isDrawing.emit(shouldBeDrawing)
         }
