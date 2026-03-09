@@ -20,7 +20,7 @@ enum class Mode {
     Draw, Erase, Select, Line
 }
 
-
+ // TODO: move to EditorViewModel, or somewhere else, this code shouldnt be here.
 class EditorState(
     val bookId: String? = null,
     val pageId: String,

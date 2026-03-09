@@ -119,12 +119,13 @@ data class ToolbarUiState(
     val notebookId: String? = null,
     val pageId: String? = null,
     val isBookActive: Boolean = false,
-    
+
+    // TODO: check correctness
     // Internal data for BackgroundSelector rendering if it remains stateless
     val backgroundType: String = "native",
     val backgroundPath: String = "blank",
     val backgroundPageNumber: Int = 0,
-    val currentPageNumber: Int = 0
+    val currentPageNumber: Int = 1
 )
 
 @HiltViewModel
