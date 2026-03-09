@@ -49,7 +49,7 @@ fun ToolbarMenu(
         alignment = Alignment.TopEnd,
         onDismissRequest = { onAction(ToolbarAction.ToggleMenu) },
         offset = IntOffset(
-            convertDpToPixel((-10).dp, context).toInt(), 
+            convertDpToPixel((-10).dp, context).toInt(),
             convertDpToPixel(50.dp, context).toInt()
         ),
         properties = PopupProperties(focusable = true),
@@ -136,7 +136,7 @@ private fun ToolbarMenuContent(
 
 @Composable
 private fun MenuItem(
-    label: String, 
+    label: String,
     onClick: () -> Unit
 ) {
     Box(

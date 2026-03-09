@@ -70,7 +70,6 @@ class EditorState(
     }
 
 
-
     private val log = ShipBook.getLogger("EditorState")
 
     var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw) // should save
@@ -131,8 +130,7 @@ class EditorState(
 
 // if state is Move then applySelectionDisplace() will delete original strokes and images
 enum class PlacementMode {
-    Move,
-    Paste
+    Move, Paste
 }
 
 object Clipboard {

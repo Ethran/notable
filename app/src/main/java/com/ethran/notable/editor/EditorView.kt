@@ -96,8 +96,7 @@ fun EditorView(
                 log.i("Could not find page, Cleaning book")
                 SnackState.globalSnackFlow.tryEmit(
                     SnackConf(
-                        text = "Could not find page, cleaning book",
-                        duration = 4000
+                        text = "Could not find page, cleaning book", duration = 4000
                     )
                 )
                 scope.launch(Dispatchers.IO) {
@@ -127,17 +126,16 @@ fun EditorView(
             )
         }
 
-        val editorState =
-            remember {
-                EditorState(
-                    appRepository = appRepository,
-                    bookId = bookId,
-                    pageId = pageId,
-                    pageView = page,
-                    persistedEditorSettings = editorSettingCacheManager.getEditorSettings(),
-                    onPageChange = onPageChange
-                )
-            }
+        val editorState = remember {
+            EditorState(
+                appRepository = appRepository,
+                bookId = bookId,
+                pageId = pageId,
+                pageView = page,
+                persistedEditorSettings = editorSettingCacheManager.getEditorSettings(),
+                onPageChange = onPageChange
+            )
+        }
 
         val history = remember {
             History(page)
@@ -158,38 +156,49 @@ fun EditorView(
                         CanvasEventBus.clearPageSignal.emit(Unit)
                         snackManager.displaySnack(SnackConf(text = "Cleared all strokes"))
                     }
+
                     is EditorUiEvent.NavigateToLibrary -> {
                         navController.navigate(LibraryDestination.createRoute(event.folderId))
                     }
+
                     is EditorUiEvent.NavigateToPages -> {
                         navController.navigate(PagesDestination.createRoute(event.bookId))
                     }
+
                     EditorUiEvent.NavigateToBugReport -> {
                         navController.navigate(BugReportDestination.route)
                     }
+
                     is EditorUiEvent.ShowSnackbar -> {
                         snackManager.displaySnack(SnackConf(text = event.message))
                     }
+
                     is EditorUiEvent.CopyImageToCanvas -> {
                         CanvasEventBus.addImageByUri.value = event.uri
                     }
+
                     EditorUiEvent.RefreshCanvas -> {
                         CanvasEventBus.reloadFromDb.emit(Unit)
                     }
+
                     is EditorUiEvent.ModeChanged -> {
                         editorState.mode = event.mode
                     }
+
                     is EditorUiEvent.PenChanged -> {
                         editorState.pen = event.pen
                     }
+
                     is EditorUiEvent.PenSettingChanged -> {
                         val newSettings = editorState.penSettings.toMutableMap()
                         newSettings[event.pen.penName] = event.setting
                         editorState.penSettings = newSettings
                     }
+
                     is EditorUiEvent.EraserChanged -> {
                         editorState.eraser = event.eraser
                     }
+
                     is EditorUiEvent.ToolbarVisibilityChanged -> {
                         editorState.isToolbarOpen = event.visible
                     }
@@ -230,21 +239,26 @@ fun EditorView(
             viewModel.setHasClipboard(editorState.clipboard != null)
             viewModel.setShowResetView(zoomLevel != 1.0f) // page.scroll != Offset.Zero
             viewModel.setSelectionActive(selectionActive)
-            viewModel.updateToolbarSettings(ToolbarUiState(
-                isToolbarOpen = editorState.isToolbarOpen,
-                mode = editorState.mode,
-                pen = editorState.pen,
-                eraser = editorState.eraser,
-                penSettings = editorState.penSettings
-            ))
+            viewModel.updateToolbarSettings(
+                ToolbarUiState(
+                    isToolbarOpen = editorState.isToolbarOpen,
+                    mode = editorState.mode,
+                    pen = editorState.pen,
+                    eraser = editorState.eraser,
+                    penSettings = editorState.penSettings
+                )
+            )
         }
 
         DisposableEffect(Unit) {
             onDispose {
                 // finish selection operation
                 editorState.selectionState.applySelectionDisplace(page)
-                if (bookId != null)
-                    exportToLinkedFile(exportEngine, bookId, appRepository.bookRepository)
+                if (bookId != null) exportToLinkedFile(
+                    exportEngine,
+                    bookId,
+                    appRepository.bookRepository
+                )
                 page.disposeOldPage()
             }
         }
@@ -274,14 +288,10 @@ fun EditorView(
         InkaTheme {
             EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                appRepository = appRepository,
-                state = editorState,
-                page = page,
-                history = history
+                appRepository = appRepository, state = editorState, page = page, history = history
             )
             SelectedBitmap(
-                context = context,
-                controlTower = editorControlTower
+                context = context, controlTower = editorControlTower
             )
             Row(
                 modifier = Modifier
@@ -292,9 +302,7 @@ fun EditorView(
                 ScrollIndicator(state = editorState)
             }
             PositionedToolbar(
-                viewModel = viewModel,
-                onDrawingStateCheck = { viewModel.updateDrawingState() }
-            )
+                viewModel = viewModel, onDrawingStateCheck = { viewModel.updateDrawingState() })
             HorizontalScrollIndicator(state = editorState)
         }
     }

@@ -37,9 +37,11 @@ fun PositionedToolbar(
     when (position) {
         AppSettings.Position.Top -> toolbar()
         AppSettings.Position.Bottom -> {
-            Column(Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+            ) {
                 Spacer(modifier = Modifier.weight(1f))
                 toolbar()
             }

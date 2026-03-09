@@ -111,7 +111,10 @@ fun ToolbarContent(
                     isSelected = isSelected(uiState, Pen.BALLPEN),
                     onSelect = { onAction(ToolbarAction.ChangePen(Pen.BALLPEN)) },
                     sizes = SIZES_STROKES_DEFAULT,
-                    penSetting = uiState.penSettings[Pen.BALLPEN.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                    penSetting = uiState.penSettings[Pen.BALLPEN.penName] ?: PenSetting(
+                        5f,
+                        android.graphics.Color.BLACK
+                    ),
                     onChangeSetting = { onAction(ToolbarAction.ChangePenSetting(Pen.BALLPEN, it)) })
 
                 if (!GlobalAppSettings.current.monochromeMode) {
@@ -150,7 +153,10 @@ fun ToolbarContent(
                         isSelected = isSelected(uiState, Pen.PENCIL),
                         onSelect = { onAction(ToolbarAction.ChangePen(Pen.PENCIL)) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = uiState.penSettings[Pen.PENCIL.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                        penSetting = uiState.penSettings[Pen.PENCIL.penName] ?: PenSetting(
+                            5f,
+                            android.graphics.Color.BLACK
+                        ),
                         onChangeSetting = {
                             onAction(
                                 ToolbarAction.ChangePenSetting(
@@ -167,7 +173,10 @@ fun ToolbarContent(
                         isSelected = isSelected(uiState, Pen.BRUSH),
                         onSelect = { onAction(ToolbarAction.ChangePen(Pen.BRUSH)) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = uiState.penSettings[Pen.BRUSH.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                        penSetting = uiState.penSettings[Pen.BRUSH.penName] ?: PenSetting(
+                            5f,
+                            android.graphics.Color.BLACK
+                        ),
                         onChangeSetting = {
                             onAction(
                                 ToolbarAction.ChangePenSetting(
@@ -184,7 +193,10 @@ fun ToolbarContent(
                     isSelected = isSelected(uiState, Pen.FOUNTAIN),
                     onSelect = { onAction(ToolbarAction.ChangePen(Pen.FOUNTAIN)) },
                     sizes = SIZES_STROKES_DEFAULT,
-                    penSetting = uiState.penSettings[Pen.FOUNTAIN.penName] ?: PenSetting(5f, android.graphics.Color.BLACK),
+                    penSetting = uiState.penSettings[Pen.FOUNTAIN.penName] ?: PenSetting(
+                        5f,
+                        android.graphics.Color.BLACK
+                    ),
                     onChangeSetting = {
                         onAction(
                             ToolbarAction.ChangePenSetting(
@@ -210,7 +222,10 @@ fun ToolbarContent(
                     isSelected = isSelected(uiState, Pen.MARKER),
                     onSelect = { onAction(ToolbarAction.ChangePen(Pen.MARKER)) },
                     sizes = SIZES_MARKER_DEFAULT,
-                    penSetting = uiState.penSettings[Pen.MARKER.penName] ?: PenSetting(40f, android.graphics.Color.LTGRAY),
+                    penSetting = uiState.penSettings[Pen.MARKER.penName] ?: PenSetting(
+                        40f,
+                        android.graphics.Color.LTGRAY
+                    ),
                     onChangeSetting = { onAction(ToolbarAction.ChangePenSetting(Pen.MARKER, it)) }
                 )
 

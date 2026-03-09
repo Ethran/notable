@@ -162,7 +162,7 @@ class CanvasObserverRegistry(
         }
     }
 
-    private fun observeReloadFromDb(){
+    private fun observeReloadFromDb() {
         coroutineScope.launch {
             CanvasEventBus.reloadFromDb.collect {
                 page.refreshCurrentPage()
@@ -263,7 +263,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
                 val pageNumber =
-                   appRepository.getPageNumber(page.pageFromDb?.notebookId!!, pageId)
+                    appRepository.getPageNumber(page.pageFromDb?.notebookId!!, pageId)
                 Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
 
                 val previewBitmap = withContext(Dispatchers.IO) {

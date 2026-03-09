@@ -32,8 +32,6 @@ import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.ui.convertDpToPixel
 
