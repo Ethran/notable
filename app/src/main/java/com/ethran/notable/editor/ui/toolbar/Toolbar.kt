@@ -237,7 +237,8 @@ fun ToolbarContent(
                     value = uiState.eraser,
                     onChange = { onAction(ToolbarAction.ChangeEraser(it)) },
                     toggleScribbleToErase = { onAction(ToolbarAction.ToggleScribbleToErase(it)) },
-                    onMenuOpenChange = {}
+                    onMenuOpenChange = { onAction(ToolbarAction.UpdateMenuOpenTo(it)) },
+                    isMenuOpen = uiState.isStrokeSelectionOpen
                 )
 
                 VerticalDivider()

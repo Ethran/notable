@@ -46,6 +46,7 @@ sealed class ToolbarAction {
     data class ChangePenSetting(val pen: Pen, val setting: PenSetting) : ToolbarAction()
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
     object ToggleMenu : ToolbarAction()
+    data class UpdateMenuOpenTo(val isOpen: Boolean) : ToolbarAction()
     data class ToggleBackgroundSelector(val isOpen: Boolean) : ToolbarAction()
     data class ToggleScribbleToErase(val enabled: Boolean) : ToolbarAction()
 
@@ -158,13 +159,13 @@ class EditorViewModel @Inject constructor(
             }
             is ToolbarAction.ChangePen -> handlePenChange(action.pen)
             is ToolbarAction.ChangePenSetting -> handlePenSettingChange(action.pen, action.setting)
-            is ToolbarAction.ChangeEraser -> {
-                _toolbarState.update { it.copy(eraser = action.eraser) }
-                sendUiEvent(EditorUiEvent.EraserChanged(action.eraser))
-                updateDrawingState()
-            }
+            is ToolbarAction.ChangeEraser -> handleEraserChange(action.eraser)
             is ToolbarAction.ToggleMenu -> {
                 _toolbarState.update { it.copy(isMenuOpen = !it.isMenuOpen) }
+                updateDrawingState()
+            }
+            is ToolbarAction.UpdateMenuOpenTo -> {
+                _toolbarState.update { it.copy(isStrokeSelectionOpen = action.isOpen) }
                 updateDrawingState()
             }
             is ToolbarAction.ToggleBackgroundSelector -> {
@@ -211,6 +212,13 @@ class EditorViewModel @Inject constructor(
         }
         updateDrawingState()
     }
+
+    private fun handleEraserChange(eraser: Eraser) {
+        _toolbarState.update { it.copy(eraser = eraser) }
+        sendUiEvent(EditorUiEvent.EraserChanged(eraser))
+        updateDrawingState()
+    }
+
 
     private fun handleCloseAllMenus() {
         log.e("Closing all menus in EditorViewModel")
