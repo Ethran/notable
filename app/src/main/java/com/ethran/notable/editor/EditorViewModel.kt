@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 private val log = ShipBook.getLogger("EditorViewModel")
@@ -172,7 +173,7 @@ class EditorViewModel @Inject constructor(
     private var currentPageId: String = ""
 
     // ---- Init guard ----
-    private var didInitSettings = false
+    private val didInitSettings = AtomicBoolean(false)
 
     // ---- Selection state (kept for drawing logic compatibility) ----
     val selectionState = SelectionState()
@@ -186,8 +187,7 @@ class EditorViewModel @Inject constructor(
      * Idempotent: only applies settings on first call; subsequent calls are no-ops.
      */
     fun initFromPersistedSettings(settings: EditorSettingCacheManager.EditorSettings?) {
-        if (didInitSettings) return
-        didInitSettings = true
+        if (!didInitSettings.compareAndSet(false, true)) return
 
         _toolbarState.update {
             it.copy(

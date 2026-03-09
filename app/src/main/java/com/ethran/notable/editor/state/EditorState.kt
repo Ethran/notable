@@ -39,6 +39,8 @@ class EditorState(
     var isToolbarOpen by mutableStateOf(initial.isToolbarOpen)
         private set
 
+    // Intentionally public — canvas components (CanvasObserverRegistry, EditorControlTower,
+    // Select) set this directly, and CanvasObserverRegistry uses snapshotFlow { state.isDrawing }.
     var isDrawing by mutableStateOf(initial.isDrawing)
 
     val selectionState: SelectionState

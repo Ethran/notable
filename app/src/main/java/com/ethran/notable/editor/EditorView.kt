@@ -221,7 +221,6 @@ fun EditorView(
         val selectionActive = viewModel.selectionState.isNonEmpty()
         LaunchedEffect(
             zoomLevel,
-            page.scroll,
             selectionActive
         ) {
             viewModel.setShowResetView(zoomLevel != 1.0f)
