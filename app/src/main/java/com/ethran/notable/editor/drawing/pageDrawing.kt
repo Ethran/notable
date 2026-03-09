@@ -137,7 +137,8 @@ fun drawOnCanvasFromPage(
 
     // Canvas is scaled, it will scale page area.
     canvas.withClip(canvasClipBounds) {
-        drawColor(Color.BLACK)
+        // for debugging:
+        drawColor(Color.WHITE)
 
         drawBg(page.context, this, backgroundType, background, page.scroll, zoomLevel, page)
         if (GlobalAppSettings.current.debugMode) {
