@@ -804,7 +804,7 @@ class PageView(
 
 
     // updates page setting in db, (for instance type of background)
-    // and redraws page to vew.
+    // and redraws page to view.
     suspend fun refreshCurrentPage() {
         pageFromDb = appRepository.pageRepository.getById(currentPageId)
         log.i("Refresh current page, background: ${pageFromDb?.background}")
