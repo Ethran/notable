@@ -126,7 +126,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.isDrawing.collect {
                 logCanvasObserver.v("drawing state changed to $it!")
-                state.isDrawing = it
+                state.viewModel.isDrawing = it
             }
         }
     }
@@ -298,5 +298,3 @@ class CanvasObserverRegistry(
 
 
 }
-
-

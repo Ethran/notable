@@ -11,12 +11,12 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.model.SimplePointF
+import com.ethran.notable.editor.Mode
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.onSurfaceChanged

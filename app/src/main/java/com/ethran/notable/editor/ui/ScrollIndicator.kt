@@ -16,7 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.editor.EditorViewModel
+import com.ethran.notable.editor.PageView
 import com.ethran.notable.ui.convertDpToPixel
 import kotlin.math.max
 
@@ -25,14 +26,13 @@ import kotlin.math.max
  * Uses page.scroll.y (IntOffset) for the vertical position.
  */
 @Composable
-fun ScrollIndicator(state: EditorState) {
+fun ScrollIndicator(viewModel: EditorViewModel, page: PageView) {
     BoxWithConstraints(
         modifier = Modifier
             .width(5.dp)
             .fillMaxHeight()
     ) {
         val viewportHeightPx = convertDpToPixel(this.maxHeight, LocalContext.current).toInt()
-        val page = state.pageView
 
         // Total scrollable height approximation:
         // page.height is the total content height (page coordinates)
@@ -43,7 +43,7 @@ fun ScrollIndicator(state: EditorState) {
         val indicatorSizeDp = (viewportHeightPx / virtualHeight.toFloat()) * this.maxHeight.value
         val indicatorPositionDp = (page.scroll.y / virtualHeight.toFloat()) * this.maxHeight.value
 
-        if (!state.isToolbarOpen) return@BoxWithConstraints
+        if (!viewModel.isToolbarOpen) return@BoxWithConstraints
 
         Box(
             modifier = Modifier
@@ -62,7 +62,7 @@ fun ScrollIndicator(state: EditorState) {
  * Uses page.scroll.x (IntOffset) for the horizontal position.
  */
 @Composable
-fun HorizontalScrollIndicator(state: EditorState) {
+fun HorizontalScrollIndicator(viewModel: EditorViewModel, page: PageView) {
     Column(Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
         BoxWithConstraints(
@@ -71,7 +71,6 @@ fun HorizontalScrollIndicator(state: EditorState) {
                 .fillMaxWidth()
         ) {
             val viewportWidthPx = convertDpToPixel(this.maxWidth, LocalContext.current).toInt()
-            val page = state.pageView
 
             // Total scrollable width approximation:
             // page.width is the total content width (page coordinates)
@@ -82,7 +81,7 @@ fun HorizontalScrollIndicator(state: EditorState) {
             val indicatorSizeDp = (viewportWidthPx / virtualWidth.toFloat()) * this.maxWidth.value
             val indicatorPositionDp = (page.scroll.x / virtualWidth.toFloat()) * this.maxWidth.value
 
-            if (!state.isToolbarOpen) return@BoxWithConstraints
+            if (!viewModel.isToolbarOpen) return@BoxWithConstraints
 
             Box(
                 modifier = Modifier

@@ -15,6 +15,7 @@ import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.PlacementMode
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.offsetImage
@@ -168,8 +169,8 @@ class SelectionState {
             }
         // move the selection a bit, to show the copy
         selectionDisplaceOffset = IntOffset(
-            x = selectionDisplaceOffset!!.x + 50,
-            y = selectionDisplaceOffset!!.y + 50,
+            x = (selectionDisplaceOffset?.x ?: 0) + 50,
+            y = (selectionDisplaceOffset?.y ?: 0) + 50,
         )
     }
 
