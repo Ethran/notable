@@ -10,6 +10,7 @@ import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Eraser
@@ -125,7 +126,7 @@ data class ToolbarUiState(
     val backgroundType: String = "native",
     val backgroundPath: String = "blank",
     val backgroundPageNumber: Int = 0,
-    val currentPageNumber: Int = 1
+    val currentPageNumber: Int = 0
 )
 
 @HiltViewModel
@@ -302,10 +303,22 @@ class EditorViewModel @Inject constructor(
                 page.copy(background = path, backgroundType = type)
             }
             appRepository.pageRepository.update(updatedPage)
+
+            // Calculate background page number
+            val bgPageNum = when (val bgTypeObj = BackgroundType.fromKey(type)) {
+                is BackgroundType.Pdf -> bgTypeObj.page
+                is BackgroundType.AutoPdf -> {
+                    currentBookId?.let { appRepository.getPageNumber(it, currentPageId) } ?: 0
+                }
+
+                else -> 0
+            }
+
             _toolbarState.update { 
                 it.copy(
                     backgroundType = updatedPage.backgroundType,
-                    backgroundPath = updatedPage.background
+                    backgroundPath = updatedPage.background,
+                    backgroundPageNumber = bgPageNum
                 )
             }
             _uiEvents.emit(EditorUiEvent.RefreshCanvas)
@@ -341,6 +354,16 @@ class EditorViewModel @Inject constructor(
             
             val pageIndex = book?.getPageIndex(pageId) ?: 0
             val totalPages = book?.pageIds?.size ?: 1
+
+            val backgroundTypeObj = BackgroundType.fromKey(page?.backgroundType ?: "native")
+            val bgPageNumber = when (backgroundTypeObj) {
+                is BackgroundType.Pdf -> backgroundTypeObj.page
+                is BackgroundType.AutoPdf -> {
+                    bookId?.let { appRepository.getPageNumber(it, pageId) } ?: 0
+                }
+
+                else -> 0
+            }
             
             _toolbarState.update {
                 it.copy(
@@ -351,6 +374,7 @@ class EditorViewModel @Inject constructor(
                     currentPageNumber = pageIndex,
                     backgroundType = page?.backgroundType ?: "native",
                     backgroundPath = page?.background ?: "blank",
+                    backgroundPageNumber = bgPageNumber
                 )
             }
         }
