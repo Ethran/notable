@@ -13,6 +13,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.SelectionState
@@ -71,7 +72,8 @@ data class ToolbarUiState(
     val mode: Mode = Mode.Draw,
     val pen: Pen = Pen.BALLPEN,
     val eraser: Eraser = Eraser.PEN,
-    val penSettings: Map<String, PenSetting> = emptyMap(),
+    // TODO: if it is an  emptyMap(), the DrawCanvas crashes, to be fixed.
+    val penSettings: Map<String, PenSetting> = DEFAULT_PEN_SETTINGS,
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
     val isDrawing: Boolean = true,

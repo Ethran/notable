@@ -137,6 +137,7 @@ fun EditorView(
         // Initialize ViewModel with persisted settings on first composition
         LaunchedEffect(Unit) {
             viewModel.initFromPersistedSettings(editorSettingCacheManager.getEditorSettings())
+            viewModel.updateDrawingState()
         }
 
         val editorControlTower = remember {
