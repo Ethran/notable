@@ -145,7 +145,6 @@ sealed class EditorUiEvent {
     data class NavigateToLibrary(val folderId: String?) : EditorUiEvent()
     data class NavigateToPages(val bookId: String) : EditorUiEvent()
     object NavigateToBugReport : EditorUiEvent()
-    data class PageChanged(val pageId: String) : EditorUiEvent()
 }
 
 // --------------------------------------------------------
@@ -474,7 +473,7 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             Log.d("EditorView", "Page changed")
             currentPageId = newPageId
-            sendUiEvent(EditorUiEvent.PageChanged(newPageId))
+            _toolbarState.update { it.copy(pageId = newPageId) }
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             sendUiEvent(EditorUiEvent.ShowSnackbar("Tried to change to same page!"))

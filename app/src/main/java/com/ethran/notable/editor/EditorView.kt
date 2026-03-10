@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -42,6 +43,9 @@ import com.ethran.notable.ui.views.LibraryDestination
 import com.ethran.notable.ui.views.PagesDestination
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -163,10 +167,6 @@ fun EditorView(
                     is EditorUiEvent.ShowSnackbar -> {
                         snackManager.displaySnack(SnackConf(text = event.message))
                     }
-
-                    is EditorUiEvent.PageChanged -> {
-                        onPageChange(event.pageId)
-                    }
                 }
             }
         }
@@ -215,6 +215,17 @@ fun EditorView(
         val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
         LaunchedEffect(toolbarState) {
             editorState.syncFrom(toolbarState)
+        }
+
+        // Observe pageId changes from ViewModel state for navigation
+        LaunchedEffect(viewModel) {
+            snapshotFlow { toolbarState.pageId }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .drop(1) // Skip initial emission from loadBookData
+                .collect { newPageId ->
+                    onPageChange(newPageId)
+                }
         }
 
         // Sync PageView state to ViewModel for Toolbar rendering
