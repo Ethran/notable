@@ -79,11 +79,9 @@ data class ToolbarUiState(
     val isDrawing: Boolean = true,
 ) {
     val isDrawingAllowed: Boolean
-        get() = mode == Mode.Draw &&
-                !isMenuOpen &&
-                !isStrokeSelectionOpen &&
-                !isBackgroundSelectorModalOpen &&
-                !isSelectionActive
+        get() = !isSelectionActive &&
+                !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
+    
 }
 
 
@@ -387,10 +385,7 @@ class EditorViewModel @Inject constructor(
      */
     fun updateDrawingState() {
         log.v("updateDrawingState")
-        val state = _toolbarState.value
-        val anyMenuOpen =
-            state.isMenuOpen || state.isStrokeSelectionOpen || state.isBackgroundSelectorModalOpen
-        val shouldBeDrawing = !anyMenuOpen && !state.isSelectionActive
+        val shouldBeDrawing = _toolbarState.value.isDrawingAllowed
         _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
         log.d("Drawing state: $shouldBeDrawing")
         viewModelScope.launch {
