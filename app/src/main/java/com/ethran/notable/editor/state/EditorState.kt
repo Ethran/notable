@@ -57,6 +57,9 @@ class EditorState(
             viewModel.setHasClipboard(value != null)
         }
 
+    init {
+        viewModel.setHasClipboard(_clipboard != null)
+    }
     /**
      * Synchronises this EditorState's mutableStateOf fields from the given [ToolbarUiState].
      * Call this from a LaunchedEffect in EditorView whenever toolbarState changes.
