@@ -77,11 +77,12 @@ data class ToolbarUiState(
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
     val isDrawing: Boolean = true,
+    val isQuickNavOpen: Boolean = false,
 ) {
     val isDrawingAllowed: Boolean
         get() = !isSelectionActive &&
                 !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
-    
+                && !isQuickNavOpen
 }
 
 
@@ -117,6 +118,7 @@ sealed class ToolbarAction {
     object NavigateToHome : ToolbarAction()
 
     object CloseAllMenus : ToolbarAction()
+    data class UpdateQuickNavOpen(val isOpen: Boolean) : ToolbarAction()
 }
 
 
@@ -259,6 +261,10 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.NavigateToHome -> sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
 
             ToolbarAction.CloseAllMenus -> handleCloseAllMenus()
+            is ToolbarAction.UpdateQuickNavOpen -> {
+                _toolbarState.update { it.copy(isQuickNavOpen = action.isOpen) }
+                updateDrawingState()
+            }
         }
     }
 

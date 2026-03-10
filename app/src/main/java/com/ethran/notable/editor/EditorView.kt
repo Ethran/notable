@@ -77,6 +77,7 @@ fun EditorView(
     appRepository: AppRepository,
     bookId: String?,
     pageId: String,
+    isQuickNavOpen: Boolean,
     onPageChange: (String) -> Unit,
     viewModel: EditorViewModel = hiltViewModel()
 ) {
@@ -94,7 +95,7 @@ fun EditorView(
 
         if (!exists) {
             // TODO: check if it is correct, and remove exeption throwing
-//            throw Exception("Page does not exist")
+            throw Exception("Page does not exist")
             if (bookId != null) {
                 // clean the book
                 log.i("Could not find page, Cleaning book")
@@ -109,6 +110,11 @@ fun EditorView(
             }
             navController.navigate(LibraryDestination.route)
         }
+    }
+
+    // Sync isQuickNavOpen to ViewModel
+    LaunchedEffect(isQuickNavOpen) {
+        viewModel.onToolbarAction(ToolbarAction.UpdateQuickNavOpen(isQuickNavOpen))
     }
 
     if (pageExists == null) return
@@ -165,7 +171,7 @@ fun EditorView(
                     }
 
                     is EditorUiEvent.ShowSnackbar -> {
-                        snackManager.displaySnack(SnackConf(text = event.message))
+                        snackManager.displaySnack(SnackConf(text = event.message, duration = 2000))
                     }
                 }
             }
