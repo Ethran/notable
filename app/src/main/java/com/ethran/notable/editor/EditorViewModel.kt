@@ -3,6 +3,9 @@ package com.ethran.notable.editor
 import android.content.Context
 import android.graphics.Color
 import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,7 +17,7 @@ import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.ClipboardContent
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -22,6 +25,8 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -34,7 +39,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 private val log = ShipBook.getLogger("EditorViewModel")
@@ -74,7 +78,6 @@ data class ToolbarUiState(
     val penSettings: Map<String, PenSetting> = emptyMap(),
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
-    val isDrawing: Boolean = true,
 ) {
     val isDrawingAllowed: Boolean
         get() = mode == Mode.Draw &&
@@ -143,7 +146,6 @@ sealed class EditorUiEvent {
     data class NavigateToLibrary(val folderId: String?) : EditorUiEvent()
     data class NavigateToPages(val bookId: String) : EditorUiEvent()
     object NavigateToBugReport : EditorUiEvent()
-    data class PageChanged(val pageId: String) : EditorUiEvent()
 }
 
 // --------------------------------------------------------
@@ -162,21 +164,47 @@ class EditorViewModel @Inject constructor(
     val toolbarState: StateFlow<ToolbarUiState> = _toolbarState.asStateFlow()
 
     // ---- One-Time Events (Channels) ----
-    private val uiEventChannel = Channel<EditorUiEvent>(Channel.BUFFERED)
+    private val uiEventChannel = Channel<EditorUiEvent>()
     val uiEvents = uiEventChannel.receiveAsFlow()
 
-    private val canvasCommandChannel = Channel<CanvasCommand>(Channel.BUFFERED)
+    private val canvasCommandChannel = Channel<CanvasCommand>()
     val canvasCommands = canvasCommandChannel.receiveAsFlow()
 
     // ---- Internal document context ----
     private var bookId: String? = null
-    private var currentPageId: String = ""
 
-    // ---- Init guard ----
-    private val didInitSettings = AtomicBoolean(false)
+    // ---- Editor state (from EditorState) ----
+    var currentPageId by mutableStateOf("")
+        private set
 
-    // ---- Selection state (kept for drawing logic compatibility) ----
+    var mode by mutableStateOf(Mode.Draw)
+        private set
+
+    var pen by mutableStateOf(Pen.BALLPEN)
+        private set
+
+    var eraser by mutableStateOf(Eraser.PEN)
+        private set
+
+    var isDrawing by mutableStateOf(true)
+
+    var isToolbarOpen by mutableStateOf(false)
+        private set
+
+    var penSettings by mutableStateOf(DEFAULT_PEN_SETTINGS)
+        private set
+
     val selectionState = SelectionState()
+
+    private var _clipboard by mutableStateOf(Clipboard.content)
+    var clipboard
+        get() = _clipboard
+        set(value) {
+            _clipboard = value
+            // The clipboard content must survive the EditorState, so we store a copy in
+            // a singleton that lives outside of the EditorState
+            Clipboard.content = value
+        }
 
     // --------------------------------------------------------
     // Initialization from persisted settings
@@ -184,20 +212,16 @@ class EditorViewModel @Inject constructor(
 
     /**
      * Restores editor settings from the persisted cache.
-     * Idempotent: only applies settings on first call; subsequent calls are no-ops.
+     * Should be called once when EditorView is composed.
      */
     fun initFromPersistedSettings(settings: EditorSettingCacheManager.EditorSettings?) {
-        if (!didInitSettings.compareAndSet(false, true)) return
+        mode = settings?.mode ?: Mode.Draw
+        pen = settings?.pen ?: Pen.BALLPEN
+        eraser = settings?.eraser ?: Eraser.PEN
+        isToolbarOpen = settings?.isToolbarOpen ?: false
+        penSettings = settings?.penSettings ?: DEFAULT_PEN_SETTINGS
 
-        _toolbarState.update {
-            it.copy(
-                mode = settings?.mode ?: Mode.Draw,
-                pen = settings?.pen ?: Pen.BALLPEN,
-                eraser = settings?.eraser ?: Eraser.PEN,
-                isToolbarOpen = settings?.isToolbarOpen ?: false,
-                penSettings = settings?.penSettings ?: DEFAULT_PEN_SETTINGS
-            )
-        }
+        syncToolbarState()
     }
 
     // --------------------------------------------------------
@@ -207,12 +231,14 @@ class EditorViewModel @Inject constructor(
     fun onToolbarAction(action: ToolbarAction) {
         when (action) {
             is ToolbarAction.ToggleToolbar -> {
-                _toolbarState.update { it.copy(isToolbarOpen = !it.isToolbarOpen) }
+                isToolbarOpen = !isToolbarOpen
+                syncToolbarState()
                 updateDrawingState()
             }
 
             is ToolbarAction.ChangeMode -> {
-                _toolbarState.update { it.copy(mode = action.mode) }
+                mode = action.mode
+                syncToolbarState()
                 updateDrawingState()
             }
 
@@ -267,26 +293,29 @@ class EditorViewModel @Inject constructor(
     // --------------------------------------------------------
 
     private fun handlePenChange(pen: Pen) {
-        val state = _toolbarState.value
-        if (state.mode == Mode.Draw && state.pen == pen) {
+        if (mode == Mode.Draw && this.pen == pen) {
             _toolbarState.update { it.copy(isStrokeSelectionOpen = true) }
         } else {
-            _toolbarState.update {
-                it.copy(pen = pen, mode = Mode.Draw)
+            this.pen = pen
+            if (mode != Mode.Draw) {
+                mode = Mode.Draw
             }
+            syncToolbarState()
         }
         updateDrawingState()
     }
 
     private fun handleEraserChange(eraser: Eraser) {
-        _toolbarState.update { it.copy(eraser = eraser) }
+        this.eraser = eraser
+        syncToolbarState()
         updateDrawingState()
     }
 
     private fun handlePenSettingChange(pen: Pen, setting: PenSetting) {
-        val newSettings = _toolbarState.value.penSettings.toMutableMap()
+        val newSettings = penSettings.toMutableMap()
         newSettings[pen.penName] = setting
-        _toolbarState.update { it.copy(penSettings = newSettings) }
+        penSettings = newSettings
+        syncToolbarState()
     }
 
     private fun handleCloseAllMenus() {
@@ -388,7 +417,7 @@ class EditorViewModel @Inject constructor(
         val anyMenuOpen =
             state.isMenuOpen || state.isStrokeSelectionOpen || state.isBackgroundSelectorModalOpen
         val shouldBeDrawing = !anyMenuOpen && !state.isSelectionActive
-        _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
+        isDrawing = shouldBeDrawing
         log.d("Drawing state: $shouldBeDrawing")
         viewModelScope.launch {
             CanvasEventBus.isDrawing.emit(shouldBeDrawing)
@@ -472,10 +501,11 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             Log.d("EditorView", "Page changed")
             currentPageId = newPageId
-            sendUiEvent(EditorUiEvent.PageChanged(newPageId))
         } else {
             Log.d("EditorView", "Tried to change to same page!")
-            sendUiEvent(EditorUiEvent.ShowSnackbar("Tried to change to same page!"))
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(text = "Tried to change to same page!", duration = 3000)
+            )
         }
     }
 
@@ -509,6 +539,22 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Pushes the current mutableState editor fields into the toolbar StateFlow
+     * so that Compose UI sees a single consistent snapshot.
+     */
+    private fun syncToolbarState() {
+        _toolbarState.update {
+            it.copy(
+                isToolbarOpen = isToolbarOpen,
+                mode = mode,
+                pen = pen,
+                eraser = eraser,
+                penSettings = penSettings
+            )
+        }
+    }
+
     // --------------------------------------------------------
     // Event / Command Helpers
     // --------------------------------------------------------
@@ -533,4 +579,23 @@ class EditorViewModel @Inject constructor(
             Pen.FOUNTAIN.penName to PenSetting(5f, Color.BLACK)
         )
     }
+}
+
+
+// --------------------------------------------------------
+// Enums (from EditorState)
+// --------------------------------------------------------
+
+enum class Mode {
+    Draw, Erase, Select, Line
+}
+
+
+// if state is Move then applySelectionDisplace() will delete original strokes and images
+enum class PlacementMode {
+    Move, Paste
+}
+
+object Clipboard {
+    var content: ClipboardContent? = null
 }

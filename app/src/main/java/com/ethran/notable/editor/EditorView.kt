@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,7 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
@@ -162,10 +162,6 @@ fun EditorView(
                     is EditorUiEvent.ShowSnackbar -> {
                         snackManager.displaySnack(SnackConf(text = event.message))
                     }
-
-                    is EditorUiEvent.PageChanged -> {
-                        onPageChange(event.pageId)
-                    }
                 }
             }
         }
@@ -210,19 +206,16 @@ fun EditorView(
             }
         }
 
-        // Collect toolbar state and sync EditorState (keeps snapshotFlow observers in canvas alive)
-        val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
-        LaunchedEffect(toolbarState) {
-            editorState.syncFrom(toolbarState)
-        }
-
         // Sync PageView state to ViewModel for Toolbar rendering
-        val zoomLevel by page.zoomLevel.collectAsStateWithLifecycle()
+        val zoomLevel by page.zoomLevel.collectAsState()
         val selectionActive = viewModel.selectionState.isNonEmpty()
         LaunchedEffect(
             zoomLevel,
+            page.scroll,
+            viewModel.clipboard,
             selectionActive
         ) {
+            viewModel.setHasClipboard(viewModel.clipboard != null)
             viewModel.setShowResetView(zoomLevel != 1.0f)
             viewModel.setSelectionActive(selectionActive)
         }
@@ -242,20 +235,20 @@ fun EditorView(
 
         // Persist editor settings when they change
         LaunchedEffect(
-            toolbarState.isToolbarOpen,
-            toolbarState.pen,
-            toolbarState.penSettings,
-            toolbarState.mode,
-            toolbarState.eraser
+            viewModel.isToolbarOpen,
+            viewModel.pen,
+            viewModel.penSettings,
+            viewModel.mode,
+            viewModel.eraser
         ) {
             log.i("EditorView: saving editor settings")
             editorSettingCacheManager.setEditorSettings(
                 EditorSettingCacheManager.EditorSettings(
-                    isToolbarOpen = toolbarState.isToolbarOpen,
-                    mode = toolbarState.mode,
-                    pen = toolbarState.pen,
-                    eraser = toolbarState.eraser,
-                    penSettings = toolbarState.penSettings
+                    isToolbarOpen = viewModel.isToolbarOpen,
+                    mode = viewModel.mode,
+                    pen = viewModel.pen,
+                    eraser = viewModel.eraser,
+                    penSettings = viewModel.penSettings
                 )
             )
         }
@@ -264,7 +257,7 @@ fun EditorView(
         InkaTheme {
             EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                appRepository = appRepository, state = editorState, page = page, history = history
+                appRepository = appRepository, viewModel = viewModel, page = page, history = history
             )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower
