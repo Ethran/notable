@@ -8,6 +8,8 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.HistoryBusActions
+import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.state.UndoRedoType
@@ -105,7 +107,7 @@ class EditorControlTower(
             logEditorControlTower.w("IsDrawing already set to $value")
             return
         }
-        state.viewModel.isDrawing = value
+        state.isDrawing = value
     }
 
     fun toggleTool() {
@@ -238,7 +240,7 @@ class EditorControlTower(
     fun deleteSelection() {
         val operationList = state.selectionState.deleteSelection(page)
         history.addOperationsToHistory(operationList)
-        state.viewModel.isDrawing = true
+        state.isDrawing = true
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
         }
