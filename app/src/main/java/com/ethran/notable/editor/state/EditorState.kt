@@ -5,7 +5,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.ethran.notable.editor.EditorViewModel
-import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
