@@ -127,21 +127,15 @@ class EditorControlTower(
     }
 
     fun goToNextPage() {
-        scope.launch(Dispatchers.IO) {
-            logEditorControlTower.i("Going to next page")
-            val next = state.viewModel.getNextPage()
-            if (next != null)
-                switchPage(next)
-        }
+        logEditorControlTower.i("Going to next page")
+        state.viewModel.goToNextPage()
+        history.cleanHistory()
     }
 
     fun goToPreviousPage() {
-        scope.launch(Dispatchers.IO) {
-            logEditorControlTower.i("Going to previous page")
-            val previous = state.viewModel.getPreviousPage()
-            if (previous != null)
-                switchPage(previous)
-        }
+        logEditorControlTower.i("Going to previous page")
+        state.viewModel.goToPreviousPage()
+        history.cleanHistory()
     }
 
     fun undo() {

@@ -171,7 +171,7 @@ class EditorViewModel @Inject constructor(
 
     // ---- Internal document context ----
     private var bookId: String? = null
-    private var currentPageId: String = ""
+    private val currentPageId: String get() = _toolbarState.value.pageId.orEmpty()
 
     // ---- Init guard ----
     private val didInitSettings = AtomicBoolean(false)
@@ -411,7 +411,6 @@ class EditorViewModel @Inject constructor(
      */
     fun loadBookData(bookId: String?, pageId: String) {
         this.bookId = bookId
-        this.currentPageId = pageId
 
         viewModelScope.launch(Dispatchers.IO) {
             val page = appRepository.pageRepository.getById(pageId)
@@ -449,7 +448,7 @@ class EditorViewModel @Inject constructor(
     // Page Navigation (from EditorState)
     // --------------------------------------------------------
 
-    suspend fun getNextPage(): String? {
+    private suspend fun getNextPageId(): String? {
         return if (bookId != null) {
             appRepository.getNextPageIdFromBookAndPageOrCreate(
                 pageId = currentPageId, notebookId = bookId!!
@@ -457,7 +456,7 @@ class EditorViewModel @Inject constructor(
         } else null
     }
 
-    suspend fun getPreviousPage(): String? {
+    private suspend fun getPreviousPageId(): String? {
         return if (bookId != null) {
             appRepository.getPreviousPageIdFromBookAndPage(
                 pageId = currentPageId, notebookId = bookId!!
@@ -465,15 +464,26 @@ class EditorViewModel @Inject constructor(
         } else null
     }
 
-    suspend fun updateOpenedPage(newPageId: String) {
+    fun goToNextPage() {
+        viewModelScope.launch(Dispatchers.IO) {
+            getNextPageId()?.let { changePage(it) }
+        }
+    }
+
+    fun goToPreviousPage() {
+        viewModelScope.launch(Dispatchers.IO) {
+            getPreviousPageId()?.let { changePage(it) }
+        }
+    }
+
+    private suspend fun updateOpenedPage(newPageId: String) {
         Log.d("EditorView", "Update open page to $newPageId")
         if (bookId != null) {
             appRepository.bookRepository.setOpenPageId(bookId!!, newPageId)
         }
         if (newPageId != currentPageId) {
             Log.d("EditorView", "Page changed")
-            currentPageId = newPageId
-            _toolbarState.update { it.copy(pageId = newPageId) }
+            loadBookData(bookId, newPageId)
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             sendUiEvent(EditorUiEvent.ShowSnackbar("Tried to change to same page!"))
@@ -485,10 +495,12 @@ class EditorViewModel @Inject constructor(
      *
      * @param id The unique identifier of the page to switch to.
      */
-    suspend fun changePage(id: String) {
+    fun changePage(id: String) {
         log.d("Changing page to $id, from $currentPageId")
-        updateOpenedPage(id)
-        selectionState.reset()
+        viewModelScope.launch(Dispatchers.IO) {
+            updateOpenedPage(id)
+            selectionState.reset()
+        }
     }
 
     // --------------------------------------------------------
