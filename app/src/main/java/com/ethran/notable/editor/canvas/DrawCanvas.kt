@@ -108,8 +108,8 @@ class DrawCanvas(
                 log.i("surface created $holder")
                 // set up the drawing surface
                 inputHandler.updateActiveSurface()
-                // Restore the correct stroke size and style.
-                inputHandler.updatePenAndStroke()
+                // Restore the correct stroke size and style, now its done in initFromPersistedSettings
+//                inputHandler.updatePenAndStroke()
             }
 
             override fun surfaceChanged(
