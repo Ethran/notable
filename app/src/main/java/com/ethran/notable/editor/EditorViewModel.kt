@@ -206,6 +206,7 @@ class EditorViewModel @Inject constructor(
     // --------------------------------------------------------
 
     fun onToolbarAction(action: ToolbarAction) {
+        log.v("onToolbarAction: $action")
         when (action) {
             is ToolbarAction.ToggleToolbar -> {
                 _toolbarState.update { it.copy(isToolbarOpen = !it.isToolbarOpen) }
@@ -385,6 +386,7 @@ class EditorViewModel @Inject constructor(
      * Re-evaluates whether drawing should be enabled based on menu and selection states.
      */
     fun updateDrawingState() {
+        log.v("updateDrawingState")
         val state = _toolbarState.value
         val anyMenuOpen =
             state.isMenuOpen || state.isStrokeSelectionOpen || state.isBackgroundSelectorModalOpen
@@ -410,6 +412,7 @@ class EditorViewModel @Inject constructor(
      * Loads context data for the toolbar (page number, background info, etc.)
      */
     fun loadBookData(bookId: String?, pageId: String) {
+        log.v("loadBookData: bookId=$bookId, pageId=$pageId")
         this.bookId = bookId
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -465,18 +468,21 @@ class EditorViewModel @Inject constructor(
     }
 
     fun goToNextPage() {
+        log.v("goToNextPage")
         viewModelScope.launch(Dispatchers.IO) {
             getNextPageId()?.let { changePage(it) }
         }
     }
 
     fun goToPreviousPage() {
+        log.v("goToPreviousPage")
         viewModelScope.launch(Dispatchers.IO) {
             getPreviousPageId()?.let { changePage(it) }
         }
     }
 
     private suspend fun updateOpenedPage(newPageId: String) {
+        log.v("updateOpenedPage: $newPageId")
         Log.d("EditorView", "Update open page to $newPageId")
         if (bookId != null) {
             appRepository.bookRepository.setOpenPageId(bookId!!, newPageId)
@@ -496,6 +502,7 @@ class EditorViewModel @Inject constructor(
      * @param id The unique identifier of the page to switch to.
      */
     fun changePage(id: String) {
+        log.v("changePage: $id")
         log.d("Changing page to $id, from $currentPageId")
         viewModelScope.launch(Dispatchers.IO) {
             updateOpenedPage(id)
@@ -516,9 +523,15 @@ class EditorViewModel @Inject constructor(
     }
 
     fun setSelectionActive(active: Boolean) {
+        log.v("setSelectionActive: $active")
         if (_toolbarState.value.isSelectionActive != active) {
+            if (active) //selection is active, we can directly update it, and skip other checks
+                viewModelScope.launch {
+                    CanvasEventBus.isDrawing.emit(false)
+                }
             _toolbarState.update { it.copy(isSelectionActive = active) }
-            updateDrawingState()
+            if (!active)
+                updateDrawingState()
         }
     }
 
@@ -527,10 +540,12 @@ class EditorViewModel @Inject constructor(
     // --------------------------------------------------------
 
     private fun sendUiEvent(event: EditorUiEvent) {
+        log.v("sendUiEvent: $event")
         viewModelScope.launch { uiEventChannel.send(event) }
     }
 
     private fun sendCanvasCommand(command: CanvasCommand) {
+        log.v("sendCanvasCommand: $command")
         viewModelScope.launch { canvasCommandChannel.send(command) }
     }
 

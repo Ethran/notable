@@ -235,6 +235,7 @@ fun EditorView(
             zoomLevel,
             selectionActive
         ) {
+            log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
             viewModel.setShowResetView(zoomLevel != 1.0f)
             viewModel.setSelectionActive(selectionActive)
         }
