@@ -1,138 +1,74 @@
 package com.ethran.notable.editor.state
 
-import android.graphics.Color
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
-import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.EditorViewModel
+import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
-import io.shipbook.shipbooksdk.Log
-import io.shipbook.shipbooksdk.ShipBook
 
-enum class Mode {
-    Draw, Erase, Select, Line
-}
-
- // TODO: move to EditorViewModel, or somewhere else, this code shouldnt be here.
+/**
+ * Wrapper around EditorViewModel for backward compatibility with canvas components
+ * (DrawCanvas, OnyxInputHandler, CanvasRefreshManager, etc. that still expect EditorState).
+ *
+ * Holds its own Compose snapshot state (mutableStateOf) so that canvas observers using
+ * snapshotFlow remain reactive. Call [syncFrom] whenever [EditorViewModel.toolbarState] changes.
+ */
+@Stable
 class EditorState(
-    val bookId: String? = null,
-    val pageId: String,
-    val pageView: PageView,
-    val appRepository: AppRepository,
-    persistedEditorSettings: EditorSettingCacheManager.EditorSettings?,
-    val onPageChange: (String) -> Unit
+    val viewModel: EditorViewModel,
 ) {
-    var currentPageId by mutableStateOf(pageId)
+    private val initial = viewModel.toolbarState.value
+
+    var mode by mutableStateOf(initial.mode)
         private set
 
+    var pen by mutableStateOf(initial.pen)
+        private set
 
-    suspend fun getNextPage(): String? {
-        return if (bookId != null) {
-            val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
-                pageId = currentPageId, notebookId = bookId
-            )
-            newPageId
-        } else null
-    }
+    var eraser by mutableStateOf(initial.eraser)
+        private set
 
-    suspend fun getPreviousPage(): String? {
-        return if (bookId != null) {
-            val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
-                pageId = currentPageId, notebookId = bookId
-            )
-            newPageId
-        } else null
-    }
+    var penSettings by mutableStateOf(initial.penSettings)
+        private set
 
+    var isToolbarOpen by mutableStateOf(initial.isToolbarOpen)
+        private set
 
-    suspend fun updateOpenedPage(newPageId: String) {
-        Log.d("EditorView", "Update open page to $newPageId")
-        if (bookId != null) {
-            appRepository.bookRepository.setOpenPageId(bookId, newPageId)
-        }
-        if (newPageId != currentPageId) {
-            Log.d("EditorView", "Page changed")
-            onPageChange(newPageId)
-            currentPageId = newPageId
-        } else {
-            Log.d("EditorView", "Tried to change to same page!")
-            SnackState.globalSnackFlow.tryEmit(
-                SnackConf(text = "Tried to change to same page!", duration = 3000)
-            )
-        }
-    }
+    // Intentionally public — canvas components (CanvasObserverRegistry, EditorControlTower,
+    // Select) set this directly, and CanvasObserverRegistry uses snapshotFlow { state.isDrawing }.
+    var isDrawing by mutableStateOf(initial.isDrawing)
 
-
-    private val log = ShipBook.getLogger("EditorState")
-
-    var mode by mutableStateOf(persistedEditorSettings?.mode ?: Mode.Draw) // should save
-    var pen by mutableStateOf(persistedEditorSettings?.pen ?: Pen.BALLPEN) // should save
-    var eraser by mutableStateOf(persistedEditorSettings?.eraser ?: Eraser.PEN) // should save
-    var isDrawing by mutableStateOf(true) // gives information if pen touch will be drawn or not
-    // For debugging:
-//    var isDrawing: Boolean
-//        get() = _isDrawing
-//        set(value) {
-//            if (_isDrawing != value) {
-//                Log.d(TAG, "isDrawing modified from ${_isDrawing} to $value")
-//                logCallStack("isDrawing modification")
-//                _isDrawing = value
-//            }
-//        }
-
-    var isToolbarOpen by mutableStateOf(
-        persistedEditorSettings?.isToolbarOpen ?: false
-    ) // should save
-    var penSettings by mutableStateOf(
-        persistedEditorSettings?.penSettings ?: mapOf(
-            Pen.BALLPEN.penName to PenSetting(5f, Color.BLACK),
-            Pen.REDBALLPEN.penName to PenSetting(5f, Color.RED),
-            Pen.BLUEBALLPEN.penName to PenSetting(5f, Color.BLUE),
-            Pen.GREENBALLPEN.penName to PenSetting(5f, Color.GREEN),
-            Pen.PENCIL.penName to PenSetting(5f, Color.BLACK),
-            Pen.BRUSH.penName to PenSetting(5f, Color.BLACK),
-            Pen.MARKER.penName to PenSetting(40f, Color.LTGRAY),
-            Pen.FOUNTAIN.penName to PenSetting(5f, Color.BLACK)
-        )
-    )
-
-    val selectionState = SelectionState()
+    val selectionState: SelectionState
+        get() = viewModel.selectionState
 
     private var _clipboard by mutableStateOf(Clipboard.content)
-    var clipboard
+    var clipboard: ClipboardContent?
         get() = _clipboard
         set(value) {
-            this._clipboard = value
+            _clipboard = value
             // The clipboard content must survive the EditorState, so we store a copy in
             // a singleton that lives outside of the EditorState
             Clipboard.content = value
+            viewModel.setHasClipboard(value != null)
         }
 
-
-    /**
-     * Changes the current page to the one with the specified [id].
-     *
-     * @param id The unique identifier of the page to switch to.
-     */
-    suspend fun changePage(id: String) {
-        log.d("Changing page to $id, from $currentPageId")
-        updateOpenedPage(id)
-        selectionState.reset()
+    init {
+        viewModel.setHasClipboard(_clipboard != null)
     }
-}
-
-// if state is Move then applySelectionDisplace() will delete original strokes and images
-enum class PlacementMode {
-    Move, Paste
-}
-
-object Clipboard {
-    var content: ClipboardContent? = null
+    /**
+     * Synchronises this EditorState's mutableStateOf fields from the given [ToolbarUiState].
+     * Call this from a LaunchedEffect in EditorView whenever toolbarState changes.
+     */
+    fun syncFrom(state: ToolbarUiState) {
+        mode = state.mode
+        pen = state.pen
+        eraser = state.eraser
+        penSettings = state.penSettings
+        isToolbarOpen = state.isToolbarOpen
+        isDrawing = state.isDrawing
+    }
 }

@@ -173,7 +173,7 @@ class CanvasObserverRegistry(
 
     private fun observePenChanges() {
         coroutineScope.launch {
-            snapshotFlow { state.pen }.drop(1).collect {
+            snapshotFlow { state.pen }.drop(0).collect {
                 logCanvasObserver.v("pen change: ${state.pen}")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
@@ -298,5 +298,3 @@ class CanvasObserverRegistry(
 
 
 }
-
-

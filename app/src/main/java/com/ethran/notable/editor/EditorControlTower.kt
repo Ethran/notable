@@ -9,8 +9,8 @@ import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.HistoryBusActions
 import com.ethran.notable.editor.state.Mode
-import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.PlacementMode
+import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.state.UndoRedoType
 import com.ethran.notable.editor.utils.divideStrokesFromCut
@@ -90,19 +90,9 @@ class EditorControlTower(
      * @param id The unique identifier of the page to switch to.
      */
     private suspend fun switchPage(id: String) {
-        // TODO: Check if this is a problem:
-        //`switchPage()` now calls `page.changePage(id)` inside `withContext(Dispatchers.IO)`,
-        // but `PageView.changePage()` mutates in-memory state (e.g., `currentPageId`,
-        // `zoomLevel.value`) before it does its own IO work. Calling it from IO risks
-        // off-main state mutations and also makes it easier for callers to accidentally
-        // invoke `page.changePage()` twice (which currently happens in `registerObservers()`).
-        // Prefer calling `page.changePage(id)` from the main thread (or let
-        // `PageView.changePage()` manage its own dispatching) and ensure callers don’t call
-        // it again after `switchPage()`.
-
         // Switch to Main thread for Compose state mutations
         withContext(Dispatchers.Main) {
-            state.changePage(id)
+            state.viewModel.changePage(id)
             history.cleanHistory()
         }
 
@@ -121,11 +111,11 @@ class EditorControlTower(
     }
 
     fun toggleTool() {
-        state.mode = if (state.mode == Mode.Draw) Mode.Erase else Mode.Draw
+        state.viewModel.onToolbarAction(ToolbarAction.ChangeMode(if (state.mode == Mode.Draw) Mode.Erase else Mode.Draw))
     }
 
     fun toggleZen() {
-        state.isToolbarOpen = !state.isToolbarOpen
+        state.viewModel.onToolbarAction(ToolbarAction.ToggleToolbar)
     }
 
     fun getSnapshotOfSelectionState(): SelectionState {
@@ -137,21 +127,15 @@ class EditorControlTower(
     }
 
     fun goToNextPage() {
-        scope.launch(Dispatchers.IO) {
-            logEditorControlTower.i("Going to next page")
-            val next = state.getNextPage()
-            if (next != null)
-                switchPage(next)
-        }
+        logEditorControlTower.i("Going to next page")
+        state.viewModel.goToNextPage()
+        history.cleanHistory()
     }
 
     fun goToPreviousPage() {
-        scope.launch(Dispatchers.IO) {
-            logEditorControlTower.i("Going to previous page")
-            val previous = state.getPreviousPage()
-            if (previous != null)
-                switchPage(previous)
-        }
+        logEditorControlTower.i("Going to previous page")
+        state.viewModel.goToPreviousPage()
+        history.cleanHistory()
     }
 
     fun undo() {
@@ -326,4 +310,3 @@ class EditorControlTower(
         showHint("Pasted content from clipboard", scope)
     }
 }
-

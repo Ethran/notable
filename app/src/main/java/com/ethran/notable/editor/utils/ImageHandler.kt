@@ -7,10 +7,10 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.state.EditorState
-import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.io.uriToBitmap
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.Log

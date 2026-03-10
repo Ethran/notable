@@ -7,10 +7,10 @@ import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen

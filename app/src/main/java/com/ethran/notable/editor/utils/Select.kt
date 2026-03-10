@@ -11,8 +11,8 @@ import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.editor.state.EditorState
@@ -45,7 +45,14 @@ fun selectStrokesFromPath(strokes: List<Stroke>, path: Path): List<Stroke> {
 
     return strokes.filter {
         strokeBounds(it).intersect(bounds)
-    }.filter { it.points.any { region.contains(it.x.toInt(), (it.y - bounds.top).toInt()) } }
+    }.filter {
+        it.points.any { point ->
+            region.contains(
+                point.x.toInt(),
+                (point.y - bounds.top).toInt()
+            )
+        }
+    }
 }
 
 fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
@@ -61,7 +68,7 @@ fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
         imageBounds(it).intersect(bounds)
     }.filter {
         // include image if all its corners are within region
-        imagePoints(it).all { region.contains(it.x, (it.y - bounds.top).toInt()) }
+        imagePoints(it).all { point -> region.contains(point.x, (point.y - bounds.top).toInt()) }
     }
 }
 
@@ -74,6 +81,7 @@ fun selectImagesAndStrokes(
     imagesToSelect: List<Image>,
     strokesToSelect: List<Stroke>
 ) {
+    log.v("selectImagesAndStrokes: images=${imagesToSelect.size}, strokes=${strokesToSelect.size}")
     //handle selection:
     val pageBounds = Rect()
 

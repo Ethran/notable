@@ -17,7 +17,9 @@ private val log = ShipBook.getLogger("EditorSurface")
 @Composable
 fun EditorSurface(
     appRepository: AppRepository,
-    state: EditorState, page: PageView, history: History
+    state: EditorState,
+    page: PageView,
+    history: History
 ) {
     val coroutineScope = rememberCoroutineScope()
     log.i("recompose surface")
@@ -27,8 +29,10 @@ fun EditorSurface(
             DrawCanvas(
                 context = ctx,
                 appRepository = appRepository,
-                state = state, page = page, history = history,
-                coroutineScope = coroutineScope
+                coroutineScope = coroutineScope,
+                state = state,
+                page = page,
+                history = history
             ).apply {
                 init()
                 registerObservers()

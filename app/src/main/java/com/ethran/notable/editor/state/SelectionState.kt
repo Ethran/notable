@@ -45,6 +45,7 @@ class SelectionState {
     var placementMode by mutableStateOf<PlacementMode?>(null)
 
     fun reset() {
+        log.v("reset")
         selectedStrokes = null
         selectedImages = null
         secondPageCut = null
@@ -66,6 +67,7 @@ class SelectionState {
     }
 
     fun resizeImages(scale: Int, scope: CoroutineScope, page: PageView) {
+        log.v("resizeImages: scale=$scale")
         val selectedImagesCopy = selectedImages?.map { image ->
             image.copy(
                 height = image.height + (image.height * scale / 100),
@@ -112,6 +114,7 @@ class SelectionState {
 
     @Suppress("UNUSED_PARAMETER")
     fun resizeStrokes(scale: Int, scope: CoroutineScope, page: PageView) {
+        log.v("resizeStrokes: scale=$scale")
         //TODO: implement this
     }
 
@@ -125,6 +128,7 @@ class SelectionState {
      * @return A list of [Operation]s that can be used to undo the deletion (e.g., re-adding the deleted items).
      */
     fun deleteSelection(page: PageView): List<Operation> {
+        log.v("deleteSelection: images=${selectedImages?.size}, strokes=${selectedStrokes?.size}")
         val operationList = mutableListOf<Operation>()
         val selectedImagesToRemove = selectedImages
         if (!selectedImagesToRemove.isNullOrEmpty()) {
@@ -145,6 +149,7 @@ class SelectionState {
     }
 
     fun duplicateSelection() {
+        log.v("duplicateSelection")
         // set operation to paste only
         placementMode = PlacementMode.Paste
         if (!selectedStrokes.isNullOrEmpty())
@@ -168,13 +173,14 @@ class SelectionState {
             }
         // move the selection a bit, to show the copy
         selectionDisplaceOffset = IntOffset(
-            x = selectionDisplaceOffset!!.x + 50,
-            y = selectionDisplaceOffset!!.y + 50,
+            x = (selectionDisplaceOffset?.x ?: 0) + 50,
+            y = (selectionDisplaceOffset?.y ?: 0) + 50,
         )
     }
 
     // Moves strokes, and redraws canvas.
     fun applySelectionDisplace(page: PageView): List<Operation>? {
+        log.v("applySelectionDisplace: offset=$selectionDisplaceOffset, mode=$placementMode")
 
         if (selectionDisplaceOffset == null) return null
         if (selectionRect == null) return null
@@ -234,6 +240,7 @@ class SelectionState {
     }
 
     fun selectionToClipboard(scrollPos: Offset, context: Context): ClipboardContent {
+        log.v("selectionToClipboard: scrollPos=$scrollPos, images=${selectedImages?.size}, strokes=${selectedStrokes?.size}")
 
         val strokes = selectedStrokes?.map {
             offsetStroke(it, offset = -scrollPos)
