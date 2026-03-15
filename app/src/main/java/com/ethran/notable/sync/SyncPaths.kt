@@ -10,7 +10,7 @@ object SyncPaths {
 
     fun rootDir() = "/$ROOT"
     fun notebooksDir() = "/$ROOT/notebooks"
-    fun tombstonesDir() = "/$ROOT/tombstones"
+    fun tombstonesDir() = "/$ROOT/deletions"
     fun foldersFile() = "/$ROOT/folders.json"
 
     fun notebookDir(notebookId: String) = "/$ROOT/notebooks/$notebookId"
@@ -33,5 +33,5 @@ object SyncPaths {
      * TODO: When ETag support is added, tombstones can be deprecated in favour
      * of detecting deletions via known-ETag + missing remote file (RFC 2518 §9.4).
      */
-    fun tombstone(notebookId: String) = "/$ROOT/tombstones/$notebookId"
+    fun tombstone(notebookId: String) = "/$ROOT/deletions/$notebookId"
 }

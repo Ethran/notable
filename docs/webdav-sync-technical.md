@@ -94,7 +94,7 @@ A full sync executes the following steps in order. A coroutine `Mutex` prevents 
    └── PUT /notable/folders.json (merged result)
 
 3. APPLY REMOTE DELETIONS
-   ├── PROPFIND /notable/tombstones/ (Depth 1) → list of tombstone files with lastModified
+   ├── PROPFIND /notable/deletions/ (Depth 1) → list of tombstone files with lastModified
    ├── For each tombstone (filename = deleted notebook UUID):
    │   ├── If local notebook was modified AFTER the tombstone's lastModified → SKIP (resurrection)
    │   └── Otherwise → delete local notebook
@@ -122,7 +122,7 @@ A full sync executes the following steps in order. A coroutine `Mutex` prevents 
    ├── Compare syncedNotebookIds (from last sync) against pre-download snapshot
    ├── Missing IDs = locally deleted notebooks
    ├── For each: DELETE /notable/notebooks/{id}/ on server
-   └── PUT zero-byte file to /notable/tombstones/{id} (tombstone for other devices)
+   └── PUT zero-byte file to /notable/deletions/{id} (tombstone for other devices)
 
 7. FINALIZE
    ├── Update syncedNotebookIds = current set of all local notebook IDs
@@ -178,7 +178,7 @@ Used for sync-on-close (triggered when the user closes the editor). Follows the 
 When a notebook is deleted locally, a targeted operation can immediately propagate the deletion to the server without running a full sync:
 
 1. DELETE the notebook's directory from server.
-2. PUT a zero-byte file to `/notable/tombstones/{id}` (the server's own `lastModified` on this file serves as the deletion timestamp for other devices' conflict resolution).
+2. PUT a zero-byte file to `/notable/deletions/{id}` (the server's own `lastModified` on this file serves as the deletion timestamp for other devices' conflict resolution).
 3. Remove notebook ID from `syncedNotebookIds`.
 
 ---
@@ -190,7 +190,7 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 ```
 /notable/                           ← Appended to user's server URL
 ├── folders.json                    ← Complete folder hierarchy
-├── tombstones/                     ← Deletion tracking (zero-byte files)
+├── deletions/                     ← Deletion tracking (zero-byte files)
 │   └── {uuid}                      ← One per deleted notebook; server lastModified = deletion time
 └── notebooks/
     └── {uuid}/                     ← One directory per notebook, named by UUID
@@ -298,9 +298,9 @@ When a notebook is deleted locally, a targeted operation can immediately propaga
 - `parentFolderId`: References another folder's `id` for nesting, or `null` for root-level folders.
 - Folder hierarchy must be synced before notebooks because notebooks reference `parentFolderId`.
 
-### 4.5 Tombstone Files (`tombstones/{uuid}`)
+### 4.5 Tombstone Files (`deletions/{uuid}`)
 
-Each deleted notebook has a zero-byte file at `/notable/tombstones/{notebook-uuid}`. The file has no content; the server's own `lastModified` timestamp on the file provides the deletion time used for conflict resolution (section 5.3).
+Each deleted notebook has a zero-byte file at `/notable/deletions/{notebook-uuid}`. The file has no content; the server's own `lastModified` timestamp on the file provides the deletion time used for conflict resolution (section 5.3).
 
 **Why tombstones instead of a shared `deletions.json`?** Two devices syncing simultaneously would both read `deletions.json`, append their entry, and write back — the second writer clobbers the first. With tombstones, each deletion is an independent PUT to a unique path, so there is nothing to race over.
 
@@ -344,7 +344,7 @@ The most dangerous conflict in any sync system is: device A deletes a notebook w
 
 Notable handles this with **tombstone-based resurrection**:
 
-1. When a notebook is deleted, a zero-byte tombstone file is PUT to `/notable/tombstones/{id}`. The server records a `lastModified` timestamp on the tombstone at the time of the PUT.
+1. When a notebook is deleted, a zero-byte tombstone file is PUT to `/notable/deletions/{id}`. The server records a `lastModified` timestamp on the tombstone at the time of the PUT.
 2. During sync, when applying remote tombstones:
    - If the local notebook's `updatedAt` is **after** the tombstone's `lastModified`, the notebook is **resurrected** (not deleted locally, and it will be re-uploaded during the upload phase; the tombstone is deleted from the server).
    - If the local notebook's `updatedAt` is **before** the tombstone's `lastModified`, the notebook is deleted locally (safe to remove).

@@ -199,7 +199,7 @@ Notable stores your data on the WebDAV server in the following structure:
 ```
 /notable/
 ├── folders.json             # Folder hierarchy
-├── tombstones/              # Tracks deleted notebooks (zero-byte files)
+├── deletions/              # Tracks deleted notebooks (zero-byte files)
 │   └── {notebook-id}
 └── notebooks/
     ├── {notebook-id-1}/
