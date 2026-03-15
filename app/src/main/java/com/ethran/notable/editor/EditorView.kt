@@ -35,19 +35,15 @@ import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.LibraryDestination
 import com.ethran.notable.ui.views.PagesDestination
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private val log = ShipBook.getLogger("EditorView")
 
@@ -86,38 +82,30 @@ fun EditorView(
     val scope = rememberCoroutineScope()
 
     var pageExists by remember(pageId) { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(pageId) {
-        viewModel.loadBookData(bookId, pageId)
-        val exists = withContext(Dispatchers.IO) {
-            appRepository.pageRepository.getById(pageId) != null
-        }
-        pageExists = exists
 
-        if (!exists) {
-            // TODO: check if it is correct, and remove exeption throwing
-            throw Exception("Page does not exist")
-            if (bookId != null) {
-                // clean the book
-                log.i("Could not find page, Cleaning book")
-                SnackState.globalSnackFlow.tryEmit(
-                    SnackConf(
-                        text = "Could not find page, cleaning book", duration = 4000
-                    )
-                )
-                scope.launch(Dispatchers.IO) {
-                    appRepository.bookRepository.removePage(bookId, pageId)
-                }
-            }
+
+    // Single point of entry for loading book data based on the pageId from Navigation
+    LaunchedEffect(pageId) {
+        log.v("EditorView: pageId changed to $pageId, loading data")
+        val success = viewModel.loadBookData(bookId, pageId)
+        pageExists = success
+        if (!success) {
+            viewModel.fixNotebook(bookId, pageId)
             navController.navigate(LibraryDestination.route)
-        }
+        } else
+            log.v("EditorView: data loaded successfully")
     }
+    if (pageExists == null){
+        log.e("Page does not exist: $pageId")
+        return
+    }
+
 
     // Sync isQuickNavOpen to ViewModel
     LaunchedEffect(isQuickNavOpen) {
         viewModel.onToolbarAction(ToolbarAction.UpdateQuickNavOpen(isQuickNavOpen))
     }
 
-    if (pageExists == null) return
 
     BoxWithConstraints {
         val height = convertDpToPixel(this.maxHeight, context).toInt()
@@ -230,6 +218,7 @@ fun EditorView(
                 .distinctUntilChanged()
                 .drop(1) // Skip initial emission from loadBookData
                 .collect { newPageId ->
+                    log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")
                     onPageChange(newPageId)
                 }
         }

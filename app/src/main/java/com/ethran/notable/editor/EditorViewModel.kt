@@ -23,6 +23,8 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -154,7 +156,7 @@ sealed class EditorUiEvent {
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val appRepository: AppRepository,
+    val appRepository: AppRepository,
     private val exportEngine: ExportEngine
 ) : ViewModel() {
 
@@ -411,40 +413,55 @@ class EditorViewModel @Inject constructor(
 
     /**
      * Loads context data for the toolbar (page number, background info, etc.)
+     * returns false if book does not exists.
      */
-    fun loadBookData(bookId: String?, pageId: String) {
+    suspend fun loadBookData(bookId: String?, pageId: String): Boolean {
         log.v("loadBookData: bookId=$bookId, pageId=$pageId")
         this.bookId = bookId
 
-        viewModelScope.launch(Dispatchers.IO) {
-            val page = appRepository.pageRepository.getById(pageId)
-            val book = bookId?.let { appRepository.bookRepository.getById(it) }
+        val page = appRepository.pageRepository.getById(pageId) ?: return false
+        val book = bookId?.let { appRepository.bookRepository.getById(it) }
 
-            val pageIndex = book?.getPageIndex(pageId) ?: 0
-            val totalPages = book?.pageIds?.size ?: 1
+        val pageIndex = book?.getPageIndex(pageId) ?: 0
+        val totalPages = book?.pageIds?.size ?: 1
 
-            val backgroundTypeObj = BackgroundType.fromKey(page?.backgroundType ?: "native")
-            val bgPageNumber = when (backgroundTypeObj) {
-                is BackgroundType.Pdf -> backgroundTypeObj.page
-                is BackgroundType.AutoPdf -> {
-                    bookId?.let { appRepository.getPageNumber(it, pageId) } ?: 0
-                }
-
-                else -> 0
+        val backgroundTypeObj = BackgroundType.fromKey(page.backgroundType)
+        val bgPageNumber = when (backgroundTypeObj) {
+            is BackgroundType.Pdf -> backgroundTypeObj.page
+            is BackgroundType.AutoPdf -> {
+                bookId?.let { appRepository.getPageNumber(it, pageId) } ?: 0
             }
 
-            _toolbarState.update {
-                it.copy(
-                    notebookId = bookId,
-                    pageId = pageId,
-                    isBookActive = bookId != null,
-                    pageNumberInfo = if (bookId != null) "${pageIndex + 1}/$totalPages" else "1/1",
-                    currentPageNumber = pageIndex,
-                    backgroundType = page?.backgroundType ?: "native",
-                    backgroundPath = page?.background ?: "blank",
-                    backgroundPageNumber = bgPageNumber
+            else -> 0
+        }
+
+        _toolbarState.update {
+            it.copy(
+                notebookId = bookId,
+                pageId = pageId,
+                isBookActive = bookId != null,
+                pageNumberInfo = if (bookId != null) "${pageIndex + 1}/$totalPages" else "1/1",
+                currentPageNumber = pageIndex,
+                backgroundType = page.backgroundType,
+                backgroundPath = page.background,
+                backgroundPageNumber = bgPageNumber
+            )
+        }
+        return true
+    }
+
+    /**
+     * Attempts to repair potential inconsistencies in the notebook's data structure.
+     */
+    suspend fun fixNotebook(bookId: String?, pageId: String) {
+        if (bookId != null) {
+            log.i("Could not find page, Cleaning book")
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    text = "Could not find page, cleaning book", duration = 4000
                 )
-            }
+            )
+            appRepository.bookRepository.removePage(bookId, pageId)
         }
     }
 
@@ -489,8 +506,10 @@ class EditorViewModel @Inject constructor(
             appRepository.bookRepository.setOpenPageId(bookId!!, newPageId)
         }
         if (newPageId != currentPageId) {
+            // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
             loadBookData(bookId, newPageId)
+//            _toolbarState.update { it.copy(pageId = newPageId) }
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             sendUiEvent(EditorUiEvent.ShowSnackbar("Tried to change to same page!"))

@@ -320,8 +320,11 @@ object PageDataManager {
 
         // 3) Reconcile: if they disagree, warn and clear
         if (jobSnapshot.isNotNull() && dataLoaded != jobDone) {
-            log.e("Inconsistent state for page($pageId): dataLoaded=$dataLoaded, jobDone=$jobDone, job=$jobSnapshot")
-            showHint("Fixing inconsistent page state: $pageId")
+            SnackState.logAndShowError(
+                "PageDataManager.validatePageDataLoaded",
+                "Inconsistent state for page($pageId): dataLoaded=$dataLoaded," +
+                        " jobDone=$jobDone, job=$jobSnapshot, trying to fix."
+            )
             dataLoadingScope.launch {
                 // Cancel/remove any job for this page
                 jobLock.withLock {
@@ -707,12 +710,9 @@ object PageDataManager {
     fun removePage(pageId: String): Boolean {
         log.d("Removing page $pageId")
         if (pageId == currentPage) {
-            log.e("Removing current page!")
-            SnackState.globalSnackFlow.tryEmit(
-                SnackConf(
-                    text = "Cannot remove current page, there is a bug in code",
-                    duration = 3000
-                )
+            SnackState.logAndShowError(
+                "PageDataManager.removePage",
+                "Cannot remove current page, there is a bug in code",
             )
             return false
         }

@@ -11,6 +11,7 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.getFolderList
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +43,7 @@ class QuickNavViewModel(
     private val pageRepository = appRepository.pageRepository
     private val bookRepository = appRepository.bookRepository
     private val kv = appRepository.kvProxy
+    private val log = ShipBook.getLogger("EditorControlTower")
 
     private val _uiState = MutableStateFlow(QuickNavUiState())
     val uiState: StateFlow<QuickNavUiState> = _uiState.asStateFlow()
@@ -142,6 +144,7 @@ class QuickNavViewModel(
     }
 
     fun onScrubEnd(index: Int) {
+        log.e("onScrubEnd: $index")
         CanvasEventBus.restoreCanvas.tryEmit(Unit)
         val pageIds = _uiState.value.bookPageIds
         if (index in pageIds.indices) {
