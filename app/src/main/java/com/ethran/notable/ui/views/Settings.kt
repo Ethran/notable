@@ -120,10 +120,12 @@ fun SettingsContent(
     listOfGestures: List<GestureRowModel> = emptyList(),
     availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList()
 ) {
+    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(selectedTabInitial) }
     val tabs = listOf(
         stringResource(R.string.settings_tab_general_name),
         stringResource(R.string.settings_tab_gestures_name),
+        stringResource(R.string.settings_tab_sync_name),
         stringResource(R.string.settings_tab_debug_name)
     )
 
@@ -153,7 +155,8 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-                    2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
+                    2 -> SyncSettings(settings, onUpdateSettings, context)
+                    3 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
                 }
             }
 

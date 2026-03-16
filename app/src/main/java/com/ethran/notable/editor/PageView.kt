@@ -365,21 +365,30 @@ class PageView(
             try {
                 dbStrokes.create(strokes)
             } catch (_: SQLiteConstraintException) {
-                // There were some rare bugs when strokes weren't unique when inserting from history
-                // I'm not sure if it's still a problem, let's just show the message
                 logAndShowError(
                     "saveStrokesToPersistLayer",
                     "Attempted to create strokes that already exist"
                 )
                 dbStrokes.update(strokes)
             }
+            updateParentNotebookTimestamp()
         }
     }
 
     private fun saveImagesToPersistLayer(image: List<Image>) {
         coroutineScope.launch(Dispatchers.IO) {
             dbImages.create(image)
+            updateParentNotebookTimestamp()
         }
+    }
+
+    /**
+     * Update the parent notebook's updatedAt timestamp so sync knows it has changes.
+     */
+    private suspend fun updateParentNotebookTimestamp() {
+        val notebookId = pageFromDb?.notebookId ?: return
+        val notebook = appRepository.bookRepository.getById(notebookId) ?: return
+        appRepository.bookRepository.update(notebook)
     }
 
 
@@ -423,12 +432,14 @@ class PageView(
     private fun removeStrokesFromPersistLayer(strokeIds: List<String>) {
         coroutineScope.launch(Dispatchers.IO) {
             appRepository.strokeRepository.deleteAll(strokeIds)
+            updateParentNotebookTimestamp()
         }
     }
 
     private fun removeImagesFromPersistLayer(imageIds: List<String>) {
         coroutineScope.launch(Dispatchers.IO) {
             appRepository.imageRepository.deleteAll(imageIds)
+            updateParentNotebookTimestamp()
         }
     }
 

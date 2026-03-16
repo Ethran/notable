@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -63,6 +64,7 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
@@ -80,6 +82,7 @@ fun NotebookConfigDialog(
     val book by bookRepository.getByIdLive(bookId).observeAsState()
     val scope = rememberCoroutineScope()
     val snackManager = LocalSnackContext.current
+    val context = LocalContext.current
 
     if (book == null) return
 
@@ -141,6 +144,16 @@ fun NotebookConfigDialog(
                 }
                 showDeleteDialog = false
                 onClose()
+
+                // Auto-upload deletion to server (use standalone scope since composition is closing)
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        log.i("Uploading deletion for notebook: $bookId")
+                        SyncEngine(context).uploadDeletion(bookId)
+                    } catch (e: Exception) {
+                        log.e("Upload deletion failed: ${e.message}")
+                    }
+                }
             },
             onCancel = {
                 showDeleteDialog = false

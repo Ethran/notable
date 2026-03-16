@@ -73,6 +73,13 @@ fun GeneralSettings(
             })
 
         SettingToggleRow(
+            label = stringResource(R.string.rename_on_create),
+            value = settings.renameOnCreate,
+            onToggle = { isChecked ->
+                onSettingsChange(settings.copy(renameOnCreate = isChecked))
+            })
+
+        SettingToggleRow(
             label = stringResource(R.string.paginate_pdf),
             value = settings.paginatePdf,
             onToggle = { isChecked ->

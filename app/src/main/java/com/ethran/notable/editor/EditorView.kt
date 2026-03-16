@@ -21,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -33,6 +34,8 @@ import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
@@ -57,12 +60,8 @@ object EditorDestination : NavigationDestination {
     const val PAGE_ID_ARG = "pageId"
     const val BOOK_ID_ARG = "bookId"
 
-    // Unified route: editor/{pageId}?bookId={bookId}
     val routeWithArgs = "$route/{$PAGE_ID_ARG}?$BOOK_ID_ARG={$BOOK_ID_ARG}"
 
-    /**
-     * Helper to create the path. If bookId is null, it just won't be appended.
-     */
     fun createRoute(pageId: String, bookId: String? = null): String {
         return "$route/$pageId" + if (bookId != null) "?$BOOK_ID_ARG=$bookId" else ""
     }
@@ -151,7 +150,7 @@ fun EditorView(
         }
 
         val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState).apply { registerObservers() }
+            EditorControlTower(scope, page, history, editorState, context, appRepository).apply { registerObservers() }
         }
 
         // Collect UI Events from ViewModel (navigation and snackbars)
@@ -256,6 +255,20 @@ fun EditorView(
                     appRepository.bookRepository
                 )
                 page.disposeOldPage()
+
+                // Trigger sync on note close if enabled
+                val settings = GlobalAppSettings.current
+                if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose && bookId != null) {
+                    // Use a new coroutine scope since the composition scope is being disposed
+                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            SyncLogger.i("EditorSync", "Auto-syncing on editor close")
+                            SyncEngine(context).syncNotebook(bookId)
+                        } catch (e: Exception) {
+                            SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
+                        }
+                    }
+                }
             }
         }
 
