@@ -17,7 +17,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.imageBounds
 import com.ethran.notable.editor.utils.plus
@@ -35,7 +35,7 @@ private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
  * This function performs the following steps:
  * 1. Converts the URI of the image into a `Bitmap` object.
  * 2. Converts the `ImageBitmap` to a software-backed `Bitmap` for compatibility.
- * 3. Clears the value of `DrawCanvas.addImageByUri` to null.
+ * 3. Clears the value of `CanvasEventBus.addImageByUri` to null.
  * 4. Draws the specified bitmap onto the provided Canvas within a destination rectangle
  *    defined by the `Image` object coordinates (`x`, `y`) and its dimensions (`width`, `height`),
  *    adjusted by the `offset`.
@@ -55,7 +55,7 @@ fun drawImage(context: Context, canvas: Canvas, image: Image, offset: Offset) {
         val softwareBitmap =
             imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
 
-        DrawCanvas.addImageByUri.value = null
+        CanvasEventBus.addImageByUri.value = null
 
         val rectOnImage = Rect(0, 0, imageBitmap.width, imageBitmap.height)
         val rectOnCanvas =
@@ -137,7 +137,8 @@ fun drawOnCanvasFromPage(
 
     // Canvas is scaled, it will scale page area.
     canvas.withClip(canvasClipBounds) {
-        drawColor(Color.BLACK)
+        // for debugging:
+        drawColor(Color.WHITE)
 
         drawBg(page.context, this, backgroundType, background, page.scroll, zoomLevel, page)
         if (GlobalAppSettings.current.debugMode) {

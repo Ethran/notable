@@ -1,43 +1,28 @@
-package com.ethran.notable.editor.ui
+package com.ethran.notable.gestures
 
 import android.graphics.Rect
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.EditorControlTower
-import com.ethran.notable.editor.state.DOUBLE_TAP_MIN_MS
-import com.ethran.notable.editor.state.DOUBLE_TAP_TIMEOUT_MS
-import com.ethran.notable.editor.state.GestureMode
-import com.ethran.notable.editor.state.GestureState
-import com.ethran.notable.editor.state.HOLD_THRESHOLD_MS
-import com.ethran.notable.editor.state.PINCH_ZOOM_THRESHOLD
-import com.ethran.notable.editor.state.SWIPE_THRESHOLD
+import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.ui.SelectionVisualCues
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -50,11 +35,9 @@ private val log = ShipBook.getLogger("GestureReceiver")
 
 
 @Composable
-@ExperimentalComposeUiApi
 fun EditorGestureReceiver(
     controlTower: EditorControlTower,
 ) {
-
     val coroutineScope = rememberCoroutineScope()
     val appSettings = remember { GlobalAppSettings.current }
     var crossPosition by remember { mutableStateOf<IntOffset?>(null) }
@@ -62,34 +45,18 @@ fun EditorGestureReceiver(
     val view = LocalView.current
     Box(
         modifier = Modifier
-            // TODO: Change to // .pointerInteropFilter { ev -> ……}
-            // for now it consumes all gestures - even stylus one.
             .pointerInput(Unit) {
                 awaitEachGesture {
                     try {
                         // Detect initial touch
                         val down = awaitFirstDown()
 
-                        // Ignore non-touch input
-                        if (down.type == PointerType.Stylus) {
-                            log.i("Redirecting stylus input")
+                        // We should not get any stylus events
+                        require(
+                            down.type != PointerType.Stylus ||
+                                    down.type == PointerType.Eraser
+                        )
 
-                            // TODO: It's only temporary workaround.
-                            // Track all moves until the stylus is lifted
-                            do {
-                                val event = awaitPointerEvent()
-                                val stylus =
-                                    event.changes.firstOrNull { it.type == PointerType.Stylus }
-                                stylus?.let {
-                                    coroutineScope.launch {
-                                        DrawCanvas.eraserTouchPoint.emit(it.position)
-                                    }
-                                    it.consume()
-                                }
-                            } while (stylus?.pressed == true)
-
-                            return@awaitEachGesture
-                        }
 
                         // testing if it will fixed exception:
                         // kotlinx.coroutines.CompletionHandlerException: Exception in resume
@@ -210,7 +177,7 @@ fun EditorGestureReceiver(
                                 log.d("Zoom or drag -- final redraw")
                                 coroutineScope.launch {
                                     // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
-                                    DrawCanvas.forceUpdate.emit(null)
+                                    CanvasEventBus.forceUpdate.emit(null)
                                 }
                                 gestureState.gestureMode =
                                     GestureMode.Normal // return screen updates to normal.
@@ -312,67 +279,12 @@ fun EditorGestureReceiver(
                     }
                 }
             }
-
             .fillMaxWidth()
             .fillMaxHeight()
-    ) {
-        val density = LocalDensity.current
-        // Draw cross where finger is touching
-        DrawCross(crossPosition, density)
-        // Draw the rectangle while dragging
-        DrawRectangle(rectangleBounds, density)
-    }
+    )
+    SelectionVisualCues(crossPosition, rectangleBounds)
 }
 
-@Composable
-private fun DrawRectangle(rectangleBounds: Rect?, density: Density) {
-    rectangleBounds?.let { bounds ->
-        // Draw the rectangle
-        Box(
-            Modifier
-                .offset { IntOffset(bounds.left, bounds.top) }
-                .size(
-                    width = with(density) { (bounds.right - bounds.left).toDp() },
-                    height = with(density) { (bounds.bottom - bounds.top).toDp() }
-                )
-                // Is there rendering speed difference between colors?
-                .background(Color(0x55000000))
-                .border(1.dp, Color.Black)
-        )
-    }
-
-}
-
-@Composable
-private fun DrawCross(crossPosition: IntOffset?, density: Density) {
-
-    // Draw cross where finger is touching
-    crossPosition?.let { pos ->
-        val crossSizePx = with(density) { 100.dp.toPx() }
-        Box(
-            Modifier
-                .offset {
-                    IntOffset(
-                        pos.x - (crossSizePx / 2).toInt(),
-                        pos.y
-                    )
-                } // Horizontal bar centered
-                .size(width = 100.dp, height = 2.dp)
-                .background(Color.Black)
-        )
-        Box(
-            Modifier
-                .offset {
-                    IntOffset(
-                        pos.x,
-                        pos.y - (crossSizePx / 2).toInt()
-                    )
-                } // Vertical bar centered
-                .size(width = 2.dp, height = 100.dp)
-                .background(Color.Black)
-        )
-    }
-}
 
 private fun resolveGesture(
     settings: AppSettings?,
@@ -400,7 +312,7 @@ private fun resolveGesture(
             log.i("select")
             scope.launch {
 //                log.w( "rect in screen coord: $rectangle")
-                DrawCanvas.rectangleToSelectByGesture.emit(rectangle)
+                CanvasEventBus.rectangleToSelectByGesture.emit(rectangle)
             }
         }
     }

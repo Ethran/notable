@@ -15,16 +15,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -35,26 +35,39 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.ethran.notable.TAG
+import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.FolderRepository
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.noRippleClickable
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.launch
 
+private val log = ShipBook.getLogger("FolderConfig")
 
-@ExperimentalComposeUiApi
 @Composable
-fun FolderConfigDialog(folderId: String, onClose: () -> Unit) {
-    val folderRepository = FolderRepository(LocalContext.current)
-    val folder = folderRepository.get(folderId)
+fun FolderConfigDialog(folderRepository: FolderRepository,
+                       folderId: String,
+                       onClose: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var folder by remember { mutableStateOf<Folder?>(null) }
+    var folderTitle by remember { mutableStateOf("") }
 
-    var folderTitle by remember {
-        mutableStateOf(folder.title)
+    LaunchedEffect(folderId) {
+        val f = folderRepository.get(folderId)
+        if (f == null) {
+            logAndShowError("FolderConfigDialog", "Folder not found")
+            onClose()
+        } else {
+            folder = f
+            folderTitle = f.title
+        }
     }
 
+    if (folder == null) return
 
     Dialog(
         onDismissRequest = {
-            Log.i(TAG, "Closing Directory Dialog - upstream")
+            log.i("Closing Directory Dialog - upstream")
             onClose()
         }
     ) {
@@ -109,8 +122,12 @@ fun FolderConfigDialog(folderId: String, onClose: () -> Unit) {
                             .padding(10.dp, 0.dp)
                             .onFocusChanged { focusState ->
                                 if (!focusState.isFocused) {
-                                    val updatedFolder = folder.copy(title = folderTitle)
-                                    folderRepository.update(updatedFolder)
+                                    val currentFolder = folder
+                                    if (currentFolder != null && currentFolder.title != folderTitle) {
+                                        scope.launch {
+                                            folderRepository.update(currentFolder.copy(title = folderTitle))
+                                        }
+                                    }
                                 }
                             }
 
@@ -135,8 +152,10 @@ fun FolderConfigDialog(folderId: String, onClose: () -> Unit) {
                     text = "Delete Folder",
                     textAlign = TextAlign.Center,
                     modifier = Modifier.noRippleClickable {
-                        folderRepository.delete(folderId)
-                        onClose()
+                        scope.launch {
+                            folderRepository.delete(folderId)
+                            onClose()
+                        }
                     })
             }
         }

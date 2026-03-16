@@ -1,8 +1,6 @@
 package com.ethran.notable.editor
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -10,26 +8,32 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.ui.EditorGestureReceiver
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
-import com.ethran.notable.editor.ui.toolbar.Toolbar
+import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
+import com.ethran.notable.gestures.EditorGestureReceiver
+import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.exportToLinkedFile
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.LocalSnackContext
@@ -37,79 +41,219 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
-import io.shipbook.shipbooksdk.Log
+import com.ethran.notable.ui.views.BugReportDestination
+import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.PagesDestination
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private val log = ShipBook.getLogger("EditorView")
+
+object EditorDestination : NavigationDestination {
+    override val route = "editor"
+
+    const val PAGE_ID_ARG = "pageId"
+    const val BOOK_ID_ARG = "bookId"
+
+    val routeWithArgs = "$route/{$PAGE_ID_ARG}?$BOOK_ID_ARG={$BOOK_ID_ARG}"
+
+    fun createRoute(pageId: String, bookId: String? = null): String {
+        return "$route/$pageId" + if (bookId != null) "?$BOOK_ID_ARG=$bookId" else ""
+    }
+}
 
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-@ExperimentalFoundationApi
 fun EditorView(
-    navController: NavController, bookId: String?, pageId: String, onPageChange: (String) -> Unit
+    editorSettingCacheManager: EditorSettingCacheManager,
+    exportEngine: ExportEngine,
+    navController: NavController,
+    appRepository: AppRepository,
+    bookId: String?,
+    pageId: String,
+    isQuickNavOpen: Boolean,
+    onPageChange: (String) -> Unit,
+    viewModel: EditorViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val snackManager = LocalSnackContext.current
     val scope = rememberCoroutineScope()
-    val appRepository = remember { AppRepository(context) }
 
-    // control if we do have a page
-    if (appRepository.pageRepository.getById(pageId) == null) {
-        if (bookId != null) {
-            // clean the book
-            Log.i(TAG, "Could not find page, Cleaning book")
-            SnackState.globalSnackFlow.tryEmit(
-                SnackConf(
-                    text = "Could not find page, cleaning book",
-                    duration = 4000
-                )
-            )
-            appRepository.bookRepository.removePage(bookId, pageId)
+    var pageExists by remember(pageId) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(pageId) {
+        viewModel.loadBookData(bookId, pageId)
+        val exists = withContext(Dispatchers.IO) {
+            appRepository.pageRepository.getById(pageId) != null
         }
-        navController.navigate("library")
-        return
+        pageExists = exists
+
+        if (!exists) {
+            // TODO: check if it is correct, and remove exeption throwing
+            throw Exception("Page does not exist")
+            if (bookId != null) {
+                // clean the book
+                log.i("Could not find page, Cleaning book")
+                SnackState.globalSnackFlow.tryEmit(
+                    SnackConf(
+                        text = "Could not find page, cleaning book", duration = 4000
+                    )
+                )
+                scope.launch(Dispatchers.IO) {
+                    appRepository.bookRepository.removePage(bookId, pageId)
+                }
+            }
+            navController.navigate(LibraryDestination.route)
+        }
     }
+
+    // Sync isQuickNavOpen to ViewModel
+    LaunchedEffect(isQuickNavOpen) {
+        viewModel.onToolbarAction(ToolbarAction.UpdateQuickNavOpen(isQuickNavOpen))
+    }
+
+    if (pageExists == null) return
 
     BoxWithConstraints {
         val height = convertDpToPixel(this.maxHeight, context).toInt()
         val width = convertDpToPixel(this.maxWidth, context).toInt()
 
-
         val page = remember {
             PageView(
                 context = context,
                 coroutineScope = scope,
+                appRepository = appRepository,
                 currentPageId = pageId,
                 viewWidth = width,
                 viewHeight = height,
-                snackManager = snackManager
+                snackManager = snackManager,
             )
         }
-
-        val editorState =
-            remember {
-                EditorState(
-                    bookId = bookId,
-                    pageId = pageId,
-                    pageView = page,
-                    appRepository,
-                    onPageChange
-                )
-            }
 
         val history = remember {
             History(page)
         }
-        val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState, context).apply { registerObservers() }
+
+        // Create EditorState wrapper for backward compatibility
+        val editorState = remember(viewModel, page) {
+            EditorState(viewModel)
         }
 
+        // Initialize ViewModel with persisted settings on first composition
+        LaunchedEffect(Unit) {
+            viewModel.initFromPersistedSettings(editorSettingCacheManager.getEditorSettings())
+            viewModel.updateDrawingState()
+        }
+
+        val editorControlTower = remember {
+            EditorControlTower(scope, page, history, editorState, context, appRepository).apply { registerObservers() }
+        }
+
+        // Collect UI Events from ViewModel (navigation and snackbars)
+        LaunchedEffect(Unit) {
+            viewModel.uiEvents.collect { event ->
+                when (event) {
+                    is EditorUiEvent.NavigateToLibrary -> {
+                        navController.navigate(LibraryDestination.createRoute(event.folderId))
+                    }
+
+                    is EditorUiEvent.NavigateToPages -> {
+                        navController.navigate(PagesDestination.createRoute(event.bookId))
+                    }
+
+                    EditorUiEvent.NavigateToBugReport -> {
+                        navController.navigate(BugReportDestination.route)
+                    }
+
+                    is EditorUiEvent.ShowSnackbar -> {
+                        snackManager.displaySnack(SnackConf(text = event.message, duration = 2000))
+                    }
+                }
+            }
+        }
+
+        // Collect Canvas Commands from ViewModel
+        LaunchedEffect(Unit) {
+            viewModel.canvasCommands.collect { command ->
+                when (command) {
+                    CanvasCommand.Undo -> editorControlTower.undo()
+                    CanvasCommand.Redo -> editorControlTower.redo()
+                    CanvasCommand.Paste -> editorControlTower.pasteFromClipboard()
+                    CanvasCommand.ResetView -> editorControlTower.resetZoomAndScroll()
+                    CanvasCommand.ClearAllStrokes -> {
+                        CanvasEventBus.clearPageSignal.emit(Unit)
+                        snackManager.displaySnack(SnackConf(text = "Cleared all strokes"))
+                    }
+
+                    CanvasCommand.RefreshCanvas -> {
+                        CanvasEventBus.reloadFromDb.emit(Unit)
+                    }
+
+                    is CanvasCommand.CopyImageToCanvas -> {
+                        CanvasEventBus.addImageByUri.value = command.uri
+                    }
+                }
+            }
+        }
+
+        // Handle Canvas signals in UI
+        LaunchedEffect(Unit) {
+            CanvasEventBus.closeMenusSignal.collect {
+                log.d("Closing all menus")
+                viewModel.onToolbarAction(ToolbarAction.CloseAllMenus)
+            }
+        }
+
+        // Handle focus changes from Canvas
+        LaunchedEffect(Unit) {
+            CanvasEventBus.onFocusChange.collect { hasFocus ->
+                log.d("Canvas has focus: $hasFocus")
+                viewModel.onFocusChanged(hasFocus)
+            }
+        }
+
+        // Collect toolbar state and sync EditorState (keeps snapshotFlow observers in canvas alive)
+        val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
+        LaunchedEffect(toolbarState) {
+            editorState.syncFrom(toolbarState)
+        }
+
+        // Observe pageId changes from ViewModel state for navigation
+        LaunchedEffect(viewModel) {
+            snapshotFlow { toolbarState.pageId }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .drop(1) // Skip initial emission from loadBookData
+                .collect { newPageId ->
+                    onPageChange(newPageId)
+                }
+        }
+
+        // Sync PageView state to ViewModel for Toolbar rendering
+        val zoomLevel by page.zoomLevel.collectAsStateWithLifecycle()
+        val selectionActive = viewModel.selectionState.isNonEmpty()
+        LaunchedEffect(
+            zoomLevel,
+            selectionActive
+        ) {
+            log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
+            viewModel.setShowResetView(zoomLevel != 1.0f)
+            viewModel.setSelectionActive(selectionActive)
+        }
 
         DisposableEffect(Unit) {
             onDispose {
                 // finish selection operation
-                editorState.selectionState.applySelectionDisplace(page)
-                exportToLinkedFile(context, bookId, appRepository.bookRepository)
+                viewModel.selectionState.applySelectionDisplace(page)
+                if (bookId != null) exportToLinkedFile(
+                    exportEngine,
+                    bookId,
+                    appRepository.bookRepository
+                )
                 page.disposeOldPage()
 
                 // Trigger sync on note close if enabled
@@ -128,37 +272,34 @@ fun EditorView(
             }
         }
 
-        // TODO put in editorSetting class
+        // Persist editor settings when they change
         LaunchedEffect(
-            editorState.isToolbarOpen,
-            editorState.pen,
-            editorState.penSettings,
-            editorState.mode,
-            editorState.eraser
+            toolbarState.isToolbarOpen,
+            toolbarState.pen,
+            toolbarState.penSettings,
+            toolbarState.mode,
+            toolbarState.eraser
         ) {
-            Log.i(TAG, "EditorView: saving")
-            EditorSettingCacheManager.setEditorSettings(
-                context,
+            log.i("EditorView: saving editor settings")
+            editorSettingCacheManager.setEditorSettings(
                 EditorSettingCacheManager.EditorSettings(
-                    isToolbarOpen = editorState.isToolbarOpen,
-                    mode = editorState.mode,
-                    pen = editorState.pen,
-                    eraser = editorState.eraser,
-                    penSettings = editorState.penSettings
+                    isToolbarOpen = toolbarState.isToolbarOpen,
+                    mode = toolbarState.mode,
+                    pen = toolbarState.pen,
+                    eraser = toolbarState.eraser,
+                    penSettings = toolbarState.penSettings
                 )
             )
         }
 
 
-
         InkaTheme {
-            EditorSurface(
-                state = editorState, page = page, history = history
-            )
             EditorGestureReceiver(controlTower = editorControlTower)
+            EditorSurface(
+                appRepository = appRepository, state = editorState, page = page, history = history
+            )
             SelectedBitmap(
-                context = context,
-                controlTower = editorControlTower
+                context = context, controlTower = editorControlTower
             )
             Row(
                 modifier = Modifier
@@ -166,36 +307,11 @@ fun EditorView(
                     .fillMaxHeight()
             ) {
                 Spacer(modifier = Modifier.weight(1f))
-                ScrollIndicator(state = editorState)
+                ScrollIndicator(viewModel = viewModel, page = page)
             }
-            PositionedToolbar(navController, editorState, editorControlTower)
-            HorizontalScrollIndicator(state = editorState)
-        }
-    }
-}
-
-
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-fun PositionedToolbar(
-    navController: NavController, editorState: EditorState, editorControlTower: EditorControlTower
-) {
-    val position = GlobalAppSettings.current.toolbarPosition
-
-    when (position) {
-        AppSettings.Position.Top -> {
-            Toolbar(navController, editorState, editorControlTower)
-        }
-
-        AppSettings.Position.Bottom -> {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                Toolbar(navController, editorState, editorControlTower)
-            }
+            PositionedToolbar(
+                viewModel = viewModel, onDrawingStateCheck = { viewModel.updateDrawingState() })
+            HorizontalScrollIndicator(viewModel = viewModel, page = page)
         }
     }
 }

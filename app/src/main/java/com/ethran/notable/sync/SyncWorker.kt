@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.db.KvProxy
+import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
 
 /**
@@ -27,7 +28,10 @@ class SyncWorker(
             return Result.retry()
         }
 
-        val kvProxy = KvProxy(applicationContext)
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext, SyncEngine.SyncEngineEntryPoint::class.java
+        )
+        val kvProxy = entryPoint.kvProxy()
         val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
         if (settings?.syncSettings?.wifiOnly == true && !connectivityChecker.isUnmeteredConnected()) {
             Log.i(TAG, "WiFi-only sync enabled but not on unmetered network, skipping")

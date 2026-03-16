@@ -29,7 +29,6 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,22 +41,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
-import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.db.newPage
-import com.ethran.notable.data.deletePage
-import com.ethran.notable.editor.ui.toolbar.Topbar
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ethran.notable.editor.ui.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.editor.utils.setAnimationMode
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.FastScroller
 import com.ethran.notable.ui.components.PageCard
 import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
+import com.ethran.notable.ui.viewmodels.PagesUiState
+import com.ethran.notable.ui.viewmodels.PagesViewModel
 import com.ethran.notable.utils.InsertionSlot
 import com.ethran.notable.utils.ReorderableGridItem
 import com.ethran.notable.utils.computeInsertionSlotRect
@@ -66,17 +66,55 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 
+object PagesDestination : NavigationDestination {
+    override val route = "books"
+    const val BOOK_ID_ARG = "bookId"
+
+    // Route: books/{bookId}/pages
+    val routeWithArgs = "$route/{$BOOK_ID_ARG}/pages"
+
+    fun createRoute(bookId: String) = "$route/$bookId/pages"
+}
+
+
+
+@Composable
+fun PagesView(
+    bookId: String,
+    goToLibrary: (String?) -> Unit,
+    goToEditor: (String, String) -> Unit,
+    viewModel: PagesViewModel = hiltViewModel()
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(bookId) {
+        viewModel.loadBook(bookId)
+    }
+
+    PagesContent(
+        state = state,
+        onBack = goToLibrary,
+        onOpenPage = { pageId -> goToEditor(pageId, bookId) },
+        onReorder = { id, to -> viewModel.reorderPage(bookId, id, to) },
+        onDeletePage = viewModel::deletePage,
+        onDuplicatePage = viewModel::duplicatePage,
+        onAddPageAfter = { viewModel.newPageInBook(bookId, it) }
+    )
+}
+
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PagesView(navController: NavController, bookId: String) {
-    val appRepository = AppRepository(LocalContext.current)
-    val context = LocalContext.current
-    val book by appRepository.bookRepository.getByIdLive(bookId).observeAsState()
-    if (book == null) return
-
-    val pageIds = book!!.pageIds
-    val openPageId = book?.openPageId
-    val bookFolder = book?.parentFolderId
+fun PagesContent(
+    state: PagesUiState,
+    onBack: (String?) -> Unit,
+    onOpenPage: (String) -> Unit,
+    onReorder: (String, Int) -> Unit,
+    onDeletePage: (String) -> Unit,
+    onDuplicatePage: (String) -> Unit,
+    onAddPageAfter: (Int) -> Unit
+) {
+    if (state.isLoading) return
 
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
@@ -88,13 +126,15 @@ fun PagesView(navController: NavController, bookId: String) {
     val density = LocalDensity.current
 
     // Initial focus on current page
-    LaunchedEffect(openPageId, pageIds) {
-        val index = pageIds.indexOf(openPageId)
+    LaunchedEffect(state.openPageId, state.pageIds) {
+        val index = state.pageIds.indexOf(state.openPageId)
         if (index >= 0 && !reorderState.wareReordered) {
             Log.d("PagesView", "Initial focus on page $index")
             gridState.scrollToItem(index)
         }
     }
+
+
     var pendingDeletePageId by rememberSaveable { mutableStateOf<String?>(null) }
 
     pendingDeletePageId?.let { id ->
@@ -102,7 +142,7 @@ fun PagesView(navController: NavController, bookId: String) {
             title = "Confirm Deletion",
             message = "Are you sure you want to delete this page?",
             onConfirm = {
-                deletePage(context, id)
+                onDeletePage(id)
                 pendingDeletePageId = null
             },
             onCancel = {
@@ -119,19 +159,16 @@ fun PagesView(navController: NavController, bookId: String) {
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BreadCrumb(folderId = bookFolder) {
-                    navController.navigate("library" + if (it == null) "" else "?folderId=$it")
-                }
+                BreadCrumb(folders = state.folderList) { onBack(it) }
                 Spacer(modifier = Modifier.weight(1f))
 
                 // --- 2. Add EditModeSwitch and control visibility of Jump pill ---
                 EditModeSwitch(isEditMode = isEditMode, onToggle = { isEditMode = it })
                 Spacer(modifier = Modifier.width(10.dp))
 
-                val openId = openPageId
-                if (openId != null) {
+                if (state.openPageId != null) {
                     JumpToCurrentPill {
-                        val idx = pageIds.indexOf(openId)
+                        val idx = state.pageIds.indexOf(state.openPageId)
                         if (idx >= 0) scope.launch { gridState.scrollToItem(idx) }
                     }
                 }
@@ -163,10 +200,10 @@ fun PagesView(navController: NavController, bookId: String) {
                     .autoEInkAnimationOnScroll()
             ) {
                 itemsIndexed(
-                    items = pageIds,
+                    items = state.pageIds,
                     key = { _, id -> id }
                 ) { pageIndex, pageId ->
-                    val isOpen = pageId == openPageId
+                    val isOpen = pageId == state.openPageId
 
                     ReorderableGridItem(
                         itemId = pageId,
@@ -175,10 +212,9 @@ fun PagesView(navController: NavController, bookId: String) {
                         state = reorderState,
                         // --- 3. Disable reordering when not in edit mode ---
                         isEnabled = isEditMode,
-                        onDrop = { _, to, id ->
-                            appRepository.bookRepository.changePageIndex(bookId, id, to)
-                        }
-                    ) { touchMod ->
+                        onDrop = { _, to, droppedId ->
+                            onReorder(droppedId, to)
+                        }) { touchMod ->
                         PageCard(
                             pageId = pageId,
                             pageIndex = pageIndex,
@@ -187,19 +223,13 @@ fun PagesView(navController: NavController, bookId: String) {
                             isEditMode = isEditMode,
                             isReorderDragging = reorderState.draggingId == null,
                             touchModifier = touchMod,
-                            onOpen = { navController.navigate("books/$bookId/pages/$pageId") },
+                            onOpen = {
+                                onOpenPage(pageId)
+                            },
                             onDelete = { pendingDeletePageId = pageId },
-                            onDuplicate = { appRepository.duplicatePage(pageId) },
+                            onDuplicate = { onDuplicatePage(pageId) },
                             onAddAfter = {
-                                val bookNow =
-                                    appRepository.bookRepository.getById(bookId) ?: return@PageCard
-                                val newPg = bookNow.newPage()
-                                appRepository.pageRepository.create(newPg)
-                                appRepository.bookRepository.addPage(
-                                    bookId,
-                                    newPg.id,
-                                    pageIndex + 1
-                                )
+                                onAddPageAfter(pageIndex + 1)
                             }
                         )
                     }
@@ -241,7 +271,7 @@ fun PagesView(navController: NavController, bookId: String) {
                     val sizeOfDragging = 0.5f
                     val wDp = with(density) { sizePx.width.toDp() } * sizeOfDragging
                     val hDp = with(density) { sizePx.height.toDp() } * sizeOfDragging
-                    val isDraggingPageOpen = draggingId == openPageId
+                    val isDraggingPageOpen = draggingId == state.openPageId
 
                     val localStartX =
                         originRoot.x - reorderState.containerOriginInRoot.x + reorderState.dragDelta.x
@@ -281,11 +311,11 @@ fun PagesView(navController: NavController, bookId: String) {
                 }
             }
 
-            if (pageIds.size > 30) {
+            if (state.pageIds.size > 30) {
                 FastScroller(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     state = gridState,
-                    itemCount = pageIds.size,
+                    itemCount = state.pageIds.size,
                     getVisibleIndex = { gridState.firstVisibleItemIndex },
                     onDragStart = { setAnimationMode(true) },
                     onDragEnd = { setAnimationMode(false) }
@@ -342,3 +372,19 @@ private fun EditModeSwitch(
         )
     }
 }
+
+
+@Preview(showBackground = true)
+@Composable
+fun PagesPreview() {
+    PagesContent(
+        state = PagesUiState(
+            pageIds = listOf("p1", "p2", "p3"),
+            openPageId = "p2",
+            isLoading = false
+        ),
+        onBack = {}, onOpenPage = {}, onReorder = { _, _ -> },
+        onDeletePage = {}, onDuplicatePage = {}, onAddPageAfter = {}
+    )
+}
+

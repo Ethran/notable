@@ -12,12 +12,12 @@ import android.net.Uri
 import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
-import com.ethran.notable.TAG
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
+private val log = ShipBook.getLogger("share")
 
 fun shareBitmap(context: Context, bitmap: Bitmap) {
     val bmpWithBackground = createBitmap(bitmap.width, bitmap.height)
@@ -26,14 +26,14 @@ fun shareBitmap(context: Context, bitmap: Bitmap) {
     canvas.drawBitmap(bitmap, 0f, 0f, null)
 
     val cachePath = File(context.cacheDir, "images")
-    Log.i(TAG, cachePath.toString())
+    log.i(cachePath.toString())
     cachePath.mkdirs()
     try {
         val stream = FileOutputStream(File(cachePath, "share.png"))
         bmpWithBackground.compress(Bitmap.CompressFormat.PNG, 100, stream)
         stream.close()
     } catch (e: IOException) {
-        Log.e(TAG, "Failed to save shared image: ${e.message}", e)
+        log.e("Failed to save shared image: ${e.message}", e)
         return
     }
 
@@ -84,7 +84,7 @@ private fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
     canvas.drawBitmap(bitmap, 0f, 0f, null)
 
     val cachePath = File(context.cacheDir, "images")
-    Log.i(TAG, cachePath.toString())
+    log.i(cachePath.toString())
     cachePath.mkdirs()
     try {
         val stream =
@@ -96,7 +96,7 @@ private fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
         )
         stream.close()
     } catch (e: IOException) {
-        Log.e(TAG, "Failed to save PDF preview image: ${e.message}", e)
+        log.e("Failed to save PDF preview image: ${e.message}", e)
     }
 
     val bitmapFile = File(cachePath, "share.png")

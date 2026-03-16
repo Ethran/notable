@@ -7,17 +7,19 @@ import android.graphics.RectF
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
-import com.ethran.notable.TAG
+import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.DrawCanvas
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.PlacementMode
-import io.shipbook.shipbooksdk.Log
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -30,6 +32,7 @@ enum class SelectPointPosition {
     CENTER
 }
 
+private val log = ShipBook.getLogger("Select")
 
 fun selectStrokesFromPath(strokes: List<Stroke>, path: Path): List<Stroke> {
     val bounds = RectF()
@@ -42,7 +45,14 @@ fun selectStrokesFromPath(strokes: List<Stroke>, path: Path): List<Stroke> {
 
     return strokes.filter {
         strokeBounds(it).intersect(bounds)
-    }.filter { it.points.any { region.contains(it.x.toInt(), (it.y - bounds.top).toInt()) } }
+    }.filter {
+        it.points.any { point ->
+            region.contains(
+                point.x.toInt(),
+                (point.y - bounds.top).toInt()
+            )
+        }
+    }
 }
 
 fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
@@ -58,7 +68,7 @@ fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
         imageBounds(it).intersect(bounds)
     }.filter {
         // include image if all its corners are within region
-        imagePoints(it).all { region.contains(it.x, (it.y - bounds.top).toInt()) }
+        imagePoints(it).all { point -> region.contains(point.x, (point.y - bounds.top).toInt()) }
     }
 }
 
@@ -71,6 +81,7 @@ fun selectImagesAndStrokes(
     imagesToSelect: List<Image>,
     strokesToSelect: List<Stroke>
 ) {
+    log.v("selectImagesAndStrokes: images=${imagesToSelect.size}, strokes=${strokesToSelect.size}")
     //handle selection:
     val pageBounds = Rect()
 
@@ -125,7 +136,7 @@ fun selectImagesAndStrokes(
         ignoredStrokeIds = strokesToSelect.map { it.id })
 
     scope.launch {
-        DrawCanvas.refreshUi.emit(Unit)
+        CanvasEventBus.refreshUi.emit(Unit)
         editorState.isDrawing = false
     }
 }
@@ -204,7 +215,7 @@ fun handleSelect(
         if (state.firstPageCut == null) {
             // this is the first page cut
             state.firstPageCut = completePoints
-            Log.i(TAG, "Registered first curt")
+            log.i("Registered first cut")
         } else {
             // this is the second page cut, we can also select the strokes
             // first lets have the cuts in the right order
@@ -236,4 +247,37 @@ fun handleSelect(
 
         // TODO collocate with control tower ?
     }
+}
+
+
+/**
+ * handles selection, and decide if we should exit the animation mode
+ */
+suspend fun selectRectangle(page: PageView, coroutineScope: CoroutineScope, state: EditorState, rectToSelect: Rect) {
+    val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
+
+    val imagesToSelect =
+        PageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)
+    val strokesToSelect =
+        PageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
+    if (imagesToSelect != null && strokesToSelect != null) {
+        CanvasEventBus.rectangleToSelectByGesture.value = null
+        if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
+            selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
+        } else {
+            setAnimationMode(false)
+            SnackState.globalSnackFlow.emit(
+                SnackConf(
+                    text = "There isn't anything.",
+                    duration = 3000,
+                )
+            )
+        }
+    } else SnackState.globalSnackFlow.emit(
+        SnackConf(
+            text = "Page is empty!",
+            duration = 3000,
+        )
+    )
+
 }

@@ -10,6 +10,10 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.ensureImagesFolder
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,8 +33,18 @@ private val SLog = SyncLogger
  */
 class SyncEngine(private val context: Context) {
 
-    private val appRepository = AppRepository(context)
-    private val kvProxy = KvProxy(context)
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface SyncEngineEntryPoint {
+        fun appRepository(): AppRepository
+        fun kvProxy(): KvProxy
+    }
+
+    private val entryPoint = EntryPointAccessors.fromApplication(
+        context.applicationContext, SyncEngineEntryPoint::class.java
+    )
+    private val appRepository = entryPoint.appRepository()
+    private val kvProxy = entryPoint.kvProxy()
     private val credentialManager = CredentialManager(context)
     private val folderSerializer = FolderSerializer
     private val notebookSerializer = NotebookSerializer(context)
@@ -206,7 +220,7 @@ class SyncEngine(private val context: Context) {
      * the public [syncNotebook] entry point and [syncExistingNotebooks] (which
      * already runs inside the full-sync mutex context).
      */
-    private fun syncNotebookImpl(notebookId: String): SyncResult {
+    private suspend fun syncNotebookImpl(notebookId: String): SyncResult {
         return try {
             SLog.i(TAG, "Syncing notebook: $notebookId")
 
@@ -368,7 +382,7 @@ class SyncEngine(private val context: Context) {
      * deferred until ETag (If-Match) support is added, at which point server-enforced
      * atomic writes will make this robust.
      */
-    private fun syncFolders(webdavClient: WebDAVClient) {
+    private suspend fun syncFolders(webdavClient: WebDAVClient) {
         SLog.i(TAG, "Syncing folders...")
 
         try {
@@ -425,7 +439,7 @@ class SyncEngine(private val context: Context) {
      *
      * @return Set of tombstoned notebook IDs (used to filter discovery in [downloadNewNotebooks])
      */
-    private fun applyRemoteDeletions(webdavClient: WebDAVClient): Set<String> {
+    private suspend fun applyRemoteDeletions(webdavClient: WebDAVClient): Set<String> {
         SLog.i(TAG, "Applying remote deletions...")
 
         val tombstonesPath = SyncPaths.tombstonesDir()
@@ -519,7 +533,7 @@ class SyncEngine(private val context: Context) {
     /**
      * Upload a notebook to the WebDAV server.
      */
-    private fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
+    private suspend fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
         val notebookId = notebook.id
         SLog.i(TAG, "Uploading: ${notebook.title} (${notebook.pageIds.size} pages)")
 
@@ -548,7 +562,7 @@ class SyncEngine(private val context: Context) {
     /**
      * Upload a single page with its strokes and images.
      */
-    private fun uploadPage(page: Page, notebookId: String, webdavClient: WebDAVClient) {
+    private suspend fun uploadPage(page: Page, notebookId: String, webdavClient: WebDAVClient) {
         val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(page.id)
         val pageWithImages = appRepository.pageRepository.getWithImageById(page.id)
 
@@ -594,7 +608,7 @@ class SyncEngine(private val context: Context) {
     /**
      * Download a notebook from the WebDAV server.
      */
-    private fun downloadNotebook(notebookId: String, webdavClient: WebDAVClient) {
+    private suspend fun downloadNotebook(notebookId: String, webdavClient: WebDAVClient) {
         SLog.i(TAG, "Downloading notebook ID: $notebookId")
 
         val manifestJson = webdavClient.getFile(SyncPaths.manifestFile(notebookId)).decodeToString()
@@ -623,7 +637,7 @@ class SyncEngine(private val context: Context) {
     /**
      * Download a single page with its strokes and images.
      */
-    private fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
+    private suspend fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
         val pageJson = webdavClient.getFile(SyncPaths.pageFile(notebookId, pageId)).decodeToString()
         val (page, strokes, images) = notebookSerializer.deserializePage(pageJson)
 
@@ -848,7 +862,7 @@ class SyncEngine(private val context: Context) {
      * Initialize sync client by getting settings and credentials.
      * @return Pair of (AppSettings, WebDAVClient) or null if initialization fails
      */
-    private fun initializeSyncClient(): Pair<AppSettings, WebDAVClient>? {
+    private suspend fun initializeSyncClient(): Pair<AppSettings, WebDAVClient>? {
         val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
             ?: return null
 
@@ -915,7 +929,7 @@ class SyncEngine(private val context: Context) {
      * Sync all existing local notebooks.
      * @return Set of notebook IDs that existed before any new downloads
      */
-    private fun syncExistingNotebooks(): Set<String> {
+    private suspend fun syncExistingNotebooks(): Set<String> {
         val localNotebooks = appRepository.bookRepository.getAll()
         val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
         SLog.i(TAG, "Found ${localNotebooks.size} local notebooks")
@@ -936,7 +950,7 @@ class SyncEngine(private val context: Context) {
      * @param tombstonedIds Notebook IDs that have tombstones — skip these, they were intentionally deleted
      * @return Number of notebooks downloaded
      */
-    private fun downloadNewNotebooks(
+    private suspend fun downloadNewNotebooks(
         webdavClient: WebDAVClient,
         tombstonedIds: Set<String>,
         settings: AppSettings,
@@ -976,7 +990,7 @@ class SyncEngine(private val context: Context) {
     /**
      * Update the list of synced notebook IDs in settings.
      */
-    private fun updateSyncedNotebookIds(settings: AppSettings) {
+    private suspend fun updateSyncedNotebookIds(settings: AppSettings) {
         val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
         kvProxy.setAppSettings(
             settings.copy(

@@ -60,6 +60,7 @@ fun ToolbarButton(
                     tint = if (isSelected) Color.White else Color.Black
                 )
             }
+
             text != null -> {
                 Text(
                     text, fontSize = 20.sp, color = if (isSelected) Color.White else Color.Black

@@ -41,7 +41,8 @@ import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.datastore.SyncSettings
-import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.ui.components.SettingToggleRow
+import com.ethran.notable.ui.components.SettingsDivider
 import com.ethran.notable.sync.CredentialManager
 import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.sync.SyncLogger
@@ -58,7 +59,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
+fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit, context: Context) {
     val syncSettings = settings.syncSettings
     val credentialManager = remember { CredentialManager(context) }
     val scope = rememberCoroutineScope()
@@ -101,7 +102,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
         SyncEnableToggle(
             syncSettings = syncSettings,
             settings = settings,
-            kv = kv,
+            onUpdateSettings = onUpdateSettings,
             context = context
         )
 
@@ -114,7 +115,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
             password = password,
             onServerUrlChange = {
                 serverUrl = it
-                kv.setAppSettings(settings.copy(syncSettings = syncSettings.copy(serverUrl = it)))
+                onUpdateSettings(settings.copy(syncSettings = syncSettings.copy(serverUrl = it)))
             },
             onUsernameChange = { username = it },
             onPasswordChange = { password = it }
@@ -128,7 +129,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
                 credentialManager.saveCredentials(username, password)
                 savedUsername = username
                 savedPassword = password
-                kv.setAppSettings(settings.copy(syncSettings = syncSettings.copy(username = username)))
+                onUpdateSettings(settings.copy(syncSettings = syncSettings.copy(username = username)))
                 SyncLogger.i("Settings", "Credentials saved for user: $username")
                 showHint(context.getString(R.string.sync_credentials_saved), scope)
             },
@@ -182,7 +183,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
         SyncControlToggles(
             syncSettings = syncSettings,
             settings = settings,
-            kv = kv,
+            onUpdateSettings = onUpdateSettings,
             context = context
         )
 
@@ -196,7 +197,7 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
             syncSettings = syncSettings,
             serverUrl = serverUrl,
             context = context,
-            kv = kv,
+            onUpdateSettings = onUpdateSettings,
             scope = scope,
             onSyncStateChange = { syncInProgress = it }
         )
@@ -227,14 +228,14 @@ fun SyncSettings(kv: KvProxy, settings: AppSettings, context: Context) {
 fun SyncEnableToggle(
     syncSettings: SyncSettings,
     settings: AppSettings,
-    kv: KvProxy,
+    onUpdateSettings: (AppSettings) -> Unit,
     context: Context
 ) {
     SettingToggleRow(
         label = stringResource(R.string.sync_enable_label),
         value = syncSettings.syncEnabled,
         onToggle = { isChecked ->
-            kv.setAppSettings(
+            onUpdateSettings(
                 settings.copy(syncSettings = syncSettings.copy(syncEnabled = isChecked))
             )
             // Enable/disable WorkManager sync
@@ -407,14 +408,14 @@ fun SyncConnectionTest(
 fun SyncControlToggles(
     syncSettings: SyncSettings,
     settings: AppSettings,
-    kv: KvProxy,
+    onUpdateSettings: (AppSettings) -> Unit,
     context: Context
 ) {
     SettingToggleRow(
         label = stringResource(R.string.sync_auto_sync_label, syncSettings.syncInterval),
         value = syncSettings.autoSync,
         onToggle = { isChecked ->
-            kv.setAppSettings(
+            onUpdateSettings(
                 settings.copy(syncSettings = syncSettings.copy(autoSync = isChecked))
             )
             if (isChecked && syncSettings.syncEnabled) {
@@ -429,7 +430,7 @@ fun SyncControlToggles(
         label = stringResource(R.string.sync_on_note_close_label),
         value = syncSettings.syncOnNoteClose,
         onToggle = { isChecked ->
-            kv.setAppSettings(
+            onUpdateSettings(
                 settings.copy(syncSettings = syncSettings.copy(syncOnNoteClose = isChecked))
             )
         }
@@ -439,7 +440,7 @@ fun SyncControlToggles(
         label = stringResource(R.string.sync_wifi_only_label),
         value = syncSettings.wifiOnly,
         onToggle = { isChecked ->
-            kv.setAppSettings(
+            onUpdateSettings(
                 settings.copy(syncSettings = syncSettings.copy(wifiOnly = isChecked))
             )
             // Re-schedule background sync with updated network constraint
@@ -456,7 +457,7 @@ fun ManualSyncButton(
     syncSettings: SyncSettings,
     serverUrl: String,
     context: Context,
-    kv: KvProxy,
+    onUpdateSettings: (AppSettings) -> Unit,
     scope: kotlinx.coroutines.CoroutineScope,
     onSyncStateChange: (Boolean) -> Unit
 ) {
@@ -474,7 +475,7 @@ fun ManualSyncButton(
                         if (result is SyncResult.Success) {
                             val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
                             val latestSettings = GlobalAppSettings.current
-                            kv.setAppSettings(
+                            onUpdateSettings(
                                 latestSettings.copy(
                                     syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
                                 )

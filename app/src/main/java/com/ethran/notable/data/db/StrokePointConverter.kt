@@ -1,14 +1,15 @@
 package com.ethran.notable.data.db
 
-import android.util.Log
-import com.ethran.notable.TAG
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import io.shipbook.shipbooksdk.ShipBook
 import net.jpountz.lz4.LZ4Factory
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /* ------------------ Mask Bits & Helpers ------------------ */
+
+private val log = ShipBook.getLogger("StrokePointConverter")
 
 private const val PRESSURE_BIT = 0
 private const val TILT_X_BIT = 1
@@ -187,7 +188,7 @@ fun encodeStrokePoints(
     points: List<StrokePoint>, mask: Int = computeStrokeMask(points)
 ): ByteArray {
     if (points.first().y > MAX_PAGE_HEIGHT) {
-        Log.e(TAG, "Page is too large!")
+        log.e("Page is too large!")
         SnackState.globalSnackFlow.tryEmit(
             SnackConf(
                 id = "oversize", text = "Page is too large!", duration = 4000

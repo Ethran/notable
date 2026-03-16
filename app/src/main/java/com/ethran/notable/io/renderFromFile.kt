@@ -9,11 +9,9 @@ import android.net.Uri
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.TAG
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.Timing
 import com.ethran.notable.utils.ensureNotMainThread
-import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
 
@@ -37,13 +35,13 @@ fun uriToBitmap(context: Context, uri: Uri): Bitmap? {
         val source = ImageDecoder.createSource(contentResolver, uri)
         ImageDecoder.decodeBitmap(source)
     } catch (e: SecurityException) {
-        Log.e(TAG, "SecurityException: ${e.message}", e)
+        log.e("SecurityException: ${e.message}", e)
         null
     } catch (e: ImageDecoder.DecodeException) {
-        Log.e(TAG, "DecodeException: ${e.message}", e)
+        log.e("DecodeException: ${e.message}", e)
         null
     } catch (e: Exception) {
-        Log.e(TAG, "Unexpected error: ${e.message}", e)
+        log.e("Unexpected error: ${e.message}", e)
         null
     }
 }
@@ -69,7 +67,7 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
             timer.end("loaded background")
             return result?.asAndroidBitmap()
         } catch (e: Exception) {
-            Log.e(TAG, "getOrLoadBackground: Error loading background - ${e.message}", e)
+            log.e("getOrLoadBackground: Error loading background - ${e.message}", e)
         }
     }
     val targetWidth = SCREEN_WIDTH * (scale.coerceAtMost(2f))

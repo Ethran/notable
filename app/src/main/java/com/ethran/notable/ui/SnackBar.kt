@@ -105,23 +105,25 @@ class SnackState {
         task: suspend () -> T,
     ): T {
         val dismissSnack = displaySnack(SnackConf(text = text))
+
         return try {
-            val result = task()
-            dismissSnack()
-            result
-        } catch (e: CancellationException) {
-            Log.d("showSnackDuring", "Task cancelled")
-            withContext(NonCancellable) {
-                dismissSnack()
-            }
-            throw e
+            task() // We just execute the task and return its result directly
         } catch (e: Exception) {
+            if (e is CancellationException) {
+                Log.d("showSnackDuring", "Task cancelled")
+                throw e // Rethrow cancellation immediately
+            }
+
+            // Handle actual errors
             Log.e("showSnackDuring", "Task failed", e)
             withContext(NonCancellable) {
-                dismissSnack()
                 displaySnack(SnackConf(text = "Error: ${e.message}", duration = 3000))
             }
             throw e
+        } finally {
+            withContext(NonCancellable) {
+                dismissSnack()
+            }
         }
     }
 
