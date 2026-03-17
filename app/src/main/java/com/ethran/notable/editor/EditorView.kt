@@ -139,7 +139,14 @@ fun EditorView(
         }
 
         val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState).apply { registerObservers() }
+            EditorControlTower(scope, page, history, editorState)
+        }
+
+        DisposableEffect(editorControlTower) {
+            editorControlTower.registerObservers()
+            onDispose {
+                editorControlTower.unregisterObservers()
+            }
         }
 
         // Collect UI Events from ViewModel (navigation and snackbars)

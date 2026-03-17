@@ -508,8 +508,8 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
-            loadBookData(bookId, newPageId)
-//            _toolbarState.update { it.copy(pageId = newPageId) }
+//            loadBookData(bookId, newPageId)
+            _toolbarState.update { it.copy(pageId = newPageId) }
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             sendUiEvent(EditorUiEvent.ShowSnackbar("Tried to change to same page!"))

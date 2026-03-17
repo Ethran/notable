@@ -47,7 +47,7 @@ class QuickNavViewModel(
 
     private val _uiState = MutableStateFlow(QuickNavUiState())
     val uiState: StateFlow<QuickNavUiState> = _uiState.asStateFlow()
-
+    private var lastScrubEndTargetPageId: String? = null
 
     // Initialize data when the ViewModel is created or when a new page is opened
     fun loadPageData(currentPageId: String?) {
@@ -133,6 +133,7 @@ class QuickNavViewModel(
     // --- Scrubber Actions ---
 
     fun onScrubStart() {
+        lastScrubEndTargetPageId = null
         CanvasEventBus.saveCurrent.tryEmit(Unit)
     }
 
@@ -146,10 +147,15 @@ class QuickNavViewModel(
     fun onScrubEnd(index: Int) {
         log.e("onScrubEnd: $index")
         CanvasEventBus.restoreCanvas.tryEmit(Unit)
+
         val pageIds = _uiState.value.bookPageIds
-        if (index in pageIds.indices) {
-            CanvasEventBus.changePage.tryEmit(pageIds[index])
-        }
+        val targetPageId = pageIds.getOrNull(index) ?: return
+
+        // Gesture end callbacks can fire more than once; ignore repeated commit for same target.
+        if (targetPageId == lastScrubEndTargetPageId) return
+        lastScrubEndTargetPageId = targetPageId
+
+        CanvasEventBus.changePage.tryEmit(targetPageId)
     }
 
     fun onReturnClick(quickNavSourcePageId: String?) {

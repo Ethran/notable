@@ -285,7 +285,7 @@ class PageView(
                 val bookId = pageFromDb?.notebookId
                 snackManager.showSnackDuring(text = "Loading strokes...") {
                     val timeToLoad = measureTimeMillis {
-                        logCache.d("Start page, id $currentPageId")
+                        logCache.d("Start page loading, id $currentPageId")
                         PageDataManager.requestPageLoadJoin(appRepository, currentPageId, bookId)
                         logCache.d("Got page data (PageView.loadPage). id $currentPageId")
                     }
