@@ -23,6 +23,9 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -141,7 +144,6 @@ sealed class CanvasCommand {
 // --------------------------------------------------------
 
 sealed class EditorUiEvent {
-    data class ShowSnackbar(val message: String) : EditorUiEvent()
     data class NavigateToLibrary(val folderId: String?) : EditorUiEvent()
     data class NavigateToPages(val bookId: String) : EditorUiEvent()
     object NavigateToBugReport : EditorUiEvent()
@@ -154,7 +156,7 @@ sealed class EditorUiEvent {
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val appRepository: AppRepository,
+    val appRepository: AppRepository,
     private val exportEngine: ExportEngine
 ) : ViewModel() {
 
@@ -321,7 +323,7 @@ class EditorViewModel @Inject constructor(
                 val copiedFile = copyImageToDatabase(context, uri)
                 sendCanvasCommand(CanvasCommand.CopyImageToCanvas(copiedFile.toUri()))
             } catch (e: Exception) {
-                sendUiEvent(EditorUiEvent.ShowSnackbar("Image import failed: ${e.message}"))
+                logAndShowError("EditorViewModel", "Image import failed: ${e.message}")
             }
         }
     }
@@ -330,9 +332,10 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = exportEngine.export(target, format)
-                sendUiEvent(EditorUiEvent.ShowSnackbar(result))
+                val snack = SnackConf(text = result, duration = 4000)
+                SnackState.globalSnackFlow.emit(snack)
             } catch (e: Exception) {
-                sendUiEvent(EditorUiEvent.ShowSnackbar("Export failed: ${e.message}"))
+                logAndShowError("EditorViewModel", "Export failed: ${e.message}")
             }
         }
     }
@@ -412,39 +415,60 @@ class EditorViewModel @Inject constructor(
     /**
      * Loads context data for the toolbar (page number, background info, etc.)
      */
-    fun loadBookData(bookId: String?, pageId: String) {
+    suspend fun loadToolbarState(bookId: String?, pageId: String) {
         log.v("loadBookData: bookId=$bookId, pageId=$pageId")
         this.bookId = bookId
 
-        viewModelScope.launch(Dispatchers.IO) {
-            val page = appRepository.pageRepository.getById(pageId)
-            val book = bookId?.let { appRepository.bookRepository.getById(it) }
+        val page = appRepository.pageRepository.getById(pageId)
+        if (page == null) {
+            logAndShowError(
+                reason = "EditorViewModel",
+                message = "Could not find page",
+            )
+            fixNotebook(bookId, pageId)
+            return
+        }
+        val book = bookId?.let { appRepository.bookRepository.getById(it) }
 
-            val pageIndex = book?.getPageIndex(pageId) ?: 0
-            val totalPages = book?.pageIds?.size ?: 1
+        val pageIndex = book?.getPageIndex(pageId) ?: 0
+        val totalPages = book?.pageIds?.size ?: 1
 
-            val backgroundTypeObj = BackgroundType.fromKey(page?.backgroundType ?: "native")
-            val bgPageNumber = when (backgroundTypeObj) {
-                is BackgroundType.Pdf -> backgroundTypeObj.page
-                is BackgroundType.AutoPdf -> {
-                    bookId?.let { appRepository.getPageNumber(it, pageId) } ?: 0
-                }
-
-                else -> 0
+        val backgroundTypeObj = BackgroundType.fromKey(page.backgroundType)
+        val bgPageNumber = when (backgroundTypeObj) {
+            is BackgroundType.Pdf -> backgroundTypeObj.page
+            is BackgroundType.AutoPdf -> {
+                bookId?.let { appRepository.getPageNumber(it, pageId) } ?: 0
             }
 
-            _toolbarState.update {
-                it.copy(
-                    notebookId = bookId,
-                    pageId = pageId,
-                    isBookActive = bookId != null,
-                    pageNumberInfo = if (bookId != null) "${pageIndex + 1}/$totalPages" else "1/1",
-                    currentPageNumber = pageIndex,
-                    backgroundType = page?.backgroundType ?: "native",
-                    backgroundPath = page?.background ?: "blank",
-                    backgroundPageNumber = bgPageNumber
+            else -> 0
+        }
+
+        _toolbarState.update {
+            it.copy(
+                notebookId = bookId,
+                pageId = pageId,
+                isBookActive = bookId != null,
+                pageNumberInfo = if (bookId != null) "${pageIndex + 1}/$totalPages" else "1/1",
+                currentPageNumber = pageIndex,
+                backgroundType = page.backgroundType,
+                backgroundPath = page.background,
+                backgroundPageNumber = bgPageNumber
+            )
+        }
+    }
+
+    /**
+     * Attempts to repair potential inconsistencies in the notebook's data structure.
+     */
+    suspend fun fixNotebook(bookId: String?, pageId: String) {
+        if (bookId != null) {
+            log.i("Could not find page, Cleaning book")
+            SnackState.globalSnackFlow.tryEmit(
+                SnackConf(
+                    text = "Could not find page, cleaning book", duration = 4000
                 )
-            }
+            )
+            appRepository.bookRepository.removePage(bookId, pageId)
         }
     }
 
@@ -482,6 +506,15 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Updates the persistence layer and UI state to reflect a change in the currently opened page.
+     *
+     * This method saves the [newPageId] as the last opened page for the current notebook in the
+     * repository. If the page ID has changed, it updates the toolbar state; otherwise, it
+     * triggers a UI event to notify the user that the target page is already active.
+     *
+     * @param newPageId The unique identifier of the page to be set as open.
+     */
     private suspend fun updateOpenedPage(newPageId: String) {
         log.v("updateOpenedPage: $newPageId")
         Log.d("EditorView", "Update open page to $newPageId")
@@ -489,11 +522,14 @@ class EditorViewModel @Inject constructor(
             appRepository.bookRepository.setOpenPageId(bookId!!, newPageId)
         }
         if (newPageId != currentPageId) {
+            // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
-            loadBookData(bookId, newPageId)
+//            loadBookData(bookId, newPageId)
+            _toolbarState.update { it.copy(pageId = newPageId) }
         } else {
             Log.d("EditorView", "Tried to change to same page!")
-            sendUiEvent(EditorUiEvent.ShowSnackbar("Tried to change to same page!"))
+            val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
+            SnackState.globalSnackFlow.emit(snack)
         }
     }
 
@@ -503,10 +539,17 @@ class EditorViewModel @Inject constructor(
      * @param id The unique identifier of the page to switch to.
      */
     fun changePage(id: String) {
-        log.v("changePage: $id")
         log.d("Changing page to $id, from $currentPageId")
         viewModelScope.launch(Dispatchers.IO) {
+            // 1. Notify the PageView about the change
+
+            // 2. Update the persistent layer
+
+            // 3. Update the UI state
             updateOpenedPage(id)
+
+
+            // 4. Clean the selection state
             selectionState.reset()
         }
     }

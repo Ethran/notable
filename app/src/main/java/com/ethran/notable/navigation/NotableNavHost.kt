@@ -27,7 +27,9 @@ import com.ethran.notable.ui.views.SystemInformationDestination
 import com.ethran.notable.ui.views.SystemInformationView
 import com.ethran.notable.ui.views.WelcomeDestination
 import com.ethran.notable.ui.views.WelcomeView
+import io.shipbook.shipbooksdk.ShipBook
 
+private val log = ShipBook.getLogger("NotableNavHost")
 
 @Composable
 fun NotableNavHost(
@@ -102,11 +104,14 @@ fun NotableNavHost(
                     exportEngine = exportEngine,
                     editorSettingCacheManager = editorSettingCacheManager,
                     appRepository = appRepository,
-                    navController = appNavigator.navController,
+                    goToLibrary = {appNavigator.goToLibrary(it)},
+                    goToPages = { bookId -> appNavigator.goToPages(bookId) },
+                    goToBugReport = { appNavigator.goToBugReport() },
                     bookId = bookId,
-                    pageId = currentPageId,
+                    initialPageId = currentPageId,
                     isQuickNavOpen = appNavigator.isQuickNavOpen,
                     onPageChange = { newPageId ->
+                        log.d("onPageChange: $newPageId")
                         appNavigator.onPageChange(
                             backStackEntry,
                             newPageId

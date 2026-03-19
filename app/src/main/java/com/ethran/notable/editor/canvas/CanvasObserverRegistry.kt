@@ -290,8 +290,10 @@ class CanvasObserverRegistry(
     private fun observeRestoreCanvas() {
         coroutineScope.launch {
             CanvasEventBus.restoreCanvas.collect {
+                Log.d("QuickNav", "Restoring canvas")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 drawCanvas.restoreCanvas(zoneToRedraw)
+                logCanvasObserver.v("Restored canvas")
             }
         }
     }
