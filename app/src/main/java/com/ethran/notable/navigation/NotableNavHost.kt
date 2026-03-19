@@ -104,9 +104,11 @@ fun NotableNavHost(
                     exportEngine = exportEngine,
                     editorSettingCacheManager = editorSettingCacheManager,
                     appRepository = appRepository,
-                    navController = appNavigator.navController,
+                    goToLibrary = {appNavigator.goToLibrary(it)},
+                    goToPages = { bookId -> appNavigator.goToPages(bookId) },
+                    goToBugReport = { appNavigator.goToBugReport() },
                     bookId = bookId,
-                    pageId = currentPageId,
+                    initialPageId = currentPageId,
                     isQuickNavOpen = appNavigator.isQuickNavOpen,
                     onPageChange = { newPageId ->
                         log.d("onPageChange: $newPageId")

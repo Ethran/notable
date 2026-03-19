@@ -16,7 +16,9 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.refreshScreen
+import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.PagesDestination
 import com.ethran.notable.ui.views.SystemInformationDestination
 import com.ethran.notable.ui.views.WelcomeDestination
 import com.ethran.notable.utils.hasFilePermission
@@ -125,6 +127,14 @@ class NotableNavigator(
 
     fun goToSystemInfo() {
         navController.navigate(SystemInformationDestination.route)
+    }
+
+    fun goToBugReport(){
+        navController.navigate(BugReportDestination.route)
+    }
+
+    fun goToPages(bookId: String) {
+        navController.navigate(PagesDestination.createRoute(bookId))
     }
 
     fun goToPage(appRepository: AppRepository, pageId: String) {
