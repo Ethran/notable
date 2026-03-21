@@ -214,11 +214,13 @@ class EditorViewModel @Inject constructor(
             is ToolbarAction.ToggleToolbar -> {
                 _toolbarState.update { it.copy(isToolbarOpen = !it.isToolbarOpen) }
                 updateDrawingState()
+                saveToolbarState()
             }
 
             is ToolbarAction.ChangeMode -> {
                 _toolbarState.update { it.copy(mode = action.mode) }
                 updateDrawingState()
+                saveToolbarState()
             }
 
             is ToolbarAction.ChangePen -> handlePenChange(action.pen)
@@ -283,6 +285,7 @@ class EditorViewModel @Inject constructor(
             _toolbarState.update {
                 it.copy(pen = pen, mode = Mode.Draw)
             }
+            saveToolbarState()
         }
         updateDrawingState()
     }
@@ -290,12 +293,14 @@ class EditorViewModel @Inject constructor(
     private fun handleEraserChange(eraser: Eraser) {
         _toolbarState.update { it.copy(eraser = eraser) }
         updateDrawingState()
+        saveToolbarState()
     }
 
     private fun handlePenSettingChange(pen: Pen, setting: PenSetting) {
         val newSettings = _toolbarState.value.penSettings.toMutableMap()
         newSettings[pen.penName] = setting
         _toolbarState.update { it.copy(penSettings = newSettings) }
+        saveToolbarState()
     }
 
     private fun handleCloseAllMenus() {
@@ -458,7 +463,6 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    // TODO: find where we change those values, and make sure that we save it.
     private fun saveToolbarState() {
         val currentState = _toolbarState.value
         editorSettingCacheManager.setEditorSettings(
