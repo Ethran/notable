@@ -23,7 +23,6 @@ import com.ethran.notable.ui.SnackState
 @Composable
 fun NotableApp(
     exportEngine: ExportEngine,
-    editorSettingCacheManager: EditorSettingCacheManager,
     snackState: SnackState,
     appRepository: AppRepository
 ) {
@@ -36,7 +35,6 @@ fun NotableApp(
     ) {
         NotableNavHost(
             exportEngine = exportEngine,
-            editorSettingCacheManager = editorSettingCacheManager,
             appRepository = appRepository,
             appNavigator = appNavState
         )

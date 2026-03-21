@@ -172,11 +172,12 @@ class CanvasObserverRegistry(
     }
 
     private fun observePenChanges() {
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.Default) {
             snapshotFlow { state.pen }.drop(0).collect {
                 logCanvasObserver.v("pen change: ${state.pen}")
                 inputHandler.updatePenAndStroke()
-                refreshManager.refreshUiSuspend()
+                //I think we don't need to refresh the screen here.
+//                refreshManager.refreshUiSuspend()
             }
         }
         coroutineScope.launch {

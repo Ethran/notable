@@ -67,9 +67,6 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var strokeMigrationHelper: dagger.Lazy<StrokeMigrationHelper>
 
-    @Inject
-    lateinit var editorSettingCacheManager: dagger.Lazy<EditorSettingCacheManager>
-
     // 1. Use dagger.Lazy to defer DB initialization until after permissions
     @Inject
     lateinit var appRepositoryLazy: dagger.Lazy<AppRepository>
@@ -106,8 +103,6 @@ class MainActivity : ComponentActivity() {
                                 ?: AppSettings(version = 1)
 
                         GlobalAppSettings.update(savedSettings)
-
-                        editorSettingCacheManager.get().init()
                         strokeMigrationHelper.get().reencodeStrokePointsToSB1()
                     }
                 }
@@ -120,7 +115,6 @@ class MainActivity : ComponentActivity() {
                         NotableApp(
                             // Call .get() here so they are only instantiated AFTER the permission check runs
                             exportEngine = exportEngineLazy.get(),
-                            editorSettingCacheManager = editorSettingCacheManager.get(),
                             snackState = snackState,
                             appRepository = appRepositoryLazy.get()
                         )

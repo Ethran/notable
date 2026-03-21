@@ -266,6 +266,13 @@ private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
             imgBitmap
         } else {
             log.w("loadPersistBitmap: failed to decode bitmap from ${file.name}")
+            log.d(
+                """
+                exists=${file.exists()}
+                size=${file.length()}
+                path=${file.absolutePath}
+                """.trimIndent()
+            )
             null
         }
     } catch (e: Exception) {

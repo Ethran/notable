@@ -35,7 +35,6 @@ private val log = ShipBook.getLogger("NotableNavHost")
 fun NotableNavHost(
     exportEngine: ExportEngine,
     appRepository: AppRepository,
-    editorSettingCacheManager: EditorSettingCacheManager,
     modifier: Modifier = Modifier,
     appNavigator: NotableNavigator
 ) {
@@ -102,7 +101,6 @@ fun NotableNavHost(
 
                 EditorView(
                     exportEngine = exportEngine,
-                    editorSettingCacheManager = editorSettingCacheManager,
                     appRepository = appRepository,
                     goToLibrary = {appNavigator.goToLibrary(it)},
                     goToPages = { bookId -> appNavigator.goToPages(bookId) },

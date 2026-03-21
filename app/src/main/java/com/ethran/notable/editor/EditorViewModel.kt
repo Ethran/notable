@@ -157,6 +157,7 @@ sealed class EditorUiEvent {
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     val appRepository: AppRepository,
+    val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine
 ) : ViewModel() {
 
@@ -189,9 +190,9 @@ class EditorViewModel @Inject constructor(
      * Restores editor settings from the persisted cache.
      * Idempotent: only applies settings on first call; subsequent calls are no-ops.
      */
-    fun initFromPersistedSettings(settings: EditorSettingCacheManager.EditorSettings?) {
+    fun initFromPersistedSettings() {
         if (!didInitSettings.compareAndSet(false, true)) return
-
+        val settings = editorSettingCacheManager.getEditorSettings()
         _toolbarState.update {
             it.copy(
                 mode = settings?.mode ?: Mode.Draw,
@@ -455,6 +456,20 @@ class EditorViewModel @Inject constructor(
                 backgroundPageNumber = bgPageNumber
             )
         }
+    }
+
+    // TODO: find where we change those values, and make sure that we save it.
+    private fun saveToolbarState() {
+        val currentState = _toolbarState.value
+        editorSettingCacheManager.setEditorSettings(
+            EditorSettingCacheManager.EditorSettings(
+                isToolbarOpen = currentState.isToolbarOpen,
+                mode = currentState.mode,
+                pen = currentState.pen,
+                eraser = currentState.eraser,
+                penSettings = currentState.penSettings
+            )
+        )
     }
 
     /**

@@ -98,7 +98,6 @@ class DrawCanvas(
 
     fun init() {
         log.i("Initializing Canvas")
-        glRenderer.release()
         glRenderer = OpenGLRenderer(this@DrawCanvas)
         glRenderer.attachSurfaceView(this)
 

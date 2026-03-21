@@ -17,7 +17,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -73,7 +72,6 @@ fun EditorView(
     goToBugReport: () -> Unit,
 
     // TODO: remove those arguments
-    editorSettingCacheManager: EditorSettingCacheManager,
     exportEngine: ExportEngine,
     appRepository: AppRepository,
 
@@ -129,7 +127,7 @@ fun EditorView(
 
         // Initialize ViewModel with persisted settings on first composition
         LaunchedEffect(Unit) {
-            viewModel.initFromPersistedSettings(editorSettingCacheManager.getEditorSettings())
+            viewModel.initFromPersistedSettings()
             viewModel.updateDrawingState()
         }
 
@@ -246,25 +244,6 @@ fun EditorView(
             }
         }
 
-        // Persist editor settings when they change
-        LaunchedEffect(
-            toolbarState.isToolbarOpen,
-            toolbarState.pen,
-            toolbarState.penSettings,
-            toolbarState.mode,
-            toolbarState.eraser
-        ) {
-            log.i("EditorView: saving editor settings")
-            editorSettingCacheManager.setEditorSettings(
-                EditorSettingCacheManager.EditorSettings(
-                    isToolbarOpen = toolbarState.isToolbarOpen,
-                    mode = toolbarState.mode,
-                    pen = toolbarState.pen,
-                    eraser = toolbarState.eraser,
-                    penSettings = toolbarState.penSettings
-                )
-            )
-        }
 
 
         InkaTheme {
