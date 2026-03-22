@@ -37,7 +37,6 @@ var referencedSurfaceView: String = ""
 @SuppressLint("ViewConstructor") // we never execute constructor from XML
 class DrawCanvas(
     context: Context,
-    appRepository: AppRepository,
     val coroutineScope: CoroutineScope,
     val state: EditorState,
     val page: PageView,
@@ -90,7 +89,6 @@ class DrawCanvas(
 
 
     private val observers = CanvasObserverRegistry(
-        appRepository,
         coroutineScope, this, page, state, history, inputHandler, refreshManager
     )
 
@@ -98,7 +96,6 @@ class DrawCanvas(
 
     fun init() {
         log.i("Initializing Canvas")
-        glRenderer.release()
         glRenderer = OpenGLRenderer(this@DrawCanvas)
         glRenderer.attachSurfaceView(this)
 

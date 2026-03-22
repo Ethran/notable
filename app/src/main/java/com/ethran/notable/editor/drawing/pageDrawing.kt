@@ -15,10 +15,9 @@ import androidx.core.graphics.withClip
 import androidx.core.net.toUri
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
-import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.imageBounds
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
@@ -131,8 +130,8 @@ fun drawOnCanvasFromPage(
     ignoredImageIds: List<String> = listOf(),
 ) {
     val zoomLevel = page.zoomLevel.value
-    val backgroundType = page.pageFromDb?.getBackgroundType() ?: BackgroundType.Native
-    val background = page.pageFromDb?.background ?: "blank"
+    val backgroundType = page.pageDataManager.getBackgroundType() ?: BackgroundType.Native
+    val background = page.pageDataManager.getBackgroundName()
     pageDrawingLog.d("drawOnCanvasFromPage, zoom: $zoomLevel, background: $background, type: $backgroundType")
 
     // Canvas is scaled, it will scale page area.

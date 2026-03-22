@@ -7,7 +7,6 @@ import android.graphics.RectF
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
-import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
@@ -257,9 +256,9 @@ suspend fun selectRectangle(page: PageView, coroutineScope: CoroutineScope, stat
     val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
 
     val imagesToSelect =
-        PageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)
+        page.pageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)
     val strokesToSelect =
-        PageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
+        page.pageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
     if (imagesToSelect != null && strokesToSelect != null) {
         CanvasEventBus.rectangleToSelectByGesture.value = null
         if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {

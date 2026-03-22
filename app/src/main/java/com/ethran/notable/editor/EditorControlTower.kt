@@ -44,18 +44,25 @@ class EditorControlTower(
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
-
-
+    private var changePageObserverJob: Job? = null
 
     fun registerObservers() {
-        scope.launch {
+        if (changePageObserverJob?.isActive == true) return
+
+        changePageObserverJob = scope.launch {
             CanvasEventBus.changePage.collect { pageId ->
                 logEditorControlTower.d("Change to page $pageId")
                 switchPage(pageId)
-                page.changePage(pageId)
+//                page.changePage(pageId)
                 refreshScreen()
             }
         }
+    }
+
+    // TODO: remove it, change to proper solution
+    fun unregisterObservers() {
+        changePageObserverJob?.cancel()
+        changePageObserverJob = null
     }
 
     // returns delta if could not scroll, to be added to next request,
@@ -110,10 +117,10 @@ class EditorControlTower(
             history.cleanHistory()
         }
 
-        // Switch to (or ensure we are on) IO thread for Database operations
-        withContext(Dispatchers.IO) {
-            page.changePage(id)
-        }
+//        // Switch to (or ensure we are on) IO thread for Database operations
+//        withContext(Dispatchers.IO) {
+//            page.changePage(id)
+//        }
     }
 
     /**

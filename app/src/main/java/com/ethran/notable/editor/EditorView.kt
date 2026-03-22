@@ -9,10 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,26 +29,17 @@ import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
-import com.ethran.notable.io.ExportEngine
-import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.ui.views.BugReportDestination
-import com.ethran.notable.ui.views.LibraryDestination
-import com.ethran.notable.ui.views.PagesDestination
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private val log = ShipBook.getLogger("EditorView")
 
@@ -68,47 +57,30 @@ object EditorDestination : NavigationDestination {
 }
 
 
+
 @Composable
 fun EditorView(
-    editorSettingCacheManager: EditorSettingCacheManager,
-    exportEngine: ExportEngine,
-    navController: NavController,
-    appRepository: AppRepository,
+    initialPageId: String,
     bookId: String?,
-    pageId: String,
     isQuickNavOpen: Boolean,
+
+    // navigation callbacks
     onPageChange: (String) -> Unit,
+    goToLibrary: (folderId: String?) -> Unit,
+    goToPages: (bookId: String) -> Unit,
+    goToBugReport: () -> Unit,
+
     viewModel: EditorViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val snackManager = LocalSnackContext.current
     val scope = rememberCoroutineScope()
 
-    var pageExists by remember(pageId) { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(pageId) {
-        viewModel.loadBookData(bookId, pageId)
-        val exists = withContext(Dispatchers.IO) {
-            appRepository.pageRepository.getById(pageId) != null
-        }
-        pageExists = exists
-
-        if (!exists) {
-            // TODO: check if it is correct, and remove exeption throwing
-            throw Exception("Page does not exist")
-            if (bookId != null) {
-                // clean the book
-                log.i("Could not find page, Cleaning book")
-                SnackState.globalSnackFlow.tryEmit(
-                    SnackConf(
-                        text = "Could not find page, cleaning book", duration = 4000
-                    )
-                )
-                scope.launch(Dispatchers.IO) {
-                    appRepository.bookRepository.removePage(bookId, pageId)
-                }
-            }
-            navController.navigate(LibraryDestination.route)
-        }
+    // Single point of entry for loading book data based on the pageId from Navigation
+    // Should not be used for regular page switching
+    LaunchedEffect(initialPageId) {
+        log.v("EditorView: pageId changed to $initialPageId, loading data")
+        viewModel.loadToolbarState(bookId, initialPageId)
     }
 
     // Sync isQuickNavOpen to ViewModel
@@ -116,18 +88,18 @@ fun EditorView(
         viewModel.onToolbarAction(ToolbarAction.UpdateQuickNavOpen(isQuickNavOpen))
     }
 
-    if (pageExists == null) return
 
     BoxWithConstraints {
         val height = convertDpToPixel(this.maxHeight, context).toInt()
         val width = convertDpToPixel(this.maxWidth, context).toInt()
 
+        // Here we load initial page into the memory
         val page = remember {
             PageView(
                 context = context,
                 coroutineScope = scope,
-                appRepository = appRepository,
-                currentPageId = pageId,
+                pageDataManager = viewModel.pageDataManager,
+                initialPageId = initialPageId,
                 viewWidth = width,
                 viewHeight = height,
                 snackManager = snackManager,
@@ -143,34 +115,40 @@ fun EditorView(
             EditorState(viewModel)
         }
 
+        val editorControlTower = remember {
+            EditorControlTower(scope, page, history, editorState)
+        }
+
+
         // Initialize ViewModel with persisted settings on first composition
         LaunchedEffect(Unit) {
-            viewModel.initFromPersistedSettings(editorSettingCacheManager.getEditorSettings())
+            viewModel.initFromPersistedSettings()
             viewModel.updateDrawingState()
         }
 
-        val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState, context, appRepository).apply { registerObservers() }
+//         val editorControlTower = remember {
+//             EditorControlTower(scope, page, history, editorState, context, appRepository).apply { registerObservers() }
+        DisposableEffect(editorControlTower) {
+            editorControlTower.registerObservers()
+            onDispose {
+                editorControlTower.unregisterObservers()
+            }
         }
 
-        // Collect UI Events from ViewModel (navigation and snackbars)
+        // Collect UI Events from ViewModel (navigation )
         LaunchedEffect(Unit) {
             viewModel.uiEvents.collect { event ->
                 when (event) {
                     is EditorUiEvent.NavigateToLibrary -> {
-                        navController.navigate(LibraryDestination.createRoute(event.folderId))
+                        goToLibrary(event.folderId)
                     }
 
                     is EditorUiEvent.NavigateToPages -> {
-                        navController.navigate(PagesDestination.createRoute(event.bookId))
+                        goToPages(event.bookId)
                     }
 
                     EditorUiEvent.NavigateToBugReport -> {
-                        navController.navigate(BugReportDestination.route)
-                    }
-
-                    is EditorUiEvent.ShowSnackbar -> {
-                        snackManager.displaySnack(SnackConf(text = event.message, duration = 2000))
+                        goToBugReport()
                     }
                 }
             }
@@ -229,6 +207,11 @@ fun EditorView(
                 .distinctUntilChanged()
                 .drop(1) // Skip initial emission from loadBookData
                 .collect { newPageId ->
+                    log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")
+                    // update the PageView
+                    page.changePage(newPageId)
+
+                    // update the navigation state
                     onPageChange(newPageId)
                 }
         }
@@ -247,56 +230,39 @@ fun EditorView(
 
         DisposableEffect(Unit) {
             onDispose {
-                // finish selection operation
-                viewModel.selectionState.applySelectionDisplace(page)
-                if (bookId != null) exportToLinkedFile(
-                    exportEngine,
-                    bookId,
-                    appRepository.bookRepository
-                )
-                page.disposeOldPage()
+// TODO
+//                 // finish selection operation
+//                 viewModel.selectionState.applySelectionDisplace(page)
+//                 if (bookId != null) exportToLinkedFile(
+//                     exportEngine,
+//                     bookId,
+//                     appRepository.bookRepository
+//                 )
+//                 page.disposeOldPage()
 
-                // Trigger sync on note close if enabled
-                val settings = GlobalAppSettings.current
-                if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose && bookId != null) {
-                    // Use a new coroutine scope since the composition scope is being disposed
-                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            SyncLogger.i("EditorSync", "Auto-syncing on editor close")
-                            SyncEngine(context).syncNotebook(bookId)
-                        } catch (e: Exception) {
-                            SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
-                        }
-                    }
-                }
+//                 // Trigger sync on note close if enabled
+//                 val settings = GlobalAppSettings.current
+//                 if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose && bookId != null) {
+//                     // Use a new coroutine scope since the composition scope is being disposed
+//                     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+//                         try {
+//                             SyncLogger.i("EditorSync", "Auto-syncing on editor close")
+//                             SyncEngine(context).syncNotebook(bookId)
+//                         } catch (e: Exception) {
+//                             SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
+//                         }
+//                     }
+//                 }
+                viewModel.onDispose(page)
             }
         }
 
-        // Persist editor settings when they change
-        LaunchedEffect(
-            toolbarState.isToolbarOpen,
-            toolbarState.pen,
-            toolbarState.penSettings,
-            toolbarState.mode,
-            toolbarState.eraser
-        ) {
-            log.i("EditorView: saving editor settings")
-            editorSettingCacheManager.setEditorSettings(
-                EditorSettingCacheManager.EditorSettings(
-                    isToolbarOpen = toolbarState.isToolbarOpen,
-                    mode = toolbarState.mode,
-                    pen = toolbarState.pen,
-                    eraser = toolbarState.eraser,
-                    penSettings = toolbarState.penSettings
-                )
-            )
-        }
 
 
         InkaTheme {
             EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                appRepository = appRepository, state = editorState, page = page, history = history
+                state = editorState, page = page, history = history
             )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower

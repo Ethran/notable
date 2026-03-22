@@ -16,7 +16,6 @@ private val log = ShipBook.getLogger("EditorSurface")
 
 @Composable
 fun EditorSurface(
-    appRepository: AppRepository,
     state: EditorState,
     page: PageView,
     history: History
@@ -28,7 +27,6 @@ fun EditorSurface(
         factory = { ctx ->
             DrawCanvas(
                 context = ctx,
-                appRepository = appRepository,
                 coroutineScope = coroutineScope,
                 state = state,
                 page = page,
