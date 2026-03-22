@@ -54,6 +54,7 @@ class LibraryViewModel @Inject constructor(
     val appRepository: AppRepository,
     val importEngine: ImportEngine,
     val exportEngine: ExportEngine,
+    val pageDataManager: PageDataManager,
     @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
 
@@ -109,7 +110,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun loadFolder(folderId: String?) {
-        PageDataManager.cancelLoadingPages()
+        pageDataManager.cancelLoadingPages()
         _folderId.value = folderId
 
         // Resolve breadcrumbs in background thread

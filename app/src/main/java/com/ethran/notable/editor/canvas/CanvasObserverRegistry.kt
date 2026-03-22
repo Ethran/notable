@@ -2,8 +2,6 @@ package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
-import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -14,7 +12,6 @@ import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.selectRectangle
 import com.ethran.notable.editor.utils.waitForEpdRefresh
 import com.onyx.android.sdk.extension.isNull
-import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +23,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class CanvasObserverRegistry(
-    private val appRepository: AppRepository,
     private val coroutineScope: CoroutineScope,
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
@@ -35,7 +31,9 @@ class CanvasObserverRegistry(
     private val inputHandler: OnyxInputHandler,
     private val refreshManager: CanvasRefreshManager
 ) {
-    private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
+    private val log = ShipBook.getLogger("CanvasObservers")
+    private val pageDataManager = page.pageDataManager
+
     fun registerAll() {
         ImageHandler(drawCanvas.context, page, state, coroutineScope).observeImageUri()
 
@@ -62,7 +60,7 @@ class CanvasObserverRegistry(
     private fun observeRefreshUiImmediately() {
         coroutineScope.launch {
             CanvasEventBus.refreshUiImmediately.collect {
-                logCanvasObserver.v("Refreshing UI!")
+                log.v("Refreshing UI!")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 refreshManager.refreshUi(zoneToRedraw)
             }
@@ -76,7 +74,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch(Dispatchers.Main.immediate) {
             CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
-                logCanvasObserver.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
+                log.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 launch(Dispatchers.Default) {
@@ -92,7 +90,7 @@ class CanvasObserverRegistry(
     private fun observeRefreshUi() {
         coroutineScope.launch(Dispatchers.Default) {
             CanvasEventBus.refreshUi.collect {
-                logCanvasObserver.v("Refreshing UI!")
+                log.v("Refreshing UI!")
                 refreshManager.refreshUiSuspend()
             }
         }
@@ -101,7 +99,7 @@ class CanvasObserverRegistry(
     private fun observeFocusChange() {
         coroutineScope.launch {
             CanvasEventBus.onFocusChange.collect { hasFocus ->
-                logCanvasObserver.v("App has focus: $hasFocus")
+                log.v("App has focus: $hasFocus")
                 if (hasFocus) {
                     inputHandler.updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvas.drawCanvasToView(null)
@@ -115,8 +113,8 @@ class CanvasObserverRegistry(
     private fun observeZoomLevel() {
         coroutineScope.launch {
             page.zoomLevel.drop(1).collect {
-                logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
-                PageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
+                log.v("zoom level change: ${page.zoomLevel.value}")
+                pageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
                 inputHandler.updatePenAndStroke()
             }
         }
@@ -125,7 +123,7 @@ class CanvasObserverRegistry(
     private fun observeDrawingState() {
         coroutineScope.launch {
             CanvasEventBus.isDrawing.collect {
-                logCanvasObserver.v("drawing state changed to $it!")
+                log.v("drawing state changed to $it!")
                 state.isDrawing = it
             }
         }
@@ -135,7 +133,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.rectangleToSelectByGesture.drop(1).collect {
                 if (it != null) {
-                    logCanvasObserver.v("Area to Select (screen): $it")
+                    log.v("Area to Select (screen): $it")
                     selectRectangle(page, drawCanvas.coroutineScope, state, it)
                 }
             }
@@ -146,7 +144,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.clearPageSignal.collect {
                 require(!state.isDrawing) { "Cannot clear page in drawing mode" }
-                logCanvasObserver.v("Clear page signal!")
+                log.v("Clear page signal!")
                 cleanAllStrokes(page, history)
             }
         }
@@ -155,7 +153,7 @@ class CanvasObserverRegistry(
     private fun observeRestartAfterConfChange() {
         coroutineScope.launch {
             CanvasEventBus.reinitSignal.collect {
-                logCanvasObserver.v("Configuration changed!")
+                log.v("Configuration changed!")
                 drawCanvas.init()
                 drawCanvas.drawCanvasToView(null)
             }
@@ -172,23 +170,24 @@ class CanvasObserverRegistry(
     }
 
     private fun observePenChanges() {
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.Default) {
             snapshotFlow { state.pen }.drop(0).collect {
-                logCanvasObserver.v("pen change: ${state.pen}")
+                log.v("pen change: ${state.pen}")
                 inputHandler.updatePenAndStroke()
-                refreshManager.refreshUiSuspend()
+                //I think we don't need to refresh the screen here.
+//                refreshManager.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.penSettings.toMap() }.drop(1).collect {
-                logCanvasObserver.v("pen settings change: ${state.penSettings}")
+                log.v("pen settings change: ${state.penSettings}")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
             snapshotFlow { state.eraser }.drop(1).collect {
-                logCanvasObserver.v("eraser change: ${state.eraser}")
+                log.v("eraser change: ${state.eraser}")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
             }
@@ -198,7 +197,7 @@ class CanvasObserverRegistry(
     private fun observeIsDrawingSnapshot() {
         coroutineScope.launch {
             snapshotFlow { state.isDrawing }.drop(1).collect {
-                logCanvasObserver.v("isDrawing change to $it")
+                log.v("isDrawing change to $it")
                 // We need to close all menus
                 if (it) {
                     CanvasEventBus.closeMenusSignal.emit(Unit)
@@ -212,7 +211,7 @@ class CanvasObserverRegistry(
     private fun observeToolbar() {
         coroutineScope.launch {
             snapshotFlow { state.isToolbarOpen }.drop(1).collect {
-                logCanvasObserver.v("istoolbaropen change: ${state.isToolbarOpen}")
+                log.v("istoolbaropen change: ${state.isToolbarOpen}")
                 inputHandler.updateActiveSurface()
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUi(null)
@@ -223,7 +222,7 @@ class CanvasObserverRegistry(
     private fun observeMode() {
         coroutineScope.launch {
             snapshotFlow { drawCanvas.getActualState().mode }.drop(1).collect {
-                logCanvasObserver.v("mode change: ${drawCanvas.getActualState().mode}")
+                log.v("mode change: ${drawCanvas.getActualState().mode}")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
             }
@@ -235,7 +234,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             // After 500ms add to history strokes
             CanvasEventBus.commitHistorySignal.debounce(500).collect {
-                logCanvasObserver.v("Commiting to history")
+                log.v("Commiting to history")
                 drawCanvas.commitToHistory()
             }
         }
@@ -252,8 +251,8 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.saveCurrent.collect {
                 // Push current bitmap to persist layer so preview has something to load
-                PageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
-                PageDataManager.saveTopic.tryEmit(page.currentPageId)
+                pageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
+                pageDataManager.saveTopic.tryEmit(page.currentPageId)
             }
         }
     }
@@ -262,9 +261,7 @@ class CanvasObserverRegistry(
     private fun observeQuickNav() {
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
-                val pageNumber =
-                    appRepository.getPageNumber(page.pageFromDb?.notebookId!!, pageId)
-                Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
+                val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
 
                 val previewBitmap = withContext(Dispatchers.IO) {
                     loadPreview(
@@ -277,7 +274,7 @@ class CanvasObserverRegistry(
                 }
 
                 if (previewBitmap.isRecycled) {
-                    Log.e("QuickNav", "Failed to preview page for $pageId, skipping draw")
+                    log.e("Failed to preview page for $pageId, skipping draw")
                     return@collectLatest
                 }
 
@@ -290,8 +287,10 @@ class CanvasObserverRegistry(
     private fun observeRestoreCanvas() {
         coroutineScope.launch {
             CanvasEventBus.restoreCanvas.collect {
+                log.d("Restoring canvas")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 drawCanvas.restoreCanvas(zoneToRedraw)
+                log.v("Restored canvas")
             }
         }
     }

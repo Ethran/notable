@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.gestures.quickNavGesture
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.NotableNavHost
@@ -23,7 +21,6 @@ import com.ethran.notable.ui.SnackState
 @Composable
 fun NotableApp(
     exportEngine: ExportEngine,
-    editorSettingCacheManager: EditorSettingCacheManager,
     snackState: SnackState,
     appRepository: AppRepository
 ) {
@@ -36,7 +33,6 @@ fun NotableApp(
     ) {
         NotableNavHost(
             exportEngine = exportEngine,
-            editorSettingCacheManager = editorSettingCacheManager,
             appRepository = appRepository,
             appNavigator = appNavState
         )

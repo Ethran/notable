@@ -60,7 +60,7 @@ var SCREEN_HEIGHT = EpdController.getEpdWidth().toInt()
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // Delay the init till we have the permisions required
+    // Delay the init till we have the permissions required
     @Inject
     lateinit var kvProxy: dagger.Lazy<KvProxy>
 
@@ -70,12 +70,14 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var editorSettingCacheManager: dagger.Lazy<EditorSettingCacheManager>
 
-    // 1. Use dagger.Lazy to defer DB initialization until after permissions
     @Inject
     lateinit var appRepositoryLazy: dagger.Lazy<AppRepository>
 
     @Inject
     lateinit var exportEngineLazy: dagger.Lazy<ExportEngine>
+
+    @Inject
+    lateinit var pageDataManager: dagger.Lazy<PageDataManager>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,7 +94,6 @@ class MainActivity : ComponentActivity() {
         val snackState = SnackState()
         snackState.registerGlobalSnackObserver()
         snackState.registerCancelGlobalSnackObserver()
-        PageDataManager.registerComponentCallbacks(this)
 
         setContent {
             var isInitialized by remember { mutableStateOf(false) }
@@ -106,9 +107,10 @@ class MainActivity : ComponentActivity() {
                                 ?: AppSettings(version = 1)
 
                         GlobalAppSettings.update(savedSettings)
-
-                        editorSettingCacheManager.get().init()
                         strokeMigrationHelper.get().reencodeStrokePointsToSB1()
+                        pageDataManager.get()
+                            .registerComponentCallbacks(this@MainActivity.applicationContext)
+                        editorSettingCacheManager.get().init()
                     }
                 }
                 isInitialized = true
@@ -120,7 +122,6 @@ class MainActivity : ComponentActivity() {
                         NotableApp(
                             // Call .get() here so they are only instantiated AFTER the permission check runs
                             exportEngine = exportEngineLazy.get(),
-                            editorSettingCacheManager = editorSettingCacheManager.get(),
                             snackState = snackState,
                             appRepository = appRepositoryLazy.get()
                         )
