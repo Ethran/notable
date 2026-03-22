@@ -215,6 +215,18 @@ class SyncEngine(private val context: Context) {
         return@withContext syncNotebookImpl(notebookId)
     }
 
+    fun syncFromPageId(pageId: String){
+        try {
+            val pageEntity = appRepository.pageRepository.getById(pageId) ?: return
+            pageEntity.notebookId?.let { notebookId ->
+                SyncLogger.i("EditorSync", "Auto-syncing on page close")
+                SyncEngine(kotlin.context).syncNotebook(notebookId)
+            }
+        } catch (e: Exception) {
+            SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
+        }
+    }
+
     /**
      * Internal notebook sync — does not check the mutex. Called from both
      * the public [syncNotebook] entry point and [syncExistingNotebooks] (which

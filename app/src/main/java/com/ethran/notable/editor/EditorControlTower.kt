@@ -38,8 +38,6 @@ class EditorControlTower(
     val page: PageView,
     private var history: History,
     private val state: EditorState,
-    private val context: Context,
-    private val appRepository: AppRepository
 ) {
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
@@ -128,16 +126,7 @@ class EditorControlTower(
      */
     private suspend fun triggerSyncForPage(pageId: String?) {
         if (pageId == null) return
-
-        try {
-            val pageEntity = appRepository.pageRepository.getById(pageId) ?: return
-            pageEntity.notebookId?.let { notebookId ->
-                SyncLogger.i("EditorSync", "Auto-syncing on page close")
-                SyncEngine(context).syncNotebook(notebookId)
-            }
-        } catch (e: Exception) {
-            SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
-        }
+        SyncEngine().syncFromPageId(pageId)
     }
 
     fun setIsDrawing(value: Boolean) {
