@@ -198,11 +198,11 @@ class PageView(
      */
     fun changePage(newPageId: String) {
         val oldId = currentPageId
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.IO) {
             pageDataManager.updateOnExit(oldId)
             persistBitmapDebounced(oldId)
         }
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.IO) {
             pageDataManager.setPage(newPageId)
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
             pageDataManager.getCachedBitmap(newPageId)?.let { cached ->

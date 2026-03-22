@@ -5,12 +5,11 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Looper
-import androidx.compose.ui.graphics.Color
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.pointsToPath
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze

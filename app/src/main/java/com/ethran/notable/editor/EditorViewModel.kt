@@ -159,7 +159,7 @@ sealed class EditorUiEvent {
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     val appRepository: AppRepository,
-    val editorSettingCacheManager: EditorSettingCacheManager,
+    var editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager
 ) : ViewModel() {

@@ -270,7 +270,7 @@ private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
                 """
                 exists=${file.exists()}
                 size=${file.length()}
-                path=${file.absolutePath}
+                name=${'$'}{file.name}
                 """.trimIndent()
             )
             null

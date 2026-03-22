@@ -9,11 +9,14 @@ import com.ethran.notable.editor.utils.Pen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
+
 
 const val persistVersion = 2
 
@@ -34,16 +37,33 @@ class EditorSettingCacheManager
     )
 
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val initMutex = Mutex()
+
+    @Volatile
+    private var isInitialized = false
+
 
     suspend fun init() {
-        val settingsJSon = withContext(Dispatchers.IO) {
-            kvRepository.get("EDITOR_SETTINGS")
-        }
-        if (settingsJSon != null) {
-            val settings = Json.decodeFromString<EditorSettings>(settingsJSon.value)
-            if (settings.version == persistVersion) setEditorSettings(settings, false)
+        if (isInitialized) return
+
+        initMutex.withLock {
+            if (isInitialized) return
+
+            val settingsJson = withContext(Dispatchers.IO) {
+                kvRepository.get("EDITOR_SETTINGS")?.value
+            }
+
+            val settings = settingsJson
+                ?.let { runCatching { Json.decodeFromString<EditorSettings>(it) }.getOrNull() }
+
+            if (settings?.version == persistVersion) {
+                setEditorSettings(settings, shouldPersist = false)
+            }
+
+            isInitialized = true
         }
     }
+
 
     private fun persist(settings: EditorSettings) {
         val settingsJson = Json.encodeToString(settings)

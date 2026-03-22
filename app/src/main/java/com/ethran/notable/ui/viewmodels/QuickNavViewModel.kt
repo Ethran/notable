@@ -43,7 +43,7 @@ class QuickNavViewModel(
     private val pageRepository = appRepository.pageRepository
     private val bookRepository = appRepository.bookRepository
     private val kv = appRepository.kvProxy
-    private val log = ShipBook.getLogger("EditorControlTower")
+    private val log = ShipBook.getLogger("QuickNavViewModel")
 
     private val _uiState = MutableStateFlow(QuickNavUiState())
     val uiState: StateFlow<QuickNavUiState> = _uiState.asStateFlow()
@@ -145,7 +145,7 @@ class QuickNavViewModel(
     }
 
     fun onScrubEnd(index: Int) {
-        log.e("onScrubEnd: $index")
+        log.v("onScrubEnd: $index")
         CanvasEventBus.restoreCanvas.tryEmit(Unit)
 
         val pageIds = _uiState.value.bookPageIds

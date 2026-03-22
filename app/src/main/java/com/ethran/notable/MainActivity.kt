@@ -28,6 +28,7 @@ import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
@@ -59,14 +60,16 @@ var SCREEN_HEIGHT = EpdController.getEpdWidth().toInt()
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // Delay the init till we have the permisions required
+    // Delay the init till we have the permissions required
     @Inject
     lateinit var kvProxy: dagger.Lazy<KvProxy>
 
     @Inject
     lateinit var strokeMigrationHelper: dagger.Lazy<StrokeMigrationHelper>
 
-    // 1. Use dagger.Lazy to defer DB initialization until after permissions
+    @Inject
+    lateinit var editorSettingCacheManager: dagger.Lazy<EditorSettingCacheManager>
+
     @Inject
     lateinit var appRepositoryLazy: dagger.Lazy<AppRepository>
 
@@ -107,6 +110,7 @@ class MainActivity : ComponentActivity() {
                         strokeMigrationHelper.get().reencodeStrokePointsToSB1()
                         pageDataManager.get()
                             .registerComponentCallbacks(this@MainActivity.applicationContext)
+                        editorSettingCacheManager.get().init()
                     }
                 }
                 isInitialized = true

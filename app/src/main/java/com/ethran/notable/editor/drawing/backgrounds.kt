@@ -351,7 +351,7 @@ fun drawBg(
     page: PageView? = null,
     clipRect: Rect? = null // before the scaling
 ) {
-    log.e("Loading the background")
+    log.v("Loading the background")
     clipRect?.let {
         canvas.save()
         canvas.clipRect(scaleRect(it, scale))
