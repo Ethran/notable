@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -55,8 +56,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.ui.LocalSnackContext
@@ -80,6 +81,7 @@ fun NotebookConfigDialog(
     val book by bookRepository.getByIdLive(bookId).observeAsState()
     val scope = rememberCoroutineScope()
     val snackManager = LocalSnackContext.current
+    val context = LocalContext.current
 
     if (book == null) return
 
@@ -141,6 +143,20 @@ fun NotebookConfigDialog(
                 }
                 showDeleteDialog = false
                 onClose()
+
+                // Auto-upload deletion to server (use standalone scope since composition is closing)
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        log.i("Uploading deletion for notebook: $bookId")
+                        val entry = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                            context.applicationContext,
+                            com.ethran.notable.sync.SyncEngineEntryPoint::class.java
+                        )
+                        entry.syncEngine().uploadDeletion(bookId)
+                    } catch (e: Exception) {
+                        log.e("Upload deletion failed: ${e.message}")
+                    }
+                }
             },
             onCancel = {
                 showDeleteDialog = false

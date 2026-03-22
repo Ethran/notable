@@ -339,11 +339,44 @@ class PageView(
         }
     }
 
+// TODO: fix this
+//     private fun saveStrokesToPersistLayer(strokes: List<Stroke>) {
+//         coroutineScope.launch(Dispatchers.IO) {
+//             try {
+//                 dbStrokes.create(strokes)
+//             } catch (_: SQLiteConstraintException) {
+//                 logAndShowError(
+//                     "saveStrokesToPersistLayer",
+//                     "Attempted to create strokes that already exist"
+//                 )
+//                 dbStrokes.update(strokes)
+//             }
+//             updateParentNotebookTimestamp()
+//         }
+//     }
+
+//     private fun saveImagesToPersistLayer(image: List<Image>) {
+//         coroutineScope.launch(Dispatchers.IO) {
+//             dbImages.create(image)
+//             updateParentNotebookTimestamp()
+//         }
+//     }
+
+//     /**
+//      * Update the parent notebook's updatedAt timestamp so sync knows it has changes.
+//      */
+//     private suspend fun updateParentNotebookTimestamp() {
+//         val notebookId = pageFromDb?.notebookId ?: return
+//         val notebook = appRepository.bookRepository.getById(notebookId) ?: return
+//         appRepository.bookRepository.update(notebook)
+//     }
+
     private fun saveStrokesToPersistLayer(strokes: List<Stroke>) =
         pageDataManager.saveStrokesToDb(strokes)
 
 
     private fun saveImagesToPersistLayer(image: List<Image>) = pageDataManager.saveImagesToDb(image)
+
 
     fun addImage(imageToAdd: Image) {
         images += listOf(imageToAdd)
@@ -387,6 +420,21 @@ class PageView(
     private fun removeImagesFromPersistLayer(imageIds: List<String>) =
         pageDataManager.removeImagesFromDb(imageIds)
 
+ // TODO:
+//     private fun removeStrokesFromPersistLayer(strokeIds: List<String>) {
+//         coroutineScope.launch(Dispatchers.IO) {
+//             appRepository.strokeRepository.deleteAll(strokeIds)
+//             updateParentNotebookTimestamp()
+//         }
+//     }
+
+//     private fun removeImagesFromPersistLayer(imageIds: List<String>) {
+//         coroutineScope.launch(Dispatchers.IO) {
+//             appRepository.imageRepository.deleteAll(imageIds)
+//             updateParentNotebookTimestamp()
+//         }
+//     }
+// =======
 
     // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {

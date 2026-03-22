@@ -10,12 +10,26 @@ import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.SyncSettings
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.sync.CredentialManager
+import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncLogger
+import com.ethran.notable.sync.SyncResult
+import com.ethran.notable.sync.SyncScheduler
+import com.ethran.notable.sync.SyncState
+import com.ethran.notable.sync.WebDAVClient
 import com.ethran.notable.utils.isLatestVersion
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 
@@ -26,12 +40,41 @@ data class GestureRowModel(
     val onUpdate: (AppSettings.GestureAction?) -> Unit
 )
 
+sealed class SyncConnectionStatus {
+    data object Success : SyncConnectionStatus()
+    data object Failed : SyncConnectionStatus()
+    data class ClockSkew(val seconds: Long) : SyncConnectionStatus()
+}
+
+data class SyncSettingsUiState(
+    val serverUrl: String = "",
+    val username: String = "",
+    val password: String = "",
+    val savedUsername: String = "",
+    val savedPassword: String = "",
+    val testingConnection: Boolean = false,
+    val connectionStatus: SyncConnectionStatus? = null,
+    val syncLogs: List<SyncLogger.LogEntry> = emptyList(),
+    val syncState: SyncState = SyncState.Idle,
+    val showForceUploadConfirm: Boolean = false,
+    val showForceDownloadConfirm: Boolean = false,
+) {
+    val credentialsChanged: Boolean
+        get() = username != savedUsername || password != savedPassword
+}
+
+sealed class SyncSettingsEffect {
+    data class ShowHint(val message: String) : SyncSettingsEffect()
+}
+
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @param:ApplicationContext private val appContext: Context,
     private val kvProxy: KvProxy,
+    private val credentialManager: CredentialManager,
+    private val syncEngine: SyncEngine,
 ) : ViewModel() {
-    companion object {}
 
     // We use the GlobalAppSettings object directly.
     val settings: AppSettings
@@ -39,6 +82,28 @@ class SettingsViewModel @Inject constructor(
 
     var isLatestVersion: Boolean by mutableStateOf(true)
         private set
+
+    var syncUiState by mutableStateOf(SyncSettingsUiState())
+        private set
+
+    private var isSyncInitialized = false
+
+    private val _syncEffects = MutableSharedFlow<SyncSettingsEffect>()
+    val syncEffects = _syncEffects.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            SyncLogger.logs.collect { logs ->
+                syncUiState = syncUiState.copy(syncLogs = logs)
+            }
+        }
+
+        viewModelScope.launch {
+            SyncEngine.syncState.collect { state ->
+                syncUiState = syncUiState.copy(syncState = state)
+            }
+        }
+    }
 
     /**
      * Checks if the app is the latest version.
@@ -69,6 +134,190 @@ class SettingsViewModel @Inject constructor(
     }
 
     // ----------------- //
+    // Sync Settings
+    // ----------------- //
+
+    fun initializeSyncState(syncSettings: SyncSettings) {
+        if (isSyncInitialized) return
+        isSyncInitialized = true
+
+        syncUiState = syncUiState.copy(
+            serverUrl = syncSettings.serverUrl,
+            username = syncSettings.username,
+            savedUsername = syncSettings.username
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val credentials = credentialManager.getCredentials()
+            withContext(Dispatchers.Main) {
+                credentials?.let { (user, pass) ->
+                    syncUiState = syncUiState.copy(
+                        username = user, password = pass, savedUsername = user, savedPassword = pass
+                    )
+                    SyncLogger.i("Settings", "Loaded credentials for user: $user")
+                } ?: SyncLogger.w("Settings", "No credentials found in storage")
+            }
+        }
+    }
+
+    fun onServerUrlChanged(serverUrl: String) {
+        syncUiState = syncUiState.copy(serverUrl = serverUrl)
+        val updated = settings.copy(
+            syncSettings = settings.syncSettings.copy(serverUrl = serverUrl)
+        )
+        updateSettings(updated)
+    }
+
+    fun onUsernameChanged(username: String) {
+        syncUiState = syncUiState.copy(username = username)
+    }
+
+    fun onPasswordChanged(password: String) {
+        syncUiState = syncUiState.copy(password = password)
+    }
+
+    fun onSaveCredentials() {
+        val username = syncUiState.username
+        val password = syncUiState.password
+        if (username.isBlank() || password.isBlank()) return
+
+        credentialManager.saveCredentials(username, password)
+        syncUiState = syncUiState.copy(
+            savedUsername = username, savedPassword = password
+        )
+
+        val updated = settings.copy(
+            syncSettings = settings.syncSettings.copy(username = username)
+        )
+        updateSettings(updated)
+        SyncLogger.i("Settings", "Credentials saved for user: $username")
+
+        viewModelScope.launch {
+            _syncEffects.emit(SyncSettingsEffect.ShowHint("Credentials saved"))
+        }
+    }
+
+    fun onTestConnection() {
+        val serverUrl = syncUiState.serverUrl
+        val username = syncUiState.username
+        val password = syncUiState.password
+        if (serverUrl.isBlank() || username.isBlank() || password.isBlank()) return
+
+        syncUiState = syncUiState.copy(testingConnection = true, connectionStatus = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            val (connected, clockSkewMs) = WebDAVClient.testConnection(
+                serverUrl, username, password
+            )
+            withContext(Dispatchers.Main) {
+                val status = when {
+                    !connected -> SyncConnectionStatus.Failed
+                    clockSkewMs != null && kotlin.math.abs(clockSkewMs) > 30_000L -> SyncConnectionStatus.ClockSkew(
+                        clockSkewMs / 1000
+                    )
+
+                    else -> SyncConnectionStatus.Success
+                }
+                syncUiState = syncUiState.copy(
+                    testingConnection = false, connectionStatus = status
+                )
+            }
+        }
+    }
+
+    fun onSyncEnabledChanged(isChecked: Boolean) {
+        val current = settings.syncSettings
+        updateSettings(settings.copy(syncSettings = current.copy(syncEnabled = isChecked)))
+        if (isChecked && current.autoSync) {
+            SyncScheduler.enablePeriodicSync(
+                appContext, current.syncInterval.toLong(), current.wifiOnly
+            )
+        } else {
+            SyncScheduler.disablePeriodicSync(appContext)
+        }
+    }
+
+    fun onAutoSyncChanged(isChecked: Boolean) {
+        val current = settings.syncSettings
+        updateSettings(settings.copy(syncSettings = current.copy(autoSync = isChecked)))
+        if (isChecked && current.syncEnabled) {
+            SyncScheduler.enablePeriodicSync(
+                appContext, current.syncInterval.toLong(), current.wifiOnly
+            )
+        } else {
+            SyncScheduler.disablePeriodicSync(appContext)
+        }
+    }
+
+    fun onSyncOnNoteCloseChanged(isChecked: Boolean) {
+        val current = settings.syncSettings
+        updateSettings(settings.copy(syncSettings = current.copy(syncOnNoteClose = isChecked)))
+    }
+
+    fun onWifiOnlyChanged(isChecked: Boolean) {
+        val current = settings.syncSettings
+        updateSettings(settings.copy(syncSettings = current.copy(wifiOnly = isChecked)))
+        if (current.autoSync && current.syncEnabled) {
+            SyncScheduler.enablePeriodicSync(appContext, current.syncInterval.toLong(), isChecked)
+        }
+    }
+
+    fun onManualSync() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = syncEngine.syncAllNotebooks()
+            withContext(Dispatchers.Main) {
+                if (result is SyncResult.Success) {
+                    val timestamp =
+                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                    val updated = settings.copy(
+                        syncSettings = settings.syncSettings.copy(lastSyncTime = timestamp)
+                    )
+                    updateSettings(updated)
+                    viewModelScope.launch {
+                        _syncEffects.emit(SyncSettingsEffect.ShowHint("Sync completed successfully"))
+                    }
+                } else {
+                    val error = (result as? SyncResult.Failure)?.error?.toString() ?: "Unknown"
+                    viewModelScope.launch {
+                        _syncEffects.emit(SyncSettingsEffect.ShowHint("Sync failed: $error"))
+                    }
+                }
+            }
+        }
+    }
+
+    fun onForceUploadRequested(show: Boolean) {
+        syncUiState = syncUiState.copy(showForceUploadConfirm = show)
+    }
+
+    fun onForceDownloadRequested(show: Boolean) {
+        syncUiState = syncUiState.copy(showForceDownloadConfirm = show)
+    }
+
+    fun onConfirmForceUpload() {
+        syncUiState = syncUiState.copy(showForceUploadConfirm = false)
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = syncEngine.forceUploadAll()
+            val message =
+                if (result is SyncResult.Success) "Force upload complete" else "Force upload failed"
+            _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
+        }
+    }
+
+    fun onConfirmForceDownload() {
+        syncUiState = syncUiState.copy(showForceDownloadConfirm = false)
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = syncEngine.forceDownloadAll()
+            val message =
+                if (result is SyncResult.Success) "Force download complete" else "Force download failed"
+            _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
+        }
+    }
+
+    fun onClearSyncLogs() {
+        SyncLogger.clear()
+    }
+
+    // ----------------- //
     // Gesture Settings
     // ----------------- //
 
@@ -82,7 +331,7 @@ class SettingsViewModel @Inject constructor(
             (R.string.gestures_two_finger_tap_action),
             settings.twoFingerTapAction,
             AppSettings.defaultTwoFingerTapAction,
-            ) { a -> updateSettings(settings.copy(twoFingerTapAction = a)) },
+        ) { a -> updateSettings(settings.copy(twoFingerTapAction = a)) },
         GestureRowModel(
             (R.string.gestures_swipe_left_action),
             settings.swipeLeftAction,

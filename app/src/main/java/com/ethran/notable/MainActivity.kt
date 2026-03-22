@@ -34,6 +34,7 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.NotableApp
@@ -79,6 +80,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var pageDataManager: dagger.Lazy<PageDataManager>
 
+    @Inject
+    lateinit var syncEngine: dagger.Lazy<SyncEngine>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableFullScreen()
@@ -112,6 +116,8 @@ class MainActivity : ComponentActivity() {
                             .registerComponentCallbacks(this@MainActivity.applicationContext)
                         editorSettingCacheManager.get().init()
                     }
+                    // Trigger initial sync on app startup (fails silently if offline)
+                    triggerInitialSync()
                 }
                 isInitialized = true
             }
@@ -130,6 +136,18 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+
+    private suspend fun triggerInitialSync() {
+        try {
+            if (GlobalAppSettings.current.syncSettings.syncEnabled) {
+                Log.i(TAG, "Triggering initial sync on app startup")
+               syncEngine.get().syncAllNotebooks()
+            }
+        } catch (e: Exception) {
+            Log.i(TAG, "Initial sync failed (offline?): ${e.message}")
         }
     }
 

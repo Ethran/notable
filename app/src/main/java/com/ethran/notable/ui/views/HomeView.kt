@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.editor.EditorDestination
@@ -97,9 +98,24 @@ fun Library(
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val newlyCreatedBookId by viewModel.newlyCreatedBookId.collectAsStateWithLifecycle()
 
     LaunchedEffect(folderId) {
         viewModel.loadFolder(folderId)
+    }
+
+    // Show config dialog for newly created notebooks so user can rename immediately
+    if (newlyCreatedBookId != null) {
+        if (GlobalAppSettings.current.renameOnCreate && uiState.books.any { it.id == newlyCreatedBookId }) {
+            NotebookConfigDialog(
+                appRepository = viewModel.appRepository,
+                exportEngine = viewModel.exportEngine,
+                bookId = newlyCreatedBookId!!,
+                onClose = { viewModel.clearNewlyCreatedBookId() }
+            )
+        } else {
+            viewModel.clearNewlyCreatedBookId()
+        }
     }
 
     LibraryContent(

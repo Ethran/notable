@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -26,6 +27,8 @@ import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.navigation.NavigationDestination
+import dagger.hilt.android.EntryPointAccessors
+import com.ethran.notable.sync.SyncEngineEntryPoint
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
@@ -53,7 +56,6 @@ object EditorDestination : NavigationDestination {
         return "$route/$pageId" + if (bookId != null) "?$BOOK_ID_ARG=$bookId" else ""
     }
 }
-
 
 
 @Composable
@@ -114,7 +116,12 @@ fun EditorView(
         }
 
         val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState)
+            // Obtain SyncEngine from Hilt entry point for use in non-Hilt-managed objects
+            val entry = EntryPointAccessors.fromApplication(
+                context.applicationContext, SyncEngineEntryPoint::class.java
+            )
+            val syncEngine = entry.syncEngine()
+            EditorControlTower(scope, page, history, editorState, syncEngine)
         }
 
 
@@ -124,6 +131,8 @@ fun EditorView(
             viewModel.updateDrawingState()
         }
 
+//         val editorControlTower = remember {
+//             EditorControlTower(scope, page, history, editorState, context, appRepository).apply { registerObservers() }
         DisposableEffect(editorControlTower) {
             editorControlTower.registerObservers()
             onDispose {
@@ -198,9 +207,7 @@ fun EditorView(
 
         // Observe pageId changes from ViewModel state for navigation
         LaunchedEffect(viewModel) {
-            snapshotFlow { toolbarState.pageId }
-                .filterNotNull()
-                .distinctUntilChanged()
+            snapshotFlow { toolbarState.pageId }.filterNotNull().distinctUntilChanged()
                 .drop(1) // Skip initial emission from loadBookData
                 .collect { newPageId ->
                     log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")
@@ -216,8 +223,7 @@ fun EditorView(
         val zoomLevel by page.zoomLevel.collectAsStateWithLifecycle()
         val selectionActive = viewModel.selectionState.isNonEmpty()
         LaunchedEffect(
-            zoomLevel,
-            selectionActive
+            zoomLevel, selectionActive
         ) {
             log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
             viewModel.setShowResetView(zoomLevel != 1.0f)
@@ -226,6 +232,29 @@ fun EditorView(
 
         DisposableEffect(Unit) {
             onDispose {
+// TODO
+//                 // finish selection operation
+//                 viewModel.selectionState.applySelectionDisplace(page)
+//                 if (bookId != null) exportToLinkedFile(
+//                     exportEngine,
+//                     bookId,
+//                     appRepository.bookRepository
+//                 )
+//                 page.disposeOldPage()
+
+//                 // Trigger sync on note close if enabled
+//                 val settings = GlobalAppSettings.current
+//                 if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose && bookId != null) {
+//                     // Use a new coroutine scope since the composition scope is being disposed
+//                     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+//                         try {
+//                             SyncLogger.i("EditorSync", "Auto-syncing on editor close")
+//                             SyncEngine(context).syncNotebook(bookId)
+//                         } catch (e: Exception) {
+//                             SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
+//                         }
+//                     }
+//                 }
                 viewModel.onDispose(page)
             }
         }
