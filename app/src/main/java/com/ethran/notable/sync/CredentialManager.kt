@@ -3,12 +3,19 @@ package com.ethran.notable.sync
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
+import androidx.core.content.edit
 
 /**
  * Manages secure storage of WebDAV credentials using EncryptedSharedPreferences.
  * Credentials are stored separately from the KV database to ensure they're encrypted at rest.
  */
-class CredentialManager(private val context: Context) {
+@Singleton
+class CredentialManager @Inject constructor(
+    @param:ApplicationContext private val context: Context
+) {
 
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -28,10 +35,10 @@ class CredentialManager(private val context: Context) {
      * @param password WebDAV password
      */
     fun saveCredentials(username: String, password: String) {
-        encryptedPrefs.edit()
-            .putString(KEY_USERNAME, username)
-            .putString(KEY_PASSWORD, password)
-            .apply()
+        encryptedPrefs.edit {
+            putString(KEY_USERNAME, username)
+                .putString(KEY_PASSWORD, password)
+        }
     }
 
     /**
@@ -48,7 +55,7 @@ class CredentialManager(private val context: Context) {
      * Clear stored credentials (e.g., on logout or reset).
      */
     fun clearCredentials() {
-        encryptedPrefs.edit().clear().apply()
+        encryptedPrefs.edit { clear() }
     }
 
     /**

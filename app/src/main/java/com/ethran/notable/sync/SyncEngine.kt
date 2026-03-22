@@ -10,10 +10,7 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.ensureImagesFolder
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +20,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import javax.inject.Inject
+import javax.inject.Singleton
 
 // Alias for cleaner code
 private val SLog = SyncLogger
@@ -31,21 +30,14 @@ private val SLog = SyncLogger
  * Core sync engine orchestrating WebDAV synchronization.
  * Handles bidirectional sync of folders, notebooks, pages, and files.
  */
-class SyncEngine(private val context: Context) {
+@Singleton
+class SyncEngine @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val appRepository: AppRepository,
+    private val kvProxy: KvProxy,
+    private val credentialManager: CredentialManager
+) {
 
-    @EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface SyncEngineEntryPoint {
-        fun appRepository(): AppRepository
-        fun kvProxy(): KvProxy
-    }
-
-    private val entryPoint = EntryPointAccessors.fromApplication(
-        context.applicationContext, SyncEngineEntryPoint::class.java
-    )
-    private val appRepository = entryPoint.appRepository()
-    private val kvProxy = entryPoint.kvProxy()
-    private val credentialManager = CredentialManager(context)
     private val folderSerializer = FolderSerializer
     private val notebookSerializer = NotebookSerializer(context)
 
@@ -215,15 +207,15 @@ class SyncEngine(private val context: Context) {
         return@withContext syncNotebookImpl(notebookId)
     }
 
-    fun syncFromPageId(pageId: String){
+    suspend fun syncFromPageId(pageId: String){
         try {
             val pageEntity = appRepository.pageRepository.getById(pageId) ?: return
             pageEntity.notebookId?.let { notebookId ->
-                SyncLogger.i("EditorSync", "Auto-syncing on page close")
-                SyncEngine(kotlin.context).syncNotebook(notebookId)
+                SLog.i("EditorSync", "Auto-syncing on page close")
+                syncNotebook(notebookId)
             }
         } catch (e: Exception) {
-            SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
+            SLog.e("EditorSync", "Auto-sync failed: ${e.message}")
         }
     }
 
@@ -1057,7 +1049,7 @@ class SyncEngine(private val context: Context) {
  * Result of a sync operation.
  */
 sealed class SyncResult {
-    object Success : SyncResult()
+    data object Success : SyncResult()
     data class Failure(val error: SyncError) : SyncResult()
 }
 
@@ -1078,7 +1070,7 @@ enum class SyncError {
  * Represents the current state of a sync operation.
  */
 sealed class SyncState {
-    object Idle : SyncState()
+    data object Idle : SyncState()
 
     data class Syncing(
         val currentStep: SyncStep,

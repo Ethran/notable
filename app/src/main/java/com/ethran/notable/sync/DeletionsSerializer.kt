@@ -2,7 +2,6 @@ package com.ethran.notable.sync
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 
 /**
  * Legacy deletion tracking format used by the old deletions.json approach.
@@ -42,7 +41,7 @@ object DeletionsSerializer {
     fun deserialize(jsonString: String): DeletionsData {
         return try {
             json.decodeFromString<DeletionsData>(jsonString)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // If parsing fails, return empty
             DeletionsData()
         }

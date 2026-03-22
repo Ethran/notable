@@ -7,7 +7,7 @@ import android.net.NetworkCapabilities
 /**
  * Checks network connectivity status for sync operations.
  */
-class ConnectivityChecker(private val context: Context) {
+class ConnectivityChecker(context: Context) {
 
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

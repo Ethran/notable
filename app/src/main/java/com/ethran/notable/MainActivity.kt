@@ -80,6 +80,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var pageDataManager: dagger.Lazy<PageDataManager>
 
+    @Inject
+    lateinit var syncEngine: dagger.Lazy<SyncEngine>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableFullScreen()
@@ -141,7 +144,7 @@ class MainActivity : ComponentActivity() {
         try {
             if (GlobalAppSettings.current.syncSettings.syncEnabled) {
                 Log.i(TAG, "Triggering initial sync on app startup")
-                SyncEngine(applicationContext).syncAllNotebooks()
+               syncEngine.get().syncAllNotebooks()
             }
         } catch (e: Exception) {
             Log.i(TAG, "Initial sync failed (offline?): ${e.message}")
