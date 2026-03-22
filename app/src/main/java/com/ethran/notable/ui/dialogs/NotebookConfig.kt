@@ -37,11 +37,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -56,15 +56,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
-import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
@@ -149,7 +148,11 @@ fun NotebookConfigDialog(
                 kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                     try {
                         log.i("Uploading deletion for notebook: $bookId")
-                        SyncEngine(context).uploadDeletion(bookId)
+                        val entry = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                            context.applicationContext,
+                            com.ethran.notable.sync.SyncEngineEntryPoint::class.java
+                        )
+                        entry.syncEngine().uploadDeletion(bookId)
                     } catch (e: Exception) {
                         log.e("Upload deletion failed: ${e.message}")
                     }

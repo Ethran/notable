@@ -22,7 +22,11 @@ object SyncScheduler {
      * @param intervalMinutes Sync interval in minutes
      * @param wifiOnly If true, only run on unmetered (WiFi) connections
      */
-    fun enablePeriodicSync(context: Context, intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES, wifiOnly: Boolean = false) {
+    fun enablePeriodicSync(
+        context: Context,
+        intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES,
+        wifiOnly: Boolean = false
+    ) {
         // UNMETERED covers WiFi and ethernet but excludes metered mobile connections.
         // This matches the intent of the "WiFi only" setting (avoid burning mobile data).
         val networkType = if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED

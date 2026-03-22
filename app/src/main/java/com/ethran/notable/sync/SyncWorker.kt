@@ -5,7 +5,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.db.KvProxy
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
 
@@ -14,8 +13,7 @@ import io.shipbook.shipbooksdk.Log
  * Runs via WorkManager on a periodic schedule (minimum 15 minutes per WorkManager constraints).
  */
 class SyncWorker(
-    context: Context,
-    params: WorkerParameters
+    context: Context, params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
@@ -29,7 +27,7 @@ class SyncWorker(
         }
 
         val entryPoint = EntryPointAccessors.fromApplication(
-            applicationContext, SyncEngine.SyncEngineEntryPoint::class.java
+            applicationContext, SyncEngineEntryPoint::class.java
         )
         val kvProxy = entryPoint.kvProxy()
         val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
@@ -47,14 +45,12 @@ class SyncWorker(
 
         // Perform sync
         return try {
-            val syncEngine = SyncEngine(applicationContext)
-            val result = syncEngine.syncAllNotebooks()
-
-            when (result) {
+            when (val result = entryPoint.syncEngine().syncAllNotebooks()) {
                 is SyncResult.Success -> {
                     Log.i(TAG, "Sync completed successfully")
                     Result.success()
                 }
+
                 is SyncResult.Failure -> {
                     when (result.error) {
                         SyncError.SYNC_IN_PROGRESS -> {
@@ -62,6 +58,7 @@ class SyncWorker(
                             // Don't retry - another sync is already running
                             Result.success()
                         }
+
                         SyncError.NETWORK_ERROR -> {
                             Log.e(TAG, "Network error during sync")
                             if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
@@ -70,6 +67,7 @@ class SyncWorker(
                                 Result.failure()
                             }
                         }
+
                         else -> {
                             Log.e(TAG, "Sync failed: ${result.error}")
                             if (runAttemptCount < MAX_RETRY_ATTEMPTS) {

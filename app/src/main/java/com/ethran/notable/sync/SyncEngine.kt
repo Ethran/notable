@@ -3,14 +3,17 @@ package com.ethran.notable.sync
 import android.content.Context
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.ensureImagesFolder
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,96 +61,119 @@ class SyncEngine @Inject constructor(
 
         return@withContext try {
             SLog.i(TAG, "Starting full sync...")
-            updateState(SyncState.Syncing(
-                currentStep = SyncStep.INITIALIZING,
-                progress = PROGRESS_INITIALIZING,
-                details = "Initializing sync..."
-            ))
+            updateState(
+                SyncState.Syncing(
+                    currentStep = SyncStep.INITIALIZING,
+                    progress = PROGRESS_INITIALIZING,
+                    details = "Initializing sync..."
+                )
+            )
 
             val initResult = initializeSyncClient()
             if (initResult == null) {
-                updateState(SyncState.Error(
-                    error = SyncError.CONFIG_ERROR,
-                    step = SyncStep.INITIALIZING,
-                    canRetry = false
-                ))
+                updateState(
+                    SyncState.Error(
+                        error = SyncError.CONFIG_ERROR,
+                        step = SyncStep.INITIALIZING,
+                        canRetry = false
+                    )
+                )
                 return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
             }
             val (settings, webdavClient) = initResult
 
             if (settings.syncSettings.wifiOnly && !ConnectivityChecker(context).isUnmeteredConnected()) {
                 SLog.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping")
-                updateState(SyncState.Error(
-                    error = SyncError.WIFI_REQUIRED,
-                    step = SyncStep.INITIALIZING,
-                    canRetry = false
-                ))
+                updateState(
+                    SyncState.Error(
+                        error = SyncError.WIFI_REQUIRED,
+                        step = SyncStep.INITIALIZING,
+                        canRetry = false
+                    )
+                )
                 return@withContext SyncResult.Failure(SyncError.WIFI_REQUIRED)
             }
 
             val skewMs = checkClockSkew(webdavClient)
             if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
                 val skewSec = skewMs / 1000
-                SLog.w(TAG, "Clock skew too large: ${skewSec}s (threshold: ${CLOCK_SKEW_THRESHOLD_MS / 1000}s)")
-                updateState(SyncState.Error(
-                    error = SyncError.CLOCK_SKEW,
-                    step = SyncStep.INITIALIZING,
-                    canRetry = false
-                ))
+                SLog.w(
+                    TAG,
+                    "Clock skew too large: ${skewSec}s (threshold: ${CLOCK_SKEW_THRESHOLD_MS / 1000}s)"
+                )
+                updateState(
+                    SyncState.Error(
+                        error = SyncError.CLOCK_SKEW, step = SyncStep.INITIALIZING, canRetry = false
+                    )
+                )
                 return@withContext SyncResult.Failure(SyncError.CLOCK_SKEW)
             }
 
             ensureServerDirectories(webdavClient)
 
             // 1. Sync folders first (they're referenced by notebooks)
-            updateState(SyncState.Syncing(
-                currentStep = SyncStep.SYNCING_FOLDERS,
-                progress = PROGRESS_SYNCING_FOLDERS,
-                details = "Syncing folders..."
-            ))
+            updateState(
+                SyncState.Syncing(
+                    currentStep = SyncStep.SYNCING_FOLDERS,
+                    progress = PROGRESS_SYNCING_FOLDERS,
+                    details = "Syncing folders..."
+                )
+            )
             syncFolders(webdavClient)
 
             // 2. Apply remote deletions (delete local notebooks that were deleted on other devices)
-            updateState(SyncState.Syncing(
-                currentStep = SyncStep.APPLYING_DELETIONS,
-                progress = PROGRESS_APPLYING_DELETIONS,
-                details = "Applying remote deletions..."
-            ))
+            updateState(
+                SyncState.Syncing(
+                    currentStep = SyncStep.APPLYING_DELETIONS,
+                    progress = PROGRESS_APPLYING_DELETIONS,
+                    details = "Applying remote deletions..."
+                )
+            )
             val tombstonedIds = applyRemoteDeletions(webdavClient)
 
             // 3. Sync existing local notebooks and capture pre-download snapshot
-            updateState(SyncState.Syncing(
-                currentStep = SyncStep.SYNCING_NOTEBOOKS,
-                progress = PROGRESS_SYNCING_NOTEBOOKS,
-                details = "Syncing local notebooks..."
-            ))
+            updateState(
+                SyncState.Syncing(
+                    currentStep = SyncStep.SYNCING_NOTEBOOKS,
+                    progress = PROGRESS_SYNCING_NOTEBOOKS,
+                    details = "Syncing local notebooks..."
+                )
+            )
             val preDownloadNotebookIds = syncExistingNotebooks()
             notebooksSynced = preDownloadNotebookIds.size
 
             // 4. Discover and download new notebooks from server
-            updateState(SyncState.Syncing(
-                currentStep = SyncStep.DOWNLOADING_NEW,
-                progress = PROGRESS_DOWNLOADING_NEW,
-                details = "Downloading new notebooks..."
-            ))
-            val newCount = downloadNewNotebooks(webdavClient, tombstonedIds, settings, preDownloadNotebookIds)
+            updateState(
+                SyncState.Syncing(
+                    currentStep = SyncStep.DOWNLOADING_NEW,
+                    progress = PROGRESS_DOWNLOADING_NEW,
+                    details = "Downloading new notebooks..."
+                )
+            )
+            val newCount =
+                downloadNewNotebooks(webdavClient, tombstonedIds, settings, preDownloadNotebookIds)
             notebooksDownloaded = newCount
 
             // 5. Detect local deletions and upload tombstones to server
-            updateState(SyncState.Syncing(
-                currentStep = SyncStep.UPLOADING_DELETIONS,
-                progress = PROGRESS_UPLOADING_DELETIONS,
-                details = "Uploading deletions..."
-            ))
-            val deletedCount = detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
+            updateState(
+                SyncState.Syncing(
+                    currentStep = SyncStep.UPLOADING_DELETIONS,
+                    progress = PROGRESS_UPLOADING_DELETIONS,
+                    details = "Uploading deletions..."
+                )
+            )
+            val deletedCount =
+                detectAndUploadLocalDeletions(webdavClient, settings, preDownloadNotebookIds)
             notebooksDeleted = deletedCount
 
             // 6. Update synced notebook IDs for next sync
-            updateState(SyncState.Syncing(
-                currentStep = SyncStep.FINALIZING,
-                progress = PROGRESS_FINALIZING,
-                details = "Finalizing..."
-            ))
+            updateState(
+                SyncState.Syncing(
+                    currentStep = SyncStep.FINALIZING,
+                    progress = PROGRESS_FINALIZING,
+                    details = "Finalizing..."
+                )
+            )
             updateSyncedNotebookIds(settings)
 
             val duration = System.currentTimeMillis() - startTime
@@ -169,21 +195,23 @@ class SyncEngine @Inject constructor(
             SyncResult.Success
         } catch (e: IOException) {
             SLog.e(TAG, "Network error during sync: ${e.message}")
-            val currentStep = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
-            updateState(SyncState.Error(
-                error = SyncError.NETWORK_ERROR,
-                step = currentStep,
-                canRetry = true
-            ))
+            val currentStep =
+                (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
+            updateState(
+                SyncState.Error(
+                    error = SyncError.NETWORK_ERROR, step = currentStep, canRetry = true
+                )
+            )
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
             SLog.e(TAG, "Unexpected error during sync: ${e.message}\n${e.stackTraceToString()}")
-            val currentStep = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
-            updateState(SyncState.Error(
-                error = SyncError.UNKNOWN_ERROR,
-                step = currentStep,
-                canRetry = false
-            ))
+            val currentStep =
+                (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
+            updateState(
+                SyncState.Error(
+                    error = SyncError.UNKNOWN_ERROR, step = currentStep, canRetry = false
+                )
+            )
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         } finally {
             syncMutex.unlock()
@@ -207,7 +235,7 @@ class SyncEngine @Inject constructor(
         return@withContext syncNotebookImpl(notebookId)
     }
 
-    suspend fun syncFromPageId(pageId: String){
+    suspend fun syncFromPageId(pageId: String) {
         try {
             val pageEntity = appRepository.pageRepository.getById(pageId) ?: return
             pageEntity.notebookId?.let { notebookId ->
@@ -240,13 +268,12 @@ class SyncEngine @Inject constructor(
                 return SyncResult.Success
             }
 
-            val credentials = credentialManager.getCredentials()
-                ?: return SyncResult.Failure(SyncError.AUTH_ERROR)
+            val credentials = credentialManager.getCredentials() ?: return SyncResult.Failure(
+                SyncError.AUTH_ERROR
+            )
 
             val webdavClient = WebDAVClient(
-                settings.syncSettings.serverUrl,
-                credentials.first,
-                credentials.second
+                settings.syncSettings.serverUrl, credentials.first, credentials.second
             )
 
             val skewMs = checkClockSkew(webdavClient)
@@ -256,8 +283,10 @@ class SyncEngine @Inject constructor(
                 return SyncResult.Failure(SyncError.CLOCK_SKEW)
             }
 
-            val localNotebook = appRepository.bookRepository.getById(notebookId)
-                ?: return SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+            val localNotebook =
+                appRepository.bookRepository.getById(notebookId) ?: return SyncResult.Failure(
+                    SyncError.UNKNOWN_ERROR
+                )
 
             val remotePath = SyncPaths.manifestFile(notebookId)
             val remoteExists = webdavClient.exists(remotePath)
@@ -268,7 +297,8 @@ class SyncEngine @Inject constructor(
                 val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
 
-                val diffMs = remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time } ?: Long.MAX_VALUE
+                val diffMs = remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time }
+                    ?: Long.MAX_VALUE
                 SLog.i(TAG, "Remote: $remoteUpdatedAt (${remoteUpdatedAt?.time}ms)")
                 SLog.i(TAG, "Local: ${localNotebook.updatedAt} (${localNotebook.updatedAt.time}ms)")
                 SLog.i(TAG, "Difference: ${diffMs}ms")
@@ -278,16 +308,21 @@ class SyncEngine @Inject constructor(
                         SLog.i(TAG, "↑ No remote timestamp, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
+
                     diffMs < -TIMESTAMP_TOLERANCE_MS -> {
                         SLog.i(TAG, "↓ Remote newer, downloading ${localNotebook.title}")
                         downloadNotebook(notebookId, webdavClient)
                     }
+
                     diffMs > TIMESTAMP_TOLERANCE_MS -> {
                         SLog.i(TAG, "↑ Local newer, uploading ${localNotebook.title}")
                         uploadNotebook(localNotebook, webdavClient)
                     }
+
                     else -> {
-                        SLog.i(TAG, "= No changes (within tolerance), skipping ${localNotebook.title}")
+                        SLog.i(
+                            TAG, "= No changes (within tolerance), skipping ${localNotebook.title}"
+                        )
                     }
                 }
             } else {
@@ -301,7 +336,9 @@ class SyncEngine @Inject constructor(
             SLog.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
             SyncResult.Failure(SyncError.NETWORK_ERROR)
         } catch (e: Exception) {
-            SLog.e(TAG, "Error syncing notebook $notebookId: ${e.message}\n${e.stackTraceToString()}")
+            SLog.e(
+                TAG, "Error syncing notebook $notebookId: ${e.message}\n${e.stackTraceToString()}"
+            )
             SyncResult.Failure(SyncError.UNKNOWN_ERROR)
         }
     }
@@ -339,13 +376,13 @@ class SyncEngine @Inject constructor(
                 return@withContext SyncResult.Success
             }
 
-            val credentials = credentialManager.getCredentials()
-                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+            val credentials =
+                credentialManager.getCredentials() ?: return@withContext SyncResult.Failure(
+                    SyncError.AUTH_ERROR
+                )
 
             val webdavClient = WebDAVClient(
-                settings.syncSettings.serverUrl,
-                credentials.first,
-                credentials.second
+                settings.syncSettings.serverUrl, credentials.first, credentials.second
             )
 
             // Delete notebook content from server
@@ -356,7 +393,9 @@ class SyncEngine @Inject constructor(
             }
 
             // Upload zero-byte tombstone file
-            webdavClient.putFile(SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream")
+            webdavClient.putFile(
+                SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream"
+            )
             SLog.i(TAG, "✓ Tombstone uploaded for: $notebookId")
 
             // Update syncedNotebookIds (remove the deleted notebook)
@@ -417,7 +456,9 @@ class SyncEngine @Inject constructor(
                 }
 
                 val updatedFoldersJson = folderSerializer.serializeFolders(mergedFolders)
-                webdavClient.putFile(remotePath, updatedFoldersJson.toByteArray(), "application/json")
+                webdavClient.putFile(
+                    remotePath, updatedFoldersJson.toByteArray(), "application/json"
+                )
                 SLog.i(TAG, "Synced ${mergedFolders.size} folders")
             } else {
                 if (localFolders.isNotEmpty()) {
@@ -462,7 +503,10 @@ class SyncEngine @Inject constructor(
 
                 // Conflict resolution: local modified AFTER tombstone → resurrection
                 if (deletedAt != null && localNotebook.updatedAt.after(deletedAt)) {
-                    SLog.i(TAG, "↻ Resurrecting '${localNotebook.title}' (modified after server deletion)")
+                    SLog.i(
+                        TAG,
+                        "↻ Resurrecting '${localNotebook.title}' (modified after server deletion)"
+                    )
                     continue
                 }
 
@@ -478,10 +522,14 @@ class SyncEngine @Inject constructor(
         // Prune stale tombstones. Safe to do after processing — the current device has
         // already applied all deletions, so old tombstones are no longer needed by us.
         // Devices that haven't synced in TOMBSTONE_MAX_AGE_DAYS need full reconciliation anyway.
-        val cutoff = java.util.Date(System.currentTimeMillis() - TOMBSTONE_MAX_AGE_DAYS * 86_400_000L)
+        val cutoff =
+            java.util.Date(System.currentTimeMillis() - TOMBSTONE_MAX_AGE_DAYS * 86_400_000L)
         val stale = tombstones.filter { it.lastModified != null && it.lastModified.before(cutoff) }
         if (stale.isNotEmpty()) {
-            SLog.i(TAG, "Pruning ${stale.size} stale tombstone(s) older than $TOMBSTONE_MAX_AGE_DAYS days")
+            SLog.i(
+                TAG,
+                "Pruning ${stale.size} stale tombstone(s) older than $TOMBSTONE_MAX_AGE_DAYS days"
+            )
             for (entry in stale) {
                 try {
                     webdavClient.delete(SyncPaths.tombstone(entry.name))
@@ -500,9 +548,7 @@ class SyncEngine @Inject constructor(
      * @return Number of notebooks deleted
      */
     private fun detectAndUploadLocalDeletions(
-        webdavClient: WebDAVClient,
-        settings: AppSettings,
-        preDownloadNotebookIds: Set<String>
+        webdavClient: WebDAVClient, settings: AppSettings, preDownloadNotebookIds: Set<String>
     ): Int {
         SLog.i(TAG, "Detecting local deletions...")
 
@@ -521,7 +567,9 @@ class SyncEngine @Inject constructor(
                     }
 
                     // Upload zero-byte tombstone
-                    webdavClient.putFile(SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream")
+                    webdavClient.putFile(
+                        SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream"
+                    )
                     SLog.i(TAG, "✓ Tombstone uploaded for: $notebookId")
                 } catch (e: Exception) {
                     SLog.e(TAG, "Failed to process local deletion $notebookId: ${e.message}")
@@ -546,7 +594,9 @@ class SyncEngine @Inject constructor(
         webdavClient.createCollection(SyncPaths.backgroundsDir(notebookId))
 
         val manifestJson = notebookSerializer.serializeManifest(notebook)
-        webdavClient.putFile(SyncPaths.manifestFile(notebookId), manifestJson.toByteArray(), "application/json")
+        webdavClient.putFile(
+            SyncPaths.manifestFile(notebookId), manifestJson.toByteArray(), "application/json"
+        )
 
         val pages = appRepository.pageRepository.getByIds(notebook.pageIds)
         for (page in pages) {
@@ -571,15 +621,11 @@ class SyncEngine @Inject constructor(
         val pageWithImages = appRepository.pageRepository.getWithImageById(page.id)
 
         val pageJson = notebookSerializer.serializePage(
-            page,
-            pageWithStrokes.strokes,
-            pageWithImages.images
+            page, pageWithStrokes.strokes, pageWithImages.images
         )
 
         webdavClient.putFile(
-            SyncPaths.pageFile(notebookId, page.id),
-            pageJson.toByteArray(),
-            "application/json"
+            SyncPaths.pageFile(notebookId, page.id), pageJson.toByteArray(), "application/json"
         )
 
         for (image in pageWithImages.images) {
@@ -641,7 +687,9 @@ class SyncEngine @Inject constructor(
     /**
      * Download a single page with its strokes and images.
      */
-    private suspend fun downloadPage(pageId: String, notebookId: String, webdavClient: WebDAVClient) {
+    private suspend fun downloadPage(
+        pageId: String, notebookId: String, webdavClient: WebDAVClient
+    ) {
         val pageJson = webdavClient.getFile(SyncPaths.pageFile(notebookId, pageId)).decodeToString()
         val (page, strokes, images) = notebookSerializer.deserializePage(pageJson)
 
@@ -658,7 +706,10 @@ class SyncEngine @Inject constructor(
 
                     image.copy(uri = localFile.absolutePath)
                 } catch (e: Exception) {
-                    SLog.e(TAG, "Failed to download image ${image.uri}: ${e.message}\n${e.stackTraceToString()}")
+                    SLog.e(
+                        TAG,
+                        "Failed to download image ${image.uri}: ${e.message}\n${e.stackTraceToString()}"
+                    )
                     image
                 }
             } else {
@@ -676,7 +727,10 @@ class SyncEngine @Inject constructor(
                     SLog.i(TAG, "Downloaded background: $filename")
                 }
             } catch (e: Exception) {
-                SLog.e(TAG, "Failed to download background ${page.background}: ${e.message}\n${e.stackTraceToString()}")
+                SLog.e(
+                    TAG,
+                    "Failed to download background ${page.background}: ${e.message}\n${e.stackTraceToString()}"
+                )
             }
         }
 
@@ -708,13 +762,13 @@ class SyncEngine @Inject constructor(
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
 
-            val credentials = credentialManager.getCredentials()
-                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+            val credentials =
+                credentialManager.getCredentials() ?: return@withContext SyncResult.Failure(
+                    SyncError.AUTH_ERROR
+                )
 
             val webdavClient = WebDAVClient(
-                settings.syncSettings.serverUrl,
-                credentials.first,
-                credentials.second
+                settings.syncSettings.serverUrl, credentials.first, credentials.second
             )
 
             try {
@@ -746,7 +800,9 @@ class SyncEngine @Inject constructor(
             val folders = appRepository.folderRepository.getAll()
             if (folders.isNotEmpty()) {
                 val foldersJson = folderSerializer.serializeFolders(folders)
-                webdavClient.putFile(SyncPaths.foldersFile(), foldersJson.toByteArray(), "application/json")
+                webdavClient.putFile(
+                    SyncPaths.foldersFile(), foldersJson.toByteArray(), "application/json"
+                )
                 SLog.i(TAG, "Uploaded ${folders.size} folders")
             }
 
@@ -780,13 +836,13 @@ class SyncEngine @Inject constructor(
             val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
                 ?: return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
 
-            val credentials = credentialManager.getCredentials()
-                ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+            val credentials =
+                credentialManager.getCredentials() ?: return@withContext SyncResult.Failure(
+                    SyncError.AUTH_ERROR
+                )
 
             val webdavClient = WebDAVClient(
-                settings.syncSettings.serverUrl,
-                credentials.first,
-                credentials.second
+                settings.syncSettings.serverUrl, credentials.first, credentials.second
             )
 
             val localFolders = appRepository.folderRepository.getAll()
@@ -798,7 +854,10 @@ class SyncEngine @Inject constructor(
             for (notebook in localNotebooks) {
                 appRepository.bookRepository.delete(notebook.id)
             }
-            SLog.i(TAG, "Deleted ${localFolders.size} folders and ${localNotebooks.size} local notebooks")
+            SLog.i(
+                TAG,
+                "Deleted ${localFolders.size} folders and ${localNotebooks.size} local notebooks"
+            )
 
             if (webdavClient.exists(SyncPaths.foldersFile())) {
                 val foldersJson = webdavClient.getFile(SyncPaths.foldersFile()).decodeToString()
@@ -819,7 +878,10 @@ class SyncEngine @Inject constructor(
                         SLog.i(TAG, "Downloading notebook: $notebookId")
                         downloadNotebook(notebookId, webdavClient)
                     } catch (e: Exception) {
-                        SLog.e(TAG, "Failed to download $notebookDir: ${e.message}\n${e.stackTraceToString()}")
+                        SLog.e(
+                            TAG,
+                            "Failed to download $notebookDir: ${e.message}\n${e.stackTraceToString()}"
+                        )
                     }
                 }
             } else {
@@ -867,21 +929,17 @@ class SyncEngine @Inject constructor(
      * @return Pair of (AppSettings, WebDAVClient) or null if initialization fails
      */
     private suspend fun initializeSyncClient(): Pair<AppSettings, WebDAVClient>? {
-        val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
-            ?: return null
+        val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer()) ?: return null
 
         if (!settings.syncSettings.syncEnabled) {
             SLog.i(TAG, "Sync disabled in settings")
             return null
         }
 
-        val credentials = credentialManager.getCredentials()
-            ?: return null
+        val credentials = credentialManager.getCredentials() ?: return null
 
         val webdavClient = WebDAVClient(
-            settings.syncSettings.serverUrl,
-            credentials.first,
-            credentials.second
+            settings.syncSettings.serverUrl, credentials.first, credentials.second
         )
 
         return Pair(settings, webdavClient)
@@ -923,7 +981,10 @@ class SyncEngine @Inject constructor(
             }
 
             webdavClient.delete(LEGACY_DELETIONS_FILE)
-            SLog.i(TAG, "Migrated ${data.getAllDeletedIds().size} entries from deletions.json to tombstones")
+            SLog.i(
+                TAG,
+                "Migrated ${data.getAllDeletedIds().size} entries from deletions.json to tombstones"
+            )
         } catch (e: Exception) {
             SLog.w(TAG, "Failed to migrate deletions.json: ${e.message}")
         }
@@ -968,11 +1029,10 @@ class SyncEngine @Inject constructor(
 
         val serverNotebookDirs = webdavClient.listCollection(SyncPaths.notebooksDir())
 
-        val newNotebookIds = serverNotebookDirs
-            .map { it.trimEnd('/') }
-            .filter { it !in preDownloadNotebookIds }
-            .filter { it !in tombstonedIds }
-            .filter { it !in settings.syncSettings.syncedNotebookIds }
+        val newNotebookIds =
+            serverNotebookDirs.map { it.trimEnd('/') }.filter { it !in preDownloadNotebookIds }
+                .filter { it !in tombstonedIds }
+                .filter { it !in settings.syncSettings.syncedNotebookIds }
 
         if (newNotebookIds.isNotEmpty()) {
             SLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
@@ -1043,6 +1103,18 @@ class SyncEngine @Inject constructor(
             _syncState.value = state
         }
     }
+
+}
+
+/**
+ * Hilt entry point so non-Hilt-managed contexts (Workers, background code)
+ * can obtain the injected SyncEngine instance and KvProxy.
+ */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface SyncEngineEntryPoint {
+    fun syncEngine(): SyncEngine
+    fun kvProxy(): KvProxy
 }
 
 /**
@@ -1057,13 +1129,7 @@ sealed class SyncResult {
  * Types of sync errors.
  */
 enum class SyncError {
-    NETWORK_ERROR,
-    AUTH_ERROR,
-    CONFIG_ERROR,
-    CLOCK_SKEW,
-    WIFI_REQUIRED,
-    SYNC_IN_PROGRESS,
-    UNKNOWN_ERROR
+    NETWORK_ERROR, AUTH_ERROR, CONFIG_ERROR, CLOCK_SKEW, WIFI_REQUIRED, SYNC_IN_PROGRESS, UNKNOWN_ERROR
 }
 
 /**
@@ -1073,9 +1139,7 @@ sealed class SyncState {
     data object Idle : SyncState()
 
     data class Syncing(
-        val currentStep: SyncStep,
-        val progress: Float,
-        val details: String
+        val currentStep: SyncStep, val progress: Float, val details: String
     ) : SyncState()
 
     data class Success(
@@ -1083,9 +1147,7 @@ sealed class SyncState {
     ) : SyncState()
 
     data class Error(
-        val error: SyncError,
-        val step: SyncStep,
-        val canRetry: Boolean
+        val error: SyncError, val step: SyncStep, val canRetry: Boolean
     ) : SyncState()
 }
 
@@ -1093,13 +1155,7 @@ sealed class SyncState {
  * Steps in the sync process, used for progress tracking.
  */
 enum class SyncStep {
-    INITIALIZING,
-    SYNCING_FOLDERS,
-    APPLYING_DELETIONS,
-    SYNCING_NOTEBOOKS,
-    DOWNLOADING_NEW,
-    UPLOADING_DELETIONS,
-    FINALIZING
+    INITIALIZING, SYNCING_FOLDERS, APPLYING_DELETIONS, SYNCING_NOTEBOOKS, DOWNLOADING_NEW, UPLOADING_DELETIONS, FINALIZING
 }
 
 /**

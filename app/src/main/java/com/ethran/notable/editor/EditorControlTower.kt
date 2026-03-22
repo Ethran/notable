@@ -18,7 +18,6 @@ import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.strokeBounds
-import com.ethran.notable.data.AppRepository
 import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.showHint
@@ -38,6 +37,7 @@ class EditorControlTower(
     val page: PageView,
     private var history: History,
     private val state: EditorState,
+    private val syncEngine: SyncEngine,
 ) {
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
@@ -126,7 +126,12 @@ class EditorControlTower(
      */
     private suspend fun triggerSyncForPage(pageId: String?) {
         if (pageId == null) return
-        SyncEngine().syncFromPageId(pageId)
+        try {
+            syncEngine.syncFromPageId(pageId)
+        } catch (e: Exception) {
+            // Log but don't crash the UI thread
+            SyncLogger.e("EditorControlTower", "Sync failed: ${e.message}")
+        }
     }
 
     fun setIsDrawing(value: Boolean) {

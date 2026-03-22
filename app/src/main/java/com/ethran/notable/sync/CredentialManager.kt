@@ -1,12 +1,12 @@
 package com.ethran.notable.sync
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import androidx.core.content.edit
 
 /**
  * Manages secure storage of WebDAV credentials using EncryptedSharedPreferences.
@@ -64,7 +64,7 @@ class CredentialManager @Inject constructor(
      */
     fun hasCredentials(): Boolean {
         return encryptedPrefs.contains(KEY_USERNAME) &&
-               encryptedPrefs.contains(KEY_PASSWORD)
+                encryptedPrefs.contains(KEY_PASSWORD)
     }
 
     companion object {

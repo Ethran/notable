@@ -6,12 +6,10 @@ import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.data.db.StrokePoint
-import com.ethran.notable.data.db.encodeStrokePoints
 import com.ethran.notable.data.db.decodeStrokePoints
+import com.ethran.notable.data.db.encodeStrokePoints
 import com.ethran.notable.editor.utils.Pen
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.text.SimpleDateFormat

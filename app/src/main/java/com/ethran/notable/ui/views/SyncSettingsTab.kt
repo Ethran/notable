@@ -1,6 +1,5 @@
 package com.ethran.notable.ui.views
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -20,12 +19,6 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,60 +28,67 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ethran.notable.R
-import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.datastore.SyncSettings
+import com.ethran.notable.sync.SyncLogger
+import com.ethran.notable.sync.SyncState
 import com.ethran.notable.ui.components.SettingToggleRow
 import com.ethran.notable.ui.components.SettingsDivider
-import com.ethran.notable.sync.CredentialManager
-import com.ethran.notable.sync.SyncEngine
-import com.ethran.notable.sync.SyncLogger
-import com.ethran.notable.sync.SyncResult
-import com.ethran.notable.sync.SyncScheduler
-import com.ethran.notable.sync.SyncState
-import com.ethran.notable.sync.WebDAVClient
-import com.ethran.notable.ui.showHint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.ethran.notable.ui.viewmodels.SyncConnectionStatus
+import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
+
+data class SyncCredentialsCallbacks(
+    val onServerUrlChange: (String) -> Unit = {},
+    val onUsernameChange: (String) -> Unit = {},
+    val onPasswordChange: (String) -> Unit = {},
+    val onSaveCredentials: () -> Unit = {},
+)
+
+data class SyncBehaviorCallbacks(
+    val onToggleSyncEnabled: (Boolean) -> Unit = {},
+    val onAutoSyncChanged: (Boolean) -> Unit = {},
+    val onSyncOnCloseChanged: (Boolean) -> Unit = {},
+    val onWifiOnlyChanged: (Boolean) -> Unit = {},
+)
+
+data class SyncDangerCallbacks(
+    val onForceUploadRequested: (Boolean) -> Unit = {},
+    val onForceDownloadRequested: (Boolean) -> Unit = {},
+    val onConfirmForceUpload: () -> Unit = {},
+    val onConfirmForceDownload: () -> Unit = {},
+)
+
+data class SyncSettingsCallbacks(
+    val credentials: SyncCredentialsCallbacks = SyncCredentialsCallbacks(),
+    val behavior: SyncBehaviorCallbacks = SyncBehaviorCallbacks(),
+    val onTestConnection: () -> Unit = {},
+    val onManualSync: () -> Unit = {},
+    val onClearSyncLogs: () -> Unit = {},
+    val danger: SyncDangerCallbacks = SyncDangerCallbacks(),
+)
 
 @Composable
-fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit, context: Context) {
-    val syncSettings = settings.syncSettings
-    val credentialManager = remember { CredentialManager(context) }
-    val scope = rememberCoroutineScope()
+fun SyncSettings(
+    syncSettings: SyncSettings,
+    state: SyncSettingsUiState,
+    callbacks: SyncSettingsCallbacks,
+) {
+    SyncSettingsContent(
+        syncSettings = syncSettings,
+        state = state,
+        callbacks = callbacks,
+    )
+}
 
-    var serverUrl by remember { mutableStateOf(syncSettings.serverUrl) }
-    var username by remember { mutableStateOf(syncSettings.username) }
-    var password by remember { mutableStateOf("") }
-    var savedUsername by remember { mutableStateOf(syncSettings.username) }
-    var savedPassword by remember { mutableStateOf("") }
-    var testingConnection by remember { mutableStateOf(false) }
-    var syncInProgress by remember { mutableStateOf(false) }
-    var connectionStatus by remember { mutableStateOf<String?>(null) }
-
-    // Observe sync logs
-    val syncLogs by SyncLogger.logs.collectAsState()
-
-    // Load password from CredentialManager on first composition
-    LaunchedEffect(Unit) {
-        credentialManager.getCredentials()?.let { (user, pass) ->
-            username = user
-            password = pass
-            savedUsername = user
-            savedPassword = pass
-            SyncLogger.i("Settings", "Loaded credentials for user: $user")
-        } ?: SyncLogger.w("Settings", "No credentials found in storage")
-    }
-
-    // Check if credentials have changed
-    val credentialsChanged = username != savedUsername || password != savedPassword
+@Composable
+fun SyncSettingsContent(
+    syncSettings: SyncSettings,
+    state: SyncSettingsUiState,
+    callbacks: SyncSettingsCallbacks,
+) {
 
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
@@ -101,39 +101,27 @@ fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit,
         // Enable/Disable Sync Toggle
         SyncEnableToggle(
             syncSettings = syncSettings,
-            settings = settings,
-            onUpdateSettings = onUpdateSettings,
-            context = context
+            onToggleSyncEnabled = callbacks.behavior.onToggleSyncEnabled
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         // Credential Fields
         SyncCredentialFields(
-            serverUrl = serverUrl,
-            username = username,
-            password = password,
-            onServerUrlChange = {
-                serverUrl = it
-                onUpdateSettings(settings.copy(syncSettings = syncSettings.copy(serverUrl = it)))
-            },
-            onUsernameChange = { username = it },
-            onPasswordChange = { password = it }
+            serverUrl = state.serverUrl,
+            username = state.username,
+            password = state.password,
+            onServerUrlChange = callbacks.credentials.onServerUrlChange,
+            onUsernameChange = callbacks.credentials.onUsernameChange,
+            onPasswordChange = callbacks.credentials.onPasswordChange
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         // Save Credentials Button
         Button(
-            onClick = {
-                credentialManager.saveCredentials(username, password)
-                savedUsername = username
-                savedPassword = password
-                onUpdateSettings(settings.copy(syncSettings = syncSettings.copy(username = username)))
-                SyncLogger.i("Settings", "Credentials saved for user: $username")
-                showHint(context.getString(R.string.sync_credentials_saved), scope)
-            },
-            enabled = credentialsChanged && username.isNotEmpty() && password.isNotEmpty(),
+            onClick = callbacks.credentials.onSaveCredentials,
+            enabled = state.credentialsChanged && state.username.isNotEmpty() && state.password.isNotEmpty(),
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = Color(0, 120, 200),
                 contentColor = Color.White,
@@ -152,27 +140,12 @@ fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit,
 
         // Test Connection Button and Status
         SyncConnectionTest(
-            serverUrl = serverUrl,
-            username = username,
-            password = password,
-            testingConnection = testingConnection,
-            connectionStatus = connectionStatus,
-            onTestConnection = {
-                testingConnection = true
-                connectionStatus = null
-                scope.launch(Dispatchers.IO) {
-                    val (connected, clockSkewMs) = WebDAVClient.testConnection(serverUrl, username, password)
-                    withContext(Dispatchers.Main) {
-                        testingConnection = false
-                        connectionStatus = when {
-                            !connected -> context.getString(R.string.sync_connection_failed)
-                            clockSkewMs != null && kotlin.math.abs(clockSkewMs) > 30_000L ->
-                                context.getString(R.string.sync_clock_skew_warning, clockSkewMs / 1000)
-                            else -> context.getString(R.string.sync_connected_successfully)
-                        }
-                    }
-                }
-            }
+            serverUrl = state.serverUrl,
+            username = state.username,
+            password = state.password,
+            testingConnection = state.testingConnection,
+            connectionStatus = state.connectionStatus,
+            onTestConnection = callbacks.onTestConnection
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -182,9 +155,9 @@ fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit,
         // Sync Controls (auto-sync and sync on close)
         SyncControlToggles(
             syncSettings = syncSettings,
-            settings = settings,
-            onUpdateSettings = onUpdateSettings,
-            context = context
+            onAutoSyncChanged = callbacks.behavior.onAutoSyncChanged,
+            onSyncOnCloseChanged = callbacks.behavior.onSyncOnCloseChanged,
+            onWifiOnlyChanged = callbacks.behavior.onWifiOnlyChanged
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -193,13 +166,10 @@ fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit,
 
         // Manual Sync Button
         ManualSyncButton(
-            syncInProgress = syncInProgress,
             syncSettings = syncSettings,
-            serverUrl = serverUrl,
-            context = context,
-            onUpdateSettings = onUpdateSettings,
-            scope = scope,
-            onSyncStateChange = { syncInProgress = it }
+            serverUrl = state.serverUrl,
+            syncState = state.syncState,
+            onManualSync = callbacks.onManualSync
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -209,10 +179,13 @@ fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit,
         // Danger Zone: Force Operations
         ForceOperationsSection(
             syncSettings = syncSettings,
-            serverUrl = serverUrl,
-            context = context,
-            scope = scope,
-            onSyncStateChange = { syncInProgress = it }
+            serverUrl = state.serverUrl,
+            showForceUploadConfirm = state.showForceUploadConfirm,
+            showForceDownloadConfirm = state.showForceDownloadConfirm,
+            onForceUploadRequested = callbacks.danger.onForceUploadRequested,
+            onForceDownloadRequested = callbacks.danger.onForceDownloadRequested,
+            onConfirmForceUpload = callbacks.danger.onConfirmForceUpload,
+            onConfirmForceDownload = callbacks.danger.onConfirmForceDownload
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -220,31 +193,34 @@ fun SyncSettings(settings: AppSettings, onUpdateSettings: (AppSettings) -> Unit,
         Spacer(modifier = Modifier.height(16.dp))
 
         // Sync Log Viewer
-        SyncLogViewer(syncLogs = syncLogs)
+        SyncLogViewer(syncLogs = state.syncLogs, onClearLog = callbacks.onClearSyncLogs)
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SyncSettingsContentPreview() {
+    SyncSettingsContent(
+        syncSettings = SyncSettings(syncEnabled = true, serverUrl = "https://webdav.example.com"),
+        state = SyncSettingsUiState(
+            serverUrl = "https://webdav.example.com",
+            username = "demo",
+            password = "secret",
+            savedUsername = "demo",
+            savedPassword = "secret"
+        ),
+        callbacks = SyncSettingsCallbacks()
+    )
 }
 
 @Composable
 fun SyncEnableToggle(
-    syncSettings: SyncSettings,
-    settings: AppSettings,
-    onUpdateSettings: (AppSettings) -> Unit,
-    context: Context
+    syncSettings: SyncSettings, onToggleSyncEnabled: (Boolean) -> Unit
 ) {
     SettingToggleRow(
         label = stringResource(R.string.sync_enable_label),
         value = syncSettings.syncEnabled,
-        onToggle = { isChecked ->
-            onUpdateSettings(
-                settings.copy(syncSettings = syncSettings.copy(syncEnabled = isChecked))
-            )
-            // Enable/disable WorkManager sync
-            if (isChecked && syncSettings.autoSync) {
-                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong(), syncSettings.wifiOnly)
-            } else {
-                SyncScheduler.disablePeriodicSync(context)
-            }
-        }
+        onToggle = onToggleSyncEnabled
     )
 }
 
@@ -289,8 +265,7 @@ fun SyncCredentialFields(
                 Box {
                     if (serverUrl.isEmpty()) {
                         Text(
-                            stringResource(R.string.sync_server_url_placeholder),
-                            style = TextStyle(
+                            stringResource(R.string.sync_server_url_placeholder), style = TextStyle(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 14.sp,
                                 color = Color.Gray
@@ -299,8 +274,7 @@ fun SyncCredentialFields(
                     }
                     innerTextField()
                 }
-            }
-        )
+            })
     }
 
     Spacer(modifier = Modifier.height(12.dp))
@@ -365,7 +339,7 @@ fun SyncConnectionTest(
     username: String,
     password: String,
     testingConnection: Boolean,
-    connectionStatus: String?,
+    connectionStatus: SyncConnectionStatus?,
     onTestConnection: () -> Unit
 ) {
     Button(
@@ -390,13 +364,21 @@ fun SyncConnectionTest(
     }
 
     connectionStatus?.let { status ->
-        val statusColor = when {
-            status.startsWith("✓") -> Color(0, 150, 0)
-            status.startsWith("✗") -> Color(200, 0, 0)
-            else -> Color(200, 100, 0) // Warning (e.g. clock skew)
+        val statusColor = when (status) {
+            is SyncConnectionStatus.Success -> Color(0, 150, 0)
+            is SyncConnectionStatus.Failed -> Color(200, 0, 0)
+            else -> Color(200, 100, 0)
+        }
+        val statusText = when (status) {
+            SyncConnectionStatus.Failed -> stringResource(R.string.sync_connection_failed)
+            SyncConnectionStatus.Success -> stringResource(R.string.sync_connected_successfully)
+            is SyncConnectionStatus.ClockSkew -> stringResource(
+                R.string.sync_clock_skew_warning,
+                status.seconds
+            )
         }
         Text(
-            text = status,
+            text = statusText,
             style = MaterialTheme.typography.body2,
             color = statusColor,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
@@ -407,86 +389,36 @@ fun SyncConnectionTest(
 @Composable
 fun SyncControlToggles(
     syncSettings: SyncSettings,
-    settings: AppSettings,
-    onUpdateSettings: (AppSettings) -> Unit,
-    context: Context
+    onAutoSyncChanged: (Boolean) -> Unit,
+    onSyncOnCloseChanged: (Boolean) -> Unit,
+    onWifiOnlyChanged: (Boolean) -> Unit
 ) {
     SettingToggleRow(
         label = stringResource(R.string.sync_auto_sync_label, syncSettings.syncInterval),
         value = syncSettings.autoSync,
-        onToggle = { isChecked ->
-            onUpdateSettings(
-                settings.copy(syncSettings = syncSettings.copy(autoSync = isChecked))
-            )
-            if (isChecked && syncSettings.syncEnabled) {
-                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong(), syncSettings.wifiOnly)
-            } else {
-                SyncScheduler.disablePeriodicSync(context)
-            }
-        }
+        onToggle = onAutoSyncChanged
     )
 
     SettingToggleRow(
         label = stringResource(R.string.sync_on_note_close_label),
         value = syncSettings.syncOnNoteClose,
-        onToggle = { isChecked ->
-            onUpdateSettings(
-                settings.copy(syncSettings = syncSettings.copy(syncOnNoteClose = isChecked))
-            )
-        }
+        onToggle = onSyncOnCloseChanged
     )
 
     SettingToggleRow(
         label = stringResource(R.string.sync_wifi_only_label),
         value = syncSettings.wifiOnly,
-        onToggle = { isChecked ->
-            onUpdateSettings(
-                settings.copy(syncSettings = syncSettings.copy(wifiOnly = isChecked))
-            )
-            // Re-schedule background sync with updated network constraint
-            if (syncSettings.autoSync && syncSettings.syncEnabled) {
-                SyncScheduler.enablePeriodicSync(context, syncSettings.syncInterval.toLong(), isChecked)
-            }
-        }
+        onToggle = onWifiOnlyChanged
     )
 }
 
 @Composable
 fun ManualSyncButton(
-    syncInProgress: Boolean,
-    syncSettings: SyncSettings,
-    serverUrl: String,
-    context: Context,
-    onUpdateSettings: (AppSettings) -> Unit,
-    scope: kotlinx.coroutines.CoroutineScope,
-    onSyncStateChange: (Boolean) -> Unit
+    syncSettings: SyncSettings, serverUrl: String, syncState: SyncState, onManualSync: () -> Unit
 ) {
-    // Observe sync state from SyncEngine
-    val syncState by SyncEngine.syncState.collectAsState()
-
     Column {
         Button(
-            onClick = {
-                onSyncStateChange(true)
-                scope.launch(Dispatchers.IO) {
-                    val result = SyncEngine(context).syncAllNotebooks()
-                    withContext(Dispatchers.Main) {
-                        onSyncStateChange(false)
-                        if (result is SyncResult.Success) {
-                            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                            val latestSettings = GlobalAppSettings.current
-                            onUpdateSettings(
-                                latestSettings.copy(
-                                    syncSettings = latestSettings.syncSettings.copy(lastSyncTime = timestamp)
-                                )
-                            )
-                            showHint(context.getString(R.string.sync_completed_successfully), scope)
-                        } else {
-                            showHint(context.getString(R.string.sync_failed_message, (result as? SyncResult.Failure)?.error.toString()), scope)
-                        }
-                    }
-                }
-            },
+            onClick = onManualSync,
             enabled = syncState is SyncState.Idle && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = when (syncState) {
@@ -503,22 +435,39 @@ fun ManualSyncButton(
                 .padding(horizontal = 4.dp)
                 .height(56.dp)
         ) {
-            when (val state = syncState) {
-                is SyncState.Idle -> Text(stringResource(R.string.sync_now), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                is SyncState.Syncing -> Text(
-                    stringResource(R.string.sync_progress_details, state.details, (state.progress * 100).toInt()),
+            when (syncState) {
+                is SyncState.Idle -> Text(
+                    stringResource(R.string.sync_now),
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    fontSize = 16.sp
                 )
-                is SyncState.Success -> Text(stringResource(R.string.sync_synced), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                is SyncState.Error -> Text(stringResource(R.string.sync_failed), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+
+                is SyncState.Syncing -> Text(
+                    stringResource(
+                        R.string.sync_progress_details,
+                        syncState.details,
+                        (syncState.progress * 100).toInt()
+                    ), fontWeight = FontWeight.Bold, fontSize = 14.sp
+                )
+
+                is SyncState.Success -> Text(
+                    stringResource(R.string.sync_synced),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+
+                is SyncState.Error -> Text(
+                    stringResource(R.string.sync_failed),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
             }
         }
 
         // Progress indicator
         if (syncState is SyncState.Syncing) {
             androidx.compose.material.LinearProgressIndicator(
-                progress = (syncState as SyncState.Syncing).progress,
+                progress = syncState.progress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 4.dp, end = 4.dp, top = 4.dp),
@@ -528,7 +477,7 @@ fun ManualSyncButton(
 
         // Success summary
         if (syncState is SyncState.Success) {
-            val summary = (syncState as SyncState.Success).summary
+            val summary = syncState.summary
             Text(
                 text = stringResource(
                     R.string.sync_summary,
@@ -545,17 +494,17 @@ fun ManualSyncButton(
 
         // Error details
         if (syncState is SyncState.Error) {
-            val error = syncState as SyncState.Error
-            val errorText = if (error.error == com.ethran.notable.sync.SyncError.WIFI_REQUIRED) {
-                stringResource(R.string.sync_wifi_required_message)
-            } else {
-                stringResource(
-                    R.string.sync_error_at_step,
-                    error.step.toString(),
-                    error.error.toString(),
-                    if (error.canRetry) stringResource(R.string.sync_can_retry) else ""
-                )
-            }
+            val errorText =
+                if (syncState.error == com.ethran.notable.sync.SyncError.WIFI_REQUIRED) {
+                    stringResource(R.string.sync_wifi_required_message)
+                } else {
+                    stringResource(
+                        R.string.sync_error_at_step,
+                        syncState.step.toString(),
+                        syncState.error.toString(),
+                        if (syncState.canRetry) stringResource(R.string.sync_can_retry) else ""
+                    )
+                }
             Text(
                 text = errorText,
                 style = MaterialTheme.typography.caption,
@@ -580,9 +529,12 @@ fun ManualSyncButton(
 fun ForceOperationsSection(
     syncSettings: SyncSettings,
     serverUrl: String,
-    context: Context,
-    scope: kotlinx.coroutines.CoroutineScope,
-    onSyncStateChange: (Boolean) -> Unit
+    showForceUploadConfirm: Boolean,
+    showForceDownloadConfirm: Boolean,
+    onForceUploadRequested: (Boolean) -> Unit,
+    onForceDownloadRequested: (Boolean) -> Unit,
+    onConfirmForceUpload: () -> Unit,
+    onConfirmForceDownload: () -> Unit
 ) {
     Text(
         text = stringResource(R.string.sync_force_operations_title),
@@ -599,9 +551,8 @@ fun ForceOperationsSection(
         modifier = Modifier.padding(bottom = 16.dp, start = 4.dp, end = 4.dp)
     )
 
-    var showForceUploadConfirm by remember { mutableStateOf(false) }
     Button(
-        onClick = { showForceUploadConfirm = true },
+        onClick = { onForceUploadRequested(true) },
         enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
         colors = ButtonDefaults.buttonColors(
             backgroundColor = Color(200, 100, 0),
@@ -622,31 +573,15 @@ fun ForceOperationsSection(
             title = stringResource(R.string.sync_confirm_force_upload_title),
             message = stringResource(R.string.sync_confirm_force_upload_message),
             onConfirm = {
-                showForceUploadConfirm = false
-                onSyncStateChange(true)
-                scope.launch(Dispatchers.IO) {
-                    val result = SyncEngine(context).forceUploadAll()
-                    withContext(Dispatchers.Main) {
-                        onSyncStateChange(false)
-                        showHint(
-                            if (result is SyncResult.Success)
-                                context.getString(R.string.sync_force_upload_success)
-                            else
-                                context.getString(R.string.sync_force_upload_failed),
-                            scope
-                        )
-                    }
-                }
+                onConfirmForceUpload()
             },
-            onDismiss = { showForceUploadConfirm = false }
-        )
+            onDismiss = { onForceUploadRequested(false) })
     }
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    var showForceDownloadConfirm by remember { mutableStateOf(false) }
     Button(
-        onClick = { showForceDownloadConfirm = true },
+        onClick = { onForceDownloadRequested(true) },
         enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
         colors = ButtonDefaults.buttonColors(
             backgroundColor = Color(200, 0, 0),
@@ -667,29 +602,14 @@ fun ForceOperationsSection(
             title = stringResource(R.string.sync_confirm_force_download_title),
             message = stringResource(R.string.sync_confirm_force_download_message),
             onConfirm = {
-                showForceDownloadConfirm = false
-                onSyncStateChange(true)
-                scope.launch(Dispatchers.IO) {
-                    val result = SyncEngine(context).forceDownloadAll()
-                    withContext(Dispatchers.Main) {
-                        onSyncStateChange(false)
-                        showHint(
-                            if (result is SyncResult.Success)
-                                context.getString(R.string.sync_force_download_success)
-                            else
-                                context.getString(R.string.sync_force_download_failed),
-                            scope
-                        )
-                    }
-                }
+                onConfirmForceDownload()
             },
-            onDismiss = { showForceDownloadConfirm = false }
-        )
+            onDismiss = { onForceDownloadRequested(false) })
     }
 }
 
 @Composable
-fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
+fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -701,12 +621,9 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
             fontWeight = FontWeight.Bold
         )
         Button(
-            onClick = { SyncLogger.clear() },
-            colors = ButtonDefaults.buttonColors(
-                backgroundColor = Color.Gray,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.height(32.dp)
+            onClick = onClearLog, colors = ButtonDefaults.buttonColors(
+                backgroundColor = Color.Gray, contentColor = Color.White
+            ), modifier = Modifier.height(32.dp)
         ) {
             Text(stringResource(R.string.sync_clear_log), fontSize = 12.sp)
         }
@@ -748,13 +665,9 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
                         SyncLogger.LogLevel.ERROR -> Color(200, 0, 0)
                     }
                     Text(
-                        text = "[${log.timestamp}] ${log.message}",
-                        style = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            color = logColor
-                        ),
-                        modifier = Modifier.padding(vertical = 1.dp)
+                        text = "[${log.timestamp}] ${log.message}", style = TextStyle(
+                            fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = logColor
+                        ), modifier = Modifier.padding(vertical = 1.dp)
                     )
                 }
             }
@@ -764,10 +677,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>) {
 
 @Composable
 fun ConfirmationDialog(
-    title: String,
-    message: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -797,8 +707,7 @@ fun ConfirmationDialog(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        backgroundColor = Color.Gray,
-                        contentColor = Color.White
+                        backgroundColor = Color.Gray, contentColor = Color.White
                     )
                 ) {
                     Text(stringResource(R.string.sync_dialog_cancel))
@@ -808,8 +717,7 @@ fun ConfirmationDialog(
                     onClick = onConfirm,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        backgroundColor = Color(200, 0, 0),
-                        contentColor = Color.White
+                        backgroundColor = Color(200, 0, 0), contentColor = Color.White
                     )
                 ) {
                     Text(stringResource(R.string.sync_dialog_confirm), fontWeight = FontWeight.Bold)

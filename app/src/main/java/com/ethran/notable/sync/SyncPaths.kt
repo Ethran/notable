@@ -16,11 +16,16 @@ object SyncPaths {
     fun notebookDir(notebookId: String) = "/$ROOT/notebooks/$notebookId"
     fun manifestFile(notebookId: String) = "/$ROOT/notebooks/$notebookId/manifest.json"
     fun pagesDir(notebookId: String) = "/$ROOT/notebooks/$notebookId/pages"
-    fun pageFile(notebookId: String, pageId: String) = "/$ROOT/notebooks/$notebookId/pages/$pageId.json"
+    fun pageFile(notebookId: String, pageId: String) =
+        "/$ROOT/notebooks/$notebookId/pages/$pageId.json"
+
     fun imagesDir(notebookId: String) = "/$ROOT/notebooks/$notebookId/images"
-    fun imageFile(notebookId: String, imageName: String) = "/$ROOT/notebooks/$notebookId/images/$imageName"
+    fun imageFile(notebookId: String, imageName: String) =
+        "/$ROOT/notebooks/$notebookId/images/$imageName"
+
     fun backgroundsDir(notebookId: String) = "/$ROOT/notebooks/$notebookId/backgrounds"
-    fun backgroundFile(notebookId: String, bgName: String) = "/$ROOT/notebooks/$notebookId/backgrounds/$bgName"
+    fun backgroundFile(notebookId: String, bgName: String) =
+        "/$ROOT/notebooks/$notebookId/backgrounds/$bgName"
 
     /**
      * Zero-byte tombstone file for a deleted notebook.

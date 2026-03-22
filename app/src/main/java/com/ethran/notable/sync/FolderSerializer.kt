@@ -2,7 +2,6 @@ package com.ethran.notable.sync
 
 import com.ethran.notable.data.db.Folder
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.Date

@@ -170,7 +170,11 @@ class WebDAVClient(
      * @param contentType MIME type of the content
      * @throws IOException if upload fails
      */
-    fun putFile(path: String, content: ByteArray, contentType: String = "application/octet-stream") {
+    fun putFile(
+        path: String,
+        content: ByteArray,
+        contentType: String = "application/octet-stream"
+    ) {
         val url = buildUrl(path)
         val mediaType = contentType.toMediaType()
         val requestBody = content.toRequestBody(mediaType)
@@ -546,13 +550,17 @@ class WebDAVClient(
                             currentHref = null
                             currentLastModified = null
                         }
+
                         "href" -> if (inResponse && parser.next() == XmlPullParser.TEXT) {
                             currentHref = parser.text.trim()
                         }
+
                         "getlastmodified" -> if (inResponse && parser.next() == XmlPullParser.TEXT) {
-                            currentLastModified = parseHttpDate(parser.text.trim())?.let { Date(it) }
+                            currentLastModified =
+                                parseHttpDate(parser.text.trim())?.let { Date(it) }
                         }
                     }
+
                     XmlPullParser.END_TAG -> if (parser.name.lowercase() == "response" && inResponse) {
                         currentHref?.let { entries.add(it to currentLastModified) }
                         inResponse = false
@@ -569,10 +577,10 @@ class WebDAVClient(
 
     private fun isValidUuid(name: String): Boolean =
         name.length == UUID_LENGTH &&
-        name[UUID_DASH_POS_1] == '-' &&
-        name[UUID_DASH_POS_2] == '-' &&
-        name[UUID_DASH_POS_3] == '-' &&
-        name[UUID_DASH_POS_4] == '-'
+                name[UUID_DASH_POS_1] == '-' &&
+                name[UUID_DASH_POS_2] == '-' &&
+                name[UUID_DASH_POS_3] == '-' &&
+                name[UUID_DASH_POS_4] == '-'
 
     companion object {
         private const val TAG = "WebDAVClient"
@@ -612,7 +620,11 @@ class WebDAVClient(
          *         the difference (deviceTime - serverTime) in milliseconds, or null
          *         if the server did not return a Date header.
          */
-        fun testConnection(serverUrl: String, username: String, password: String): Pair<Boolean, Long?> {
+        fun testConnection(
+            serverUrl: String,
+            username: String,
+            password: String
+        ): Pair<Boolean, Long?> {
             return try {
                 val client = WebDAVClient(serverUrl, username, password)
                 val connected = client.testConnection()

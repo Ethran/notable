@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,12 +60,15 @@ import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.showHint
 import com.ethran.notable.ui.components.DebugSettings
 import com.ethran.notable.ui.components.GeneralSettings
 import com.ethran.notable.ui.components.GesturesSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.viewmodels.GestureRowModel
 import com.ethran.notable.ui.viewmodels.SettingsViewModel
+import com.ethran.notable.ui.viewmodels.SyncSettingsEffect
+import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
 import com.ethran.notable.utils.isNext
 
 
@@ -81,9 +85,22 @@ fun SettingsView(
 ) {
     val context = LocalContext.current
     val settings = viewModel.settings
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.checkUpdate(context, force = false)
+    }
+
+    LaunchedEffect(settings.syncSettings) {
+        viewModel.initializeSyncState(settings.syncSettings)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.syncEffects.collect { effect ->
+            when (effect) {
+                is SyncSettingsEffect.ShowHint -> showHint(effect.message, scope)
+            }
+        }
     }
 
     @Suppress("KotlinConstantConditions") val versionString = remember {
@@ -102,7 +119,31 @@ fun SettingsView(
         },
         onUpdateSettings = { viewModel.updateSettings(it) },
         listOfGestures = viewModel.getGestureRows(),
-        availableGestures = viewModel.availableGestures
+        availableGestures = viewModel.availableGestures,
+        syncUiState = viewModel.syncUiState,
+        syncCallbacks = SyncSettingsCallbacks(
+            credentials = SyncCredentialsCallbacks(
+                onServerUrlChange = viewModel::onServerUrlChanged,
+                onUsernameChange = viewModel::onUsernameChanged,
+                onPasswordChange = viewModel::onPasswordChanged,
+                onSaveCredentials = viewModel::onSaveCredentials,
+            ),
+            behavior = SyncBehaviorCallbacks(
+                onToggleSyncEnabled = viewModel::onSyncEnabledChanged,
+                onAutoSyncChanged = viewModel::onAutoSyncChanged,
+                onSyncOnCloseChanged = viewModel::onSyncOnNoteCloseChanged,
+                onWifiOnlyChanged = viewModel::onWifiOnlyChanged,
+            ),
+            onTestConnection = viewModel::onTestConnection,
+            onManualSync = viewModel::onManualSync,
+            onClearSyncLogs = viewModel::onClearSyncLogs,
+            danger = SyncDangerCallbacks(
+                onForceUploadRequested = viewModel::onForceUploadRequested,
+                onForceDownloadRequested = viewModel::onForceDownloadRequested,
+                onConfirmForceUpload = viewModel::onConfirmForceUpload,
+                onConfirmForceDownload = viewModel::onConfirmForceDownload,
+            ),
+        )
     )
 }
 
@@ -118,9 +159,10 @@ fun SettingsContent(
     onUpdateSettings: (AppSettings) -> Unit,
     selectedTabInitial: Int = 0,
     listOfGestures: List<GestureRowModel> = emptyList(),
-    availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList()
+    availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList(),
+    syncUiState: SyncSettingsUiState = SyncSettingsUiState(),
+    syncCallbacks: SyncSettingsCallbacks = SyncSettingsCallbacks(),
 ) {
-    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(selectedTabInitial) }
     val tabs = listOf(
         stringResource(R.string.settings_tab_general_name),
@@ -155,7 +197,12 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-                    2 -> SyncSettings(settings, onUpdateSettings, context)
+                    2 -> SyncSettings(
+                        syncSettings = settings.syncSettings,
+                        state = syncUiState,
+                        callbacks = syncCallbacks,
+                    )
+
                     3 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
                 }
             }
@@ -172,7 +219,8 @@ fun SettingsContent(
                             .fillMaxWidth()
                     )
                     UpdateActions(
-                        isLatestVersion = isLatestVersion, onCheckUpdate = onCheckUpdate,
+                        isLatestVersion = isLatestVersion,
+                        onCheckUpdate = onCheckUpdate,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 30.dp, vertical = 8.dp)
@@ -231,8 +279,7 @@ private fun SettingsTabRow(tabs: List<String>, selectedTab: Int, onTabSelected: 
         tabs.forEachIndexed { index, title ->
             Tab(selected = selectedTab == index, onClick = { onTabSelected(index) }, text = {
                 Text(
-                    text = title,
-                    color = if (selectedTab == index) MaterialTheme.colors.onSurface
+                    text = title, color = if (selectedTab == index) MaterialTheme.colors.onSurface
                     else MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                 )
             })
@@ -298,9 +345,6 @@ fun UpdateActions(
         }
     }
 }
-
-
-
 
 
 fun openInBrowser(context: Context, uriString: String) {
@@ -370,6 +414,24 @@ fun SettingsPreviewGestures() {
 @Preview(showBackground = true)
 @Composable
 fun SettingsPreviewDebug() {
+    InkaTheme {
+        SettingsContent(
+            versionString = "v1.0.0",
+            settings = AppSettings(version = 1),
+            isLatestVersion = true,
+            onBack = {},
+            goToWelcome = {},
+            goToSystemInfo = {},
+            onCheckUpdate = {},
+            onUpdateSettings = {},
+            selectedTabInitial = 3
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsPreviewSync() {
     InkaTheme {
         SettingsContent(
             versionString = "v1.0.0",
