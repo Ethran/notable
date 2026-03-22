@@ -2,8 +2,6 @@ package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
 import androidx.compose.runtime.snapshotFlow
-import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -26,7 +24,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class CanvasObserverRegistry(
-    private val appRepository: AppRepository,
     private val coroutineScope: CoroutineScope,
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
@@ -36,6 +33,8 @@ class CanvasObserverRegistry(
     private val refreshManager: CanvasRefreshManager
 ) {
     private val logCanvasObserver = ShipBook.getLogger("CanvasObservers")
+    private val pageDataManager = page.pageDataManager
+
     fun registerAll() {
         ImageHandler(drawCanvas.context, page, state, coroutineScope).observeImageUri()
 
@@ -116,7 +115,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             page.zoomLevel.drop(1).collect {
                 logCanvasObserver.v("zoom level change: ${page.zoomLevel.value}")
-                PageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
+                pageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
                 inputHandler.updatePenAndStroke()
             }
         }
@@ -253,8 +252,8 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.saveCurrent.collect {
                 // Push current bitmap to persist layer so preview has something to load
-                PageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
-                PageDataManager.saveTopic.tryEmit(page.currentPageId)
+                pageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
+                pageDataManager.saveTopic.tryEmit(page.currentPageId)
             }
         }
     }
@@ -263,9 +262,7 @@ class CanvasObserverRegistry(
     private fun observeQuickNav() {
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
-                val pageNumber =
-                    appRepository.getPageNumber(page.pageFromDb?.notebookId!!, pageId)
-                Log.d("QuickNav", "Previewing page($pageNumber): $pageId")
+                val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
 
                 val previewBitmap = withContext(Dispatchers.IO) {
                     loadPreview(

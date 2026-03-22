@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ethran.notable.data.AppRepository
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -26,8 +25,6 @@ import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
-import com.ethran.notable.io.ExportEngine
-import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
@@ -71,10 +68,6 @@ fun EditorView(
     goToPages: (bookId: String) -> Unit,
     goToBugReport: () -> Unit,
 
-    // TODO: remove those arguments
-    exportEngine: ExportEngine,
-    appRepository: AppRepository,
-
     viewModel: EditorViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -103,8 +96,8 @@ fun EditorView(
             PageView(
                 context = context,
                 coroutineScope = scope,
-                appRepository = appRepository,
-                currentPageId = initialPageId,
+                pageDataManager = viewModel.pageDataManager,
+                initialPageId = initialPageId,
                 viewWidth = width,
                 viewHeight = height,
                 snackManager = snackManager,
@@ -233,14 +226,7 @@ fun EditorView(
 
         DisposableEffect(Unit) {
             onDispose {
-                // finish selection operation
-                viewModel.selectionState.applySelectionDisplace(page)
-                if (bookId != null) exportToLinkedFile(
-                    exportEngine,
-                    bookId,
-                    appRepository.bookRepository
-                )
-                page.disposeOldPage()
+                viewModel.onDispose(page)
             }
         }
 
@@ -249,7 +235,7 @@ fun EditorView(
         InkaTheme {
             EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                appRepository = appRepository, state = editorState, page = page, history = history
+                state = editorState, page = page, history = history
             )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower

@@ -28,7 +28,6 @@ import androidx.lifecycle.lifecycleScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
@@ -74,6 +73,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var exportEngineLazy: dagger.Lazy<ExportEngine>
 
+    @Inject
+    lateinit var pageDataManager: dagger.Lazy<PageDataManager>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableFullScreen()
@@ -89,7 +91,6 @@ class MainActivity : ComponentActivity() {
         val snackState = SnackState()
         snackState.registerGlobalSnackObserver()
         snackState.registerCancelGlobalSnackObserver()
-        PageDataManager.registerComponentCallbacks(this)
 
         setContent {
             var isInitialized by remember { mutableStateOf(false) }
@@ -104,6 +105,8 @@ class MainActivity : ComponentActivity() {
 
                         GlobalAppSettings.update(savedSettings)
                         strokeMigrationHelper.get().reencodeStrokePointsToSB1()
+                        pageDataManager.get()
+                            .registerComponentCallbacks(this@MainActivity.applicationContext)
                     }
                 }
                 isInitialized = true

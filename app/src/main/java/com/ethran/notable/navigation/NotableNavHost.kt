@@ -11,7 +11,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.editor.EditorView
 import com.ethran.notable.io.ExportEngine
@@ -100,8 +99,6 @@ fun NotableNavHost(
                 val currentPageId = appNavigator.resolveAndSyncPageId(backStackEntry)
 
                 EditorView(
-                    exportEngine = exportEngine,
-                    appRepository = appRepository,
                     goToLibrary = {appNavigator.goToLibrary(it)},
                     goToPages = { bookId -> appNavigator.goToPages(bookId) },
                     goToBugReport = { appNavigator.goToBugReport() },

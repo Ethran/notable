@@ -7,6 +7,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -23,6 +24,7 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
@@ -158,7 +160,8 @@ class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     val appRepository: AppRepository,
     val editorSettingCacheManager: EditorSettingCacheManager,
-    private val exportEngine: ExportEngine
+    private val exportEngine: ExportEngine,
+    val pageDataManager: PageDataManager
 ) : ViewModel() {
 
     // ---- Toolbar / UI State (single flat flow) ----
@@ -202,6 +205,19 @@ class EditorViewModel @Inject constructor(
                 penSettings = settings?.penSettings ?: DEFAULT_PEN_SETTINGS
             )
         }
+    }
+
+    fun onDispose(page: PageView) {
+        // finish selection operation
+        selectionState.applySelectionDisplace(page)
+        bookId?.let { bookId ->
+            exportToLinkedFile(
+                exportEngine,
+                bookId,
+                appRepository.bookRepository
+            )
+        }
+        page.disposeOldPage()
     }
 
     // --------------------------------------------------------

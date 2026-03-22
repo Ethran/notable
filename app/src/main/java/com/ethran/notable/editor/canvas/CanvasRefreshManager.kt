@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Looper
+import androidx.compose.ui.graphics.Color
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
@@ -31,7 +32,8 @@ class CanvasRefreshManager(
 
         // post what page drawn to visible surface
         drawCanvasToView(dirtyRect)
-        if (CanvasEventBus.drawingInProgress.isLocked) log.w("Drawing is still in progress there might be a bug.")
+        if (CanvasEventBus.drawingInProgress.isLocked)
+            log.w("Drawing is still in progress there might be a bug.")
 
         // Use only if you have confidence that there are no strokes being drawn at the moment
         if (!state.isDrawing) {
@@ -40,6 +42,7 @@ class CanvasRefreshManager(
         }
         // reset screen freeze
         resetScreenFreeze(touchHelper)
+        log.d("refreshUi: done")
     }
 
     suspend fun refreshUiSuspend() {
@@ -66,6 +69,8 @@ class CanvasRefreshManager(
 
 
     fun drawCanvasToView(dirtyRect: Rect?) {
+        log.v("Canvas refresh started, dirtyRect: $dirtyRect")
+
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
         var canvas: Canvas? = null
         try {
@@ -94,6 +99,7 @@ class CanvasRefreshManager(
                 if (canvas != null) {
                     drawCanvas.holder.unlockCanvasAndPost(canvas)
                 }
+                log.v("Canvas refreshed")
             } catch (e: IllegalStateException) {
                 log.w("Surface released during unlock", e)
             }

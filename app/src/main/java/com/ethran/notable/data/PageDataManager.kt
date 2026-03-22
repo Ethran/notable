@@ -3,6 +3,7 @@ package com.ethran.notable.data
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
+import android.database.sqlite.SQLiteConstraintException
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.FileObserver
@@ -11,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
@@ -26,6 +28,7 @@ import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.io.waitForFileAvailable
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.chunked
 import com.onyx.android.sdk.extension.isNotNull
@@ -43,6 +46,8 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.lang.ref.SoftReference
 import java.security.MessageDigest
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
 
@@ -66,8 +71,15 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
 }
 
 // Cache manager companion object
-object PageDataManager {
+@Singleton
+class PageDataManager @Inject constructor(
+    private val appRepository: AppRepository
+) {
     val log = ShipBook.getLogger("PageDataManager")
+    private val dataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    var pageFromDb: Page? = null
+
+
 
     private val strokes = LinkedHashMap<String, MutableList<Stroke>>()
     private var strokesById = LinkedHashMap<String, HashMap<String, Stroke>>()
@@ -95,6 +107,13 @@ object PageDataManager {
 
     @Volatile
     private var currentPage = ""
+
+    @Volatile
+    private var currentPageNumber = -1
+
+    fun getCurrentPageId(): String {
+        return currentPage
+    }
 
     private val accessLock = Any() // Lock for accessing Images, Strokes, Backgrounds & derived
     private var entrySizeMB = LinkedHashMap<String, Int>()
@@ -128,7 +147,7 @@ object PageDataManager {
      * Locking is handled internally.
      */
     private suspend fun getOrStartLoadingJob(
-        appRepository: AppRepository, pageId: String, bookId: String?
+        pageId: String, bookId: String?
     ): Job {
         log.d("getOrStartLoadingJob($pageId)")
         //             PageDataManager.ensureMemoryAvailable(15)
@@ -148,11 +167,11 @@ object PageDataManager {
                 existing == null || existing.isCancelled -> {
                     // Cancel any previous job, without current, next and previous page
                     if (bookId.isNotNull())
-                        cancelUnnecessaryLoading(appRepository, pageId, bookId)
+                        cancelUnnecessaryLoading(pageId, bookId)
                     log.d("starting loading of the Page($pageId)")
                     if (existing.isNull() && areListInitialized(pageId)) log.e("Illegal state: Page($pageId) already in memory, but job is null.")
                     val newJob = dataLoadingScope.launch {
-                        loadPageFromDb(appRepository, this, pageId)
+                        loadPageFromDb(this, pageId)
                     }
                     dataLoadingJobs[pageId] = newJob
                     newJob
@@ -166,15 +185,15 @@ object PageDataManager {
     /**
      * Ensures that the page is loaded; suspends until load is finished.
      */
-    suspend fun requestPageLoadJoin(
-        appRepository: AppRepository, pageId: String, bookId: String?
+    suspend fun requestCurrentPageLoadJoin(
     ) {
-        log.d("requestPageLoadJoin($pageId)")
-        getOrStartLoadingJob(appRepository, pageId, bookId).join()
+        assert(currentPage == pageFromDb?.id)
+        val bookId = pageFromDb?.notebookId
+        log.d("requestCurrentPageLoadJoin($currentPage)")
+        getOrStartLoadingJob(currentPage, bookId).join()
     }
 
     private suspend fun cancelUnnecessaryLoading(
-        appRepository: AppRepository,
         pageId: String,
         bookId: String
     ) {
@@ -190,30 +209,37 @@ object PageDataManager {
         )
     }
 
-    suspend fun cacheNeighbors(appRepository: AppRepository, pageId: String, bookId: String) {
+    suspend fun cacheNeighbors() {
+        assert(currentPage == pageFromDb?.id)
+        val bookId = pageFromDb?.notebookId ?: return
+
+        log.d("cacheNeighbors($currentPage)")
 
         // Only attempt to cache neighbors if we have memory to spare.
         if (!hasEnoughMemory(15)) return
         try {
             // Cache next page if not already cached
             val nextPageId =
-                appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = bookId)
+                appRepository.getNextPageIdFromBookAndPage(
+                    pageId = currentPage,
+                    notebookId = bookId
+                )
             log.d("Caching next page $nextPageId")
 
             nextPageId?.let { nextPage ->
-                requestPageLoad(appRepository, nextPage)
+                requestPageLoad(nextPage)
             }
             if (hasEnoughMemory(15)) {
                 // Cache previous page if not already cached
                 val prevPageId =
                     appRepository.getPreviousPageIdFromBookAndPage(
-                        pageId = pageId,
+                        pageId = currentPage,
                         notebookId = bookId
                     )
                 log.d("Caching prev page $prevPageId")
 
                 prevPageId?.let { prevPage ->
-                    requestPageLoad(appRepository, prevPage)
+                    requestPageLoad(prevPage)
                 }
             }
         } catch (e: CancellationException) {
@@ -231,22 +257,24 @@ object PageDataManager {
      * Requests that the given page is loaded, but doesn't wait.
      * If already loading, is a no-op.
      */
-    fun requestPageLoad(
-        appRepository: AppRepository, pageId: String
-    ) {
+    fun requestPageLoad(pageId: String) {
         dataLoadingScope.launch {
-            getOrStartLoadingJob(appRepository, pageId, null)
+            getOrStartLoadingJob(pageId, null)
         }
     }
 
-    private suspend fun preLoadBackground(appRepository: AppRepository, pageId: String) {
-        val pageFromDb = appRepository.pageRepository.getById(pageId) ?: return
-        val backgroundType = pageFromDb.getBackgroundType()
-        val background = pageFromDb.background
+    private suspend fun preLoadBackground(pageId: String) {
+        val pageDataFromDb = appRepository.pageRepository.getById(pageId)
+        if (pageDataFromDb == null) {
+            log.e("Background not found for page $pageId")
+            return
+        }
+        val backgroundType = pageDataFromDb.getBackgroundType()
+        val background = pageDataFromDb.background
         val pageNumber = when (backgroundType) {
             is BackgroundType.Pdf -> backgroundType.page
             is BackgroundType.AutoPdf -> backgroundType.getPage(
-                appRepository, pageFromDb.notebookId, pageId
+                appRepository, pageDataFromDb.notebookId, pageId
             ) ?: return
 
             BackgroundType.Native -> return
@@ -254,20 +282,18 @@ object PageDataManager {
         }
         val value = CachedBackground(background, pageNumber, 1f)
         log.i("Preloaded background: $value")
-        val observeBg = appRepository.isObservable(pageFromDb.notebookId)
-        setBackground(pageId, value, observeBg)
+        setBackground(pageId, value)
     }
 
     private suspend fun loadPageFromDb(
-        appRepository: AppRepository, coroutineScope: CoroutineScope, pageId: String
+        coroutineScope: CoroutineScope, pageId: String
     ) {
         try {
             log.d("Loading page $pageId")
 //            sleep(5000)
-            coroutineScope.launch {
-                log.d("Preloading background for page $pageId")
-                preLoadBackground(appRepository, pageId)
-            }
+            log.d("Preloading background for page $pageId")
+            preLoadBackground(pageId)
+
 
             val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(pageId)
             // What will happened if page isn't in repository?
@@ -396,9 +422,20 @@ object PageDataManager {
         }
     }
 
-
-    fun setPage(pageId: String) {
+    /*
+     * Sets current page, and starts loading it from db.
+     */
+    suspend fun setPage(pageId: String) {
+        pageFromDb = appRepository.pageRepository.getById(pageId)
+        pageFromDb?.notebookId?.let { notebookId ->
+            currentPageNumber = appRepository.getPageNumber(notebookId, pageId)
+        }
         currentPage = pageId
+    }
+
+    suspend fun refreshPageFromDb() {
+        pageFromDb = appRepository.pageRepository.getById(currentPage)
+        log.i("Refresh current page, background: ${pageFromDb?.background}")
     }
 
     fun getCachedBitmap(pageId: String): Bitmap? {
@@ -437,7 +474,11 @@ object PageDataManager {
         }
     }
 
-    fun getPageScroll(pageId: String): Offset? = pageScroll[pageId]
+    fun getPageScroll(pageId: String): Offset {
+        return pageScroll.getOrPut(pageId) {
+            Offset(0f, pageFromDb?.scroll?.toFloat() ?: 0f)
+        }
+    }
     fun setPageScroll(pageId: String, scroll: Offset) {
         pageScroll[pageId] = scroll
     }
@@ -447,6 +488,20 @@ object PageDataManager {
         pageZoom[pageId] = zoom
     }
 
+
+    fun isTransformationAllowedForCurrentPage(): Boolean {
+        return when (pageFromDb?.backgroundType) {
+            "native", null -> true
+            "coverImage" -> false
+            else -> true
+        }
+    }
+
+    fun getCurrentPageNumber(): Int {
+        if (currentPageNumber == -1)
+            log.d("Current page number: $currentPageNumber")
+        return currentPageNumber
+    }
 
     fun getStrokes(pageId: String): List<Stroke> = strokes[pageId] ?: emptyList()
 
@@ -511,6 +566,63 @@ object PageDataManager {
         }
     }
 
+    fun updateStrokesInDb(strokes: List<Stroke>) {
+        dataScope.launch {
+            appRepository.strokeRepository.update(strokes)
+        }
+    }
+
+    fun saveStrokesToDb(strokes: List<Stroke>) {
+        dataScope.launch {
+            try {
+                appRepository.strokeRepository.create(strokes)
+            } catch (_: SQLiteConstraintException) {
+                // There were some rare bugs when strokes weren't unique when inserting from history
+                // I'm not sure if it's still a problem, let's just show the message
+                logAndShowError(
+                    "saveStrokesToPersistLayer",
+                    "Attempted to create strokes that already exist"
+                )
+                appRepository.strokeRepository.update(strokes)
+            }
+        }
+    }
+
+    fun saveImagesToDb(images: List<Image>) {
+        dataScope.launch {
+            appRepository.imageRepository.create(images)
+        }
+    }
+
+    fun removeStrokesFromDb(strokes: List<String>) {
+        dataScope.launch {
+            appRepository.strokeRepository.deleteAll(strokes)
+        }
+    }
+
+    fun removeImagesFromDb(images: List<String>) {
+        dataScope.launch {
+            appRepository.imageRepository.deleteAll(images)
+        }
+    }
+
+    fun setScrollInDb() {
+        dataScope.launch {
+            appRepository.pageRepository.updateScroll(
+                currentPage,
+                getPageScroll(currentPage).y.toInt()
+            )
+        }
+    }
+
+    fun getBackgroundType(): BackgroundType? {
+        return pageFromDb?.getBackgroundType()
+    }
+
+    fun getBackgroundName(): String {
+        return pageFromDb?.background ?: "blank"
+    }
+
 
     private fun cacheStrokes(pageId: String, strokes: List<Stroke>) {
         synchronized(accessLock) {
@@ -534,23 +646,27 @@ object PageDataManager {
         }
     }
 
-    fun setBackground(pageId: String, background: CachedBackground, observe: Boolean) {
-        synchronized(accessLock) {
+    fun setBackground(pageId: String, background: CachedBackground) {
+        dataScope.launch {
+            val observeBg = appRepository.isObservable(pageFromDb?.notebookId)
 
-            // Merge/upgrade cache: if we already have an entry for this background,
-            // keep the one with higher scale (higher quality).
-            val existing = backgroundCache[background.id]
-            if (existing == null || background.scale > existing.scale) {
-                backgroundCache[background.id] = background
-                log.d("Cached background set: id=${background.id} scale=${background.scale}")
-            } else {
-                log.d("Cached background exists with equal/higher scale; reusing id=${existing.id} scale=${existing.scale}")
+            synchronized(accessLock) {
+
+                // Merge/upgrade cache: if we already have an entry for this background,
+                // keep the one with higher scale (higher quality).
+                val existing = backgroundCache[background.id]
+                if (existing == null || background.scale > existing.scale) {
+                    backgroundCache[background.id] = background
+                    log.d("Cached background set: id=${background.id} scale=${background.scale}")
+                } else {
+                    log.d("Cached background exists with equal/higher scale; reusing id=${existing.id} scale=${existing.scale}")
+                }
+
+                // Link this page to the background key
+                pageToBackgroundKey[pageId] = background.id
+
+                if (observeBg) observeBackgroundFile(pageId, background.path)
             }
-
-            // Link this page to the background key
-            pageToBackgroundKey[pageId] = background.id
-
-            if (observe) observeBackgroundFile(pageId, background.path)
         }
     }
 
@@ -566,13 +682,20 @@ object PageDataManager {
      * @param pageId The unique identifier of the page for which to retrieve the background.
      * @return The [CachedBackground] associated with the page, or a default empty instance if not found.
      */
-    fun getBackground(pageId: String): CachedBackground {
+    fun getCurrentBackground(): CachedBackground {
         return synchronized(accessLock) {
-            val key = pageToBackgroundKey[pageId]
+            val key = pageToBackgroundKey[currentPage]
             val bg = if (key != null) backgroundCache[key] else null
-            log.d("Background for page $pageId: $bg")
+            log.d("Background for page $currentPage (no. $currentPageNumber): $bg")
             bg ?: CachedBackground("", 0, 1.0f)
         }
+    }
+
+    suspend fun getPageNumberInCurrentNotebook(pageId: String): Int {
+        val pageNumber =
+            appRepository.getPageNumber(pageFromDb?.notebookId!!, pageId)
+        log.d("Page number for page($pageNumber): $pageId")
+        return pageNumber
     }
 
     /**

@@ -37,7 +37,6 @@ var referencedSurfaceView: String = ""
 @SuppressLint("ViewConstructor") // we never execute constructor from XML
 class DrawCanvas(
     context: Context,
-    appRepository: AppRepository,
     val coroutineScope: CoroutineScope,
     val state: EditorState,
     val page: PageView,
@@ -90,7 +89,6 @@ class DrawCanvas(
 
 
     private val observers = CanvasObserverRegistry(
-        appRepository,
         coroutineScope, this, page, state, history, inputHandler, refreshManager
     )
 
