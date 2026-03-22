@@ -646,8 +646,13 @@ class PageDataManager @Inject constructor(
         }
     }
 
+    fun setCurrentBackground(background: CachedBackground){
+        setBackground(currentPage, background)
+    }
+
     fun setBackground(pageId: String, background: CachedBackground) {
         dataScope.launch {
+            // we assume that the pageId is in current notebook.
             val observeBg = appRepository.isObservable(pageFromDb?.notebookId)
 
             synchronized(accessLock) {
@@ -665,7 +670,8 @@ class PageDataManager @Inject constructor(
                 // Link this page to the background key
                 pageToBackgroundKey[pageId] = background.id
 
-                if (observeBg) observeBackgroundFile(pageId, background.path)
+                if (observeBg)
+                    observeBackgroundFile(pageId, background.path)
             }
         }
     }

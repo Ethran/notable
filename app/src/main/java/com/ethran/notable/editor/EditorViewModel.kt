@@ -496,15 +496,17 @@ class EditorViewModel @Inject constructor(
      * Attempts to repair potential inconsistencies in the notebook's data structure.
      */
     suspend fun fixNotebook(bookId: String?, pageId: String) {
-        if (bookId != null) {
-            log.i("Could not find page, Cleaning book")
-            SnackState.globalSnackFlow.tryEmit(
-                SnackConf(
-                    text = "Could not find page, cleaning book", duration = 4000
-                )
-            )
-            appRepository.bookRepository.removePage(bookId, pageId)
-        }
+        TODO("""I'm not confident in the code below.""" )
+//        if (bookId != null) {
+//            log.i("Could not find page, Cleaning book")
+//            SnackState.globalSnackFlow.tryEmit(
+//                SnackConf(
+//                    text = "Could not find page, cleaning book", duration = 4000
+//                )
+//            )
+//            appRepository.bookRepository.removePage(bookId, pageId)
+//
+//        }
     }
 
     // --------------------------------------------------------

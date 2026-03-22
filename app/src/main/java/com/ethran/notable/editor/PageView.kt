@@ -93,7 +93,7 @@ class PageView(
     // warning: The setter is delayed!
     private var currentBackground: CachedBackground
         get() = pageDataManager.getCurrentBackground()
-        set(value) = pageDataManager.setBackground(currentPageId, value)
+        set(value) = pageDataManager.setCurrentBackground(value)
 
     val currentPageId: String
         get() = pageDataManager.getCurrentPageId()
