@@ -34,6 +34,7 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.sync.CredentialManager
 import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
@@ -82,6 +83,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var syncEngine: dagger.Lazy<SyncEngine>
+
+    @Inject
+    lateinit var credentialManager: dagger.Lazy<CredentialManager>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -142,7 +146,8 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun triggerInitialSync() {
         try {
-            if (GlobalAppSettings.current.syncSettings.syncEnabled) {
+            val settings = credentialManager.get().settings.value
+            if (settings.syncEnabled) {
                 Log.i(TAG, "Triggering initial sync on app startup")
                syncEngine.get().syncAllNotebooks()
             }

@@ -3,8 +3,6 @@ package com.ethran.notable.sync
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.ethran.notable.APP_SETTINGS_KEY
-import com.ethran.notable.data.datastore.AppSettings
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
 
@@ -29,15 +27,23 @@ class SyncWorker(
         val entryPoint = EntryPointAccessors.fromApplication(
             applicationContext, SyncEngineEntryPoint::class.java
         )
-        val kvProxy = entryPoint.kvProxy()
-        val settings = kvProxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
-        if (settings?.syncSettings?.wifiOnly == true && !connectivityChecker.isUnmeteredConnected()) {
+        
+        val credentialManager = entryPoint.credentialManager()
+        val syncSettings = credentialManager.settings.value
+
+        // Check if sync is enabled
+        if (!syncSettings.syncEnabled) {
+            Log.i(TAG, "Sync disabled in settings, skipping")
+            return Result.success()
+        }
+
+        // Check WiFi-only constraint
+        if (syncSettings.wifiOnly && !connectivityChecker.isUnmeteredConnected()) {
             Log.i(TAG, "WiFi-only sync enabled but not on unmetered network, skipping")
             return Result.success()
         }
 
         // Check if we have credentials
-        val credentialManager = CredentialManager(applicationContext)
         if (!credentialManager.hasCredentials()) {
             Log.w(TAG, "No credentials stored, skipping sync")
             return Result.success()

@@ -20,24 +20,6 @@ object GlobalAppSettings {
     }
 }
 
-
-@Serializable
-data class SyncSettings(
-    val syncEnabled: Boolean = false,
-    val serverUrl: String = "",
-    val username: String = "",
-    // Note: Password stored separately in EncryptedSharedPreferences for security
-    val autoSync: Boolean = true,
-    // Default must be >= 15 minutes due to WorkManager/JobScheduler minimum interval
-    val syncInterval: Int = 15,  // minutes
-    val lastSyncTime: String? = null,
-    val syncOnNoteClose: Boolean = true,
-    val wifiOnly: Boolean = false,
-    // Track which notebooks we've successfully synced to detect deletions
-    val syncedNotebookIds: Set<String> = emptySet()
-)
-
-
 @Serializable
 data class AppSettings(
     // General
@@ -65,9 +47,6 @@ data class AppSettings(
     val holdAction: GestureAction? = defaultHoldAction,
     val enableQuickNav: Boolean = true,
     val renameOnCreate: Boolean = true,
-
-    // Sync
-    val syncSettings: SyncSettings = SyncSettings(),
 
     // Debug
     val showWelcome: Boolean = true,

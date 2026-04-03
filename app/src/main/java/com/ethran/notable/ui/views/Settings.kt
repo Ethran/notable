@@ -92,10 +92,6 @@ fun SettingsView(
         viewModel.checkUpdate(context, force = false)
     }
 
-    LaunchedEffect(settings.syncSettings) {
-        viewModel.initializeSyncState(settings.syncSettings)
-    }
-
     LaunchedEffect(Unit) {
         viewModel.syncEffects.collect { effect ->
             when (effect) {
@@ -199,7 +195,6 @@ fun SettingsContent(
                     )
 
                     2 -> SyncSettings(
-                        syncSettings = settings.syncSettings,
                         state = syncUiState,
                         callbacks = syncCallbacks,
                     )
@@ -429,13 +424,18 @@ fun SettingsPreviewDebug() {
         )
     }
 }
-
-@Preview(name = "Light", showBackground = true)
+@Preview(
+    name = "Light",
+    showBackground = true,
+    device = "spec:width=360dp,height=600dp"
+)
 @Preview(
     name = "Dark",
     uiMode = Configuration.UI_MODE_NIGHT_YES,
-    showBackground = true
-)@Composable
+    showBackground = true,
+    device = "spec:width=360dp,height=600dp"
+)
+@Composable
 fun SettingsPreviewSync() {
     InkaTheme {
         SettingsContent(
@@ -447,7 +447,7 @@ fun SettingsPreviewSync() {
             goToSystemInfo = {},
             onCheckUpdate = {},
             onUpdateSettings = {},
-            selectedTabInitial = 2
+            selectedTabInitial = 2,
         )
     }
 }

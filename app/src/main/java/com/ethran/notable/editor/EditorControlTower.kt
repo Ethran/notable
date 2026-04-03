@@ -100,10 +100,9 @@ class EditorControlTower(
      * @param id The unique identifier of the page to switch to.
      */
     private suspend fun switchPage(id: String) {
-        // Trigger sync on the page we're leaving (if enabled)
-        val settings = GlobalAppSettings.current
-        if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose) {
-            val oldPageId = page.currentPageId
+        // Trigger sync on the page we're leaving (sync logic inside syncEngine.syncFromPageId)
+        val oldPageId = page.currentPageId
+        if (oldPageId != null) {
             scope.launch(Dispatchers.IO) {
                 triggerSyncForPage(oldPageId)
             }

@@ -32,8 +32,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ethran.notable.R
-import com.ethran.notable.data.datastore.SyncSettings
 import com.ethran.notable.sync.SyncLogger
+import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
 import com.ethran.notable.ui.components.SettingToggleRow
 import com.ethran.notable.ui.components.SettingsDivider
@@ -72,23 +72,10 @@ data class SyncSettingsCallbacks(
 
 @Composable
 fun SyncSettings(
-    syncSettings: SyncSettings,
     state: SyncSettingsUiState,
     callbacks: SyncSettingsCallbacks,
 ) {
-    SyncSettingsContent(
-        syncSettings = syncSettings,
-        state = state,
-        callbacks = callbacks,
-    )
-}
-
-@Composable
-fun SyncSettingsContent(
-    syncSettings: SyncSettings,
-    state: SyncSettingsUiState,
-    callbacks: SyncSettingsCallbacks,
-) {
+    val syncSettings = state.syncSettings
 
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
@@ -197,21 +184,6 @@ fun SyncSettingsContent(
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun SyncSettingsContentPreview() {
-    SyncSettingsContent(
-        syncSettings = SyncSettings(syncEnabled = true, serverUrl = "https://webdav.example.com"),
-        state = SyncSettingsUiState(
-            serverUrl = "https://webdav.example.com",
-            username = "demo",
-            password = "secret",
-            savedUsername = "demo",
-            savedPassword = "secret"
-        ),
-        callbacks = SyncSettingsCallbacks()
-    )
-}
 
 @Composable
 fun SyncEnableToggle(
@@ -725,4 +697,26 @@ fun ConfirmationDialog(
             }
         }
     }
+}
+
+
+// ----------------------------------- //
+// --------      Previews      ------- //
+// ----------------------------------- //
+
+
+@Preview(showBackground = true)
+@Composable
+fun SyncSettingsContentPreview() {
+    SyncSettings(
+        state = SyncSettingsUiState(
+            serverUrl = "https://webdav.example.com",
+            username = "demo",
+            password = "secret",
+            savedUsername = "demo",
+            savedPassword = "secret",
+            syncSettings = SyncSettings(syncEnabled = true, serverUrl = "https://webdav.example.com")
+        ),
+        callbacks = SyncSettingsCallbacks()
+    )
 }
