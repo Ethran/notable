@@ -1,5 +1,6 @@
 package com.ethran.notable.ui.views
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -16,17 +18,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
 import com.ethran.notable.ui.components.SettingToggleRow
 import com.ethran.notable.ui.components.SettingsDivider
+import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.viewmodels.SyncConnectionStatus
 import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
 
@@ -77,11 +80,16 @@ fun SyncSettings(
 ) {
     val syncSettings = state.syncSettings
 
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
         Text(
             text = stringResource(R.string.sync_title),
             style = MaterialTheme.typography.h6,
             fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -110,14 +118,13 @@ fun SyncSettings(
             onClick = callbacks.credentials.onSaveCredentials,
             enabled = state.credentialsChanged && state.username.isNotEmpty() && state.password.isNotEmpty(),
             colors = ButtonDefaults.buttonColors(
-                backgroundColor = Color(0, 120, 200),
-                contentColor = Color.White,
-                disabledBackgroundColor = Color(200, 200, 200),
-                disabledContentColor = Color.Gray
+                backgroundColor = MaterialTheme.colors.primary,
+                contentColor = MaterialTheme.colors.onPrimary,
+                disabledBackgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+                disabledContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp)
                 .height(48.dp)
         ) {
             Text(stringResource(R.string.sync_save_credentials), fontWeight = FontWeight.Bold)
@@ -181,6 +188,8 @@ fun SyncSettings(
 
         // Sync Log Viewer
         SyncLogViewer(syncLogs = state.syncLogs, onClearLog = callbacks.onClearSyncLogs)
+
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -205,8 +214,10 @@ fun SyncCredentialFields(
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit
 ) {
+    val textFieldBackground = MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+
     // Server URL Field
-    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+    Column {
         Text(
             text = stringResource(R.string.sync_server_url_note),
             style = MaterialTheme.typography.caption,
@@ -231,7 +242,7 @@ fun SyncCredentialFields(
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(230, 230, 230, 255))
+                .background(textFieldBackground)
                 .padding(12.dp),
             decorationBox = { innerTextField ->
                 Box {
@@ -240,7 +251,7 @@ fun SyncCredentialFields(
                             stringResource(R.string.sync_server_url_placeholder), style = TextStyle(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 14.sp,
-                                color = Color.Gray
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f)
                             )
                         )
                     }
@@ -252,7 +263,7 @@ fun SyncCredentialFields(
     Spacer(modifier = Modifier.height(12.dp))
 
     // Username Field
-    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+    Column {
         Text(
             text = stringResource(R.string.sync_username_label),
             style = MaterialTheme.typography.body2,
@@ -271,7 +282,7 @@ fun SyncCredentialFields(
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(230, 230, 230, 255))
+                .background(textFieldBackground)
                 .padding(12.dp)
         )
     }
@@ -279,7 +290,7 @@ fun SyncCredentialFields(
     Spacer(modifier = Modifier.height(12.dp))
 
     // Password Field
-    Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+    Column {
         Text(
             text = stringResource(R.string.sync_password_label),
             style = MaterialTheme.typography.body2,
@@ -299,7 +310,7 @@ fun SyncCredentialFields(
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(230, 230, 230, 255))
+                .background(textFieldBackground)
                 .padding(12.dp)
         )
     }
@@ -318,14 +329,13 @@ fun SyncConnectionTest(
         onClick = onTestConnection,
         enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = Color(80, 80, 80),
-            contentColor = Color.White,
-            disabledBackgroundColor = Color(200, 200, 200),
-            disabledContentColor = Color.Gray
+            backgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+            contentColor = MaterialTheme.colors.onSurface,
+            disabledBackgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.05f),
+            disabledContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp)
             .height(48.dp)
     ) {
         if (testingConnection) {
@@ -338,7 +348,7 @@ fun SyncConnectionTest(
     connectionStatus?.let { status ->
         val statusColor = when (status) {
             is SyncConnectionStatus.Success -> Color(0, 150, 0)
-            is SyncConnectionStatus.Failed -> Color(200, 0, 0)
+            is SyncConnectionStatus.Failed -> MaterialTheme.colors.error
             else -> Color(200, 100, 0)
         }
         val statusText = when (status) {
@@ -353,7 +363,7 @@ fun SyncConnectionTest(
             text = statusText,
             style = MaterialTheme.typography.body2,
             color = statusColor,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 8.dp)
         )
     }
 }
@@ -395,16 +405,15 @@ fun ManualSyncButton(
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = when (syncState) {
                     is SyncState.Success -> Color(0, 150, 0)
-                    is SyncState.Error -> Color(200, 0, 0)
-                    else -> Color(0, 120, 200)
+                    is SyncState.Error -> MaterialTheme.colors.error
+                    else -> MaterialTheme.colors.primary
                 },
                 contentColor = Color.White,
-                disabledBackgroundColor = Color(200, 200, 200),
-                disabledContentColor = Color.Gray
+                disabledBackgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+                disabledContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp)
                 .height(56.dp)
         ) {
             when (syncState) {
@@ -442,8 +451,8 @@ fun ManualSyncButton(
                 progress = syncState.progress,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 4.dp, end = 4.dp, top = 4.dp),
-                color = Color(0, 120, 200)
+                    .padding(top = 4.dp),
+                color = MaterialTheme.colors.primary
             )
         }
 
@@ -460,7 +469,7 @@ fun ManualSyncButton(
                 ),
                 style = MaterialTheme.typography.caption,
                 color = Color(0, 150, 0),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+                modifier = Modifier.padding(vertical = 8.dp)
             )
         }
 
@@ -480,8 +489,8 @@ fun ManualSyncButton(
             Text(
                 text = errorText,
                 style = MaterialTheme.typography.caption,
-                color = Color(200, 0, 0),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+                color = MaterialTheme.colors.error,
+                modifier = Modifier.padding(vertical = 8.dp)
             )
         }
 
@@ -491,7 +500,7 @@ fun ManualSyncButton(
                 text = stringResource(R.string.sync_last_synced, timestamp),
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+                modifier = Modifier.padding(vertical = 8.dp)
             )
         }
     }
@@ -512,7 +521,7 @@ fun ForceOperationsSection(
         text = stringResource(R.string.sync_force_operations_title),
         style = MaterialTheme.typography.h6,
         fontWeight = FontWeight.Bold,
-        color = Color(200, 0, 0),
+        color = MaterialTheme.colors.error,
         modifier = Modifier.padding(bottom = 8.dp)
     )
 
@@ -520,7 +529,7 @@ fun ForceOperationsSection(
         text = stringResource(R.string.sync_force_operations_warning),
         style = MaterialTheme.typography.body2,
         color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
-        modifier = Modifier.padding(bottom = 16.dp, start = 4.dp, end = 4.dp)
+        modifier = Modifier.padding(bottom = 16.dp)
     )
 
     Button(
@@ -529,12 +538,11 @@ fun ForceOperationsSection(
         colors = ButtonDefaults.buttonColors(
             backgroundColor = Color(200, 100, 0),
             contentColor = Color.White,
-            disabledBackgroundColor = Color(200, 200, 200),
-            disabledContentColor = Color.Gray
+            disabledBackgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+            disabledContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp)
             .height(48.dp)
     ) {
         Text(stringResource(R.string.sync_force_upload_button), fontWeight = FontWeight.Bold)
@@ -556,14 +564,13 @@ fun ForceOperationsSection(
         onClick = { onForceDownloadRequested(true) },
         enabled = syncSettings.syncEnabled && serverUrl.isNotEmpty(),
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = Color(200, 0, 0),
+            backgroundColor = MaterialTheme.colors.error,
             contentColor = Color.White,
-            disabledBackgroundColor = Color(200, 200, 200),
-            disabledContentColor = Color.Gray
+            disabledBackgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+            disabledContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.38f)
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp)
             .height(48.dp)
     ) {
         Text(stringResource(R.string.sync_force_download_button), fontWeight = FontWeight.Bold)
@@ -590,11 +597,13 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
         Text(
             text = stringResource(R.string.sync_log_title),
             style = MaterialTheme.typography.h6,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface
         )
         Button(
             onClick = onClearLog, colors = ButtonDefaults.buttonColors(
-                backgroundColor = Color.Gray, contentColor = Color.White
+                backgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+                contentColor = MaterialTheme.colors.onSurface
             ), modifier = Modifier.height(32.dp)
         ) {
             Text(stringResource(R.string.sync_clear_log), fontSize = 12.sp)
@@ -607,8 +616,8 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(300.dp)
-            .background(Color(250, 250, 250))
-            .border(1.dp, Color.Gray)
+            .background(MaterialTheme.colors.onSurface.copy(alpha = 0.05f))
+            .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.2f))
     ) {
         val scrollState = rememberScrollState()
 
@@ -620,7 +629,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
             Text(
                 text = stringResource(R.string.sync_log_empty),
                 style = MaterialTheme.typography.body2,
-                color = Color.Gray,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier.padding(12.dp)
             )
         } else {
@@ -632,9 +641,14 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
             ) {
                 syncLogs.takeLast(20).forEach { log ->
                     val logColor = when (log.level) {
-                        SyncLogger.LogLevel.INFO -> Color(0, 100, 0)
+                        SyncLogger.LogLevel.INFO -> if (MaterialTheme.colors.isLight) Color(
+                            0,
+                            100,
+                            0
+                        ) else Color(150, 255, 150)
+
                         SyncLogger.LogLevel.WARNING -> Color(200, 100, 0)
-                        SyncLogger.LogLevel.ERROR -> Color(200, 0, 0)
+                        SyncLogger.LogLevel.ERROR -> MaterialTheme.colors.error
                     }
                     Text(
                         text = "[${log.timestamp}] ${log.message}", style = TextStyle(
@@ -652,47 +666,58 @@ fun ConfirmationDialog(
     title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .background(Color.White)
-                .border(2.dp, Color.Black, RectangleShape)
-                .padding(24.dp)
+        Surface(
+            color = MaterialTheme.colors.surface,
+            shape = MaterialTheme.shapes.medium,
+            elevation = 8.dp
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.h6,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            Text(
-                text = message,
-                style = MaterialTheme.typography.body1,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
             ) {
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = Color.Gray, contentColor = Color.White
-                    )
-                ) {
-                    Text(stringResource(R.string.sync_dialog_cancel))
-                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.h6,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colors.onSurface,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
 
-                Button(
-                    onClick = onConfirm,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        backgroundColor = Color(200, 0, 0), contentColor = Color.White
-                    )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.body1,
+                    color = MaterialTheme.colors.onSurface,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(stringResource(R.string.sync_dialog_confirm), fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+                            contentColor = MaterialTheme.colors.onSurface
+                        )
+                    ) {
+                        Text(stringResource(R.string.sync_dialog_cancel))
+                    }
+
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = MaterialTheme.colors.error,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            stringResource(R.string.sync_dialog_confirm),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -705,18 +730,38 @@ fun ConfirmationDialog(
 // ----------------------------------- //
 
 
-@Preview(showBackground = true)
+@Preview(
+    showBackground = true,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+    name = "Dark Mode",
+    heightDp = 1200
+)
+@Preview(
+    showBackground = true,
+    uiMode = Configuration.UI_MODE_NIGHT_NO,
+    name = "Light Mode",
+    heightDp = 1200
+)
 @Composable
 fun SyncSettingsContentPreview() {
-    SyncSettings(
-        state = SyncSettingsUiState(
-            serverUrl = "https://webdav.example.com",
-            username = "demo",
-            password = "secret",
-            savedUsername = "demo",
-            savedPassword = "secret",
-            syncSettings = SyncSettings(syncEnabled = true, serverUrl = "https://webdav.example.com")
-        ),
-        callbacks = SyncSettingsCallbacks()
-    )
+    InkaTheme {
+        Surface(color = MaterialTheme.colors.background) {
+            Box(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                SyncSettings(
+                    state = SyncSettingsUiState(
+                        serverUrl = "https://webdav.example.com",
+                        username = "demo",
+                        password = "secret",
+                        savedUsername = "demo",
+                        savedPassword = "secret",
+                        syncSettings = SyncSettings(
+                            syncEnabled = true,
+                            serverUrl = "https://webdav.example.com"
+                        )
+                    ),
+                    callbacks = SyncSettingsCallbacks()
+                )
+            }
+        }
+    }
 }
