@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -355,8 +354,7 @@ fun SyncConnectionTest(
             SyncConnectionStatus.Failed -> stringResource(R.string.sync_connection_failed)
             SyncConnectionStatus.Success -> stringResource(R.string.sync_connected_successfully)
             is SyncConnectionStatus.ClockSkew -> stringResource(
-                R.string.sync_clock_skew_warning,
-                status.seconds
+                R.string.sync_clock_skew_warning, status.seconds
             )
         }
         Text(
@@ -642,9 +640,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
                 syncLogs.takeLast(20).forEach { log ->
                     val logColor = when (log.level) {
                         SyncLogger.LogLevel.INFO -> if (MaterialTheme.colors.isLight) Color(
-                            0,
-                            100,
-                            0
+                            0, 100, 0
                         ) else Color(150, 255, 150)
 
                         SyncLogger.LogLevel.WARNING -> Color(200, 100, 0)
@@ -672,8 +668,7 @@ fun ConfirmationDialog(
             elevation = 8.dp
         ) {
             Column(
-                modifier = Modifier
-                    .padding(24.dp)
+                modifier = Modifier.padding(24.dp)
             ) {
                 Text(
                     text = title,
@@ -709,8 +704,7 @@ fun ConfirmationDialog(
                         onClick = onConfirm,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            backgroundColor = MaterialTheme.colors.error,
-                            contentColor = Color.White
+                            backgroundColor = MaterialTheme.colors.error, contentColor = Color.White
                         )
                     ) {
                         Text(
@@ -755,11 +749,9 @@ fun SyncSettingsContentPreview() {
                         savedUsername = "demo",
                         savedPassword = "secret",
                         syncSettings = SyncSettings(
-                            syncEnabled = true,
-                            serverUrl = "https://webdav.example.com"
+                            syncEnabled = true, serverUrl = "https://webdav.example.com"
                         )
-                    ),
-                    callbacks = SyncSettingsCallbacks()
+                    ), callbacks = SyncSettingsCallbacks()
                 )
             }
         }
