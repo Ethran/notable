@@ -55,7 +55,7 @@ All sync code lives in `com.ethran.notable.sync`. The components and their respo
 | [`NotebookReconciliationService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookReconciliationService.kt) | Per-notebook conflict decision (upload/download/no-op) based on manifest timestamps.                                                                               |
 | [`SyncForceService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncForceService.kt)                           | Force upload/download flows (full side replacement) used by settings actions.                                                                                      |
 | [`SyncPorts.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPorts.kt)                                         | DI port/adapter for WebDAV client creation (`WebDavClientFactoryPort`).                                                                                            |
-| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt)                                   | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. Streaming downloads.                                                                             |
+| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt)                                   | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. Streaming downloads. ETag-aware downloads and `If-Match` guarded uploads for optimistic concurrency. |
 | [`NotebookSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/NotebookSerializer.kt)           | Serializes/deserializes notebooks, pages, strokes, and images to/from JSON. Stroke points are embedded as base64-encoded [SB1 binary](database-structure.md) data. |
 | [`FolderSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/FolderSerializer.kt)               | Serializes/deserializes the folder hierarchy to/from `folders.json`.                                                                                               |
 | [`SyncWorker.kt`](../app/src/main/java/com/ethran/notable/sync/SyncWorker.kt)                                       | `CoroutineWorker` for WorkManager integration. Checks connectivity and credentials before delegating to `SyncOrchestrator`.                                        |
@@ -80,10 +80,10 @@ operations on a single device (see section 7.2 for multi-device concurrency).
    └── Ensure /notable/, /notable/notebooks/, /notable/deletions/ exist on server (MKCOL)
 
 2. SYNC FOLDERS
-   ├── GET /notable/folders.json (if exists)
+   ├── GET /notable/folders.json (if exists) + capture ETag
    ├── Merge: for each folder, keep the version with the later updatedAt
    ├── Upsert merged folders into local Room database
-   └── PUT /notable/folders.json (merged result)
+   └── PUT /notable/folders.json with If-Match (captured ETag)
 
 3. APPLY REMOTE DELETIONS
    ├── PROPFIND /notable/deletions/ (Depth 1) → list of tombstone files with lastModified
@@ -97,11 +97,12 @@ operations on a single device (see section 7.2 for multi-device concurrency).
    └── For each local notebook:
        ├── HEAD /notable/notebooks/{id}/manifest.json
        ├── If remote exists:
-       │   ├── GET manifest.json, parse updatedAt
+       │   ├── GET manifest.json + capture ETag, parse updatedAt
        │   ├── Compare timestamps (with ±1s tolerance):
-       │   │   ├── Local newer → upload notebook
+       │   │   ├── Local newer → upload notebook manifest with If-Match (captured ETag)
        │   │   ├── Remote newer → download notebook
        │   │   └── Within tolerance → skip
+       │   ├── If server changed between GET and PUT, server returns 412 and sync reports CONFLICT
        │   └── (end comparison)
        └── If remote doesn't exist → upload notebook
 
@@ -420,11 +421,9 @@ misidentified as a local deletion.
   choose. Last-writer-wins is applied automatically.
 - **Folder deletion is not cascaded across devices.** Deleting a folder locally does not propagate
   to other devices (only notebook deletions are tracked via tombstones).
-- **`folders.json` writes are not atomic.** This shared file is updated via read-modify-write with
-  no server-side locking. If two devices sync simultaneously, one device's write can clobber the
-  other's merge. The next sync will self-heal, but a folder rename or deletion could be lost in the
-  narrow window. Notebook deletions do not have this problem — they use per-notebook tombstones.
-  ETag-based optimistic locking (see section 9) would eliminate the `folders.json` race.
+- **Concurrent updates can return conflict (`412 Precondition Failed`).** `folders.json` and
+  `manifest.json` updates are protected by `If-Match`. This prevents silent overwrite, but can abort
+  a sync step with `CONFLICT` when another device changes the resource between GET and PUT.
 - **Depends on reasonably synchronized device clocks.** Timestamp comparison is the foundation of
   conflict resolution. If two devices have significantly different clock settings, the wrong version
   may win. This is mitigated by the clock skew detection described in 5.8, which blocks sync when
@@ -494,6 +493,7 @@ enum class SyncError {
     CONFIG_ERROR,       // Settings missing or sync disabled
     CLOCK_SKEW,         // Device clock differs from server by >30s (see 5.8)
     SYNC_IN_PROGRESS,   // Another sync is already running (mutex held)
+    CONFLICT,           // ETag precondition failed (HTTP 412)
     UNKNOWN_ERROR       // Catch-all for unexpected exceptions
 }
 ```
@@ -526,7 +526,7 @@ Failures are isolated at the notebook level:
 - **Sync already in progress**: Return `Result.success()` (not an error -- another sync is handling
   it).
 - **Network error during sync**: Retry up to 3 attempts, then fail.
-- **Non-retryable sync errors** (`AUTH_ERROR`, `CONFIG_ERROR`, `CLOCK_SKEW`, `WIFI_REQUIRED`): Return
+- **Non-retryable sync errors** (`AUTH_ERROR`, `CONFIG_ERROR`, `CLOCK_SKEW`, `WIFI_REQUIRED`, `CONFLICT`): Return
   `Result.success()` to avoid useless retry loops.
 - **Other/unknown errors**: Retry up to 3 attempts, then fail.
 - WorkManager's exponential backoff handles retry timing.
@@ -573,15 +573,11 @@ Idle → Syncing(step, progress, details) → Success(summary) → Idle
 
 Potential enhancements beyond the current implementation, roughly ordered by impact:
 
-1. **ETag-based optimistic locking for `folders.json`.** This shared file is updated via
-   read-modify-write with no coordination between devices. Using `If-Match` on PUT (and re-reading
-   on 412 Precondition Failed) would eliminate the concurrent-write race described in section 5.7.
-   Most WebDAV servers (including Nextcloud) return strong ETags on all resources. Tombstones
-   already solved this problem for notebook deletions; `folders.json` is the last remaining shared
-   mutable file.
-2. **ETag-based change detection.** Extend ETags to notebook manifests: store the ETag from each
+1. **ETag-based change detection.** Extend ETags to notebook manifests: store the ETag from each
    GET, send `If-None-Match` on the next sync -- a 304 avoids downloading the full manifest. This
    would also make clock skew detection unnecessary for change detection.
+2. **Conflict recovery strategy.** On `CONFLICT` (412), add an automatic re-GET/reconcile/retry path
+   for selected operations instead of finishing current run as skipped.
 3. **Page-level sync granularity.** Compare and sync individual pages rather than whole notebooks to
    reduce bandwidth and improve conflict handling for multi-page notebooks.
 4. **Stroke-level merge.** When two devices edit different pages of the same notebook, merge
@@ -597,5 +593,5 @@ Potential enhancements beyond the current implementation, roughly ordered by imp
 
 ---
 
-**Version**: 1.3
+**Version**: 1.4
 **Last Updated**: 2026-04-03
