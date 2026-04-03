@@ -2,7 +2,6 @@ package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.sync.serializers.NotebookSerializer
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -24,9 +23,10 @@ class SyncOrchestrator @Inject constructor(
     private val syncPreflightService: SyncPreflightService,
     private val folderSyncService: FolderSyncService,
     private val notebookSyncService: NotebookSyncService,
-    private val syncForceService: SyncForceService
+    private val syncForceService: SyncForceService,
+    private val notebookReconciliationService: NotebookReconciliationService,
+    private val webDavClientFactory: WebDavClientFactoryPort
 ) {
-    private val notebookSerializer = NotebookSerializer()
     private val sLog = SyncLogger
     suspend fun syncAllNotebooks(): SyncResult = withContext(Dispatchers.IO) {
         if (!syncMutex.tryLock()) {
@@ -52,7 +52,7 @@ class SyncOrchestrator @Inject constructor(
                 return@withContext SyncResult.Failure(SyncError.WIFI_REQUIRED)
             }
             val webdavClient =
-                WebDAVClient(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
             val skewMs = syncPreflightService.checkClockSkew(webdavClient)
             if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
                 updateState(SyncState.Error(SyncError.CLOCK_SKEW, SyncStep.INITIALIZING, false))
@@ -83,7 +83,7 @@ class SyncOrchestrator @Inject constructor(
                     "Syncing local notebooks..."
                 )
             )
-            val preDownloadNotebookIds = syncExistingNotebooks(webdavClient)
+            val preDownloadNotebookIds = notebookReconciliationService.syncExistingNotebooks(webdavClient)
             val notebooksSynced = preDownloadNotebookIds.size
             updateState(
                 SyncState.Syncing(
@@ -154,8 +154,9 @@ class SyncOrchestrator @Inject constructor(
         }
         val credentials = credentialManager.getCredentials()
             ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
-        val webdavClient = WebDAVClient(settings.serverUrl, credentials.first, credentials.second)
-        return@withContext syncNotebookImpl(notebookId, webdavClient)
+        val webdavClient =
+            webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
+        return@withContext notebookReconciliationService.syncNotebook(notebookId, webdavClient)
     }
 
     suspend fun syncFromPageId(pageId: String) {
@@ -172,78 +173,6 @@ class SyncOrchestrator @Inject constructor(
         }
     }
 
-    private suspend fun syncExistingNotebooks(webdavClient: WebDAVClient): Set<String> {
-        val localNotebooks = appRepository.bookRepository.getAll()
-        val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
-        for (notebook in localNotebooks) {
-            try {
-                syncNotebookImpl(notebook.id, webdavClient)
-            } catch (e: Exception) {
-                sLog.e(TAG, "Failed to sync ${notebook.title}: ${e.message}")
-            }
-        }
-        return preDownloadNotebookIds
-    }
-
-    private suspend fun syncNotebookImpl(
-        notebookId: String,
-        webdavClient: WebDAVClient
-    ): SyncResult {
-        return try {
-            sLog.i(TAG, "Syncing notebook: $notebookId")
-            val settings = credentialManager.settings.value
-            if (!settings.syncEnabled) return SyncResult.Success
-            if (!syncPreflightService.checkWifiConstraint()) return SyncResult.Success
-            if ((syncPreflightService.checkClockSkew(webdavClient)
-                    ?.let { kotlin.math.abs(it) > CLOCK_SKEW_THRESHOLD_MS }) == true
-            ) {
-                return SyncResult.Failure(SyncError.CLOCK_SKEW)
-            }
-            val localNotebook =
-                appRepository.bookRepository.getById(notebookId) ?: return SyncResult.Failure(
-                    SyncError.UNKNOWN_ERROR
-                )
-            val remotePath = SyncPaths.manifestFile(notebookId)
-            val remoteExists = webdavClient.exists(remotePath)
-            if (remoteExists) {
-                val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
-                val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
-                val diffMs = remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time }
-                    ?: Long.MAX_VALUE
-                when {
-                    remoteUpdatedAt == null -> notebookSyncService.uploadNotebook(
-                        localNotebook,
-                        webdavClient
-                    )
-
-                    diffMs < -TIMESTAMP_TOLERANCE_MS -> notebookSyncService.downloadNotebook(
-                        notebookId,
-                        webdavClient
-                    )
-
-                    diffMs > TIMESTAMP_TOLERANCE_MS -> notebookSyncService.uploadNotebook(
-                        localNotebook,
-                        webdavClient
-                    )
-
-                    else -> sLog.i(
-                        TAG,
-                        "= No changes (within tolerance), skipping ${localNotebook.title}"
-                    )
-                }
-            } else {
-                notebookSyncService.uploadNotebook(localNotebook, webdavClient)
-            }
-            SyncResult.Success
-        } catch (e: IOException) {
-            sLog.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
-            SyncResult.Failure(SyncError.NETWORK_ERROR)
-        } catch (e: Exception) {
-            sLog.e(TAG, "Error syncing notebook $notebookId: ${e.message}")
-            SyncResult.Failure(SyncError.UNKNOWN_ERROR)
-        }
-    }
-
     suspend fun uploadDeletion(notebookId: String): SyncResult = withContext(Dispatchers.IO) {
         return@withContext try {
             val settings = credentialManager.settings.value
@@ -254,7 +183,7 @@ class SyncOrchestrator @Inject constructor(
                     SyncError.AUTH_ERROR
                 )
             val webdavClient =
-                WebDAVClient(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
             val notebookPath = SyncPaths.notebookDir(notebookId)
             if (webdavClient.exists(notebookPath)) {
                 webdavClient.delete(notebookPath)
@@ -312,9 +241,9 @@ class SyncOrchestrator @Inject constructor(
         private const val PROGRESS_UPLOADING_DELETIONS = 0.8f
         private const val PROGRESS_FINALIZING = 0.9f
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
-        private const val TIMESTAMP_TOLERANCE_MS = 1000L
         private const val CLOCK_SKEW_THRESHOLD_MS = 30_000L
         private const val TOMBSTONE_MAX_AGE_DAYS = 90L
+        // Shared across all call sites (UI, worker, editor) to prevent parallel sync jobs.
         private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
         val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
         private val syncMutex = Mutex()

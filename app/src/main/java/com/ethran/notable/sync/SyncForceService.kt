@@ -10,7 +10,8 @@ class SyncForceService @Inject constructor(
     private val appRepository: AppRepository,
     private val credentialManager: CredentialManager,
     private val syncPreflightService: SyncPreflightService,
-    private val notebookSyncService: NotebookSyncService
+    private val notebookSyncService: NotebookSyncService,
+    private val webDavClientFactory: WebDavClientFactoryPort
 ) {
     private val folderSerializer = FolderSerializer
     private val logger = SyncLogger
@@ -23,7 +24,7 @@ class SyncForceService @Inject constructor(
                 ?: return SyncResult.Failure(SyncError.AUTH_ERROR)
 
             val webdavClient =
-                WebDAVClient(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
 
             try {
                 if (webdavClient.exists(SyncPaths.notebooksDir())) {
@@ -84,7 +85,7 @@ class SyncForceService @Inject constructor(
                 ?: return SyncResult.Failure(SyncError.AUTH_ERROR)
 
             val webdavClient =
-                WebDAVClient(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
 
             val localFolders = appRepository.folderRepository.getAll()
             localFolders.forEach { appRepository.folderRepository.delete(it.id) }
