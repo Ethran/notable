@@ -12,7 +12,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.sync.CredentialManager
-import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.sync.SyncResult
 import com.ethran.notable.sync.SyncScheduler
@@ -74,7 +74,7 @@ class SettingsViewModel @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
     private val kvProxy: KvProxy,
     private val credentialManager: CredentialManager,
-    private val syncEngine: SyncEngine,
+    private val syncOrchestrator: SyncOrchestrator,
 ) : ViewModel() {
 
     // We use the GlobalAppSettings object directly.
@@ -100,7 +100,7 @@ class SettingsViewModel @Inject constructor(
 
         // Observe sync engine state
         viewModelScope.launch {
-            SyncEngine.syncState.collect { state ->
+            SyncOrchestrator.syncState.collect { state ->
                 syncUiState = syncUiState.copy(syncState = state)
             }
         }
@@ -245,7 +245,7 @@ class SettingsViewModel @Inject constructor(
 
     fun onManualSync() {
         viewModelScope.launch(Dispatchers.IO) {
-            val result = syncEngine.syncAllNotebooks()
+            val result = syncOrchestrator.syncAllNotebooks()
             withContext(Dispatchers.Main) {
                 if (result is SyncResult.Success) {
                     val timestamp =
@@ -271,7 +271,7 @@ class SettingsViewModel @Inject constructor(
     fun onConfirmForceUpload() {
         syncUiState = syncUiState.copy(showForceUploadConfirm = false)
         viewModelScope.launch(Dispatchers.IO) {
-            val result = syncEngine.forceUploadAll()
+            val result = syncOrchestrator.forceUploadAll()
             val message =
                 if (result is SyncResult.Success) "Force upload complete" else "Force upload failed"
             _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
@@ -281,7 +281,7 @@ class SettingsViewModel @Inject constructor(
     fun onConfirmForceDownload() {
         syncUiState = syncUiState.copy(showForceDownloadConfirm = false)
         viewModelScope.launch(Dispatchers.IO) {
-            val result = syncEngine.forceDownloadAll()
+            val result = syncOrchestrator.forceDownloadAll()
             val message =
                 if (result is SyncResult.Success) "Force download complete" else "Force download failed"
             _syncEffects.emit(SyncSettingsEffect.ShowHint(message))

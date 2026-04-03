@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
@@ -27,12 +26,12 @@ import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.navigation.NavigationDestination
-import dagger.hilt.android.EntryPointAccessors
-import com.ethran.notable.sync.SyncEngineEntryPoint
+import com.ethran.notable.sync.SyncOrchestratorEntryPoint
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
+import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -116,12 +115,12 @@ fun EditorView(
         }
 
         val editorControlTower = remember {
-            // Obtain SyncEngine from Hilt entry point for use in non-Hilt-managed objects
+            // Obtain SyncOrchestrator from Hilt entry point for use in non-Hilt-managed objects
             val entry = EntryPointAccessors.fromApplication(
-                context.applicationContext, SyncEngineEntryPoint::class.java
+                context.applicationContext, SyncOrchestratorEntryPoint::class.java
             )
-            val syncEngine = entry.syncEngine()
-            EditorControlTower(scope, page, history, editorState, syncEngine)
+            val syncOrchestrator = entry.syncOrchestrator()
+            EditorControlTower(scope, page, history, editorState, syncOrchestrator)
         }
 
 

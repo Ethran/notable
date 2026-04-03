@@ -18,7 +18,7 @@ import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
 import com.ethran.notable.editor.utils.strokeBounds
-import com.ethran.notable.sync.SyncEngine
+import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
@@ -37,7 +37,7 @@ class EditorControlTower(
     val page: PageView,
     private var history: History,
     private val state: EditorState,
-    private val syncEngine: SyncEngine,
+    private val syncOrchestrator: SyncOrchestrator,
 ) {
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
@@ -100,12 +100,10 @@ class EditorControlTower(
      * @param id The unique identifier of the page to switch to.
      */
     private suspend fun switchPage(id: String) {
-        // Trigger sync on the page we're leaving (sync logic inside syncEngine.syncFromPageId)
+        // Trigger sync on the page we're leaving (sync logic inside syncOrchestrator.syncFromPageId)
         val oldPageId = page.currentPageId
-        if (oldPageId != null) {
-            scope.launch(Dispatchers.IO) {
-                triggerSyncForPage(oldPageId)
-            }
+        scope.launch(Dispatchers.IO) {
+            triggerSyncForPage(oldPageId)
         }
 
         // Switch to Main thread for Compose state mutations
@@ -126,7 +124,7 @@ class EditorControlTower(
     private suspend fun triggerSyncForPage(pageId: String?) {
         if (pageId == null) return
         try {
-            syncEngine.syncFromPageId(pageId)
+            syncOrchestrator.syncFromPageId(pageId)
         } catch (e: Exception) {
             // Log but don't crash the UI thread
             SyncLogger.e("EditorControlTower", "Sync failed: ${e.message}")

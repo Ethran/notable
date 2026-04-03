@@ -1,4 +1,4 @@
-package com.ethran.notable.sync
+package com.ethran.notable.sync.serializers
 
 import com.ethran.notable.data.db.Folder
 import kotlinx.serialization.Serializable

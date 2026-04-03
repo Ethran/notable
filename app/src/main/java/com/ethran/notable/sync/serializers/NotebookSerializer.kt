@@ -1,6 +1,5 @@
-package com.ethran.notable.sync
+package com.ethran.notable.sync.serializers
 
-import android.content.Context
 import android.util.Base64
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Notebook
@@ -20,7 +19,7 @@ import java.util.TimeZone
 /**
  * Serializer for notebooks, pages, strokes, and images to/from JSON format for WebDAV sync.
  */
-class NotebookSerializer(private val context: Context) {
+class NotebookSerializer() {
 
     private val json = Json {
         prettyPrint = true

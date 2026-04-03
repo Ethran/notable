@@ -150,9 +150,9 @@ fun NotebookConfigDialog(
                         log.i("Uploading deletion for notebook: $bookId")
                         val entry = dagger.hilt.android.EntryPointAccessors.fromApplication(
                             context.applicationContext,
-                            com.ethran.notable.sync.SyncEngineEntryPoint::class.java
+                            com.ethran.notable.sync.SyncOrchestratorEntryPoint::class.java
                         )
-                        entry.syncEngine().uploadDeletion(bookId)
+                        entry.syncOrchestrator().uploadDeletion(bookId)
                     } catch (e: Exception) {
                         log.e("Upload deletion failed: ${e.message}")
                     }

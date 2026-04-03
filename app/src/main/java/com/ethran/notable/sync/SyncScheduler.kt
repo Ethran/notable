@@ -60,8 +60,8 @@ object SyncScheduler {
      * Trigger an immediate sync (one-time work).
      * @param context Android context
      */
-    fun triggerImmediateSync(context: Context) {
+    fun triggerImmediateSync() {
         // TODO: Implement one-time sync work request
-        // For now, just trigger through SyncEngine directly
+        // For now, just trigger through SyncOrchestrator directly
     }
 }

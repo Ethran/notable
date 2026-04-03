@@ -25,9 +25,9 @@ class SyncWorker(
         }
 
         val entryPoint = EntryPointAccessors.fromApplication(
-            applicationContext, SyncEngineEntryPoint::class.java
+            applicationContext, SyncOrchestratorEntryPoint::class.java
         )
-        
+
         val credentialManager = entryPoint.credentialManager()
         val syncSettings = credentialManager.settings.value
 
@@ -51,7 +51,7 @@ class SyncWorker(
 
         // Perform sync
         return try {
-            when (val result = entryPoint.syncEngine().syncAllNotebooks()) {
+            when (val result = entryPoint.syncOrchestrator().syncAllNotebooks()) {
                 is SyncResult.Success -> {
                     Log.i(TAG, "Sync completed successfully")
                     Result.success()
@@ -72,6 +72,14 @@ class SyncWorker(
                             } else {
                                 Result.failure()
                             }
+                        }
+
+                        SyncError.AUTH_ERROR,
+                        SyncError.CONFIG_ERROR,
+                        SyncError.CLOCK_SKEW,
+                        SyncError.WIFI_REQUIRED -> {
+                            Log.w(TAG, "Sync skipped (non-retryable): ${result.error}")
+                            Result.success()
                         }
 
                         else -> {

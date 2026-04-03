@@ -60,7 +60,8 @@ class CredentialManager @Inject constructor(
             lastSyncTime = encryptedPrefs.getString(KEY_LAST_SYNC_TIME, null),
             syncOnNoteClose = encryptedPrefs.getBoolean(KEY_SYNC_ON_CLOSE, true),
             wifiOnly = encryptedPrefs.getBoolean(KEY_WIFI_ONLY, false),
-            syncedNotebookIds = encryptedPrefs.getStringSet(KEY_SYNCED_IDS, emptySet()) ?: emptySet()
+            syncedNotebookIds = encryptedPrefs.getStringSet(KEY_SYNCED_IDS, emptySet())
+                ?: emptySet()
         )
     }
 
