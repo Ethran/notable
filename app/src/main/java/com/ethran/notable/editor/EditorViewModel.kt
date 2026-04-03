@@ -25,6 +25,7 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.io.exportToLinkedFile
+import com.ethran.notable.sync.SyncEngine
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -161,7 +163,8 @@ class EditorViewModel @Inject constructor(
     val appRepository: AppRepository,
     var editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
-    val pageDataManager: PageDataManager
+    val pageDataManager: PageDataManager,
+    private val syncEngine: SyncEngine
 ) : ViewModel() {
 
     // ---- Toolbar / UI State (single flat flow) ----
@@ -207,16 +210,35 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Called when the EditorView is being disposed.
+     * Performs cleanup, exports linked files, and triggers auto-sync.
+     */
     fun onDispose(page: PageView) {
-        // finish selection operation
+        // 1. Finish selection operation
         selectionState.applySelectionDisplace(page)
-        bookId?.let { bookId ->
+
+        // 2. Export and Sync
+        val currentBookId = bookId
+        val currentPid = currentPageId
+
+        if (currentBookId != null) {
             exportToLinkedFile(
                 exportEngine,
-                bookId,
+                currentBookId,
                 appRepository.bookRepository
             )
+
+            // Trigger auto-sync if enabled (syncFromPageId checks settings internally)
+            if (currentPid.isNotEmpty()) {
+                // Use a dedicated scope to ensure sync finishes even if VM is cleared
+                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                    syncEngine.syncFromPageId(currentPid)
+                }
+            }
         }
+
+        // 3. Cleanup page resources
         page.disposeOldPage()
     }
 

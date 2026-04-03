@@ -232,29 +232,6 @@ fun EditorView(
 
         DisposableEffect(Unit) {
             onDispose {
-// TODO
-//                 // finish selection operation
-//                 viewModel.selectionState.applySelectionDisplace(page)
-//                 if (bookId != null) exportToLinkedFile(
-//                     exportEngine,
-//                     bookId,
-//                     appRepository.bookRepository
-//                 )
-//                 page.disposeOldPage()
-
-//                 // Trigger sync on note close if enabled
-//                 val settings = GlobalAppSettings.current
-//                 if (settings.syncSettings.syncEnabled && settings.syncSettings.syncOnNoteClose && bookId != null) {
-//                     // Use a new coroutine scope since the composition scope is being disposed
-//                     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-//                         try {
-//                             SyncLogger.i("EditorSync", "Auto-syncing on editor close")
-//                             SyncEngine(context).syncNotebook(bookId)
-//                         } catch (e: Exception) {
-//                             SyncLogger.e("EditorSync", "Auto-sync failed: ${e.message}")
-//                         }
-//                     }
-//                 }
                 viewModel.onDispose(page)
             }
         }
