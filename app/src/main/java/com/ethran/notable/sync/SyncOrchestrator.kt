@@ -52,7 +52,11 @@ class SyncOrchestrator @Inject constructor(
                 return@withContext SyncResult.Failure(SyncError.WIFI_REQUIRED)
             }
             val webdavClient =
-                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(
+                    settings.serverUrl,
+                    credentials.first,
+                    credentials.second
+                )
             val skewMs = syncPreflightService.checkClockSkew(webdavClient)
             if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
                 updateState(SyncState.Error(SyncError.CLOCK_SKEW, SyncStep.INITIALIZING, false))
@@ -83,7 +87,8 @@ class SyncOrchestrator @Inject constructor(
                     "Syncing local notebooks..."
                 )
             )
-            val preDownloadNotebookIds = notebookReconciliationService.syncExistingNotebooks(webdavClient)
+            val preDownloadNotebookIds =
+                notebookReconciliationService.syncExistingNotebooks(webdavClient)
             val notebooksSynced = preDownloadNotebookIds.size
             updateState(
                 SyncState.Syncing(
@@ -126,6 +131,11 @@ class SyncOrchestrator @Inject constructor(
             delay(SUCCESS_STATE_AUTO_RESET_MS)
             if (syncState.value is SyncState.Success) updateState(SyncState.Idle)
             SyncResult.Success
+        } catch (e: PreconditionFailedException) {
+            sLog.w(TAG, "Conflict during sync: ${e.message}")
+            val step = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
+            updateState(SyncState.Error(SyncError.CONFLICT, step, true))
+            SyncResult.Failure(SyncError.CONFLICT)
         } catch (e: IOException) {
             sLog.e(TAG, "Network error during sync: ${e.message}")
             val step = (syncState.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
@@ -183,7 +193,11 @@ class SyncOrchestrator @Inject constructor(
                     SyncError.AUTH_ERROR
                 )
             val webdavClient =
-                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(
+                    settings.serverUrl,
+                    credentials.first,
+                    credentials.second
+                )
             val notebookPath = SyncPaths.notebookDir(notebookId)
             if (webdavClient.exists(notebookPath)) {
                 webdavClient.delete(notebookPath)
@@ -243,6 +257,7 @@ class SyncOrchestrator @Inject constructor(
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
         private const val CLOCK_SKEW_THRESHOLD_MS = 30_000L
         private const val TOMBSTONE_MAX_AGE_DAYS = 90L
+
         // Shared across all call sites (UI, worker, editor) to prevent parallel sync jobs.
         private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
         val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
@@ -266,7 +281,7 @@ sealed class SyncResult {
     data class Failure(val error: SyncError) : SyncResult()
 }
 
-enum class SyncError { NETWORK_ERROR, AUTH_ERROR, CONFIG_ERROR, CLOCK_SKEW, WIFI_REQUIRED, SYNC_IN_PROGRESS, UNKNOWN_ERROR }
+enum class SyncError { NETWORK_ERROR, AUTH_ERROR, CONFIG_ERROR, CLOCK_SKEW, WIFI_REQUIRED, SYNC_IN_PROGRESS, CONFLICT, UNKNOWN_ERROR }
 sealed class SyncState {
     data object Idle : SyncState()
     data class Syncing(val currentStep: SyncStep, val progress: Float, val details: String) :

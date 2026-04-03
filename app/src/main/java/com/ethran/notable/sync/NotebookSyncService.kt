@@ -119,7 +119,11 @@ class NotebookSyncService @Inject constructor(
         return newNotebookIds.size
     }
 
-    suspend fun uploadNotebook(notebook: Notebook, webdavClient: WebDAVClient) {
+    suspend fun uploadNotebook(
+        notebook: Notebook,
+        webdavClient: WebDAVClient,
+        manifestIfMatch: String? = null
+    ) {
         val notebookId = notebook.id
         sLog.i(TAG, "Uploading: ${notebook.title} (${notebook.pageIds.size} pages)")
         webdavClient.ensureParentDirectories(SyncPaths.pagesDir(notebookId) + "/")
@@ -127,7 +131,10 @@ class NotebookSyncService @Inject constructor(
         webdavClient.createCollection(SyncPaths.backgroundsDir(notebookId))
         val manifestJson = notebookSerializer.serializeManifest(notebook)
         webdavClient.putFile(
-            SyncPaths.manifestFile(notebookId), manifestJson.toByteArray(), "application/json"
+            SyncPaths.manifestFile(notebookId),
+            manifestJson.toByteArray(),
+            "application/json",
+            ifMatch = manifestIfMatch
         )
         val pages = appRepository.pageRepository.getByIds(notebook.pageIds)
         for (page in pages) {

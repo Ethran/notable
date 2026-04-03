@@ -3,6 +3,7 @@ package com.ethran.notable.sync
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.sync.serializers.FolderSerializer
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,7 +18,10 @@ class FolderSyncService @Inject constructor(
             val localFolders = appRepository.folderRepository.getAll()
             val remotePath = SyncPaths.foldersFile()
             if (webdavClient.exists(remotePath)) {
-                val remoteFoldersJson = webdavClient.getFile(remotePath).decodeToString()
+                val remoteFile = webdavClient.getFileWithMetadata(remotePath)
+                val remoteEtag = remoteFile.etag
+                    ?: throw IOException("Missing ETag for $remotePath")
+                val remoteFoldersJson = remoteFile.content.decodeToString()
                 val remoteFolders = folderSerializer.deserializeFolders(remoteFoldersJson)
                 val folderMap = mutableMapOf<String, Folder>()
                 remoteFolders.forEach { folderMap[it.id] = it }
@@ -38,7 +42,10 @@ class FolderSyncService @Inject constructor(
                 }
                 val updatedFoldersJson = folderSerializer.serializeFolders(mergedFolders)
                 webdavClient.putFile(
-                    remotePath, updatedFoldersJson.toByteArray(), "application/json"
+                    remotePath,
+                    updatedFoldersJson.toByteArray(),
+                    "application/json",
+                    ifMatch = remoteEtag
                 )
                 SyncLogger.i("FolderSyncService", "Synced ${mergedFolders.size} folders")
             } else {

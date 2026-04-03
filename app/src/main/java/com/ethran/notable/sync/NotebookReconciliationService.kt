@@ -51,22 +51,45 @@ class NotebookReconciliationService @Inject constructor(
             val remoteExists = webdavClient.exists(remotePath)
 
             if (remoteExists) {
-                val remoteManifestJson = webdavClient.getFile(remotePath).decodeToString()
+                val remoteManifest = webdavClient.getFileWithMetadata(remotePath)
+                val remoteEtag = remoteManifest.etag
+                    ?: throw IOException("Missing ETag for $remotePath")
+                val remoteManifestJson = remoteManifest.content.decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
                 val diffMs = remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time }
                     ?: Long.MAX_VALUE
 
                 when {
-                    remoteUpdatedAt == null -> notebookSyncService.uploadNotebook(localNotebook, webdavClient)
-                    diffMs < -TIMESTAMP_TOLERANCE_MS -> notebookSyncService.downloadNotebook(notebookId, webdavClient)
-                    diffMs > TIMESTAMP_TOLERANCE_MS -> notebookSyncService.uploadNotebook(localNotebook, webdavClient)
-                    else -> logger.i(TAG, "= No changes (within tolerance), skipping ${localNotebook.title}")
+                    remoteUpdatedAt == null -> notebookSyncService.uploadNotebook(
+                        localNotebook,
+                        webdavClient,
+                        manifestIfMatch = remoteEtag
+                    )
+
+                    diffMs < -TIMESTAMP_TOLERANCE_MS -> notebookSyncService.downloadNotebook(
+                        notebookId,
+                        webdavClient
+                    )
+
+                    diffMs > TIMESTAMP_TOLERANCE_MS -> notebookSyncService.uploadNotebook(
+                        localNotebook,
+                        webdavClient,
+                        manifestIfMatch = remoteEtag
+                    )
+
+                    else -> logger.i(
+                        TAG,
+                        "= No changes (within tolerance), skipping ${localNotebook.title}"
+                    )
                 }
             } else {
                 notebookSyncService.uploadNotebook(localNotebook, webdavClient)
             }
 
             SyncResult.Success
+        } catch (e: PreconditionFailedException) {
+            logger.w(TAG, "Conflict syncing notebook $notebookId: ${e.message}")
+            SyncResult.Failure(SyncError.CONFLICT)
         } catch (e: IOException) {
             logger.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
             SyncResult.Failure(SyncError.NETWORK_ERROR)

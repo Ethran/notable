@@ -77,7 +77,8 @@ class SyncWorker(
                         SyncError.AUTH_ERROR,
                         SyncError.CONFIG_ERROR,
                         SyncError.CLOCK_SKEW,
-                        SyncError.WIFI_REQUIRED -> {
+                        SyncError.WIFI_REQUIRED,
+                        SyncError.CONFLICT -> {
                             Log.w(TAG, "Sync skipped (non-retryable): ${result.error}")
                             Result.success()
                         }

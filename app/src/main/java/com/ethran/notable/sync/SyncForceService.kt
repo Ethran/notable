@@ -24,7 +24,11 @@ class SyncForceService @Inject constructor(
                 ?: return SyncResult.Failure(SyncError.AUTH_ERROR)
 
             val webdavClient =
-                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(
+                    settings.serverUrl,
+                    credentials.first,
+                    credentials.second
+                )
 
             try {
                 if (webdavClient.exists(SyncPaths.notebooksDir())) {
@@ -85,7 +89,11 @@ class SyncForceService @Inject constructor(
                 ?: return SyncResult.Failure(SyncError.AUTH_ERROR)
 
             val webdavClient =
-                webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
+                webDavClientFactory.create(
+                    settings.serverUrl,
+                    credentials.first,
+                    credentials.second
+                )
 
             val localFolders = appRepository.folderRepository.getAll()
             localFolders.forEach { appRepository.folderRepository.delete(it.id) }

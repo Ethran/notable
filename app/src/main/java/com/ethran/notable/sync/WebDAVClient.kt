@@ -26,6 +26,13 @@ import java.util.concurrent.TimeUnit
  */
 data class RemoteEntry(val name: String, val lastModified: Date?)
 
+data class DownloadedFile(
+    val content: ByteArray,
+    val etag: String?
+)
+
+class PreconditionFailedException(message: String) : IOException(message)
+
 /**
  * Wrapper for streaming file downloads that properly manages the underlying HTTP response.
  * This class ensures that both the InputStream and the HTTP Response are properly closed.
@@ -173,19 +180,28 @@ class WebDAVClient(
     fun putFile(
         path: String,
         content: ByteArray,
-        contentType: String = "application/octet-stream"
+        contentType: String = "application/octet-stream",
+        ifMatch: String? = null
     ) {
         val url = buildUrl(path)
         val mediaType = contentType.toMediaType()
         val requestBody = content.toRequestBody(mediaType)
 
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url(url)
             .put(requestBody)
             .header("Authorization", credentials)
-            .build()
+
+        ifMatch?.let { requestBuilder.header("If-Match", it) }
+
+        val request = requestBuilder.build()
 
         client.newCall(request).execute().use { response ->
+            if (response.code == HttpURLConnection.HTTP_PRECON_FAILED) {
+                throw PreconditionFailedException(
+                    "Precondition failed for $path: ${response.code} ${response.message}"
+                )
+            }
             if (!response.isSuccessful) {
                 throw IOException("Failed to upload file: ${response.code} ${response.message}")
             }
@@ -199,11 +215,16 @@ class WebDAVClient(
      * @param contentType MIME type of the content
      * @throws IOException if upload fails
      */
-    fun putFile(path: String, localFile: File, contentType: String = "application/octet-stream") {
+    fun putFile(
+        path: String,
+        localFile: File,
+        contentType: String = "application/octet-stream",
+        ifMatch: String? = null
+    ) {
         if (!localFile.exists()) {
             throw IOException("Local file does not exist: ${localFile.absolutePath}")
         }
-        putFile(path, localFile.readBytes(), contentType)
+        putFile(path, localFile.readBytes(), contentType, ifMatch)
     }
 
     /**
@@ -213,6 +234,10 @@ class WebDAVClient(
      * @throws IOException if download fails
      */
     fun getFile(path: String): ByteArray {
+        return getFileWithMetadata(path).content
+    }
+
+    fun getFileWithMetadata(path: String): DownloadedFile {
         val url = buildUrl(path)
         val request = Request.Builder()
             .url(url)
@@ -224,7 +249,8 @@ class WebDAVClient(
             if (!response.isSuccessful) {
                 throw IOException("Failed to download file: ${response.code} ${response.message}")
             }
-            return response.body?.bytes() ?: throw IOException("Empty response body")
+            val content = response.body?.bytes() ?: throw IOException("Empty response body")
+            return DownloadedFile(content = content, etag = response.header("ETag"))
         }
     }
 
