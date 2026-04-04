@@ -54,6 +54,8 @@ data class SyncSettingsUiState(
     val password: String = "",
     val savedUsername: String = "",
     val savedPassword: String = "",
+    val isPasswordSaved: Boolean = false,
+    val passwordVisible: Boolean = false,
     val testingConnection: Boolean = false,
     val connectionStatus: SyncConnectionStatus? = null,
     val syncLogs: List<SyncLogger.LogEntry> = emptyList(),
@@ -63,7 +65,7 @@ data class SyncSettingsUiState(
     val syncSettings: SyncSettings = SyncSettings()
 ) {
     val credentialsChanged: Boolean
-        get() = username != savedUsername || password != savedPassword
+        get() = username != savedUsername || (password.isNotEmpty() && password != savedPassword)
 }
 
 sealed class SyncSettingsEffect {
@@ -120,13 +122,14 @@ class SettingsViewModel @Inject constructor(
             }
         }
 
-        // Load initial password
+        // Load initial password state (don't load actual password into memory)
         viewModelScope.launch(Dispatchers.IO) {
-            val password = credentialManager.getPassword()
+            val hasPassword = credentialManager.getPassword() != null
             withContext(Dispatchers.Main) {
                 syncUiState = syncUiState.copy(
-                    password = password ?: "",
-                    savedPassword = password ?: ""
+                    isPasswordSaved = hasPassword,
+                    password = "",
+                    savedPassword = ""
                 )
             }
         }
@@ -167,14 +170,38 @@ class SettingsViewModel @Inject constructor(
         syncUiState = syncUiState.copy(password = password)
     }
 
+    fun onTogglePasswordVisibility() {
+        syncUiState = syncUiState.copy(passwordVisible = !syncUiState.passwordVisible)
+    }
+
     fun onSaveCredentials() {
         val username = syncUiState.username
         val password = syncUiState.password
+        
+        // If password is empty but saved, we only update username if it changed
+        if (password.isEmpty() && syncUiState.isPasswordSaved) {
+             if (username != syncUiState.savedUsername) {
+                 viewModelScope.launch(Dispatchers.IO) {
+                     val currentPassword = credentialManager.getPassword() ?: ""
+                     credentialManager.saveCredentials(username, currentPassword)
+                     withContext(Dispatchers.Main) {
+                         syncUiState = syncUiState.copy(savedUsername = username)
+                         SyncLogger.i("Settings", "Username updated to: $username")
+                         _syncEffects.emit(SyncSettingsEffect.ShowHint("Credentials updated"))
+                     }
+                 }
+             }
+             return
+        }
+
         if (username.isBlank() || password.isBlank()) return
 
         credentialManager.saveCredentials(username, password)
         syncUiState = syncUiState.copy(
-            savedUsername = username, savedPassword = password
+            savedUsername = username, 
+            savedPassword = password,
+            isPasswordSaved = true,
+            password = "" // Clear after saving for security
         )
 
         SyncLogger.i("Settings", "Credentials saved for user: $username")
@@ -187,12 +214,19 @@ class SettingsViewModel @Inject constructor(
         val serverUrl = syncUiState.serverUrl
         val username = syncUiState.username
         val password = syncUiState.password
-        if (serverUrl.isBlank() || username.isBlank() || password.isBlank()) return
+        if (serverUrl.isBlank() || username.isBlank()) return
 
         syncUiState = syncUiState.copy(testingConnection = true, connectionStatus = null)
         viewModelScope.launch(Dispatchers.IO) {
+            // If password field is empty, use the saved one
+            val passwordToUse = if (password.isEmpty()) {
+                credentialManager.getPassword() ?: ""
+            } else {
+                password
+            }
+            
             val (connected, clockSkewMs) = WebDAVClient.testConnection(
-                serverUrl, username, password
+                serverUrl, username, passwordToUse
             )
             withContext(Dispatchers.Main) {
                 val status = when {

@@ -123,6 +123,7 @@ fun SettingsView(
                 onServerUrlChange = viewModel::onServerUrlChanged,
                 onUsernameChange = viewModel::onUsernameChanged,
                 onPasswordChange = viewModel::onPasswordChanged,
+                onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
                 onSaveCredentials = viewModel::onSaveCredentials,
             ),
             behavior = SyncBehaviorCallbacks(

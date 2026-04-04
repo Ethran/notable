@@ -3,6 +3,7 @@ package com.ethran.notable.ui.views
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,14 +12,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -29,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +54,7 @@ data class SyncCredentialsCallbacks(
     val onServerUrlChange: (String) -> Unit = {},
     val onUsernameChange: (String) -> Unit = {},
     val onPasswordChange: (String) -> Unit = {},
+    val onTogglePasswordVisibility: () -> Unit = {},
     val onSaveCredentials: () -> Unit = {},
 )
 
@@ -105,9 +114,12 @@ fun SyncSettings(
             serverUrl = state.serverUrl,
             username = state.username,
             password = state.password,
+            isPasswordSaved = state.isPasswordSaved,
+            passwordVisible = state.passwordVisible,
             onServerUrlChange = callbacks.credentials.onServerUrlChange,
             onUsernameChange = callbacks.credentials.onUsernameChange,
-            onPasswordChange = callbacks.credentials.onPasswordChange
+            onPasswordChange = callbacks.credentials.onPasswordChange,
+            onTogglePasswordVisibility = callbacks.credentials.onTogglePasswordVisibility
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -115,7 +127,7 @@ fun SyncSettings(
         // Save Credentials Button
         Button(
             onClick = callbacks.credentials.onSaveCredentials,
-            enabled = state.credentialsChanged && state.username.isNotEmpty() && state.password.isNotEmpty(),
+            enabled = state.credentialsChanged && state.username.isNotEmpty() && (state.password.isNotEmpty() || state.isPasswordSaved),
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = MaterialTheme.colors.primary,
                 contentColor = MaterialTheme.colors.onPrimary,
@@ -136,6 +148,7 @@ fun SyncSettings(
             serverUrl = state.serverUrl,
             username = state.username,
             password = state.password,
+            isPasswordSaved = state.isPasswordSaved,
             testingConnection = state.testingConnection,
             connectionStatus = state.connectionStatus,
             onTestConnection = callbacks.onTestConnection
@@ -209,9 +222,12 @@ fun SyncCredentialFields(
     serverUrl: String,
     username: String,
     password: String,
+    isPasswordSaved: Boolean,
+    passwordVisible: Boolean,
     onServerUrlChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit
+    onPasswordChange: (String) -> Unit,
+    onTogglePasswordVisibility: () -> Unit
 ) {
     val textFieldBackground = MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
 
@@ -306,11 +322,39 @@ fun SyncCredentialFields(
                 color = MaterialTheme.colors.onSurface
             ),
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             modifier = Modifier
                 .fillMaxWidth()
                 .background(textFieldBackground)
-                .padding(12.dp)
+                .padding(start = 12.dp, end = 0.dp),
+            decorationBox = { innerTextField ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (password.isEmpty() && isPasswordSaved) {
+                            Text(
+                                "(not changed)",
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f)
+                                )
+                            )
+                        }
+                        innerTextField()
+                    }
+                    IconButton(
+                        onClick = onTogglePasswordVisibility,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = "Toggle password visibility",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
         )
     }
 }
@@ -320,13 +364,14 @@ fun SyncConnectionTest(
     serverUrl: String,
     username: String,
     password: String,
+    isPasswordSaved: Boolean,
     testingConnection: Boolean,
     connectionStatus: SyncConnectionStatus?,
     onTestConnection: () -> Unit
 ) {
     Button(
         onClick = onTestConnection,
-        enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
+        enabled = !testingConnection && serverUrl.isNotEmpty() && username.isNotEmpty() && (password.isNotEmpty() || isPasswordSaved),
         colors = ButtonDefaults.buttonColors(
             backgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
             contentColor = MaterialTheme.colors.onSurface,
