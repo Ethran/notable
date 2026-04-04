@@ -187,7 +187,10 @@ class PageDataManager @Inject constructor(
      */
     suspend fun requestCurrentPageLoadJoin(
     ) {
-        assert(currentPage == pageFromDb?.id)
+        if (currentPage != pageFromDb?.id) {
+            log.e("Skipping load for invalid current page: current=$currentPage db=${pageFromDb?.id}")
+            return
+        }
         val bookId = pageFromDb?.notebookId
         log.d("requestCurrentPageLoadJoin($currentPage)")
         getOrStartLoadingJob(currentPage, bookId).join()
@@ -210,7 +213,10 @@ class PageDataManager @Inject constructor(
     }
 
     suspend fun cacheNeighbors() {
-        assert(currentPage == pageFromDb?.id)
+        if (currentPage != pageFromDb?.id) {
+            log.e("Skipping neighbors cache for invalid current page: current=$currentPage db=${pageFromDb?.id}")
+            return
+        }
         val bookId = pageFromDb?.notebookId ?: return
 
         log.d("cacheNeighbors($currentPage)")
