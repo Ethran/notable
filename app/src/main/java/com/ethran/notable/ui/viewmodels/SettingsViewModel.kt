@@ -246,26 +246,19 @@ class SettingsViewModel @Inject constructor(
 
     fun onSyncEnabledChanged(isChecked: Boolean) {
         credentialManager.updateSettings { it.copy(syncEnabled = isChecked) }
-        val settings = credentialManager.settings.value
-        if (isChecked && settings.autoSync) {
-            SyncScheduler.enablePeriodicSync(
-                appContext, settings.syncInterval.toLong(), settings.wifiOnly
-            )
-        } else {
-            SyncScheduler.disablePeriodicSync(appContext)
-        }
+        updatePeriodicSyncSchedule()
     }
 
     fun onAutoSyncChanged(isChecked: Boolean) {
         credentialManager.updateSettings { it.copy(autoSync = isChecked) }
-        val settings = credentialManager.settings.value
-        if (isChecked && settings.syncEnabled) {
-            SyncScheduler.enablePeriodicSync(
-                appContext, settings.syncInterval.toLong(), settings.wifiOnly
-            )
-        } else {
-            SyncScheduler.disablePeriodicSync(appContext)
+        updatePeriodicSyncSchedule()
+    }
+
+    fun onSyncIntervalChanged(minutes: Int) {
+        credentialManager.updateSettings {
+            it.copy(syncInterval = minutes.coerceAtLeast(15))
         }
+        updatePeriodicSyncSchedule()
     }
 
     fun onSyncOnNoteCloseChanged(isChecked: Boolean) {
@@ -274,10 +267,7 @@ class SettingsViewModel @Inject constructor(
 
     fun onWifiOnlyChanged(isChecked: Boolean) {
         credentialManager.updateSettings { it.copy(wifiOnly = isChecked) }
-        val settings = credentialManager.settings.value
-        if (settings.autoSync && settings.syncEnabled) {
-            SyncScheduler.enablePeriodicSync(appContext, settings.syncInterval.toLong(), isChecked)
-        }
+        updatePeriodicSyncSchedule()
     }
 
     fun onManualSync() {
@@ -338,6 +328,11 @@ class SettingsViewModel @Inject constructor(
                 message
             }
         }
+    }
+
+    private fun updatePeriodicSyncSchedule() {
+        val settings = credentialManager.settings.value
+        SyncScheduler.reconcilePeriodicSync(appContext, settings)
     }
 
     fun onClearSyncLogs() {

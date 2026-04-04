@@ -129,6 +129,7 @@ fun SettingsView(
             behavior = SyncBehaviorCallbacks(
                 onToggleSyncEnabled = viewModel::onSyncEnabledChanged,
                 onAutoSyncChanged = viewModel::onAutoSyncChanged,
+                onSyncIntervalChanged = viewModel::onSyncIntervalChanged,
                 onSyncOnCloseChanged = viewModel::onSyncOnNoteCloseChanged,
                 onWifiOnlyChanged = viewModel::onWifiOnlyChanged,
             ),

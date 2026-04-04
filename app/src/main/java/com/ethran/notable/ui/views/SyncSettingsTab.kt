@@ -77,6 +77,7 @@ data class SyncCredentialsCallbacks(
 data class SyncBehaviorCallbacks(
     val onToggleSyncEnabled: (Boolean) -> Unit = {},
     val onAutoSyncChanged: (Boolean) -> Unit = {},
+    val onSyncIntervalChanged: (Int) -> Unit = {},
     val onSyncOnCloseChanged: (Boolean) -> Unit = {},
     val onWifiOnlyChanged: (Boolean) -> Unit = {},
 )
@@ -233,6 +234,7 @@ private fun SyncBehaviorSection(
             SyncControlToggles(
                 syncSettings = state.syncSettings,
                 onAutoSyncChanged = callbacks.behavior.onAutoSyncChanged,
+                onSyncIntervalChanged = callbacks.behavior.onSyncIntervalChanged,
                 onSyncOnCloseChanged = callbacks.behavior.onSyncOnCloseChanged,
                 onWifiOnlyChanged = callbacks.behavior.onWifiOnlyChanged
             )
@@ -541,6 +543,7 @@ fun SyncEnableToggle(
 fun SyncControlToggles(
     syncSettings: SyncSettings,
     onAutoSyncChanged: (Boolean) -> Unit,
+    onSyncIntervalChanged: (Int) -> Unit,
     onSyncOnCloseChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit
 ) {
@@ -548,6 +551,10 @@ fun SyncControlToggles(
         label = "Auto-sync (every ${syncSettings.syncInterval}m)",
         value = syncSettings.autoSync,
         onToggle = onAutoSyncChanged
+    )
+    SyncIntervalSelector(
+        intervalMinutes = syncSettings.syncInterval,
+        onIntervalChanged = onSyncIntervalChanged
     )
     SettingToggleRow(
         label = "Sync when closing notes",
@@ -559,6 +566,52 @@ fun SyncControlToggles(
         value = syncSettings.wifiOnly,
         onToggle = onWifiOnlyChanged
     )
+}
+
+@Composable
+private fun SyncIntervalSelector(
+    intervalMinutes: Int,
+    onIntervalChanged: (Int) -> Unit,
+) {
+    val minInterval = 15
+    val maxInterval = 240
+    val stepMinutes = 5
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Sync interval",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+
+        EInkActionButton(
+            text = "-",
+            onClick = { onIntervalChanged((intervalMinutes - stepMinutes).coerceAtLeast(minInterval)) },
+            enabled = intervalMinutes > minInterval,
+            isSecondary = true
+        )
+
+        Text(
+            text = "${intervalMinutes}m",
+            style = MaterialTheme.typography.body2,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface
+        )
+
+        EInkActionButton(
+            text = "+",
+            onClick = { onIntervalChanged((intervalMinutes + stepMinutes).coerceAtMost(maxInterval)) },
+            enabled = intervalMinutes < maxInterval,
+            isSecondary = true
+        )
+    }
 }
 
 @Composable

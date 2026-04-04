@@ -18,7 +18,25 @@ import java.util.concurrent.TimeUnit
 object SyncScheduler {
 
     // WorkManager enforces a minimum interval of 15 minutes for periodic work.
-    private const val DEFAULT_SYNC_INTERVAL_MINUTES = 15L
+    private const val MIN_PERIODIC_SYNC_INTERVAL_MINUTES = 15L
+
+    /**
+     * Reconcile periodic sync schedule against persisted sync settings.
+     */
+    fun reconcilePeriodicSync(
+        context: Context,
+        settings: SyncSettings
+    ) {
+        if (settings.syncEnabled && settings.autoSync) {
+            enablePeriodicSync(
+                context = context,
+                intervalMinutes = settings.syncInterval.toLong(),
+                wifiOnly = settings.wifiOnly
+            )
+            return
+        }
+        disablePeriodicSync(context)
+    }
 
     /**
      * Enable periodic background sync.
@@ -28,9 +46,11 @@ object SyncScheduler {
      */
     fun enablePeriodicSync(
         context: Context,
-        intervalMinutes: Long = DEFAULT_SYNC_INTERVAL_MINUTES,
+        intervalMinutes: Long = MIN_PERIODIC_SYNC_INTERVAL_MINUTES,
         wifiOnly: Boolean = false
     ) {
+        val safeIntervalMinutes = intervalMinutes.coerceAtLeast(MIN_PERIODIC_SYNC_INTERVAL_MINUTES)
+
         // UNMETERED covers WiFi and ethernet but excludes metered mobile connections.
         // This matches the intent of the "WiFi only" setting (avoid burning mobile data).
         val networkType = if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
@@ -39,7 +59,7 @@ object SyncScheduler {
             .build()
 
         val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
-            repeatInterval = intervalMinutes,
+            repeatInterval = safeIntervalMinutes,
             repeatIntervalTimeUnit = TimeUnit.MINUTES
         )
             .setConstraints(constraints)
@@ -83,9 +103,9 @@ object SyncScheduler {
             .joinToString(separator = "-") { "${it.key}:${it.value}" }
             .ifEmpty { "default" }
         WorkManager.getInstance(context).enqueueUniqueWork(
-            "${SyncWorker.WORK_NAME}-immediate-$syncType-$workSuffix",
-            ExistingWorkPolicy.REPLACE,
-            syncRequest
+            /* uniqueWorkName = */ "${SyncWorker.WORK_NAME}-immediate-$syncType-$workSuffix",
+            /* existingWorkPolicy = */ ExistingWorkPolicy.REPLACE,
+            /* work = */ syncRequest
         )
         return syncRequest.id
     }

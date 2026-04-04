@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
                             .registerComponentCallbacks(this@MainActivity.applicationContext)
                         editorSettingCacheManager.get().init()
                     }
+                    restorePeriodicSyncSchedule()
                     // Trigger initial sync on app startup (fails silently if offline)
                     triggerInitialSync()
                 }
@@ -152,6 +153,15 @@ class MainActivity : ComponentActivity() {
             }
         } catch (e: Exception) {
             Log.i(TAG, "Initial sync setup failed: ${e.message}")
+        }
+    }
+
+    private fun restorePeriodicSyncSchedule() {
+        try {
+            val settings = credentialManager.get().settings.value
+            SyncScheduler.reconcilePeriodicSync(applicationContext, settings)
+        } catch (e: Exception) {
+            Log.i(TAG, "Periodic sync reconcile failed: ${e.message}")
         }
     }
 
