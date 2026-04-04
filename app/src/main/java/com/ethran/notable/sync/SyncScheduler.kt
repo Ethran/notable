@@ -62,6 +62,12 @@ object SyncScheduler {
             repeatInterval = safeIntervalMinutes,
             repeatIntervalTimeUnit = TimeUnit.MINUTES
         )
+            .setInputData(
+                Data.Builder()
+                    .putString(INPUT_KEY_SYNC_TYPE, DEFAULT_SYNC_TYPE)
+                    .putString(INPUT_KEY_SYNC_TRIGGER, SYNC_TRIGGER_PERIODIC)
+                    .build()
+            )
             .setConstraints(constraints)
             .build()
 
@@ -91,7 +97,9 @@ object SyncScheduler {
         syncType: String = "syncAll",
         data: Map<String, String> = emptyMap()
     ): UUID {
-        val builder = Data.Builder().putString("sync_type", syncType)
+        val builder = Data.Builder()
+            .putString(INPUT_KEY_SYNC_TYPE, syncType)
+            .putString(INPUT_KEY_SYNC_TRIGGER, SYNC_TRIGGER_IMMEDIATE)
         for ((k, v) in data) {
             builder.putString(k, v)
         }
@@ -109,4 +117,10 @@ object SyncScheduler {
         )
         return syncRequest.id
     }
+
+    private const val INPUT_KEY_SYNC_TYPE = "sync_type"
+    private const val INPUT_KEY_SYNC_TRIGGER = "sync_trigger"
+    private const val DEFAULT_SYNC_TYPE = "syncAll"
+    private const val SYNC_TRIGGER_PERIODIC = "periodic"
+    private const val SYNC_TRIGGER_IMMEDIATE = "immediate"
 }

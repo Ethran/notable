@@ -154,6 +154,8 @@
     <string name="sync_completed_successfully">Synchronizacja zakończona pomyślnie</string>
     <string name="sync_failed_message">Synchronizacja nie powiodła się: %1$s</string>
     <string name="sync_last_synced">Ostatnia synchronizacja: %1$s</string>
+    <string name="sync_scheduled_started">Rozpoczynam zaplanowaną synchronizację...</string>
+    <string name="sync_scheduled_completed">Zaplanowana synchronizacja zakończona</string>
 
     <!-- Sync Summary Messages -->
     <string name="sync_summary">Zsynchronizowano: %1$d, Pobrano: %2$d, Usunięto: %3$d (%4$dms)</string>

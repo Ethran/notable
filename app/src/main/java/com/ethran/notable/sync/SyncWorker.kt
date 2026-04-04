@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.ethran.notable.R
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackState
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
 
@@ -51,9 +54,15 @@ class SyncWorker(
         }
 
         val syncType = inputData.getString("sync_type") ?: "syncAll"
+        val syncTrigger = inputData.getString("sync_trigger")
+        val isPeriodicSync = syncTrigger == SYNC_TRIGGER_PERIODIC
 
         // Perform sync based on type
         return try {
+            if (isPeriodicSync) {
+                showSyncSnack(R.string.sync_scheduled_started)
+            }
+
             val result = when (syncType) {
                 "syncAll" -> entryPoint.syncOrchestrator().syncAllNotebooks()
                 "forceUpload" -> entryPoint.syncOrchestrator().forceUploadAll()
@@ -76,7 +85,6 @@ class SyncWorker(
 
                 else -> SyncResult.Failure(SyncError.UNKNOWN_ERROR)
             }
-
             when (result) {
                 is SyncResult.Success -> {
                     Log.i(TAG, "Sync $syncType completed successfully")
@@ -153,12 +161,27 @@ class SyncWorker(
                     )
                 )
             }
+        } finally {
+            if (isPeriodicSync)
+                showSyncSnack(R.string.sync_scheduled_completed)
+             else
+                showSyncSnack(R.string.sync_completed_successfully)
         }
+    }
+
+    private suspend fun showSyncSnack(textResId: Int) {
+        SnackState.globalSnackFlow.emit(
+            SnackConf(
+                text = applicationContext.getString(textResId),
+                duration = 3000
+            )
+        )
     }
 
     companion object {
         private const val TAG = "SyncWorker"
         private const val MAX_RETRY_ATTEMPTS = 3
+        private const val SYNC_TRIGGER_PERIODIC = "periodic"
 
         /**
          * Unique work name for periodic sync.

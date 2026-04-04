@@ -138,6 +138,8 @@
     <string name="sync_completed_successfully">Sync completed successfully</string>
     <string name="sync_failed_message">Sync failed: %1$s</string>
     <string name="sync_last_synced">Last synced: %1$s</string>
+    <string name="sync_scheduled_started">Starting scheduled sync...</string>
+    <string name="sync_scheduled_completed">Scheduled sync completed</string>
 
     <!-- Sync Summary Messages -->
     <string name="sync_summary">Synced: %1$d, Downloaded: %2$d, Deleted: %3$d (%4$dms)</string>
