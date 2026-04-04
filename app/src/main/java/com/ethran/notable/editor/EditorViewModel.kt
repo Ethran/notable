@@ -14,6 +14,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.Mode
@@ -25,6 +26,7 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.io.exportToLinkedFile
+import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
@@ -32,6 +34,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -158,10 +161,12 @@ sealed class EditorUiEvent {
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    val appRepository: AppRepository,
-    var editorSettingCacheManager: EditorSettingCacheManager,
+    private val appRepository: AppRepository,
+    private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
-    val pageDataManager: PageDataManager
+    val pageDataManager: PageDataManager,
+    private val syncOrchestrator: SyncOrchestrator,
+    @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
     // ---- Toolbar / UI State (single flat flow) ----
@@ -207,16 +212,34 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Called when the EditorView is being disposed.
+     * Performs cleanup, exports linked files, and triggers auto-sync.
+     */
     fun onDispose(page: PageView) {
-        // finish selection operation
+        // 1. Finish selection operation
         selectionState.applySelectionDisplace(page)
-        bookId?.let { bookId ->
+
+        // 2. Export and Sync
+        val currentBookId = bookId
+        val currentPid = currentPageId
+
+        if (currentBookId != null) {
             exportToLinkedFile(
                 exportEngine,
-                bookId,
+                currentBookId,
                 appRepository.bookRepository
             )
+
+            // Trigger auto-sync if enabled (syncFromPageId checks settings internally)
+            if (currentPid.isNotEmpty()) {
+                appScope.launch {
+                    syncOrchestrator.syncFromPageId(currentPid)
+                }
+            }
         }
+
+        // 3. Cleanup page resources
         page.disposeOldPage()
     }
 
@@ -496,17 +519,16 @@ class EditorViewModel @Inject constructor(
      * Attempts to repair potential inconsistencies in the notebook's data structure.
      */
     suspend fun fixNotebook(bookId: String?, pageId: String) {
-        TODO("""I'm not confident in the code below.""" )
-//        if (bookId != null) {
-//            log.i("Could not find page, Cleaning book")
-//            SnackState.globalSnackFlow.tryEmit(
-//                SnackConf(
-//                    text = "Could not find page, cleaning book", duration = 4000
-//                )
-//            )
-//            appRepository.bookRepository.removePage(bookId, pageId)
-//
-//        }
+        log.i("Could not find page, cleaning book and returning to library")
+        if (bookId != null) {
+            appRepository.bookRepository.removePage(bookId, pageId)
+        }
+        SnackState.globalSnackFlow.tryEmit(
+            SnackConf(
+                text = "Could not find page, returning to library", duration = 4000
+            )
+        )
+        sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
     }
 
     // --------------------------------------------------------

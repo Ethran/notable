@@ -73,7 +73,7 @@
     <string name="welcome_view_refresh_mode_details">Zalecane jest używanie trybu HD lub Regal</string>
     <string name="welcome_view_refresh_mode_applied">Zastosowano (%1$s)</string>
     <string name="welcome_view_refresh_mode_set_hd_mode">Ustaw tryb HD (obecnie: %1$s)</string>
-    <string name="welcome_view_permissions_granted">Przyznano ✓</string>
+    <string name="welcome_view_permissions_granted">Przyznano</string>
     <string name="welcome_view_permissions_button">Przyznaj uprawnienia</string>
     <string name="welcome_view_continue">Kontynuuj</string>
     <string name="welcome_view_complete_setup_first">Najpierw zakończ konfigurację</string>
@@ -89,7 +89,7 @@
     <string name="welcome_view_quick_start_navigation_details">• Przeciągnij w górę/w dół: Przewijaj stronę\n• Przeciągnij w lewo/w prawo: Poprzednia/następna strona\n• Uszczypnij dwoma palcami: Przybliż/oddal\n• Stuknij numer strony: Szybkie przejście\n• Przeciągnięcie dwoma palcami w lewo/w prawo: Pokaż/ukryj pasek narzędzi</string>
 
     <string name="welcome_view_quick_start_selection_editing_title"><![CDATA[Zaznaczanie i edycja]]></string>
-    <string name="welcome_view_quick_start_selection_editing_details"><![CDATA[• Przytrzymaj i przeciągnij: Zaznacz elementy\n• Podwójne stuknięcie: Cofnij\n• Podwójne stuknięcie na zaznaczeniu: Kopiuj\n• Przeciągnij zaznaczenie: Przenieś\n• Szkicuj, aby wymazać (jeśli włączone)]]></string>
+    <string name="welcome_view_quick_start_selection_editing_details"><![CDATA[• Przytrzymaj i przeciągnij: Zaznaczenie elementów\n• Podwójne stuknięcie: Cofnij\n• Podwójne stuknięcie na zaznaczeniu: Kopiuj\n• Przeciągnij zaznaczenie: Przenieś\n• Szkicuj, aby wymazać (jeśli włączone)]]></string>
 
     <string name="welcome_view_quick_start_tips_title">Wskazówki</string>
     <string name="welcome_view_quick_start_tips_details">• Użyj  opcji eksportowania zanacznia, aby szybko udostępniać obrazy.\n• Stuknij numer strony, aby szybko przejść do wybranej strony.\n• Spróbuj włączyć  \'Zamaż aby usnąć\'(\'Scribble to Erase\') w Ustawieniach, aby naturalnie wymazywać.\n• Podwójne stuknięcie cofa, a podwójne stuknięcie na zaznaczeniu kopiuje je.\n• Możesz używać Notable jako podglądu PDF w czasie rzeczywistym dla LaTeX — zobacz README.\n• Możesz dostosować akcje gestów w Ustawieniach.</string>
@@ -120,5 +120,71 @@
 
     <string name="toolbar_scribble_to_erase_two_lined_short">Zamaż\n→usuń</string>
     <string name="toolbar_position">Pozycja paska narzędzi</string>
+
+    <!-- Sync Settings Tab -->
+    <!-- TODO: Native Polish speaker needed for proper translations -->
+    <string name="settings_tab_sync_name">Synchronizacja</string>
+    <string name="sync_title">Synchronizacja WebDAV</string>
+
+    <!-- Sync Field Labels -->
+    <string name="sync_server_url_note">Uwaga: \"/notable\" zostanie dodane do ścieżki, aby uporządkować pliki.</string>
+    <string name="sync_server_url_label">URL serwera</string>
+    <string name="sync_username_label">Nazwa użytkownika</string>
+    <string name="sync_password_label">Hasło</string>
+    <string name="sync_server_url_placeholder">https://nextcloud.example.com/remote.php/dav/files/username/</string>
+
+    <!-- Sync Toggle Labels -->
+    <string name="sync_enable_label">Włącz synchronizację WebDAV</string>
+    <string name="sync_auto_sync_label">Automatyczna synchronizacja co %1$d minut</string>
+    <string name="sync_on_note_close_label">Synchronizuj przy zamykaniu notatek</string>
+
+    <!-- Sync Button Labels -->
+    <string name="sync_save_credentials">Zapisz dane logowania</string>
+    <string name="sync_test_connection">Testuj połączenie</string>
+    <string name="sync_testing_connection">Testowanie połączenia…</string>
+    <string name="sync_now">Synchronizuj teraz</string>
+    <string name="sync_synced">Zsynchronizowano</string>
+    <string name="sync_failed">Niepowodzenie</string>
+    <string name="sync_clear_log">Wyczyść</string>
+
+    <!-- Sync Status Messages -->
+    <string name="sync_credentials_saved">Dane logowania zapisane</string>
+    <string name="sync_connected_successfully">Połączono pomyślnie</string>
+    <string name="sync_connection_failed">Połączenie nieudane</string>
+    <string name="sync_completed_successfully">Synchronizacja zakończona pomyślnie</string>
+    <string name="sync_failed_message">Synchronizacja nie powiodła się: %1$s</string>
+    <string name="sync_last_synced">Ostatnia synchronizacja: %1$s</string>
+    <string name="sync_scheduled_started">Rozpoczynam zaplanowaną synchronizację...</string>
+    <string name="sync_scheduled_completed">Zaplanowana synchronizacja zakończona</string>
+
+    <!-- Sync Summary Messages -->
+    <string name="sync_summary">Zsynchronizowano: %1$d, Pobrano: %2$d, Usunięto: %3$d (%4$dms)</string>
+    <string name="sync_error_at_step">Błąd w kroku %1$s: %2$s%3$s</string>
+    <string name="sync_can_retry"> (możesz spróbować ponownie)</string>
+
+    <!-- Sync Progress -->
+    <string name="sync_progress_details">%1$s (%2$d%%)</string>
+
+    <!-- Sync Force Operations -->
+    <string name="sync_force_operations_title">UWAGA: Operacje zastępowania</string>
+    <string name="sync_force_operations_warning">Używaj tylko podczas konfiguracji nowego urządzenia lub resetowania synchronizacji. Te operacje usuwają dane!</string>
+    <string name="sync_force_upload_button">⚠ Zastąp serwer danymi lokalnymi</string>
+    <string name="sync_force_download_button">⚠ Zastąp dane lokalne danymi z serwera</string>
+    <string name="sync_force_upload_success">Serwer zastąpiony danymi lokalnymi</string>
+    <string name="sync_force_upload_failed">Wymuszony upload nie powiódł się</string>
+    <string name="sync_force_download_success">Dane lokalne zastąpione danymi z serwera</string>
+    <string name="sync_force_download_failed">Wymuszony download nie powiódł się</string>
+
+    <!-- Sync Confirmation Dialogs -->
+    <string name="sync_confirm_force_upload_title">Zastąpić dane serwera?</string>
+    <string name="sync_confirm_force_upload_message">To USUNIE wszystkie dane na serwerze i zastąpi je danymi lokalnymi z tego urządzenia. Nie można tego cofnąć!\n\nCzy jesteś pewny?</string>
+    <string name="sync_confirm_force_download_title">Zastąpić dane lokalne?</string>
+    <string name="sync_confirm_force_download_message">To USUNIE wszystkie lokalne zeszyty i zastąpi je danymi z serwera. Nie można tego cofnąć!\n\nCzy jesteś pewny?</string>
+    <string name="sync_dialog_cancel">Anuluj</string>
+    <string name="sync_dialog_confirm">Potwierdź</string>
+
+    <!-- Sync Log -->
+    <string name="sync_log_title">Dziennik synchronizacji</string>
+    <string name="sync_log_empty">Brak aktywności synchronizacji</string>
 
 </resources>
