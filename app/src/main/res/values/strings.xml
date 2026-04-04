@@ -65,7 +65,7 @@
     <string name="welcome_view_refresh_mode_details">It\'s recommended to use HD mode or Regal mode</string>
     <string name="welcome_view_refresh_mode_applied">Applied (%1$s)</string>
     <string name="welcome_view_refresh_mode_set_hd_mode">Set HD Mode (currently in %1$s)</string>
-    <string name="welcome_view_permissions_granted">Granted ✓</string>
+    <string name="welcome_view_permissions_granted">Granted</string>
     <string name="welcome_view_permissions_button">Grant Permission</string>
     <string name="welcome_view_continue">Continue</string>
     <string name="welcome_view_complete_setup_first">Complete Setup First</string>
@@ -127,14 +127,14 @@
     <string name="sync_test_connection">Test Connection</string>
     <string name="sync_testing_connection">Testing connection…</string>
     <string name="sync_now">Sync Now</string>
-    <string name="sync_synced">✓ Synced</string>
-    <string name="sync_failed">✗ Failed</string>
+    <string name="sync_synced">Synced</string>
+    <string name="sync_failed">Failed</string>
     <string name="sync_clear_log">Clear</string>
 
     <!-- Sync Status Messages -->
     <string name="sync_credentials_saved">Credentials saved</string>
-    <string name="sync_connected_successfully">✓ Connected successfully</string>
-    <string name="sync_connection_failed">✗ Connection failed</string>
+    <string name="sync_connected_successfully">Connected successfully</string>
+    <string name="sync_connection_failed">Connection failed</string>
     <string name="sync_completed_successfully">Sync completed successfully</string>
     <string name="sync_failed_message">Sync failed: %1$s</string>
     <string name="sync_last_synced">Last synced: %1$s</string>

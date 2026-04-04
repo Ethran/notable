@@ -37,7 +37,7 @@ class NotebookSyncService @Inject constructor(
                     continue
                 }
                 try {
-                    sLog.i(TAG, "✗ Deleting locally (tombstone on server): ${localNotebook.title}")
+                    sLog.i(TAG, "Deleting locally (tombstone on server): ${localNotebook.title}")
                     appRepository.bookRepository.delete(notebookId)
                 } catch (e: Exception) {
                     sLog.e(TAG, "Failed to delete ${localNotebook.title}: ${e.message}")
@@ -71,13 +71,13 @@ class NotebookSyncService @Inject constructor(
                 try {
                     val notebookPath = SyncPaths.notebookDir(notebookId)
                     if (webdavClient.exists(notebookPath)) {
-                        sLog.i(TAG, "✗ Deleting from server: $notebookId")
+                        sLog.i(TAG, "Deleting from server: $notebookId")
                         webdavClient.delete(notebookPath)
                     }
                     webdavClient.putFile(
                         SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream"
                     )
-                    sLog.i(TAG, "✓ Tombstone uploaded for: $notebookId")
+                    sLog.i(TAG, "Tombstone uploaded for: $notebookId")
                 } catch (e: Exception) {
                     sLog.e(TAG, "Failed to process local deletion $notebookId: ${e.message}")
                 }
@@ -107,7 +107,7 @@ class NotebookSyncService @Inject constructor(
             sLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
             for (notebookId in newNotebookIds) {
                 try {
-                    sLog.i(TAG, "↓ Downloading new notebook from server: $notebookId")
+                    sLog.i(TAG, "Downloading new notebook from server: $notebookId")
                     downloadNotebook(notebookId, webdavClient)
                 } catch (e: Exception) {
                     sLog.e(TAG, "Failed to download $notebookId: ${e.message}")
@@ -145,7 +145,7 @@ class NotebookSyncService @Inject constructor(
             webdavClient.delete(tombstonePath)
             sLog.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
         }
-        sLog.i(TAG, "✓ Uploaded: ${notebook.title}")
+        sLog.i(TAG, "Uploaded: ${notebook.title}")
     }
 
     private suspend fun uploadPage(page: Page, notebookId: String, webdavClient: WebDAVClient) {
@@ -201,7 +201,7 @@ class NotebookSyncService @Inject constructor(
                 sLog.e(TAG, "Failed to download page $pageId: ${e.message}")
             }
         }
-        sLog.i(TAG, "✓ Downloaded: ${notebook.title}")
+        sLog.i(TAG, "Downloaded: ${notebook.title}")
     }
 
     private suspend fun downloadPage(

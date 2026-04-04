@@ -79,7 +79,7 @@ Other WebDAV providers with 2FA may have a similar app password mechanism -- che
 
 1. Click the **Test Connection** button
 2. Wait for the test to complete
-3. You should see "✓ Connected successfully"
+3. You should see "Connected successfully"
 4. If connection fails, double-check your credentials and URL
 
 ### 4. Enable Sync
@@ -140,7 +140,7 @@ Click **Clear** to clear the log.
 
 ### Connection Failed
 
-**Problem**: Test connection fails with "✗ Connection failed"
+**Problem**: Test connection fails with "Connection failed"
 
 **Solutions**:
 1. Verify your server URL is correct

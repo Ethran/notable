@@ -134,7 +134,7 @@ class SyncOrchestrator @Inject constructor(
             val duration = System.currentTimeMillis() - startTime
             val summary =
                 SyncSummary(notebooksSynced, notebooksDownloaded, notebooksDeleted, duration)
-            sLog.i(TAG, "✓ Full sync completed in ${duration}ms")
+            sLog.i(TAG, "Full sync completed in ${duration}ms")
             updateState(SyncState.Success(summary))
             SyncResult.Success
         } catch (e: PreconditionFailedException) {

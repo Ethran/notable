@@ -73,7 +73,7 @@
     <string name="welcome_view_refresh_mode_details">Zalecane jest używanie trybu HD lub Regal</string>
     <string name="welcome_view_refresh_mode_applied">Zastosowano (%1$s)</string>
     <string name="welcome_view_refresh_mode_set_hd_mode">Ustaw tryb HD (obecnie: %1$s)</string>
-    <string name="welcome_view_permissions_granted">Przyznano ✓</string>
+    <string name="welcome_view_permissions_granted">Przyznano</string>
     <string name="welcome_view_permissions_button">Przyznaj uprawnienia</string>
     <string name="welcome_view_continue">Kontynuuj</string>
     <string name="welcome_view_complete_setup_first">Najpierw zakończ konfigurację</string>
@@ -89,7 +89,7 @@
     <string name="welcome_view_quick_start_navigation_details">• Przeciągnij w górę/w dół: Przewijaj stronę\n• Przeciągnij w lewo/w prawo: Poprzednia/następna strona\n• Uszczypnij dwoma palcami: Przybliż/oddal\n• Stuknij numer strony: Szybkie przejście\n• Przeciągnięcie dwoma palcami w lewo/w prawo: Pokaż/ukryj pasek narzędzi</string>
 
     <string name="welcome_view_quick_start_selection_editing_title"><![CDATA[Zaznaczanie i edycja]]></string>
-    <string name="welcome_view_quick_start_selection_editing_details"><![CDATA[• Przytrzymaj i przeciągnij: Zaznacz elementy\n• Podwójne stuknięcie: Cofnij\n• Podwójne stuknięcie na zaznaczeniu: Kopiuj\n• Przeciągnij zaznaczenie: Przenieś\n• Szkicuj, aby wymazać (jeśli włączone)]]></string>
+    <string name="welcome_view_quick_start_selection_editing_details"><![CDATA[• Przytrzymaj i przeciągnij: Zaznaczenie elementów\n• Podwójne stuknięcie: Cofnij\n• Podwójne stuknięcie na zaznaczeniu: Kopiuj\n• Przeciągnij zaznaczenie: Przenieś\n• Szkicuj, aby wymazać (jeśli włączone)]]></string>
 
     <string name="welcome_view_quick_start_tips_title">Wskazówki</string>
     <string name="welcome_view_quick_start_tips_details">• Użyj  opcji eksportowania zanacznia, aby szybko udostępniać obrazy.\n• Stuknij numer strony, aby szybko przejść do wybranej strony.\n• Spróbuj włączyć  \'Zamaż aby usnąć\'(\'Scribble to Erase\') w Ustawieniach, aby naturalnie wymazywać.\n• Podwójne stuknięcie cofa, a podwójne stuknięcie na zaznaczeniu kopiuje je.\n• Możesz używać Notable jako podglądu PDF w czasie rzeczywistym dla LaTeX — zobacz README.\n• Możesz dostosować akcje gestów w Ustawieniach.</string>
@@ -143,14 +143,14 @@
     <string name="sync_test_connection">Testuj połączenie</string>
     <string name="sync_testing_connection">Testowanie połączenia…</string>
     <string name="sync_now">Synchronizuj teraz</string>
-    <string name="sync_synced">✓ Zsynchronizowano</string>
-    <string name="sync_failed">✗ Niepowodzenie</string>
+    <string name="sync_synced">Zsynchronizowano</string>
+    <string name="sync_failed">Niepowodzenie</string>
     <string name="sync_clear_log">Wyczyść</string>
 
     <!-- Sync Status Messages -->
     <string name="sync_credentials_saved">Dane logowania zapisane</string>
-    <string name="sync_connected_successfully">✓ Połączono pomyślnie</string>
-    <string name="sync_connection_failed">✗ Połączenie nieudane</string>
+    <string name="sync_connected_successfully">Połączono pomyślnie</string>
+    <string name="sync_connection_failed">Połączenie nieudane</string>
     <string name="sync_completed_successfully">Synchronizacja zakończona pomyślnie</string>
     <string name="sync_failed_message">Synchronizacja nie powiodła się: %1$s</string>
     <string name="sync_last_synced">Ostatnia synchronizacja: %1$s</string>
