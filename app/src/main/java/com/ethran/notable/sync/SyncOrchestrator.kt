@@ -2,10 +2,11 @@ package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.di.IoDispatcher
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,10 +26,11 @@ class SyncOrchestrator @Inject constructor(
     private val notebookSyncService: NotebookSyncService,
     private val syncForceService: SyncForceService,
     private val notebookReconciliationService: NotebookReconciliationService,
-    private val webDavClientFactory: WebDavClientFactoryPort
+    private val webDavClientFactory: WebDavClientFactoryPort,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
     private val sLog = SyncLogger
-    suspend fun syncAllNotebooks(): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun syncAllNotebooks(): SyncResult = withContext(ioDispatcher) {
         if (!syncMutex.tryLock()) {
             sLog.w(TAG, "Sync already in progress, skipping")
             return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)
@@ -45,8 +47,14 @@ class SyncOrchestrator @Inject constructor(
             )
             val settings = credentialManager.settings.value
             val credentials = credentialManager.getCredentials()
-            if (!settings.syncEnabled) return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
-            if (credentials == null) return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+            if (!settings.syncEnabled) {
+                updateState(SyncState.Error(SyncError.CONFIG_ERROR, SyncStep.INITIALIZING, false))
+                return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+            }
+            if (credentials == null) {
+                updateState(SyncState.Error(SyncError.AUTH_ERROR, SyncStep.INITIALIZING, false))
+                return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+            }
             if (!syncPreflightService.checkWifiConstraint()) {
                 updateState(SyncState.Error(SyncError.WIFI_REQUIRED, SyncStep.INITIALIZING, false))
                 return@withContext SyncResult.Failure(SyncError.WIFI_REQUIRED)
@@ -128,8 +136,6 @@ class SyncOrchestrator @Inject constructor(
                 SyncSummary(notebooksSynced, notebooksDownloaded, notebooksDeleted, duration)
             sLog.i(TAG, "✓ Full sync completed in ${duration}ms")
             updateState(SyncState.Success(summary))
-            delay(SUCCESS_STATE_AUTO_RESET_MS)
-            if (syncState.value is SyncState.Success) updateState(SyncState.Idle)
             SyncResult.Success
         } catch (e: PreconditionFailedException) {
             sLog.w(TAG, "Conflict during sync: ${e.message}")
@@ -149,9 +155,14 @@ class SyncOrchestrator @Inject constructor(
         } finally {
             syncMutex.unlock()
         }
+    }.also {
+        if (it is SyncResult.Success) {
+            delay(SUCCESS_STATE_AUTO_RESET_MS)
+            if (syncState.value is SyncState.Success) updateState(SyncState.Idle)
+        }
     }
 
-    suspend fun syncNotebook(notebookId: String): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun syncNotebook(notebookId: String): SyncResult = withContext(ioDispatcher) {
         if (syncMutex.isLocked) {
             sLog.i(TAG, "Full sync in progress, skipping per-notebook sync for $notebookId")
             return@withContext SyncResult.Success
@@ -183,7 +194,7 @@ class SyncOrchestrator @Inject constructor(
         }
     }
 
-    suspend fun uploadDeletion(notebookId: String): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun uploadDeletion(notebookId: String): SyncResult = withContext(ioDispatcher) {
         return@withContext try {
             val settings = credentialManager.settings.value
             if (!settings.syncEnabled) return@withContext SyncResult.Success
@@ -216,7 +227,7 @@ class SyncOrchestrator @Inject constructor(
         }
     }
 
-    suspend fun forceUploadAll(): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun forceUploadAll(): SyncResult = withContext(ioDispatcher) {
         if (!syncMutex.tryLock()) {
             sLog.w(TAG, "Sync already in progress, skipping force upload")
             return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)
@@ -228,7 +239,7 @@ class SyncOrchestrator @Inject constructor(
         }
     }
 
-    suspend fun forceDownloadAll(): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun forceDownloadAll(): SyncResult = withContext(ioDispatcher) {
         if (!syncMutex.tryLock()) {
             sLog.w(TAG, "Sync already in progress, skipping force download")
             return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)

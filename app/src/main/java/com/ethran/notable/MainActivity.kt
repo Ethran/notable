@@ -35,7 +35,7 @@ import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.sync.CredentialManager
-import com.ethran.notable.sync.SyncOrchestrator
+import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.NotableApp
@@ -82,10 +82,10 @@ class MainActivity : ComponentActivity() {
     lateinit var pageDataManager: dagger.Lazy<PageDataManager>
 
     @Inject
-    lateinit var syncOrchestrator: dagger.Lazy<SyncOrchestrator>
+    lateinit var credentialManager: dagger.Lazy<CredentialManager>
 
     @Inject
-    lateinit var credentialManager: dagger.Lazy<CredentialManager>
+    lateinit var snackState: SnackState
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,7 +99,6 @@ class MainActivity : ComponentActivity() {
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
 
-        val snackState = SnackState()
         snackState.registerGlobalSnackObserver()
         snackState.registerCancelGlobalSnackObserver()
 
@@ -144,15 +143,15 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    private suspend fun triggerInitialSync() {
+    private fun triggerInitialSync() {
         try {
             val settings = credentialManager.get().settings.value
             if (settings.syncEnabled) {
-                Log.i(TAG, "Triggering initial sync on app startup")
-               syncOrchestrator.get().syncAllNotebooks()
+                Log.i(TAG, "Triggering one-time sync on app startup via WorkManager")
+                SyncScheduler.triggerImmediateSync(applicationContext)
             }
         } catch (e: Exception) {
-            Log.i(TAG, "Initial sync failed (offline?): ${e.message}")
+            Log.i(TAG, "Initial sync setup failed: ${e.message}")
         }
     }
 

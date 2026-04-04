@@ -14,6 +14,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.Mode
@@ -33,6 +34,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -159,11 +161,12 @@ sealed class EditorUiEvent {
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    val appRepository: AppRepository,
-    var editorSettingCacheManager: EditorSettingCacheManager,
+    private val appRepository: AppRepository,
+    private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,
-    private val syncOrchestrator: SyncOrchestrator
+    private val syncOrchestrator: SyncOrchestrator,
+    @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
     // ---- Toolbar / UI State (single flat flow) ----
@@ -230,8 +233,7 @@ class EditorViewModel @Inject constructor(
 
             // Trigger auto-sync if enabled (syncFromPageId checks settings internally)
             if (currentPid.isNotEmpty()) {
-                // Use a dedicated scope to ensure sync finishes even if VM is cleared
-                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                appScope.launch {
                     syncOrchestrator.syncFromPageId(currentPid)
                 }
             }

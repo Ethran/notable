@@ -11,17 +11,20 @@ import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.sync.CredentialManager
-import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.sync.SyncLogger
+import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.sync.SyncResult
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
 import com.ethran.notable.sync.WebDAVClient
+import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.isLatestVersion
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -31,7 +34,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
-
 
 data class GestureRowModel(
     val titleRes: Int,
@@ -68,13 +70,14 @@ sealed class SyncSettingsEffect {
     data class ShowHint(val message: String) : SyncSettingsEffect()
 }
 
-
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
     private val kvProxy: KvProxy,
     private val credentialManager: CredentialManager,
     private val syncOrchestrator: SyncOrchestrator,
+    private val snackState: SnackState,
+    @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
     // We use the GlobalAppSettings object directly.
@@ -244,19 +247,17 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onManualSync() {
-        viewModelScope.launch(Dispatchers.IO) {
+        runSyncWithSnack(
+            textDuring = "Sync initialized...",
+            successMessage = "Sync completed successfully"
+        ) {
             val result = syncOrchestrator.syncAllNotebooks()
-            withContext(Dispatchers.Main) {
-                if (result is SyncResult.Success) {
-                    val timestamp =
-                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                    credentialManager.updateSettings { it.copy(lastSyncTime = timestamp) }
-                    _syncEffects.emit(SyncSettingsEffect.ShowHint("Sync completed successfully"))
-                } else {
-                    val error = (result as? SyncResult.Failure)?.error?.toString() ?: "Unknown"
-                    _syncEffects.emit(SyncSettingsEffect.ShowHint("Sync failed: $error"))
-                }
+            if (result is SyncResult.Success) {
+                val timestamp =
+                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                credentialManager.updateSettings { it.copy(lastSyncTime = timestamp) }
             }
+            result
         }
     }
 
@@ -270,21 +271,38 @@ class SettingsViewModel @Inject constructor(
 
     fun onConfirmForceUpload() {
         syncUiState = syncUiState.copy(showForceUploadConfirm = false)
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = syncOrchestrator.forceUploadAll()
-            val message =
-                if (result is SyncResult.Success) "Force upload complete" else "Force upload failed"
-            _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
-        }
+        runSyncWithSnack(
+            textDuring = "Force upload started...",
+            successMessage = "Force upload complete"
+        ) { syncOrchestrator.forceUploadAll() }
     }
 
     fun onConfirmForceDownload() {
         syncUiState = syncUiState.copy(showForceDownloadConfirm = false)
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = syncOrchestrator.forceDownloadAll()
-            val message =
-                if (result is SyncResult.Success) "Force download complete" else "Force download failed"
-            _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
+        runSyncWithSnack(
+            textDuring = "Force download started...",
+            successMessage = "Force download complete"
+        ) { syncOrchestrator.forceDownloadAll() }
+    }
+
+    private fun runSyncWithSnack(
+        textDuring: String,
+        successMessage: String,
+        action: suspend () -> SyncResult
+    ) {
+        appScope.launch {
+            snackState.runWithSnack(textDuring = textDuring, resultDurationMs = 3000) {
+                val result = action()
+                val message =
+                    if (result is SyncResult.Success) {
+                        successMessage
+                    } else {
+                        val error = (result as? SyncResult.Failure)?.error?.toString() ?: "Unknown"
+                        "Sync failed: $error"
+                    }
+                _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
+                message
+            }
         }
     }
 

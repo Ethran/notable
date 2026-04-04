@@ -3,6 +3,7 @@ package com.ethran.notable.sync
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
 
@@ -49,20 +50,51 @@ class SyncWorker(
             return Result.success()
         }
 
-        // Perform sync
+        val syncType = inputData.getString("sync_type") ?: "syncAll"
+
+        // Perform sync based on type
         return try {
-            when (val result = entryPoint.syncOrchestrator().syncAllNotebooks()) {
+            val result = when (syncType) {
+                "syncAll" -> entryPoint.syncOrchestrator().syncAllNotebooks()
+                "forceUpload" -> entryPoint.syncOrchestrator().forceUploadAll()
+                "forceDownload" -> entryPoint.syncOrchestrator().forceDownloadAll()
+                "uploadDeletion" -> {
+                    val notebookId = inputData.getString("notebookId") ?: return Result.failure()
+                    entryPoint.syncOrchestrator().uploadDeletion(notebookId)
+                }
+
+                "syncNotebook" -> {
+                    val notebookId = inputData.getString("notebookId") ?: return Result.failure()
+                    entryPoint.syncOrchestrator().syncNotebook(notebookId)
+                }
+
+                "syncFromPageId" -> {
+                    val pageId = inputData.getString("pageId") ?: return Result.failure()
+                    entryPoint.syncOrchestrator().syncFromPageId(pageId)
+                    SyncResult.Success // syncFromPageId doesn't return a result, so we wrap it
+                }
+
+                else -> SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+            }
+
+            when (result) {
                 is SyncResult.Success -> {
-                    Log.i(TAG, "Sync completed successfully")
-                    Result.success()
+                    Log.i(TAG, "Sync $syncType completed successfully")
+                    Result.success(workDataOf("success" to true))
                 }
 
                 is SyncResult.Failure -> {
+                    val errorStr = result.error.name
                     when (result.error) {
                         SyncError.SYNC_IN_PROGRESS -> {
                             Log.i(TAG, "Sync already in progress, skipping this run")
                             // Don't retry - another sync is already running
-                            Result.success()
+                            Result.success(
+                                workDataOf(
+                                    "success" to false,
+                                    "error" to errorStr
+                                )
+                            )
                         }
 
                         SyncError.NETWORK_ERROR -> {
@@ -70,7 +102,12 @@ class SyncWorker(
                             if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
                                 Result.retry()
                             } else {
-                                Result.failure()
+                                Result.failure(
+                                    workDataOf(
+                                        "success" to false,
+                                        "error" to errorStr
+                                    )
+                                )
                             }
                         }
 
@@ -80,7 +117,12 @@ class SyncWorker(
                         SyncError.WIFI_REQUIRED,
                         SyncError.CONFLICT -> {
                             Log.w(TAG, "Sync skipped (non-retryable): ${result.error}")
-                            Result.success()
+                            Result.success(
+                                workDataOf(
+                                    "success" to false,
+                                    "error" to errorStr
+                                )
+                            )
                         }
 
                         else -> {
@@ -88,7 +130,12 @@ class SyncWorker(
                             if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
                                 Result.retry()
                             } else {
-                                Result.failure()
+                                Result.failure(
+                                    workDataOf(
+                                        "success" to false,
+                                        "error" to errorStr
+                                    )
+                                )
                             }
                         }
                     }
@@ -99,7 +146,12 @@ class SyncWorker(
             if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
                 Result.retry()
             } else {
-                Result.failure()
+                Result.failure(
+                    workDataOf(
+                        "success" to false,
+                        "error" to "UNKNOWN_EXCEPTION"
+                    )
+                )
             }
         }
     }

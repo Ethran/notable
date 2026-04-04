@@ -2,10 +2,14 @@ package com.ethran.notable.sync
 
 import android.content.Context
 import androidx.work.Constraints
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -59,9 +63,30 @@ object SyncScheduler {
     /**
      * Trigger an immediate sync (one-time work).
      * @param context Android context
+     * @param syncType The specific sync action ("syncAll", "forceUpload", "forceDownload", etc.)
+     * @param data Optional extra data (like notebookId)
      */
-    fun triggerImmediateSync() {
-        // TODO: Implement one-time sync work request
-        // For now, just trigger through SyncOrchestrator directly
+    fun triggerImmediateSync(
+        context: Context,
+        syncType: String = "syncAll",
+        data: Map<String, String> = emptyMap()
+    ): UUID {
+        val builder = Data.Builder().putString("sync_type", syncType)
+        for ((k, v) in data) {
+            builder.putString(k, v)
+        }
+        val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(builder.build())
+            .build()
+        val workSuffix = data.entries
+            .sortedBy { it.key }
+            .joinToString(separator = "-") { "${it.key}:${it.value}" }
+            .ifEmpty { "default" }
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "${SyncWorker.WORK_NAME}-immediate-$syncType-$workSuffix",
+            ExistingWorkPolicy.REPLACE,
+            syncRequest
+        )
+        return syncRequest.id
     }
 }

@@ -60,6 +60,7 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.getLinkedFilesDir
+import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
@@ -144,17 +145,16 @@ fun NotebookConfigDialog(
                 showDeleteDialog = false
                 onClose()
 
-                // Auto-upload deletion to server (use standalone scope since composition is closing)
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    try {
-                        log.i("Uploading deletion for notebook: $bookId")
-                        val entry = dagger.hilt.android.EntryPointAccessors.fromApplication(
-                            context.applicationContext,
-                            com.ethran.notable.sync.SyncOrchestratorEntryPoint::class.java
+                // Queue remote deletion in background so it is independent from this view lifecycle.
+                scope.launch {
+                    snackManager.runWithSnack("Deleting notebook...", 3000) {
+                        SyncScheduler.triggerImmediateSync(
+                            context = context.applicationContext,
+                            syncType = "uploadDeletion",
+                            data = mapOf("notebookId" to bookId)
                         )
-                        entry.syncOrchestrator().uploadDeletion(bookId)
-                    } catch (e: Exception) {
-                        log.e("Upload deletion failed: ${e.message}")
+                        log.i("Queued notebook deletion upload for $bookId")
+                        "Notebook deleted. Sync queued."
                     }
                 }
             },
