@@ -26,10 +26,12 @@ import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.sync.SyncOrchestratorEntryPoint
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
+import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -54,7 +56,6 @@ object EditorDestination : NavigationDestination {
         return "$route/$pageId" + if (bookId != null) "?$BOOK_ID_ARG=$bookId" else ""
     }
 }
-
 
 
 @Composable
@@ -115,7 +116,12 @@ fun EditorView(
         }
 
         val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState)
+            // Obtain SyncOrchestrator from Hilt entry point for use in non-Hilt-managed objects
+            val entry = EntryPointAccessors.fromApplication(
+                context.applicationContext, SyncOrchestratorEntryPoint::class.java
+            )
+            val syncOrchestrator = entry.syncOrchestrator()
+            EditorControlTower(scope, page, history, editorState, syncOrchestrator)
         }
 
 
@@ -125,6 +131,8 @@ fun EditorView(
             viewModel.updateDrawingState()
         }
 
+//         val editorControlTower = remember {
+//             EditorControlTower(scope, page, history, editorState, context, appRepository).apply { registerObservers() }
         DisposableEffect(editorControlTower) {
             editorControlTower.registerObservers()
             onDispose {
@@ -199,9 +207,7 @@ fun EditorView(
 
         // Observe pageId changes from ViewModel state for navigation
         LaunchedEffect(viewModel) {
-            snapshotFlow { toolbarState.pageId }
-                .filterNotNull()
-                .distinctUntilChanged()
+            snapshotFlow { toolbarState.pageId }.filterNotNull().distinctUntilChanged()
                 .drop(1) // Skip initial emission from loadBookData
                 .collect { newPageId ->
                     log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")
@@ -217,8 +223,7 @@ fun EditorView(
         val zoomLevel by page.zoomLevel.collectAsStateWithLifecycle()
         val selectionActive = viewModel.selectionState.isNonEmpty()
         LaunchedEffect(
-            zoomLevel,
-            selectionActive
+            zoomLevel, selectionActive
         ) {
             log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
             viewModel.setShowResetView(zoomLevel != 1.0f)

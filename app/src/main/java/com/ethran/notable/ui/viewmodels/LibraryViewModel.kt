@@ -66,6 +66,8 @@ class LibraryViewModel @Inject constructor(
 
     private val _folderId = MutableStateFlow<String?>(null)
     private val _isImporting = MutableStateFlow(false)
+    private val _newlyCreatedBookId = MutableStateFlow<String?>(null)
+    val newlyCreatedBookId: StateFlow<String?> = _newlyCreatedBookId
     private val _isLatestVersion = MutableStateFlow(true)
     private val _breadcrumbFolders = MutableStateFlow<List<Folder>>(emptyList())
 
@@ -159,15 +161,18 @@ class LibraryViewModel @Inject constructor(
     fun onCreateNewNotebook() {
         viewModelScope.launch(Dispatchers.IO) {
             val settings = GlobalAppSettings.current
-
-            bookRepository.create(
-                Notebook(
-                    parentFolderId = _folderId.value,
-                    defaultBackground = settings.defaultNativeTemplate,
-                    defaultBackgroundType = BackgroundType.Native.key
-                )
+            val notebook = Notebook(
+                parentFolderId = _folderId.value,
+                defaultBackground = settings.defaultNativeTemplate,
+                defaultBackgroundType = BackgroundType.Native.key
             )
+            bookRepository.create(notebook)
+            _newlyCreatedBookId.value = notebook.id
         }
+    }
+
+    fun clearNewlyCreatedBookId() {
+        _newlyCreatedBookId.value = null
     }
 
     fun onPdfFile(uri: Uri, copy: Boolean) {

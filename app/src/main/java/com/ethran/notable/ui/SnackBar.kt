@@ -29,9 +29,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
-val LocalSnackContext = staticCompositionLocalOf { SnackState() }
+val LocalSnackContext = staticCompositionLocalOf<SnackState> { error("No SnackState provided") }
 
 data class SnackConf(
     val id: String = UUID.randomUUID().toString(),
@@ -41,7 +43,8 @@ data class SnackConf(
     val actions: List<Pair<String, () -> Unit>>? = null
 )
 
-class SnackState {
+@Singleton
+class SnackState @Inject constructor() {
     val snackFlow = MutableSharedFlow<SnackConf?>()
     val cancelSnackFlow = MutableSharedFlow<String?>()
     suspend fun displaySnack(conf: SnackConf): suspend () -> Unit {
