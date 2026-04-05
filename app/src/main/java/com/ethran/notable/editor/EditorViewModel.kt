@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -219,24 +220,8 @@ class EditorViewModel @Inject constructor(
     fun onDispose(page: PageView) {
         // 1. Finish selection operation
         selectionState.applySelectionDisplace(page)
-
-        // 2. Export and Sync
-        val currentBookId = bookId
-        val currentPid = currentPageId
-
-        if (currentBookId != null) {
-            exportToLinkedFile(
-                exportEngine,
-                currentBookId,
-                appRepository.bookRepository
-            )
-
-            // Trigger auto-sync if enabled (syncFromPageId checks settings internally)
-            if (currentPid.isNotEmpty()) {
-                appScope.launch {
-                    syncOrchestrator.syncFromPageId(currentPid)
-                }
-            }
+        bookId?.let { bookId ->
+            exportEngine.exportToLinkedFileAsync(bookId)
         }
 
         // 3. Cleanup page resources
@@ -389,9 +374,16 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val page = appRepository.pageRepository.getById(currentPageId) ?: return@launch
             val updatedPage = if (path == null) {
-                page.copy(backgroundType = type)
+                page.copy(
+                    backgroundType = type,
+                    updatedAt = Date()
+                )
             } else {
-                page.copy(background = path, backgroundType = type)
+                page.copy(
+                    background = path,
+                    backgroundType = type,
+                    updatedAt = Date()
+                )
             }
             appRepository.pageRepository.update(updatedPage)
 

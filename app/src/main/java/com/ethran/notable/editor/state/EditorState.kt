@@ -9,6 +9,8 @@ import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
+import io.shipbook.shipbooksdk.Log
+import kotlinx.coroutines.delay
 
 /**
  * Wrapper around EditorViewModel for backward compatibility with canvas components
@@ -64,6 +66,7 @@ class EditorState(
      * Call this from a LaunchedEffect in EditorView whenever toolbarState changes.
      */
     fun syncFrom(state: ToolbarUiState) {
+        Log.d("EditorState", "syncFrom($state)")
         mode = state.mode
         pen = state.pen
         eraser = state.eraser

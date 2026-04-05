@@ -133,7 +133,8 @@ fun Library(
         onDeleteEmptyBook = viewModel::deleteEmptyBook,
         onCreateNewNotebook = viewModel::onCreateNewNotebook,
         onImportPdf = viewModel::onPdfFile,
-        onImportXopp = viewModel::onXoppFile
+        onImportXopp = viewModel::onXoppFile,
+        onPreviewMissing = viewModel::onPreviewRequested
 
     )
 }
@@ -154,7 +155,8 @@ fun LibraryContent(
     onDeleteEmptyBook: (String) -> Unit,
     onCreateNewNotebook: () -> Unit,
     onImportPdf: (Uri, Boolean) -> Unit,
-    onImportXopp: (Uri) -> Unit
+    onImportXopp: (Uri) -> Unit,
+    onPreviewMissing: (String) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         Topbar {
@@ -199,7 +201,9 @@ fun LibraryContent(
                 pages = uiState.singlePages,
                 currentPageId = null,
                 title = stringResource(R.string.home_quick_pages), onSelectPage = goToPage,
-                showAddQuickPage = true, onCreateNewQuickPage = onCreateNewQuickPage
+                showAddQuickPage = true,
+                onCreateNewQuickPage = onCreateNewQuickPage,
+                onPreviewMissing = onPreviewMissing
             )
 
             Spacer(Modifier.height(10.dp))
@@ -213,7 +217,8 @@ fun LibraryContent(
                 onDeleteEmptyBook = onDeleteEmptyBook,
                 onCreateNewNotebook = onCreateNewNotebook,
                 onImportPdf = onImportPdf,
-                onImportXopp = onImportXopp
+                onImportXopp = onImportXopp,
+                onPreviewMissing = onPreviewMissing
             )
         }
     }
@@ -290,7 +295,8 @@ fun NotebookGrid(
     onDeleteEmptyBook: (String) -> Unit,
     onCreateNewNotebook: () -> Unit,
     onImportPdf: (Uri, Boolean) -> Unit,
-    onImportXopp: (Uri) -> Unit
+    onImportXopp: (Uri) -> Unit,
+    onPreviewMissing: (String) -> Unit
 ) {
     Text(text = stringResource(R.string.home_notebooks))
     Spacer(Modifier.height(10.dp))
@@ -326,7 +332,9 @@ fun NotebookGrid(
                     pageIds = book.pageIds,
                     openPageId = book.openPageId,
                     onOpen = { bookId, pageId -> onNavigateToEditor(pageId, bookId) },
-                    onOpenSettings = { isSettingsOpen = true })
+                    onOpenSettings = { isSettingsOpen = true },
+                    onPreviewMissing = onPreviewMissing
+                )
 
                 if (isSettingsOpen) {
                     NotebookConfigDialog(

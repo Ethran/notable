@@ -15,6 +15,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
+import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.isLatestVersion
@@ -54,6 +55,7 @@ class LibraryViewModel @Inject constructor(
     val appRepository: AppRepository,
     val importEngine: ImportEngine,
     val exportEngine: ExportEngine,
+    private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     val pageDataManager: PageDataManager,
     @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
@@ -109,6 +111,10 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _isLatestVersion.value = isLatestVersion(context, true)
         }
+    }
+
+    fun onPreviewRequested(pageId: String) {
+        thumbnailBackfillQueue.enqueue(listOf(pageId))
     }
 
     fun loadFolder(folderId: String?) {
