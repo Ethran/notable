@@ -20,6 +20,7 @@ import java.nio.file.Files.delete
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
+import androidx.core.graphics.createBitmap
 
 private val log = ShipBook.getLogger("bitmapUtils")
 
@@ -30,6 +31,11 @@ private const val EQUALITY_THRESHOLD = 0.01f
 private const val THUMBNAIL_WIDTH = 500
 private const val THUMBNAIL_QUALITY = 60
 private const val PREVIEW_QUALITY = 90
+
+fun getThumbnailTargetWidthPx(): Int = THUMBNAIL_WIDTH
+
+fun getThumbnailFile(context: Context, pageID: String): File =
+    File(context.filesDir, "pages/previews/thumbs/$pageID")
 
 private fun isEqqApprox(a: Float, b: Float): Boolean = abs(a - b) <= EQUALITY_THRESHOLD
 
@@ -231,11 +237,7 @@ private fun createPlaceholderPreview(
     height: Int,
     pageNumber: Int?
 ): Bitmap {
-    val bmp = Bitmap.createBitmap(
-        width.coerceAtLeast(1),
-        height.coerceAtLeast(1),
-        Bitmap.Config.ARGB_8888
-    )
+    val bmp = createBitmap(width.coerceAtLeast(1), height.coerceAtLeast(1))
     val canvas = Canvas(bmp)
     canvas.drawColor(Color.WHITE)
 
@@ -286,7 +288,7 @@ private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
  * Persist a thumbnail for a page.
  */
 fun persistBitmapThumbnail(context: Context, bitmap: Bitmap, pageID: String) {
-    val file = File(context.filesDir, "pages/previews/thumbs/$pageID")
+    val file = getThumbnailFile(context, pageID)
     file.parentFile?.mkdirs()
     val ratio = bitmap.height.toFloat() / bitmap.width.toFloat()
     val scaledBitmap = bitmap.scale(THUMBNAIL_WIDTH, (THUMBNAIL_WIDTH * ratio).toInt(), false)

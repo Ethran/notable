@@ -10,7 +10,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import coil.compose.rememberAsyncImagePainter
-import java.io.File
+import com.ethran.notable.editor.utils.getThumbnailFile
 
 @Composable
 fun PagePreview(modifier: Modifier = Modifier, pageId: String) {
@@ -28,7 +28,7 @@ fun PagePreview(modifier: Modifier = Modifier, pageId: String) {
     // Pass the File directly to Coil.
     // Coil automatically handles decoding the Bitmap on an IO thread!
     val imgFile = remember(pageId) {
-        File(context.filesDir, "pages/previews/thumbs/$pageId")
+        getThumbnailFile(context, pageId)
     }
 
     Image(
