@@ -5,7 +5,6 @@ import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.StrokeRepository
@@ -66,16 +65,15 @@ class AppRepository @Inject constructor(
     }
 
     suspend fun duplicatePage(pageId: String) {
-        val pageWithStrokes = pageRepository.getWithStrokeById(pageId)
-        val pageWithImages = pageRepository.getWithImageById(pageId)
-        val duplicatedPage = pageWithStrokes.page.copy(
+        val pageWithData = pageRepository.getWithDataById(pageId)
+        val duplicatedPage = pageWithData.page.copy(
             id = UUID.randomUUID().toString(),
             scroll = 0,
             createdAt = Date(),
             updatedAt = Date()
         )
         pageRepository.create(duplicatedPage)
-        strokeRepository.create(pageWithStrokes.strokes.map {
+        strokeRepository.create(pageWithData.strokes.map {
             it.copy(
                 id = UUID.randomUUID().toString(),
                 pageId = duplicatedPage.id,
@@ -83,7 +81,7 @@ class AppRepository @Inject constructor(
                 createdAt = Date()
             )
         })
-        imageRepository.create(pageWithImages.images.map {
+        imageRepository.create(pageWithData.images.map {
             it.copy(
                 id = UUID.randomUUID().toString(),
                 pageId = duplicatedPage.id,
@@ -91,11 +89,10 @@ class AppRepository @Inject constructor(
                 createdAt = Date()
             )
         })
-        require(pageWithStrokes.page.notebookId == pageWithImages.page.notebookId) { "pageWithStrokes.page.notebookId != pageWithImages.page.notebookId" }
-        val notebookId = pageWithStrokes.page.notebookId
+        val notebookId = pageWithData.page.notebookId
         if (notebookId != null) {
             val book = bookRepository.getById(notebookId) ?: return
-            val pageIndex = book.getPageIndex(pageWithImages.page.id)
+            val pageIndex = book.getPageIndex(pageWithData.page.id)
             if (pageIndex == -1) return
             val pageIds = book.pageIds.toMutableList()
             pageIds.add(pageIndex + 1, duplicatedPage.id)

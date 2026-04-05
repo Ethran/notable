@@ -39,15 +39,17 @@ data class Page(
     val createdAt: Date = Date(), val updatedAt: Date = Date()
 )
 
-data class PageWithStrokes(
-    @Embedded val page: Page, @Relation(
-        parentColumn = "id", entityColumn = "pageId", entity = Stroke::class
-    ) val strokes: List<Stroke>
-)
-
-data class PageWithImages(
-    @Embedded val page: Page, @Relation(
-        parentColumn = "id", entityColumn = "pageId", entity = Image::class
+data class PageWithData(
+    @Embedded val page: Page,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "pageId",
+        entity = Stroke::class
+    ) val strokes: List<Stroke>,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "pageId",
+        entity = Image::class
     ) val images: List<Image>
 )
 
@@ -63,11 +65,7 @@ interface PageDao {
 
     @Transaction
     @Query("SELECT * FROM page WHERE id =:pageId")
-    suspend fun getPageWithStrokesById(pageId: String): PageWithStrokes
-
-    @Transaction
-    @Query("SELECT * FROM page WHERE id =:pageId")
-    suspend fun getPageWithImagesById(pageId: String): PageWithImages
+    suspend fun getPageWithDataById(pageId: String): PageWithData
 
     @Query("UPDATE page SET scroll=:scroll WHERE id =:pageId")
     suspend fun updateScroll(pageId: String, scroll: Int)
@@ -86,7 +84,6 @@ interface PageDao {
 }
 
 class PageRepository @Inject constructor(
-    private val notebookDao: NotebookDao,
     private val db: PageDao
 ) {
     suspend fun create(page: Page): Long {
@@ -104,15 +101,10 @@ class PageRepository @Inject constructor(
     suspend fun getByIds(ids: List<String>): List<Page> {
         return db.getByIds(ids)
     }
-
-
-    suspend fun getWithStrokeById(pageId: String): PageWithStrokes {
-        return db.getPageWithStrokesById(pageId)
+    suspend fun getWithDataById(pageId: String): PageWithData {
+        return db.getPageWithDataById(pageId)
     }
 
-    suspend fun getWithImageById(pageId: String): PageWithImages {
-        return db.getPageWithImagesById(pageId)
-    }
 
     fun getSinglePagesInFolder(folderId: String? = null): LiveData<List<Page>> {
         return db.getSinglePagesInFolder(folderId)

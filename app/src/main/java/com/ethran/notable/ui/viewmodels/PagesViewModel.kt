@@ -6,6 +6,7 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.components.getFolderList
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,6 +30,7 @@ data class PagesUiState(
 @HiltViewModel
 class PagesViewModel @Inject constructor(
     private val appRepository: AppRepository,
+    private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -74,5 +76,11 @@ class PagesViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             appRepository.newPageInBook(bookId, index)
         }
+    }
+
+    fun generateThumbnailsForCurrentBook() {
+        val pageIds = _uiState.value.pageIds
+        if (pageIds.isEmpty()) return
+        thumbnailBackfillQueue.enqueue(pageIds)
     }
 }

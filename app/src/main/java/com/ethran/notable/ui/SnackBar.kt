@@ -58,6 +58,35 @@ class SnackState {
     companion object {
         val globalSnackFlow = MutableSharedFlow<SnackConf>(extraBufferCapacity = 10)
         val cancelGlobalSnack = MutableSharedFlow<String>(extraBufferCapacity = 10)
+        fun showOrUpdateGlobalProgress(
+            id: String,
+            current: Int,
+            total: Int,
+            prefix: String = "Generating previews"
+        ) {
+            val emitted = globalSnackFlow.tryEmit(
+                SnackConf(
+                    id = id,
+                    text = "$prefix $current/$total",
+                    duration = null
+                )
+            )
+            if (!emitted) {
+                Log.w("SnackState", "Failed to emit progress snackbar update.")
+            }
+        }
+
+        fun finishGlobalProgress(
+            id: String,
+            resultText: String? = null,
+            resultDurationMs: Int = 1500
+        ) {
+            cancelGlobalSnack.tryEmit(id)
+            resultText?.let {
+                globalSnackFlow.tryEmit(SnackConf(text = it, duration = resultDurationMs))
+            }
+        }
+
         fun logAndShowError(
             reason: String,
             message: String,
@@ -160,6 +189,7 @@ fun SnackBar(state: SnackState) {
         launch {
             state.snackFlow.collect { snack ->
                 if (snack != null) {
+                    getSnacks().removeIf { it.id == snack.id }
                     getSnacks().add(snack)
                     if (snack.duration != null) {
                         launch {

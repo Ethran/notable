@@ -8,6 +8,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.getFolderList
@@ -39,6 +40,7 @@ data class QuickNavUiState(
 
 class QuickNavViewModel(
     private val appRepository: AppRepository,
+    private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
 ) : ViewModel() {
     private val pageRepository = appRepository.pageRepository
     private val bookRepository = appRepository.bookRepository
@@ -166,5 +168,11 @@ class QuickNavViewModel(
         } else {
             CanvasEventBus.changePage.tryEmit(quickNavSourcePageId)
         }
+    }
+
+    fun generateThumbnailsForCurrentBook() {
+        val pageIds = _uiState.value.bookPageIds
+        if (pageIds.isEmpty()) return
+        thumbnailBackfillQueue.enqueue(pageIds)
     }
 }

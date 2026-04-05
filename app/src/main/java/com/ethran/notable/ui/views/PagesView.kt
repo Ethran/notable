@@ -77,7 +77,6 @@ object PagesDestination : NavigationDestination {
 }
 
 
-
 @Composable
 fun PagesView(
     bookId: String,
@@ -95,11 +94,11 @@ fun PagesView(
         state = state,
         onBack = goToLibrary,
         onOpenPage = { pageId -> goToEditor(pageId, bookId) },
+        onGenerateThumbnails = viewModel::generateThumbnailsForCurrentBook,
         onReorder = { id, to -> viewModel.reorderPage(bookId, id, to) },
         onDeletePage = viewModel::deletePage,
         onDuplicatePage = viewModel::duplicatePage,
-        onAddPageAfter = { viewModel.newPageInBook(bookId, it) }
-    )
+        onAddPageAfter = { viewModel.newPageInBook(bookId, it) })
 }
 
 
@@ -109,6 +108,7 @@ fun PagesContent(
     state: PagesUiState,
     onBack: (String?) -> Unit,
     onOpenPage: (String) -> Unit,
+    onGenerateThumbnails: () -> Unit,
     onReorder: (String, Int) -> Unit,
     onDeletePage: (String) -> Unit,
     onDuplicatePage: (String) -> Unit,
@@ -147,8 +147,7 @@ fun PagesContent(
             },
             onCancel = {
                 pendingDeletePageId = null
-            }
-        )
+            })
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -159,17 +158,23 @@ fun PagesContent(
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BreadCrumb(folders = state.folderList) { onBack(it) }
-                Spacer(modifier = Modifier.weight(1f))
+                Box(Modifier.weight(1f)) {
+                    BreadCrumb(folders = state.folderList) { onBack(it) }
+                }
 
-                // --- 2. Add EditModeSwitch and control visibility of Jump pill ---
-                EditModeSwitch(isEditMode = isEditMode, onToggle = { isEditMode = it })
-                Spacer(modifier = Modifier.width(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GenerateThumbsSwitch(onClick = onGenerateThumbnails)
 
-                if (state.openPageId != null) {
-                    JumpToCurrentPill {
-                        val idx = state.pageIds.indexOf(state.openPageId)
-                        if (idx >= 0) scope.launch { gridState.scrollToItem(idx) }
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    EditModeSwitch(isEditMode = isEditMode, onToggle = { isEditMode = it })
+
+                    if (state.openPageId != null) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        JumpToCurrentPill {
+                            val idx = state.pageIds.indexOf(state.openPageId)
+                            if (idx >= 0) scope.launch { gridState.scrollToItem(idx) }
+                        }
                     }
                 }
             }
@@ -183,8 +188,7 @@ fun PagesContent(
                     val r = coords.boundsInRoot()
                     reorderState.containerOriginInRoot =
                         IntOffset(r.left.roundToInt(), r.top.roundToInt())
-                }
-        ) {
+                }) {
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(120.dp),
@@ -197,12 +201,9 @@ fun PagesContent(
                         reorderState.gridOriginInRoot =
                             IntOffset(r.left.roundToInt(), r.top.roundToInt())
                     }
-                    .autoEInkAnimationOnScroll()
-            ) {
+                    .autoEInkAnimationOnScroll()) {
                 itemsIndexed(
-                    items = state.pageIds,
-                    key = { _, id -> id }
-                ) { pageIndex, pageId ->
+                    items = state.pageIds, key = { _, id -> id }) { pageIndex, pageId ->
                     val isOpen = pageId == state.openPageId
 
                     ReorderableGridItem(
@@ -230,8 +231,7 @@ fun PagesContent(
                             onDuplicate = { onDuplicatePage(pageId) },
                             onAddAfter = {
                                 onAddPageAfter(pageIndex + 1)
-                            }
-                        )
+                            })
                     }
                 }
             }
@@ -253,12 +253,10 @@ fun PagesContent(
                 val slotWidthDp = with(density) { slot.size.width.toDp() }
                 val slotHeightDp = with(density) { slot.size.height.toDp() }
 
-                Box(
-                    modifier = Modifier
-                        .offset { localOffset }
-                        .size(width = slotWidthDp, height = slotHeightDp)
-                        .background(Color.DarkGray)
-                )
+                Box(modifier = Modifier
+                    .offset { localOffset }
+                    .size(width = slotWidthDp, height = slotHeightDp)
+                    .background(Color.DarkGray))
             }
 
             // Drag proxy overlay — match on-screen size
@@ -278,12 +276,10 @@ fun PagesContent(
                     val localStartY =
                         originRoot.y - reorderState.containerOriginInRoot.y + reorderState.dragDelta.y
 
-                    Box(
-                        modifier = Modifier
-                            .offset { IntOffset(localStartX, localStartY) }
-                            .size(width = wDp, height = hDp)
-                            .background(Color.White)
-                    ) {
+                    Box(modifier = Modifier
+                        .offset { IntOffset(localStartX, localStartY) }
+                        .size(width = wDp, height = hDp)
+                        .background(Color.White)) {
                         // PagePreview fills the proxy without adding extra outer borders
                         PagePreview(
                             modifier = Modifier
@@ -292,8 +288,7 @@ fun PagesContent(
                                     if (isDraggingPageOpen) 2.dp else 1.dp,
                                     Color.Black,
                                     RectangleShape
-                                ),
-                            pageId = draggingId
+                                ), pageId = draggingId
                         )
                     }
 
@@ -318,10 +313,23 @@ fun PagesContent(
                     itemCount = state.pageIds.size,
                     getVisibleIndex = { gridState.firstVisibleItemIndex },
                     onDragStart = { setAnimationMode(true) },
-                    onDragEnd = { setAnimationMode(false) }
-                )
+                    onDragEnd = { setAnimationMode(false) })
             }
         }
+    }
+}
+
+@Composable
+private fun GenerateThumbsSwitch(onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .border(1.dp, Color.Black, RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Text("Generate previews", color = Color.Black)
     }
 }
 
@@ -338,8 +346,7 @@ private fun JumpToCurrentPill(onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 8.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() }, indication = null
-            ) { onClick() }
-    ) {
+            ) { onClick() }) {
         Text("Jump to current", color = Color.White)
     }
 }
@@ -349,8 +356,7 @@ private fun JumpToCurrentPill(onClick: () -> Unit) {
  */
 @Composable
 private fun EditModeSwitch(
-    isEditMode: Boolean,
-    onToggle: (Boolean) -> Unit
+    isEditMode: Boolean, onToggle: (Boolean) -> Unit
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -359,8 +365,7 @@ private fun EditModeSwitch(
             .background(if (isEditMode) Color.Black else Color.White)
             .border(1.dp, Color.Black, RoundedCornerShape(16.dp))
             .clickable { onToggle(!isEditMode) }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
+            .padding(horizontal = 14.dp, vertical = 8.dp)) {
         Text("Edit Mode", color = if (isEditMode) Color.White else Color.Black)
         Spacer(Modifier.width(8.dp))
         // Simple visual indicator for the switch state
@@ -379,12 +384,14 @@ private fun EditModeSwitch(
 fun PagesPreview() {
     PagesContent(
         state = PagesUiState(
-            pageIds = listOf("p1", "p2", "p3"),
-            openPageId = "p2",
-            isLoading = false
-        ),
-        onBack = {}, onOpenPage = {}, onReorder = { _, _ -> },
-        onDeletePage = {}, onDuplicatePage = {}, onAddPageAfter = {}
-    )
+        pageIds = listOf("p1", "p2", "p3"), openPageId = "p2", isLoading = false
+    ),
+        onBack = {},
+        onOpenPage = {},
+        onGenerateThumbnails = {},
+        onReorder = { _, _ -> },
+        onDeletePage = {},
+        onDuplicatePage = {},
+        onAddPageAfter = {})
 }
 

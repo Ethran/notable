@@ -80,7 +80,6 @@ class PageDataManager @Inject constructor(
     var pageFromDb: Page? = null
 
 
-
     private val strokes = LinkedHashMap<String, MutableList<Stroke>>()
     private var strokesById = LinkedHashMap<String, HashMap<String, Stroke>>()
 
@@ -295,11 +294,10 @@ class PageDataManager @Inject constructor(
             preLoadBackground(pageId)
 
 
-            val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(pageId)
+            val pageWithData = appRepository.pageRepository.getWithDataById(pageId)
             // What will happened if page isn't in repository?
-            cacheStrokes(pageId, pageWithStrokes.strokes)
-            val pageWithImages = appRepository.pageRepository.getWithImageById(pageId)
-            cacheImages(pageId, pageWithImages.images)
+            cacheStrokes(pageId, pageWithData.strokes)
+            cacheImages(pageId, pageWithData.images)
             recomputeHeight(pageId)
             indexImages(coroutineScope, pageId)
             indexStrokes(coroutineScope, pageId)
@@ -346,7 +344,7 @@ class PageDataManager @Inject constructor(
 
         // 3) Reconcile: if they disagree, warn and clear
         if (jobSnapshot.isNotNull() && dataLoaded != jobDone) {
-            SnackState.logAndShowError(
+            logAndShowError(
                 "PageDataManager.validatePageDataLoaded",
                 "Inconsistent state for page($pageId): dataLoaded=$dataLoaded," +
                         " jobDone=$jobDone, job=$jobSnapshot, trying to fix."
@@ -479,6 +477,7 @@ class PageDataManager @Inject constructor(
             Offset(0f, pageFromDb?.scroll?.toFloat() ?: 0f)
         }
     }
+
     fun setPageScroll(pageId: String, scroll: Offset) {
         pageScroll[pageId] = scroll
     }
@@ -619,6 +618,10 @@ class PageDataManager @Inject constructor(
         return pageFromDb?.getBackgroundType()
     }
 
+    suspend fun getPageUpdatedAt(pageId: String): Long? {
+        return appRepository.pageRepository.getById(pageId)?.updatedAt?.time
+    }
+
     fun getBackgroundName(): String {
         return pageFromDb?.background ?: "blank"
     }
@@ -646,7 +649,7 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    fun setCurrentBackground(background: CachedBackground){
+    fun setCurrentBackground(background: CachedBackground) {
         setBackground(currentPage, background)
     }
 
@@ -729,7 +732,7 @@ class PageDataManager @Inject constructor(
             val observer = object : FileObserver(file, mask) {
                 override fun onEvent(event: Int, path: String?) {
                     dataLoadingScope.launch {
-                        if(event == IN_IGNORED)
+                        if (event == IN_IGNORED)
                             return@launch
                         val eventString = fileObserverEventNames(event)
 
@@ -839,7 +842,7 @@ class PageDataManager @Inject constructor(
     fun removePage(pageId: String): Boolean {
         log.d("Removing page $pageId")
         if (pageId == currentPage) {
-            SnackState.logAndShowError(
+            logAndShowError(
                 "PageDataManager.removePage",
                 "Cannot remove current page, there is a bug in code",
             )
@@ -944,7 +947,7 @@ class PageDataManager @Inject constructor(
                 if (oldestPage == currentPage)
                     continue
                 log.d("Clearing page (oldest) $oldestPage, requested by reduceCache")
-                if(!removePage(oldestPage)) {
+                if (!removePage(oldestPage)) {
                     log.e("Illegal state: Could not remove page $oldestPage")
                     break
                 }
@@ -1026,7 +1029,7 @@ class PageDataManager @Inject constructor(
             for (pageId in pagesToRemove) {
                 if (currentCacheSizeMB <= cacheSizeLimit) break
                 log.d("Clearing page (all except current) $pageId, requested by freeMemory")
-                if(!removePage(pageId)) {
+                if (!removePage(pageId)) {
                     log.e("Illegal state: Could not remove page $pageId")
                     break
                 }

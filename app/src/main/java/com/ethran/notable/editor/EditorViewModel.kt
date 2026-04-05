@@ -24,7 +24,6 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
-import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
@@ -40,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -211,11 +211,7 @@ class EditorViewModel @Inject constructor(
         // finish selection operation
         selectionState.applySelectionDisplace(page)
         bookId?.let { bookId ->
-            exportToLinkedFile(
-                exportEngine,
-                bookId,
-                appRepository.bookRepository
-            )
+            exportEngine.exportToLinkedFileAsync(bookId)
         }
         page.disposeOldPage()
     }
@@ -366,9 +362,16 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val page = appRepository.pageRepository.getById(currentPageId) ?: return@launch
             val updatedPage = if (path == null) {
-                page.copy(backgroundType = type)
+                page.copy(
+                    backgroundType = type,
+                    updatedAt = Date()
+                )
             } else {
-                page.copy(background = path, backgroundType = type)
+                page.copy(
+                    background = path,
+                    backgroundType = type,
+                    updatedAt = Date()
+                )
             }
             appRepository.pageRepository.update(updatedPage)
 
@@ -496,7 +499,7 @@ class EditorViewModel @Inject constructor(
      * Attempts to repair potential inconsistencies in the notebook's data structure.
      */
     suspend fun fixNotebook(bookId: String?, pageId: String) {
-        TODO("""I'm not confident in the code below.""" )
+        TODO("""I'm not confident in the code below.""")
 //        if (bookId != null) {
 //            log.i("Could not find page, Cleaning book")
 //            SnackState.globalSnackFlow.tryEmit(
