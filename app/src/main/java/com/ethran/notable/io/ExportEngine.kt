@@ -17,11 +17,16 @@ import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.di.ApplicationScope
+import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.ui.components.getFolderList
+import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -55,7 +60,9 @@ class ExportEngine @Inject constructor(
     private val appRepository: AppRepository,
     private val pageRepo: PageRepository,
     private val bookRepo: BookRepository,
-    private val pageContentRenderer: PageContentRenderer
+    private val pageContentRenderer: PageContentRenderer,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
     private val log = ShipBook.getLogger("ExportEngine")
 
@@ -76,6 +83,41 @@ class ExportEngine @Inject constructor(
             )
 
             ExportFormat.XOPP -> exportAsXopp(target, folderUri, baseFileName, options)
+        }
+    }
+
+    fun exportToLinkedFileAsync(bookId: String) {
+        applicationScope.launch {
+            val uriStr = try {
+                bookRepo.getById(bookId)?.linkedExternalUri
+            } catch (e: Exception) {
+                logAndShowError(
+                    "exportToLinkedFileAsync",
+                    "Error reading linked export path: ${e.message}"
+                )
+                return@launch
+            }
+
+            if (uriStr.isNullOrBlank()) return@launch
+
+            try {
+                log.i("Exporting book to linked file, uri: $uriStr")
+                export(
+                    target = ExportTarget.Book(bookId),
+                    format = ExportFormat.XOPP,
+                    options = ExportOptions(
+                        copyToClipboard = false,
+                        targetFolderUri = uriStr.toUri(),
+                        overwrite = true
+                    )
+                )
+                log.i("Linked export successful")
+            } catch (e: Exception) {
+                logAndShowError(
+                    "exportToLinkedFileAsync",
+                    "Error exporting linked file: ${e.message}"
+                )
+            }
         }
     }
 
@@ -455,7 +497,7 @@ class ExportEngine @Inject constructor(
         mimeType: String,
         overwrite: Boolean,
         writer: suspend (OutputStream) -> Unit
-    ): String = withContext(Dispatchers.IO) {
+    ): String = withContext(ioDispatcher) {
         val displayName = if (extension.isBlank()) fileName else "$fileName.$extension"
         try {
             val dest = createOrGetFileInDir(folderUri, displayName, mimeType, overwrite)

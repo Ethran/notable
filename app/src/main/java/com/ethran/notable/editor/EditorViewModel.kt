@@ -24,7 +24,6 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
-import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
@@ -211,11 +210,7 @@ class EditorViewModel @Inject constructor(
         // finish selection operation
         selectionState.applySelectionDisplace(page)
         bookId?.let { bookId ->
-            exportToLinkedFile(
-                exportEngine,
-                bookId,
-                appRepository.bookRepository
-            )
+            exportEngine.exportToLinkedFileAsync(bookId)
         }
         page.disposeOldPage()
     }
