@@ -80,7 +80,6 @@ class PageDataManager @Inject constructor(
     var pageFromDb: Page? = null
 
 
-
     private val strokes = LinkedHashMap<String, MutableList<Stroke>>()
     private var strokesById = LinkedHashMap<String, HashMap<String, Stroke>>()
 
@@ -478,6 +477,7 @@ class PageDataManager @Inject constructor(
             Offset(0f, pageFromDb?.scroll?.toFloat() ?: 0f)
         }
     }
+
     fun setPageScroll(pageId: String, scroll: Offset) {
         pageScroll[pageId] = scroll
     }
@@ -649,7 +649,7 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    fun setCurrentBackground(background: CachedBackground){
+    fun setCurrentBackground(background: CachedBackground) {
         setBackground(currentPage, background)
     }
 
@@ -732,7 +732,7 @@ class PageDataManager @Inject constructor(
             val observer = object : FileObserver(file, mask) {
                 override fun onEvent(event: Int, path: String?) {
                     dataLoadingScope.launch {
-                        if(event == IN_IGNORED)
+                        if (event == IN_IGNORED)
                             return@launch
                         val eventString = fileObserverEventNames(event)
 
@@ -947,7 +947,7 @@ class PageDataManager @Inject constructor(
                 if (oldestPage == currentPage)
                     continue
                 log.d("Clearing page (oldest) $oldestPage, requested by reduceCache")
-                if(!removePage(oldestPage)) {
+                if (!removePage(oldestPage)) {
                     log.e("Illegal state: Could not remove page $oldestPage")
                     break
                 }
@@ -1029,7 +1029,7 @@ class PageDataManager @Inject constructor(
             for (pageId in pagesToRemove) {
                 if (currentCacheSizeMB <= cacheSizeLimit) break
                 log.d("Clearing page (all except current) $pageId, requested by freeMemory")
-                if(!removePage(pageId)) {
+                if (!removePage(pageId)) {
                     log.e("Illegal state: Could not remove page $pageId")
                     break
                 }

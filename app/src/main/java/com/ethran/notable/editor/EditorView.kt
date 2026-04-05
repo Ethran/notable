@@ -31,6 +31,7 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
