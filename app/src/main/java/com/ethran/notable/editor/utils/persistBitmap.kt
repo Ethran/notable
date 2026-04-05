@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
 import androidx.core.graphics.scale
@@ -192,21 +193,31 @@ fun loadPersistBitmap(
     return decodePreview(newest, expectedName)
 }
 
-
 // Load preview fast, without touching any windowed canvas.
 suspend fun loadPreview(
     context: Context,
     pageIdToLoad: String,
     expectedWidth: Int,
     expectedHeight: Int,
-    pageNumber: Int?
+    pageNumber: Int?,
+    requireExactMatch: Boolean = true
 ): Bitmap = withContext(Dispatchers.IO) {
-    // Load from disk
-    val bitmapFromDisk: Bitmap? = try {
+    // Load from disk (full quality folder)
+    var bitmapFromDisk: Bitmap? = try {
+        // We use requireExactMatch=false here for the full folder search because loadPreview usually 
+        // doesn't have current scroll/zoom info, so we want the best available full preview.
         loadPersistBitmap(context, pageIdToLoad, null, null, false)
     } catch (t: Throwable) {
         log.e("Failed to load persisted bitmap: ${t.message}")
         null
+    }
+
+    // Fallback to low-quality thumbnail if full preview is missing and we allow non-exact matches
+    if (bitmapFromDisk == null && !requireExactMatch) {
+        val thumbFile = getThumbnailFile(context, pageIdToLoad)
+        if (thumbFile.exists()) {
+            bitmapFromDisk = decodePreview(thumbFile, "thumbnail-fallback")
+        }
     }
 
     val prepared = when {
@@ -221,10 +232,26 @@ suspend fun loadPreview(
         }
 
         else -> {
-            log.i(
-                "Preview size mismatch (${bitmapFromDisk.width}x${bitmapFromDisk.height}) -> " + "scaling to ${expectedWidth}x${expectedHeight}"
-            )
-            bitmapFromDisk
+            log.i("Preview size mismatch (${bitmapFromDisk.width}x${bitmapFromDisk.height}) -> " +
+                    "scaling to ${expectedWidth}x${expectedHeight}")
+
+            val scaled = createBitmap(expectedWidth, expectedHeight, bitmapFromDisk.config!!)
+            val canvas = Canvas(scaled)
+            val paint = Paint().apply {
+                isAntiAlias = true
+                isFilterBitmap = true
+                isDither = true
+            }
+
+            val srcRect = Rect(0, 0, bitmapFromDisk.width, bitmapFromDisk.height)
+            val destRect = Rect(0, 0, expectedWidth, expectedHeight)
+
+            canvas.drawBitmap(bitmapFromDisk, srcRect, destRect, paint)
+
+            if (scaled != bitmapFromDisk) {
+                bitmapFromDisk.recycle()
+            }
+            scaled
         }
     }
 
