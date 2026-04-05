@@ -5,29 +5,18 @@ import android.content.ClipboardManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Environment
 import androidx.compose.ui.geometry.Offset
-import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
-import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.BookRepository
-import com.ethran.notable.data.db.Image
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.data.db.getBackgroundType
-import com.ethran.notable.data.model.BackgroundType.Native
-import com.ethran.notable.editor.drawing.drawBg
-import com.ethran.notable.editor.drawing.drawImage
-import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -65,7 +54,8 @@ class ExportEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val appRepository: AppRepository,
     private val pageRepo: PageRepository,
-    private val bookRepo: BookRepository
+    private val bookRepo: BookRepository,
+    private val pageContentRenderer: PageContentRenderer
 ) {
     private val log = ShipBook.getLogger("ExportEngine")
 
@@ -150,7 +140,7 @@ class ExportEngine @Inject constructor(
         when (target) {
             is ExportTarget.Page -> {
                 val pageId = target.pageId
-                val bitmap = renderBitmapForPage(pageId)
+                val bitmap = pageContentRenderer.renderPageBitmap(pageId, RenderTarget.Full)
                 bitmap.useAndRecycle { bmp ->
                     val bytes = bmp.toBytes(compressFormat)
                     saveBytes(
@@ -169,7 +159,7 @@ class ExportEngine @Inject constructor(
                 // Export each page separately (same folder = book title)
                 book.pageIds.forEachIndexed { index, pageId ->
                     val fileName = "$baseFileName-p${index + 1}"
-                    val bitmap = renderBitmapForPage(pageId)
+                    val bitmap = pageContentRenderer.renderPageBitmap(pageId, RenderTarget.Full)
                     bitmap.useAndRecycle { bmp ->
                         val bytes = bmp.toBytes(compressFormat)
                         saveBytes(folderUri, fileName, ext, mime, options.overwrite, bytes)
@@ -355,8 +345,9 @@ class ExportEngine @Inject constructor(
 
     private suspend fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int) {
         ensureNotMainThread("ExportPdf")
-        val data = fetchPageData(pageId)
-        val (_, contentHeightPx) = computeContentDimensions(data)
+        val data = pageContentRenderer.loadPageContent(pageId)
+        val (_, contentHeightPx) = pageContentRenderer.computeContentDimensions(data)
+        val backgroundType = pageContentRenderer.resolveExportBackgroundType(data)
 
         val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH.toFloat()
         val scaledHeight = (contentHeightPx * scaleFactor).toInt()
@@ -368,11 +359,12 @@ class ExportEngine @Inject constructor(
                 val pageInfo =
                     PdfDocument.PageInfo.Builder(A4_WIDTH, A4_HEIGHT, logicalPageNumber).create()
                 val page = doc.startPage(pageInfo)
-                drawPage(
+                pageContentRenderer.drawPage(
                     canvas = page.canvas,
                     data = data,
                     scroll = Offset(0f, currentTop.toFloat()),
-                    scaleFactor = scaleFactor
+                    scaleFactor = scaleFactor,
+                    backgroundType = backgroundType
                 )
                 doc.finishPage(page)
                 currentTop += A4_HEIGHT
@@ -381,87 +373,17 @@ class ExportEngine @Inject constructor(
         } else {
             val pageInfo = PdfDocument.PageInfo.Builder(A4_WIDTH, scaledHeight, pageNumber).create()
             val page = doc.startPage(pageInfo)
-            drawPage(
-                canvas = page.canvas, data = data, scroll = Offset.Zero, scaleFactor = scaleFactor
+            pageContentRenderer.drawPage(
+                canvas = page.canvas,
+                data = data,
+                scroll = Offset.Zero,
+                scaleFactor = scaleFactor,
+                backgroundType = backgroundType
             )
             doc.finishPage(page)
         }
     }
 
-    private suspend fun renderBitmapForPage(pageId: String): Bitmap {
-        ensureNotMainThread("ExportBitmap")
-        val data = fetchPageData(pageId)
-        val (contentWidth, contentHeight) = computeContentDimensions(data)
-
-        val bitmap = createBitmap(contentWidth, contentHeight)
-        val canvas = Canvas(bitmap)
-
-        // Scale = 1f (bitmap is native logical size)
-        drawBg(context, canvas, data.page.getBackgroundType(), data.page.background)
-        data.images.forEach { drawImage(context, canvas, it, Offset.Zero) }
-        data.strokes.forEach { drawStroke(canvas, it, Offset.Zero) }
-
-        return bitmap
-    }
-
-    private suspend fun drawPage(
-        canvas: Canvas, data: PageData, scroll: Offset, scaleFactor: Float
-    ) {
-        canvas.scale(scaleFactor, scaleFactor)
-        val scaledScroll = scroll / scaleFactor
-        val backgroundType =
-            data.page.notebookId?.let {
-                data.page.getBackgroundType()
-                    .resolveForExport(
-                        getPageNumber(
-                            it,
-                            data.page.id
-                        )
-                    )
-            } ?: Native
-        drawBg(
-            context,
-            canvas,
-            backgroundType,
-            data.page.background,
-            scaledScroll,
-            scaleFactor
-        )
-        data.images.forEach { drawImage(context, canvas, it, -scaledScroll) }
-        data.strokes.forEach { drawStroke(canvas, it, -scaledScroll) }
-    }
-
-    /* -------------------- Data Fetch / Dimension Calculation -------------------- */
-
-    private data class PageData(
-        val page: Page, val strokes: List<Stroke>, val images: List<Image>
-    )
-
-    private suspend fun fetchPageData(pageId: String): PageData {
-        val (page, strokes) = pageRepo.getWithStrokeById(pageId)
-        val (_, images) = pageRepo.getWithImageById(pageId)
-        return PageData(page, strokes, images)
-    }
-
-    // Returns (width, height)
-    private fun computeContentDimensions(data: PageData): Pair<Int, Int> {
-        if (data.strokes.isEmpty() && data.images.isEmpty()) {
-            return SCREEN_WIDTH to SCREEN_HEIGHT
-        }
-        val strokeBottom = data.strokes.maxOfOrNull { it.bottom.toInt() } ?: 0
-        val strokeRight = data.strokes.maxOfOrNull { it.right.toInt() } ?: 0
-        val imageBottom = data.images.maxOfOrNull { (it.y + it.height) } ?: 0
-        val imageRight = data.images.maxOfOrNull { (it.x + it.width) } ?: 0
-
-        val rawHeight = maxOf(
-            strokeBottom, imageBottom
-        ) + if (GlobalAppSettings.current.visualizePdfPagination) 0 else 50
-        val rawWidth = maxOf(strokeRight, imageRight) + 50
-
-        val height = rawHeight.coerceAtLeast(SCREEN_HEIGHT)
-        val width = rawWidth.coerceAtLeast(SCREEN_WIDTH)
-        return width to height
-    }
 
     /* -------------------- Saving Helpers -------------------- */
 
