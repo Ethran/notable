@@ -50,7 +50,7 @@ class EditorControlTower(
                 switchPage(pageId)
 //                page.changePage(pageId)
                 refreshScreen()
-                CanvasEventBus.refreshUi.emit(Unit)
+//                CanvasEventBus.refreshUi.emit(Unit)
             }
         }
     }
