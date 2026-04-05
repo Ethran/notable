@@ -618,6 +618,10 @@ class PageDataManager @Inject constructor(
         return pageFromDb?.getBackgroundType()
     }
 
+    suspend fun getPageUpdatedAt(pageId: String): Long? {
+        return appRepository.pageRepository.getById(pageId)?.updatedAt?.time
+    }
+
     fun getBackgroundName(): String {
         return pageFromDb?.background ?: "blank"
     }

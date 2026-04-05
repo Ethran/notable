@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
+import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import com.ethran.notable.R
 import com.ethran.notable.data.ensurePreviewsFullFolder
@@ -21,7 +22,6 @@ import java.nio.file.Files.delete
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
-import androidx.core.graphics.createBitmap
 
 private val log = ShipBook.getLogger("bitmapUtils")
 
@@ -54,6 +54,10 @@ private fun checkZoomAndScroll(scroll: Offset?, zoom: Float?): Boolean {
         return false
     }
     return true
+}
+
+private fun isCacheFresh(file: File, pageUpdatedAtMs: Long?): Boolean {
+    return pageUpdatedAtMs == null || pageUpdatedAtMs <= 0 || file.lastModified() >= pageUpdatedAtMs
 }
 
 /**
@@ -138,7 +142,12 @@ fun persistBitmapFull(
  * - Backward compatibility: if encoded file not found and scrollY != 0, attempt legacy filename (without suffix)
  */
 fun loadPersistBitmap(
-    context: Context, pageID: String, scroll: Offset?, zoom: Float?, requireExactMatch: Boolean
+    context: Context,
+    pageID: String,
+    scroll: Offset?,
+    zoom: Float?,
+    pageUpdatedAtMs: Long?,
+    requireExactMatch: Boolean,
 ): Bitmap? {
     val dir = ensurePreviewsFullFolder(context)
 
@@ -155,6 +164,10 @@ fun loadPersistBitmap(
         val targetFile = candidateFiles.firstOrNull { it.exists() }
         if (targetFile == null) {
             log.i("loadPersistBitmap: no exact-match cache (expected ${encodedFile.name})")
+            return null
+        }
+        if (!isCacheFresh(targetFile, pageUpdatedAtMs)) {
+            log.i("loadPersistBitmap: cache is stale for ${targetFile.name} (pageUpdatedAtMs=$pageUpdatedAtMs)")
             return null
         }
         return decodePreview(targetFile, encodedFile.name)
@@ -178,7 +191,7 @@ fun loadPersistBitmap(
     // Merge and deduplicate by name
     val candidates =
         (listOfNotNull(encodedFromProvidedScroll) + legacyExtras + allMatches).distinctBy { it.name }
-            .filter { it.exists() }
+            .filter { it.exists() && isCacheFresh(it, pageUpdatedAtMs) }
 
     if (candidates.isEmpty()) {
         log.i("loadPersistBitmap: no cache file for pageID=$pageID (non-exact)")
@@ -200,13 +213,21 @@ suspend fun loadPreview(
     expectedWidth: Int,
     expectedHeight: Int,
     pageNumber: Int?,
-    requireExactMatch: Boolean = true
+    pageUpdatedAtMs: Long?,
+    requireExactMatch: Boolean = true,
 ): Bitmap = withContext(Dispatchers.IO) {
     // Load from disk (full quality folder)
     var bitmapFromDisk: Bitmap? = try {
         // We use requireExactMatch=false here for the full folder search because loadPreview usually 
         // doesn't have current scroll/zoom info, so we want the best available full preview.
-        loadPersistBitmap(context, pageIdToLoad, null, null, false)
+        loadPersistBitmap(
+            context,
+            pageIdToLoad,
+            null,
+            null,
+            pageUpdatedAtMs = pageUpdatedAtMs,
+            requireExactMatch = false
+        )
     } catch (t: Throwable) {
         log.e("Failed to load persisted bitmap: ${t.message}")
         null

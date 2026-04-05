@@ -262,6 +262,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
                 val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
+                val pageUpdatedAtMs = pageDataManager.getPageUpdatedAt(pageId)
 
                 val previewBitmap = withContext(Dispatchers.IO) {
                     loadPreview(
@@ -270,7 +271,8 @@ class CanvasObserverRegistry(
                         expectedWidth = page.viewWidth,
                         expectedHeight = page.viewHeight,
                         pageNumber = pageNumber,
-                        requireExactMatch = false
+                        requireExactMatch = false,
+                        pageUpdatedAtMs = pageUpdatedAtMs
                     )
                 }
 
