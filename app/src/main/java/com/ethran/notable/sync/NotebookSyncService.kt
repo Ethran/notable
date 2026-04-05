@@ -149,15 +149,14 @@ class NotebookSyncService @Inject constructor(
     }
 
     private suspend fun uploadPage(page: Page, notebookId: String, webdavClient: WebDAVClient) {
-        val pageWithStrokes = appRepository.pageRepository.getWithStrokeById(page.id)
-        val pageWithImages = appRepository.pageRepository.getWithImageById(page.id)
+        val pageWithData = appRepository.pageRepository.getWithDataById(page.id)
         val pageJson = notebookSerializer.serializePage(
-            page, pageWithStrokes.strokes, pageWithImages.images
+            page, pageWithData.strokes, pageWithData.images
         )
         webdavClient.putFile(
             SyncPaths.pageFile(notebookId, page.id), pageJson.toByteArray(), "application/json"
         )
-        for (image in pageWithImages.images) {
+        for (image in pageWithData.images) {
             if (!image.uri.isNullOrEmpty()) {
                 val localFile = File(image.uri)
                 if (localFile.exists()) {
@@ -247,10 +246,9 @@ class NotebookSyncService @Inject constructor(
         }
         val existingPage = appRepository.pageRepository.getById(page.id)
         if (existingPage != null) {
-            val existingStrokes = appRepository.pageRepository.getWithStrokeById(page.id).strokes
-            val existingImages = appRepository.pageRepository.getWithImageById(page.id).images
-            appRepository.strokeRepository.deleteAll(existingStrokes.map { it.id })
-            appRepository.imageRepository.deleteAll(existingImages.map { it.id })
+            val pageWithData = appRepository.pageRepository.getWithDataById(page.id)
+            appRepository.strokeRepository.deleteAll(pageWithData.strokes.map { it.id })
+            appRepository.imageRepository.deleteAll(pageWithData.images.map { it.id })
             appRepository.pageRepository.update(page)
         } else {
             appRepository.pageRepository.create(page)

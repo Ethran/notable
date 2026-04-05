@@ -25,7 +25,6 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
-import com.ethran.notable.io.exportToLinkedFile
 import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
