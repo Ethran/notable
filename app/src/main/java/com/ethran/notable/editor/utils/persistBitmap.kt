@@ -232,10 +232,13 @@ suspend fun loadPreview(
         }
 
         else -> {
-            log.i("Preview size mismatch (${bitmapFromDisk.width}x${bitmapFromDisk.height}) -> " +
-                    "scaling to ${expectedWidth}x${expectedHeight}")
+            log.i(
+                "Preview size mismatch (${bitmapFromDisk.width}x${bitmapFromDisk.height}) -> " + "scaling to ${expectedWidth}x${expectedHeight}"
+            )
 
-            val scaled = createBitmap(expectedWidth, expectedHeight, bitmapFromDisk.config!!)
+            val scaled = createBitmap(
+                expectedWidth, expectedHeight, bitmapFromDisk.config ?: Bitmap.Config.ARGB_8888
+            )
             val canvas = Canvas(scaled)
             val paint = Paint().apply {
                 isAntiAlias = true
@@ -260,9 +263,7 @@ suspend fun loadPreview(
 
 
 private fun createPlaceholderPreview(
-    width: Int,
-    height: Int,
-    pageNumber: Int?
+    width: Int, height: Int, pageNumber: Int?
 ): Bitmap {
     val bmp = createBitmap(width.coerceAtLeast(1), height.coerceAtLeast(1))
     val canvas = Canvas(bmp)

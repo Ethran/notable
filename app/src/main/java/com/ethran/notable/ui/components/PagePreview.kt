@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,15 +25,13 @@ import kotlinx.coroutines.withContext
 
 /**
  * Renders a preview image for a page.
- * 
+ *
  * Automatically listens to [ThumbnailGenerator] updates to refresh the image
  * when a new thumbnail is generated.
  */
 @Composable
 fun PagePreview(
-    modifier: Modifier = Modifier,
-    pageId: String,
-    onPreviewMissing: (String) -> Unit = {}
+    modifier: Modifier = Modifier, pageId: String, onPreviewMissing: (String) -> Unit = {}
 ) {
     val isPreview = LocalInspectionMode.current
     val context = LocalContext.current
@@ -47,8 +44,7 @@ fun PagePreview(
     // Get the generator via EntryPoint since this is a stateless Composable
     val thumbnailGenerator = remember(context) {
         EntryPoints.get(
-            context.applicationContext,
-            ThumbnailGeneratorEntryPoint::class.java
+            context.applicationContext, ThumbnailGeneratorEntryPoint::class.java
         ).thumbnailGenerator()
     }
 
@@ -61,11 +57,9 @@ fun PagePreview(
 
     // Listen for updates specifically for this pageId
     LaunchedEffect(pageId) {
-        thumbnailGenerator.thumbnailUpdated
-            .filter { it == pageId }
-            .collect {
-                refreshTrigger = System.currentTimeMillis()
-            }
+        thumbnailGenerator.thumbnailUpdated.filter { it == pageId }.collect {
+            refreshTrigger = System.currentTimeMillis()
+        }
     }
 
     // Check if the file exists initially or when refreshed
@@ -77,16 +71,14 @@ fun PagePreview(
     }
 
     val painter = rememberAsyncImagePainter(
-        model = ImageRequest.Builder(context)
-            .data(imgFile)
+        model = ImageRequest.Builder(context).data(imgFile)
             // Use the refreshTrigger in the cache key to bypass Coil's cache
             .apply {
                 if (refreshTrigger > 0) {
                     memoryCacheKey("${imgFile.absolutePath}_$refreshTrigger")
                     diskCacheKey("${imgFile.absolutePath}_$refreshTrigger")
                 }
-            }
-            .build()
+            }.build()
     )
 
     Image(

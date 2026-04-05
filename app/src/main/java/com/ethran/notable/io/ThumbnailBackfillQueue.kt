@@ -28,7 +28,7 @@ class ThumbnailBackfillQueue @Inject constructor(
 ) {
     private val log = ShipBook.getLogger("ThumbnailBackfillQueue")
     private val queue = Channel<String>(Channel.UNLIMITED)
-    
+
     private val mutex = Mutex()
     private val queuedPageIds = linkedSetOf<String>()
 
@@ -96,7 +96,7 @@ class ThumbnailBackfillQueue @Inject constructor(
             mutex.withLock {
                 queuedPageIds.remove(pageId)
                 cycleDone += 1
-                
+
                 if (queuedPageIds.isEmpty()) {
                     finalizeCycleLocked()
                 } else {
@@ -105,11 +105,11 @@ class ThumbnailBackfillQueue @Inject constructor(
             }
         }
     }
-    
+
     private fun updateProgressLocked(throttled: Boolean = false) {
         val now = System.currentTimeMillis()
         if (throttled && now - lastUpdateMs < 300) return
-        
+
         lastUpdateMs = now
         SnackState.showOrUpdateGlobalProgress(
             id = progressSnackId,
@@ -124,7 +124,7 @@ class ThumbnailBackfillQueue @Inject constructor(
         val total = cycleTotal
         cycleDone = 0
         cycleTotal = 0
-        
+
         // Use a small delay to ensure the user sees the 100% state or "Done" state
         applicationScope.launch {
             delay(100)

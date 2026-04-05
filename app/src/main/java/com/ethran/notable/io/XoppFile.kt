@@ -111,8 +111,9 @@ class XoppFile @Inject constructor(
      * @param writer The BufferedWriter to write XML data to.
      */
     private suspend fun writePage(pageId: String, writer: BufferedWriter) {
-        val (_, strokes) = pageRepo.getWithStrokeById(pageId)
-        val (_, images) = pageRepo.getWithImageById(pageId)
+        val pageWithData = pageRepo.getWithDataById(pageId)
+        val strokes = pageWithData.strokes
+        val images = pageWithData.images
 
         val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument()
 

@@ -71,9 +71,8 @@ class PageContentRenderer @Inject constructor(
     )
 
     suspend fun loadPageContent(pageId: String): PageContent = withContext(Dispatchers.IO) {
-        val (page, strokes) = pageRepo.getWithStrokeById(pageId)
-        val (_, images) = pageRepo.getWithImageById(pageId)
-        PageContent(page, strokes, images)
+        val pageWithData = pageRepo.getWithDataById(pageId)
+        PageContent(pageWithData.page, pageWithData.strokes, pageWithData.images)
     }
 
     suspend fun resolveExportBackgroundType(data: PageContent): BackgroundType {

@@ -57,6 +57,7 @@ class ThumbnailGenerator @Inject constructor(
     private val inFlight = mutableMapOf<String, CompletableDeferred<ThumbnailEnsureResult>>()
 
     private val _thumbnailUpdated = MutableSharedFlow<String>(extraBufferCapacity = 64)
+
     /**
      * Flow of page IDs whose thumbnails have been updated (generated or refreshed).
      */
