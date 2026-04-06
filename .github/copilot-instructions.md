@@ -38,14 +38,14 @@
 
 ## Package Layout (`com.ethran.notable/`)
 
-| Package | Contents |
-|---|---|
+| Package | Contents                                                                      |
+|---|-------------------------------------------------------------------------------|
 | `data/` | Room DB (`db/`), DataStore (`datastore/`), `AppRepository`, `PageDataManager` |
-| `editor/` | `canvas/`, `drawing/`, `state/` (sealed `EditorState`), `utils/`, `ui/` |
-| `ui/` | `views/` (screens), `components/` (reusable), `theme/` |
-| `io/` | Import/export engines |
-| `navigation/` | `NotableNavHost`, `NavigationDestination` |
-| `utils/` | Generic shared helpers |
+| `editor/` | `canvas/`, `drawing/`, `state/` , `utils/`, `ui/`                             |
+| `ui/` | `views/` (screens), `components/` (reusable), `theme/`                        |
+| `io/` | Import/export engines                                                         |
+| `navigation/` | `NotableNavHost`, `NavigationDestination`                                     |
+| `utils/` | Generic shared helpers                                                        |
 
 ## Build & Test
 

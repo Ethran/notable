@@ -17,7 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
@@ -31,7 +31,6 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
@@ -109,13 +108,14 @@ fun EditorView(
             History(page)
         }
 
-        // Create EditorState wrapper for backward compatibility
-        val editorState = remember(viewModel, page) {
-            EditorState(viewModel)
-        }
-
         val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState)
+            EditorControlTower(
+                scope = scope,
+                page = page,
+                history = history,
+                viewModel = viewModel,
+                clipboardStore = ClipboardStore,
+            )
         }
 
 
@@ -191,11 +191,7 @@ fun EditorView(
             }
         }
 
-        // Collect toolbar state and sync EditorState (keeps snapshotFlow observers in canvas alive)
         val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
-        LaunchedEffect(toolbarState) {
-            editorState.syncFrom(toolbarState)
-        }
 
         // Observe pageId changes from ViewModel state for navigation
         LaunchedEffect(viewModel) {
@@ -236,7 +232,9 @@ fun EditorView(
         InkaTheme {
             EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                state = editorState, page = page, history = history
+                viewModel = viewModel,
+                page = page,
+                history = history
             )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower

@@ -52,10 +52,9 @@ fun EditorGestureReceiver(
                         val down = awaitFirstDown()
 
                         // We should not get any stylus events
-                        require(
-                            down.type != PointerType.Stylus ||
-                                    down.type == PointerType.Eraser
-                        )
+                        if (down.type == PointerType.Stylus || down.type == PointerType.Eraser) {
+                            return@awaitEachGesture // Escapes the current gesture loop, waits for the next one
+                        }
 
 
                         // testing if it will fixed exception:

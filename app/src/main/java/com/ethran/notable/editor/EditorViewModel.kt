@@ -17,6 +17,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -163,10 +164,15 @@ class EditorViewModel @Inject constructor(
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager
 ) : ViewModel() {
-
     // ---- Toolbar / UI State (single flat flow) ----
     private val _toolbarState = MutableStateFlow(ToolbarUiState())
     val toolbarState: StateFlow<ToolbarUiState> = _toolbarState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            ClipboardStore.content.collect { setHasClipboard(it != null) }
+        }
+    }
 
     // ---- One-Time Events (Channels) ----
     private val uiEventChannel = Channel<EditorUiEvent>(Channel.BUFFERED)
@@ -513,7 +519,7 @@ class EditorViewModel @Inject constructor(
     }
 
     // --------------------------------------------------------
-    // Page Navigation (from EditorState)
+    // Page navigation
     // --------------------------------------------------------
 
     private suspend fun getNextPageId(): String? {
@@ -617,6 +623,10 @@ class EditorViewModel @Inject constructor(
             if (!active)
                 updateDrawingState()
         }
+    }
+
+    fun setDrawingStateFromCanvas(isDrawing: Boolean) {
+        _toolbarState.update { it.copy(isDrawing = isDrawing) }
     }
 
     // --------------------------------------------------------

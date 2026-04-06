@@ -6,11 +6,12 @@ import android.net.Uri
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ethran.notable.data.db.Image
+import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
-import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.io.uriToBitmap
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.Log
@@ -22,10 +23,10 @@ import kotlinx.coroutines.launch
 class ImageHandler(
     private val context: Context,
     private val page: PageView,
-    private val state: EditorState,
+    private val viewModel: EditorViewModel,
     private val coroutineScope: CoroutineScope
 ) {
-    private val logImageHandler = ShipBook.Companion.getLogger("ImageHandler")
+    private val logImageHandler = ShipBook.getLogger("ImageHandler")
 
      fun observeImageUri() {
         coroutineScope.launch {
@@ -67,13 +68,13 @@ class ImageHandler(
             drawImage(
                 context, page.windowedCanvas, imageToSave, -page.scroll
             )
-            selectImage(coroutineScope, page, state, imageToSave)
+            selectImage(coroutineScope, page, viewModel,  imageToSave)
             // image will be added to database when released, the same as with paste element.
-            state.selectionState.placementMode = PlacementMode.Paste
+            viewModel.selectionState.placementMode = PlacementMode.Paste
             // make sure, that after regaining focus, we wont go back to drawing mode
         } else {
             // Handle cases where the bitmap could not be created
-            Log.Companion.e("ImageProcessing", "Failed to create software bitmap from URI.")
+            Log.e("ImageProcessing", "Failed to create software bitmap from URI.")
         }
     }
 }
