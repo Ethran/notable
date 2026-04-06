@@ -20,9 +20,9 @@ jobs:
           distribution: "temurin"
           # cache: gradle
 
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: 9.1
+          gradle-version: 9.1.0
 
       - name: Decode Keystore
         id: decode_keystore
