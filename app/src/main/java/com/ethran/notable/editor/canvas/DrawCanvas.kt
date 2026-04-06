@@ -11,13 +11,12 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.EditorViewModel
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Operation
-import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
@@ -44,26 +43,42 @@ class DrawCanvas(
 ) : SurfaceView(context) {
     private val log = ShipBook.getLogger("DrawCanvas")
 
-    override fun onTouchEvent(event: MotionEvent): Boolean { //Custom view DrawCanvas overrides onTouchEvent but not performClick
-        if (event.action == MotionEvent.ACTION_UP) {
+    private fun isStylusOrEraser(toolType: Int): Boolean =
+        toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
+
+    private fun hasAnyStylusPointer(event: MotionEvent): Boolean =
+        (0 until event.pointerCount).any { index -> isStylusOrEraser(event.getToolType(index)) }
+
+    // Overriding dispatchTouchEvent catches the event BEFORE it is routed
+    // to onTouchEvent or sent down to nested Android components.
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        // 1. Accessibility & Clicks
+        if (event.actionMasked == MotionEvent.ACTION_UP && !hasAnyStylusPointer(event)) {
             performClick()
         }
-        // We will only capture stylus events, and past rest down
-//        log.d("onTouchEvent, ${event.getToolType(0)}")
-        if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS || event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER) {
-            return if (!DeviceCompat.isOnyxDevice || inputHandler.isErasing) glRenderer.onTouchListener.onTouch(
-                this, event
-            )
-            else true
+
+        // 2. Intercept at the highest level if a stylus is present
+        if (hasAnyStylusPointer(event)) {
+            // Block parent scrolling
+            parent?.requestDisallowInterceptTouchEvent(true)
+
+
+            if (!DeviceCompat.isOnyxDevice || inputHandler.isErasing) {
+                glRenderer.onTouchListener.onTouch(this, event)
+            }
+
+            // Consume completely. This prevents Compose underneath from ever
+            // seeing this event IF the stylus was the first thing to touch the screen.
+            return true
         }
-        // Pass everything else down
-        return super.onTouchEvent(event)
+        return super.dispatchTouchEvent(event)
     }
 
     @Suppress("RedundantOverride")
     override fun performClick(): Boolean {
         return super.performClick()
     }
+
     var glRenderer = OpenGLRenderer(this)
 
     private val strokeHistoryBatch = mutableListOf<String>()
@@ -138,7 +153,6 @@ class DrawCanvas(
     }
 
 
-
     fun drawCanvasToView(dirtyRect: Rect?) {
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
         var canvas: Canvas? = null
@@ -150,7 +164,7 @@ class DrawCanvas(
 
             if (viewModel.toolbarState.value.mode == Mode.Select) {
                 // render selection, but only within dirtyRect
-               viewModel.selectionState.firstPageCut?.let { cutPoints ->
+                viewModel.selectionState.firstPageCut?.let { cutPoints ->
                     log.i("render cut")
                     val path = pointsToPath(cutPoints.map {
                         SimplePointF(
