@@ -74,5 +74,10 @@ jobs:
           tag_name: next
           name: next
           prerelease: true
-          body: "Preview version built from branch: ${{ github.ref_name }}"
+          make_latest: true 
+          body: |
+            ### Preview Build
+            - **Branch:** `${{ github.ref_name }}`
+            - **Commit:** `${{ github.sha }}`
+            - **Build Date:** $(date +'%Y-%m-%d %H:%M')
           token: ${{ secrets.TOKEN }}
