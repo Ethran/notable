@@ -20,14 +20,17 @@ import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
+import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.div
 import com.ethran.notable.editor.utils.loadPersistBitmap
 import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
+import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
@@ -48,6 +51,11 @@ import kotlin.math.min
 import kotlin.system.measureTimeMillis
 
 const val OVERLAP = 2
+
+data class PageCutMoveResult(
+    val previousStrokes: List<Stroke>,
+    val movedStrokes: List<Stroke>,
+)
 
 /**
  * Manages the state and rendering of a single page within the editor.
@@ -302,6 +310,34 @@ class PageView(
         pageDataManager.indexStrokes(coroutineScope, currentPageId)
 
         persistBitmapDebounced()
+    }
+
+    fun applyPageCutOffset(cutLine: List<SimplePointF>, offset: Offset): PageCutMoveResult? {
+        if (offset.x < 0 || offset.y < 0) return null
+
+        val (_, previousStrokes) = divideStrokesFromCut(strokes, cutLine)
+        if (previousStrokes.isEmpty()) return null
+
+        val movedStrokes = previousStrokes.map { stroke ->
+            stroke.copy(
+                points = stroke.points.map { point ->
+                    point.copy(x = point.x + offset.x, y = point.y + offset.y)
+                },
+                top = stroke.top + offset.y,
+                bottom = stroke.bottom + offset.y,
+                left = stroke.left + offset.x,
+                right = stroke.right + offset.x
+            )
+        }
+
+        removeStrokes(strokeIds = previousStrokes.map { it.id })
+        addStrokes(movedStrokes)
+        drawAreaScreenCoordinates(strokeBounds(previousStrokes + movedStrokes))
+
+        return PageCutMoveResult(
+            previousStrokes = previousStrokes,
+            movedStrokes = movedStrokes,
+        )
     }
 
     // Completely updates strokes

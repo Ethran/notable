@@ -71,6 +71,14 @@ class History(pageView: PageView) {
         }
     }
 
+    suspend fun undo() {
+        handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
+    }
+
+    suspend fun redo() {
+        handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
+    }
+
 
     fun cleanHistory() {
         undoList.clear()

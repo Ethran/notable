@@ -7,17 +7,13 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.HistoryBusActions
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.state.SelectionState
-import com.ethran.notable.editor.state.UndoRedoType
-import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
-import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -151,7 +147,7 @@ class EditorControlTower(
     fun undo() {
         scope.launch {
             logEditorControlTower.i("Undo called")
-            history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
+            history.undo()
 //            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
@@ -159,7 +155,7 @@ class EditorControlTower(
     fun redo() {
         scope.launch {
             logEditorControlTower.i("Redo called")
-            history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
+            history.redo()
 //            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
@@ -188,37 +184,19 @@ class EditorControlTower(
         }
     }
 
-    // TODO: add description
     private fun onOpenPageCut(offset: Offset) {
-        if (offset.x < 0 || offset.y < 0) return
-        val cutLine = viewModel.selectionState.firstPageCut!!
-
-        val (_, previousStrokes) = divideStrokesFromCut(page.strokes, cutLine)
-
-        // calculate new strokes to add to the page
-        val nextStrokes = previousStrokes.map { stroke ->
-            stroke.copy(
-                points = stroke.points.map { point ->
-                    point.copy(x = point.x + offset.x, y = point.y + offset.y)
-                }, top = stroke.top + offset.y, bottom = stroke.bottom + offset.y,
-                left = stroke.left + offset.x, right = stroke.right + offset.x
-            )
-        }
-
-        // remove and paste
-        page.removeStrokes(strokeIds = previousStrokes.map { it.id })
-        page.addStrokes(nextStrokes)
+        val cutLine = viewModel.selectionState.firstPageCut ?: return
+        val result = page.applyPageCutOffset(cutLine, offset) ?: return
 
         // commit to history
         history.addOperationsToHistory(
             listOf(
-                Operation.DeleteStroke(nextStrokes.map { it.id }),
-                Operation.AddStroke(previousStrokes)
+                Operation.DeleteStroke(result.movedStrokes.map { it.id }),
+                Operation.AddStroke(result.previousStrokes)
             )
         )
 
         viewModel.selectionState.reset()
-        page.drawAreaScreenCoordinates(strokeBounds(previousStrokes + nextStrokes))
     }
 
     private suspend fun onPageScroll(dragDelta: Offset) {
@@ -232,18 +210,14 @@ class EditorControlTower(
 
     // when selection is moved, we need to redraw canvas
     fun applySelectionDisplace() {
-        val operationList = viewModel.selectionState.applySelectionDisplace(page)
-        if (!operationList.isNullOrEmpty()) {
-            history.addOperationsToHistory(operationList)
-        }
+        viewModel.selectionState.applySelectionDisplaceAndCommit(page, history)
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
     fun deleteSelection() {
-        val operationList = viewModel.selectionState.deleteSelection(page)
-        history.addOperationsToHistory(operationList)
+        viewModel.selectionState.deleteSelectionAndCommit(page, history)
         setIsDrawing(true)
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)

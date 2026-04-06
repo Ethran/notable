@@ -239,6 +239,18 @@ class SelectionState {
         return operationList
     }
 
+    fun applySelectionDisplaceAndCommit(page: PageView, history: History): Boolean {
+        val operationList = applySelectionDisplace(page)
+        if (operationList.isNullOrEmpty()) return false
+        history.addOperationsToHistory(operationList)
+        return true
+    }
+
+    fun deleteSelectionAndCommit(page: PageView, history: History) {
+        val operationList = deleteSelection(page)
+        history.addOperationsToHistory(operationList)
+    }
+
     fun selectionToClipboard(scrollPos: Offset, context: Context): ClipboardContent {
         log.v("selectionToClipboard: scrollPos=$scrollPos, images=${selectedImages?.size}, strokes=${selectedStrokes?.size}")
 
