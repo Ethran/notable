@@ -521,6 +521,9 @@ class ExportEngine @Inject constructor(
             }
 
             "Saved $displayName"
+        } catch (e: OutOfMemoryError) {
+            log.e("Save error (OOM): ${e.message}")
+            "Not enough memory to save $displayName"
         } catch (e: Exception) {
             log.e("Save error: ${e.message}")
             "Error saving $displayName"
