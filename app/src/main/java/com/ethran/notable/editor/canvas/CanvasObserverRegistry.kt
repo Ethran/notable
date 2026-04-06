@@ -1,10 +1,10 @@
 package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
-import androidx.compose.runtime.snapshotFlow
+import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPreview
@@ -18,7 +18,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -26,7 +28,7 @@ class CanvasObserverRegistry(
     private val coroutineScope: CoroutineScope,
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
-    private val state: EditorState,
+    private val viewModel: EditorViewModel,
     private val history: History,
     private val inputHandler: OnyxInputHandler,
     private val refreshManager: CanvasRefreshManager
@@ -35,7 +37,7 @@ class CanvasObserverRegistry(
     private val pageDataManager = page.pageDataManager
 
     fun registerAll() {
-        ImageHandler(drawCanvas.context, page, state, coroutineScope).observeImageUri()
+        ImageHandler(drawCanvas.context, page, viewModel, coroutineScope).observeImageUri()
 
         observeRefreshUiImmediately()
         observeForceUpdate()
@@ -124,7 +126,7 @@ class CanvasObserverRegistry(
         coroutineScope.launch {
             CanvasEventBus.isDrawing.collect {
                 log.v("drawing state changed to $it!")
-                state.isDrawing = it
+                viewModel.setDrawingStateFromCanvas(it)
             }
         }
     }
@@ -134,7 +136,7 @@ class CanvasObserverRegistry(
             CanvasEventBus.rectangleToSelectByGesture.drop(1).collect {
                 if (it != null) {
                     log.v("Area to Select (screen): $it")
-                    selectRectangle(page, drawCanvas.coroutineScope, state, it)
+                    selectRectangle(page, drawCanvas.coroutineScope, viewModel, it)
                 }
             }
         }
@@ -143,7 +145,7 @@ class CanvasObserverRegistry(
     private fun observeClearPage() {
         coroutineScope.launch {
             CanvasEventBus.clearPageSignal.collect {
-                require(!state.isDrawing) { "Cannot clear page in drawing mode" }
+                require(!viewModel.toolbarState.value.isDrawing) { "Cannot clear page in drawing mode" }
                 log.v("Clear page signal!")
                 cleanAllStrokes(page, history)
             }
@@ -171,23 +173,34 @@ class CanvasObserverRegistry(
 
     private fun observePenChanges() {
         coroutineScope.launch(Dispatchers.Default) {
-            snapshotFlow { state.pen }.drop(0).collect {
-                log.v("pen change: ${state.pen}")
+            viewModel.toolbarState
+                .map { it.pen }
+                .distinctUntilChanged()
+                .collect { pen ->
+                log.v("pen change: $pen")
                 inputHandler.updatePenAndStroke()
                 //I think we don't need to refresh the screen here.
 //                refreshManager.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
-            snapshotFlow { state.penSettings.toMap() }.drop(1).collect {
-                log.v("pen settings change: ${state.penSettings}")
+            viewModel.toolbarState
+                .map { it.penSettings }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { penSettings ->
+                log.v("pen settings change: $penSettings")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
             }
         }
         coroutineScope.launch {
-            snapshotFlow { state.eraser }.drop(1).collect {
-                log.v("eraser change: ${state.eraser}")
+            viewModel.toolbarState
+                .map { it.eraser }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { eraser ->
+                log.v("eraser change: $eraser")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
             }
@@ -196,7 +209,11 @@ class CanvasObserverRegistry(
 
     private fun observeIsDrawingSnapshot() {
         coroutineScope.launch {
-            snapshotFlow { state.isDrawing }.drop(1).collect {
+            viewModel.toolbarState
+                .map { it.isDrawing }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
                 log.v("isDrawing change to $it")
                 // We need to close all menus
                 if (it) {
@@ -210,8 +227,12 @@ class CanvasObserverRegistry(
 
     private fun observeToolbar() {
         coroutineScope.launch {
-            snapshotFlow { state.isToolbarOpen }.drop(1).collect {
-                log.v("istoolbaropen change: ${state.isToolbarOpen}")
+            viewModel.toolbarState
+                .map { it.isToolbarOpen }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { isToolbarOpen ->
+                log.v("istoolbaropen change: $isToolbarOpen")
                 inputHandler.updateActiveSurface()
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUi(null)
@@ -221,8 +242,12 @@ class CanvasObserverRegistry(
 
     private fun observeMode() {
         coroutineScope.launch {
-            snapshotFlow { drawCanvas.getActualState().mode }.drop(1).collect {
-                log.v("mode change: ${drawCanvas.getActualState().mode}")
+            viewModel.toolbarState
+                .map { it.mode }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { mode ->
+                log.v("mode change: $mode")
                 inputHandler.updatePenAndStroke()
                 refreshManager.refreshUiSuspend()
             }

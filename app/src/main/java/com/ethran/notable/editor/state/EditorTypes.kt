@@ -14,10 +14,3 @@ enum class Mode {
 enum class PlacementMode {
     Move, Paste
 }
-
-/**
- * Singleton holding clipboard content across EditorState instances.
- */
-object Clipboard {
-    var content: ClipboardContent? = null
-}

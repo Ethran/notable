@@ -9,13 +9,14 @@ import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.PlacementMode
+import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import io.shipbook.shipbooksdk.ShipBook
@@ -76,7 +77,7 @@ fun selectImagesFromPath(images: List<Image>, path: Path): List<Image> {
 fun selectImagesAndStrokes(
     scope: CoroutineScope,
     page: PageView,
-    editorState: EditorState,
+    viewModel: EditorViewModel,
     imagesToSelect: List<Image>,
     strokesToSelect: List<Stroke>
 ) {
@@ -121,13 +122,13 @@ fun selectImagesAndStrokes(
     val startOffset = IntOffset(pageBounds.left, pageBounds.top) - page.scroll.toIntOffset()
 
     // set state
-    editorState.selectionState.selectedImages = imagesToSelect
-    editorState.selectionState.selectedStrokes = strokesToSelect
-    editorState.selectionState.selectedBitmap = selectedBitmap
-    editorState.selectionState.selectionRect = pageBounds
-    editorState.selectionState.selectionStartOffset = startOffset
-    editorState.selectionState.selectionDisplaceOffset = IntOffset(0, 0)
-    editorState.selectionState.placementMode = PlacementMode.Move
+    viewModel.selectionState.selectedImages = imagesToSelect
+    viewModel.selectionState.selectedStrokes = strokesToSelect
+    viewModel.selectionState.selectedBitmap = selectedBitmap
+    viewModel.selectionState.selectionRect = pageBounds
+    viewModel.selectionState.selectionStartOffset = startOffset
+    viewModel.selectionState.selectionDisplaceOffset = IntOffset(0, 0)
+    viewModel.selectionState.placementMode = PlacementMode.Move
     setAnimationMode(true)
     page.drawAreaPageCoordinates(
         pageBounds,
@@ -136,7 +137,7 @@ fun selectImagesAndStrokes(
 
     scope.launch {
         CanvasEventBus.refreshUi.emit(Unit)
-        editorState.isDrawing = false
+        viewModel.setDrawingStateFromCanvas(false)
     }
 }
 
@@ -147,10 +148,16 @@ fun selectImagesAndStrokes(
 fun selectImage(
     scope: CoroutineScope,
     page: PageView,
-    editorState: EditorState,
+    viewModel: EditorViewModel,
     imageToSelect: Image
 ) {
-    selectImagesAndStrokes(scope, page, editorState, listOf(imageToSelect), emptyList())
+    selectImagesAndStrokes(
+        scope = scope,
+        page = page,
+        viewModel = viewModel,
+        imagesToSelect = listOf(imageToSelect),
+        strokesToSelect = emptyList()
+    )
 }
 
 
@@ -185,17 +192,17 @@ fun selectImage(
  *
  * @param scope The `CoroutineScope` used to perform asynchronous operations, such as UI refresh.
  * @param page The `PageView` object representing the current page, including its strokes and dimensions.
- * @param editorState The `EditorState` object storing the current state of the editor, such as selected strokes.
+ * @param selectionState The `SelectionState` object storing the current state of the selection.
  * @param points A list of `SimplePointF` objects defining the user's selection path in page coordinates.
  * points is in page coordinates
  */
 fun handleSelect(
     scope: CoroutineScope,
     page: PageView,
-    editorState: EditorState,
+    viewModel: EditorViewModel,
     points: List<SimplePointF>
 ) {
-    val state = editorState.selectionState
+    val state = viewModel.selectionState
 
     val firstPointPosition =
         if (points.first().x < 50) SelectPointPosition.LEFT else if (points.first().x > page.viewWidth - 50) SelectPointPosition.RIGHT else SelectPointPosition.CENTER
@@ -242,7 +249,13 @@ fun handleSelect(
 
         if (selectedStrokes.isEmpty() && selectedImages.isEmpty()) return
 
-        selectImagesAndStrokes(scope, page, editorState, selectedImages, selectedStrokes)
+        selectImagesAndStrokes(
+            scope = scope,
+            page = page,
+            viewModel = viewModel,
+            imagesToSelect = selectedImages,
+            strokesToSelect = selectedStrokes
+        )
 
         // TODO collocate with control tower ?
     }
@@ -252,7 +265,12 @@ fun handleSelect(
 /**
  * handles selection, and decide if we should exit the animation mode
  */
-suspend fun selectRectangle(page: PageView, coroutineScope: CoroutineScope, state: EditorState, rectToSelect: Rect) {
+suspend fun selectRectangle(
+    page: PageView,
+    coroutineScope: CoroutineScope,
+    viewModel: EditorViewModel,
+    rectToSelect: Rect
+) {
     val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoomLevel.value, page.scroll)
 
     val imagesToSelect =
@@ -262,7 +280,13 @@ suspend fun selectRectangle(page: PageView, coroutineScope: CoroutineScope, stat
     if (imagesToSelect != null && strokesToSelect != null) {
         CanvasEventBus.rectangleToSelectByGesture.value = null
         if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
-            selectImagesAndStrokes(coroutineScope, page, state, imagesToSelect, strokesToSelect)
+            selectImagesAndStrokes(
+                scope = coroutineScope,
+                page = page,
+                viewModel = viewModel,
+                imagesToSelect = imagesToSelect,
+                strokesToSelect = strokesToSelect
+            )
         } else {
             setAnimationMode(false)
             SnackState.globalSnackFlow.emit(
