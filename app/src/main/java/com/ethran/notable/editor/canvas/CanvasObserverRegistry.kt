@@ -11,6 +11,7 @@ import com.ethran.notable.editor.utils.loadPreview
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.selectRectangle
 import com.ethran.notable.editor.utils.waitForEpdRefresh
+import com.ethran.notable.ui.SnackConf
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -145,9 +146,9 @@ class CanvasObserverRegistry(
     private fun observeClearPage() {
         coroutineScope.launch {
             CanvasEventBus.clearPageSignal.collect {
-                require(!viewModel.toolbarState.value.isDrawing) { "Cannot clear page in drawing mode" }
                 log.v("Clear page signal!")
                 cleanAllStrokes(page, history)
+                refreshManager.refreshUiSuspend()
             }
         }
     }

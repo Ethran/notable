@@ -161,7 +161,8 @@ fun EditorView(
                     CanvasCommand.ResetView -> editorControlTower.resetZoomAndScroll()
                     CanvasCommand.ClearAllStrokes -> {
                         CanvasEventBus.clearPageSignal.emit(Unit)
-                        snackManager.displaySnack(SnackConf(text = "Cleared all strokes"))
+                        // TODO: move it.
+                        snackManager.displaySnack(SnackConf(text = "Cleared all strokes", duration = 2000))
                     }
 
                     CanvasCommand.RefreshCanvas -> {
