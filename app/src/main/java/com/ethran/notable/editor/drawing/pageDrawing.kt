@@ -157,7 +157,8 @@ fun drawOnCanvasFromPage(
         // for debugging:
         drawColor(Color.WHITE)
 
-        drawBg(page.context, this, backgroundType, background, page.scroll, zoomLevel, page)
+//        drawBg(page.context, this, backgroundType, background, page.scroll, zoomLevel, page, page.currentPageNumber)
+        page.drawBgToCanvas(null)
         if (GlobalAppSettings.current.debugMode) {
             drawDebugRectWithLabels(canvas, RectF(canvasClipBounds), Color.BLACK)
         }

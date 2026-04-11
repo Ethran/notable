@@ -85,14 +85,14 @@ class PageContentRenderer @Inject constructor(
         withContext(Dispatchers.Default) {
             canvas.scale(scaleFactor, scaleFactor)
             val scaledScroll = scroll / scaleFactor
-            drawBg(
-                context = context,
-                canvas = canvas,
-                backgroundType = backgroundType,
-                background = data.page.background,
-                scroll = scaledScroll,
-                scale = scaleFactor
-            )
+//            drawBg(
+//                context = context,
+//                canvas = canvas,
+//                backgroundType = backgroundType,
+//                background = data.page.background,
+//                scroll = scaledScroll,
+//                scale = scaleFactor
+//            )
             data.images.forEach { drawImage(context, canvas, it, -scaledScroll) }
             data.strokes.forEach { drawStroke(canvas, it, -scaledScroll) }
         }
