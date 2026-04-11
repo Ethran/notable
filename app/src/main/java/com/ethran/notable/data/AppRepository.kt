@@ -10,8 +10,6 @@ import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
-import com.ethran.notable.data.events.AppEvent
-import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.ShipBook
 import java.util.Date
@@ -126,7 +124,7 @@ class AppRepository @Inject constructor(
         return book.getPageIndex(pageId)
     }
 
-    suspend fun createNewQuickPage(parentFolderId: String? = null) : String? {
+    suspend fun createNewQuickPage(parentFolderId: String? = null): String? {
         val page = Page(
             notebookId = null,
             background = GlobalAppSettings.current.defaultNativeTemplate,

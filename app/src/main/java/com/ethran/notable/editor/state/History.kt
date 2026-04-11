@@ -5,8 +5,8 @@ import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
-import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.utils.logCallStack
@@ -61,7 +61,11 @@ class History @AssistedInject constructor(
                     //moved to refresh after drawing
                     CanvasEventBus.refreshUi.emit(Unit)
                 } else {
-                    appEventBus.emit(AppEvent.ActionHint("Nothing to undo", 3000))
+                    val message = when (actions.type) {
+                        UndoRedoType.Undo -> "Nothing to undo"
+                        UndoRedoType.Redo -> "Nothing to redo"
+                    }
+                    appEventBus.emit(AppEvent.ActionHint(message, 3000))
                 }
             }
 

@@ -881,7 +881,7 @@ class PageView(
 
     private suspend fun waitForDrawingWithSnack() {
         if (drawingInProgress.isLocked) {
-            snackManager.runWithSnack("Waiting for drawing to finish…") {
+            snackManager.runWithSnack("Waiting for drawing to finish…", resultDurationMs = 0) {
                 waitForDrawing()
                 "Drawing finished"
             }

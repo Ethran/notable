@@ -35,7 +35,7 @@ val LocalSnackContext = staticCompositionLocalOf { SnackState() }
 data class SnackConf(
     val id: String = UUID.randomUUID().toString(),
     val text: String? = null,
-    val duration: Int? = 60000, // no longer then 60s
+    val duration: Int? = 60000, // no longer than 60s
     val progress: Float? = null, // from 0.0f to 1.0f
     val content: (@Composable () -> Unit)? = null,
     val actions: List<Pair<String, () -> Unit>>? = null
