@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
@@ -15,7 +14,6 @@ import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
-
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -246,7 +244,7 @@ class EditorControlTower(
     fun cutSelectionToClipboard(context: Context) {
         clipboardStore.set(viewModel.selectionState.selectionToClipboard(page.scroll, context))
         deleteSelection()
-        showHint("Content cut to clipboard")
+        viewModel.showHint("Content cut to clipboard")
     }
 
     fun copySelectionToClipboard(context: Context) {
@@ -298,12 +296,8 @@ class EditorControlTower(
         )
         viewModel.selectionState.placementMode = PlacementMode.Paste
 
-        showHint("Pasted content from clipboard")
+        viewModel.showHint("Pasted content from clipboard")
     }
 
-    fun showHint(message: String, durationMs: Int = 1500) {
-        viewModel.snackDispatcher.showOrUpdateSnack(
-            SnackConf(text = message, duration = durationMs)
-        )
-    }
+
 }

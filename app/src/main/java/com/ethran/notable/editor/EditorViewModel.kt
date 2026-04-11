@@ -16,9 +16,9 @@ import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
-import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -351,7 +351,12 @@ class EditorViewModel @Inject constructor(
                 val copiedFile = copyImageToDatabase(context, uri)
                 sendCanvasCommand(CanvasCommand.CopyImageToCanvas(copiedFile.toUri()))
             } catch (e: Exception) {
-                snackDispatcher.showOrUpdateSnack(SnackConf(text =  "Image import failed: ${e.message}", duration = 3000))
+                snackDispatcher.showOrUpdateSnack(
+                    SnackConf(
+                        text = "Image import failed: ${e.message}",
+                        duration = 3000
+                    )
+                )
             }
         }
     }
@@ -363,7 +368,12 @@ class EditorViewModel @Inject constructor(
                 val snack = SnackConf(text = result, duration = 4000)
                 snackDispatcher.showOrUpdateSnack(snack)
             } catch (e: Exception) {
-                snackDispatcher.showOrUpdateSnack(com.ethran.notable.ui.SnackConf(text =  "Export failed: ${e.message}", duration = 3000))
+                snackDispatcher.showOrUpdateSnack(
+                    SnackConf(
+                        text = "Export failed: ${e.message}",
+                        duration = 3000
+                    )
+                )
             }
         }
     }
@@ -456,7 +466,12 @@ class EditorViewModel @Inject constructor(
 
         val page = appRepository.pageRepository.getById(pageId)
         if (page == null) {
-            snackDispatcher.showOrUpdateSnack(SnackConf(text =  "Could not find page", duration = 3000))
+            snackDispatcher.showOrUpdateSnack(
+                SnackConf(
+                    text = "Could not find page",
+                    duration = 3000
+                )
+            )
             fixNotebook(bookId, pageId)
             return
         }
@@ -506,17 +521,16 @@ class EditorViewModel @Inject constructor(
      * Attempts to repair potential inconsistencies in the notebook's data structure.
      */
     suspend fun fixNotebook(bookId: String?, pageId: String) {
-        TODO("""I'm not confident in the code below.""")
-//        if (bookId != null) {
-//            log.i("Could not find page, Cleaning book")
-//            SnackState.globalSnackFlow.tryEmit(
-//                SnackConf(
-//                    text = "Could not find page, cleaning book", duration = 4000
-//                )
-//            )
-//            appRepository.bookRepository.removePage(bookId, pageId)
-//
-//        }
+        log.i("Could not find page, cleaning book and returning to library")
+        if (bookId != null) {
+            appRepository.bookRepository.removePage(bookId, pageId)
+        }
+        snackDispatcher.showOrUpdateSnack(
+            SnackConf(
+                text = "Could not find page, returning to library", duration = 4000
+            )
+        )
+        sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
     }
 
     // --------------------------------------------------------
@@ -654,6 +668,14 @@ class EditorViewModel @Inject constructor(
             Pen.BRUSH.penName to PenSetting(5f, Color.BLACK),
             Pen.MARKER.penName to PenSetting(40f, Color.LTGRAY),
             Pen.FOUNTAIN.penName to PenSetting(5f, Color.BLACK)
+        )
+    }
+
+
+    // Hints for Editor
+    fun showHint(message: String, durationMs: Int = 1500) {
+        snackDispatcher.showOrUpdateSnack(
+            SnackConf(text = message, duration = durationMs)
         )
     }
 }
