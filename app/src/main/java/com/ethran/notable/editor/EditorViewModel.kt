@@ -310,6 +310,9 @@ class EditorViewModel @Inject constructor(
             saveToolbarState()
         }
         updateDrawingState()
+        viewModelScope.launch {
+            CanvasEventBus.refreshUi.emit(Unit)
+        }
     }
 
     private fun handleEraserChange(eraser: Eraser) {
