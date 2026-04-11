@@ -244,7 +244,7 @@ class EditorControlTower(
     fun cutSelectionToClipboard(context: Context) {
         clipboardStore.set(viewModel.selectionState.selectionToClipboard(page.scroll, context))
         deleteSelection()
-        viewModel.showHint("Content cut to clipboard")
+        showHint("Content cut to clipboard")
     }
 
     fun copySelectionToClipboard(context: Context) {
@@ -296,8 +296,8 @@ class EditorControlTower(
         )
         viewModel.selectionState.placementMode = PlacementMode.Paste
 
-        viewModel.showHint("Pasted content from clipboard")
+        showHint("Pasted content from clipboard")
     }
 
-
+    fun showHint(text: String) = viewModel.showHint(text)
 }

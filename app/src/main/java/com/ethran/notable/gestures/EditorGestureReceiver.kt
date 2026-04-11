@@ -122,12 +122,12 @@ fun EditorGestureReceiver(
                                     controlTower.setIsDrawing(false) // unfreeze the screen
                                     crossPosition = gestureState.getLastPositionIO()
                                     rectangleBounds = gestureState.calculateRectangleBounds()
-                                    controlTower.showHint("Selection mode!", 1500)
+                                    controlTower.showHint("Selection mode!")
                                 }
                                 gestureState.checkSmoothScrolling()
                                 gestureState.checkContinuousZoom()
                                 if (gestureState.checkHoldingTwoFingers())
-                                    controlTower.showHint("Drag mode!", 1500)
+                                    controlTower.showHint("Drag mode!")
 
                             }
                             if (gestureState.gestureMode == GestureMode.Scroll) {

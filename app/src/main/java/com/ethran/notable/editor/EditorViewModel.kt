@@ -465,6 +465,8 @@ class EditorViewModel @Inject constructor(
         this.bookId = bookId
 
         val page = appRepository.pageRepository.getById(pageId)
+        fixNotebook(bookId, pageId)
+
         if (page == null) {
             snackDispatcher.showOrUpdateSnack(
                 SnackConf(
@@ -472,7 +474,6 @@ class EditorViewModel @Inject constructor(
                     duration = 3000
                 )
             )
-            fixNotebook(bookId, pageId)
             return
         }
         val book = bookId?.let { appRepository.bookRepository.getById(it) }
@@ -520,17 +521,24 @@ class EditorViewModel @Inject constructor(
     /**
      * Attempts to repair potential inconsistencies in the notebook's data structure.
      */
-    suspend fun fixNotebook(bookId: String?, pageId: String) {
-        log.i("Could not find page, cleaning book and returning to library")
-        if (bookId != null) {
-            appRepository.bookRepository.removePage(bookId, pageId)
-        }
+    fun fixNotebook(bookId: String?, pageId: String) {
+        log.i("Could not find page, prompting for repair")
         snackDispatcher.showOrUpdateSnack(
             SnackConf(
-                text = "Could not find page, returning to library", duration = 4000
+                text = "Could not find page",
+                duration = 60000,
+                actions = listOf(
+                    "Remove bad page" to {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            if (bookId != null) {
+                                appRepository.bookRepository.removePage(bookId, pageId)
+                            }
+                            sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
+                        }
+                    }
+                )
             )
         )
-        sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
     }
 
     // --------------------------------------------------------

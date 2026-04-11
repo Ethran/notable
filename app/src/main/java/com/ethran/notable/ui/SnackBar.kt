@@ -1,6 +1,7 @@
 package com.ethran.notable.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +22,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -95,13 +99,15 @@ class SnackState {
     }
 
     suspend fun runWithSnack(
-        textDuring: String,
-        resultDurationMs: Int = 2000,
-        block: suspend () -> String
+        textDuring: String, resultDurationMs: Int = 2000, block: suspend () -> String
     ): String {
         val message = showSnackDuring(text = textDuring) { block() }
-        if (resultDurationMs > 0)
-            showOrUpdateSnack(SnackConf(text = message, duration = resultDurationMs))
+        if (resultDurationMs > 0) showOrUpdateSnack(
+            SnackConf(
+                text = message,
+                duration = resultDurationMs
+            )
+        )
         return message
     }
 }
@@ -117,18 +123,15 @@ fun SnackBar(state: SnackState, dispatcher: SnackDispatcher) {
     Column(
         Modifier
             .fillMaxHeight()
-            .padding(3.dp),
-        verticalArrangement = Arrangement.Bottom
+            .padding(3.dp), verticalArrangement = Arrangement.Bottom
     ) {
         allSnacks.forEach { snack ->
             key(snack.id) {
                 SnackItem(
-                    snack = snack,
-                    onDismiss = { id ->
+                    snack = snack, onDismiss = { id ->
                         state.removeSnack(id)
                         dispatcher.removeSnack(id)
-                    }
-                )
+                    })
             }
         }
     }
@@ -147,27 +150,37 @@ private fun SnackItem(snack: SnackConf, onDismiss: (String) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(3.dp),
-        contentAlignment = Alignment.Center
+            .padding(3.dp), contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .background(Color.Black)
-                .padding(15.dp, 5.dp),
+                .padding(15.dp, 10.dp),
             contentAlignment = Alignment.Center
         ) {
             if (snack.text != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = snack.text, color = Color.White)
+                    Text(
+                        text = snack.text, color = Color.White, modifier = Modifier.weight(
+                            1f, fill = false
+                        )
+                    )
 
                     if (!snack.actions.isNullOrEmpty()) {
                         snack.actions.forEach { action ->
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = action.first,
+                                text = action.first.uppercase(),
                                 color = Color.White,
-                                modifier = Modifier.noRippleClickable { action.second() }
-                            )
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color.White,
+                                        shape = RoundedCornerShape(4.dp)
+                                    )
+                                    .noRippleClickable { action.second() }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp))
                         }
                     }
                 }
@@ -175,5 +188,45 @@ private fun SnackItem(snack: SnackConf, onDismiss: (String) -> Unit) {
                 snack.content?.invoke()
             }
         }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFFFFFFF, name = "E-ink SnackItems")
+@Composable
+private fun SnackItemPreview() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // 1. Standard simple text message
+        SnackItem(
+            snack = SnackConf(
+                id = "1", text = "Document saved successfully.", actions = null
+            ), onDismiss = {})
+
+        // 2. Short message with a single action button
+        SnackItem(
+            snack = SnackConf(
+                id = "2",
+                text = "Sync failed.",
+                actions = listOf(Pair("Retry") { /* do nothing in preview */ })
+            ), onDismiss = {})
+
+        // 3. Long text to test the weight(1f, fill = false) wrapping
+        SnackItem(
+            snack = SnackConf(
+                id = "3",
+                text = "This is a very long error message that should wrap to the next line nicely without pushing the action button off the screen.",
+                actions = listOf(Pair("Dismiss") { })
+            ), onDismiss = {})
+
+        // 4. Multiple actions
+        SnackItem(
+            snack = SnackConf(
+                id = "4",
+                text = "Delete this page?",
+                actions = listOf(Pair("Cancel") { }, Pair("Delete") { })), onDismiss = {})
     }
 }
