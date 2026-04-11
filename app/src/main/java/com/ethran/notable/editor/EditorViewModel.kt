@@ -465,7 +465,6 @@ class EditorViewModel @Inject constructor(
         this.bookId = bookId
 
         val page = appRepository.pageRepository.getById(pageId)
-        fixNotebook(bookId, pageId)
 
         if (page == null) {
             snackDispatcher.showOrUpdateSnack(
@@ -474,6 +473,7 @@ class EditorViewModel @Inject constructor(
                     duration = 3000
                 )
             )
+            fixNotebook(bookId, pageId)
             return
         }
         val book = bookId?.let { appRepository.bookRepository.getById(it) }
