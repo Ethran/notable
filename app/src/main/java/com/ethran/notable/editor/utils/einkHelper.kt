@@ -327,7 +327,7 @@ fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelp
 fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
     if(touchHelper == null)
     {
-        log.e("touchHelper is null")
+        log.w("touchHelper is null")
         return
     }
     touchHelper.isRawDrawingRenderEnabled = false
