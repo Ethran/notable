@@ -4,12 +4,10 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.WorkerThread
 import com.ethran.notable.data.db.BookRepository
-import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.Notebook
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.PageWithData
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
@@ -17,18 +15,6 @@ import com.ethran.notable.data.model.BackgroundType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
 import javax.inject.Inject
-
-
-/**
- * A standardized data structure representing a page and its content,
- * as parsed from an import file. This is used to pass data from a
- * file parser to the ImportEngine.
- */
-data class PageContent(
-    val page: Page,
-    val strokes: List<Stroke>,
-    val images: List<Image>
-)
 
 
 /**
@@ -83,8 +69,9 @@ class ImportEngine @Inject constructor(
     private val appEventBus: AppEventBus
 ) {
     private val log = ShipBook.getLogger("ImportEngine")
+
     @Inject
-    lateinit var xoppFile : XoppFile
+    lateinit var xoppFile: XoppFile
 
     /**
      * Imports a notebook from the given URI. It recognizes the file type and
@@ -197,7 +184,7 @@ class ImportEngine @Inject constructor(
     }
 
 
-    private fun merge(fileData: PageContent, options: ImportOptions) {
+    private fun merge(fileData: PageWithData, options: ImportOptions) {
         require(options.saveToBookId != null) { "saveToBookId cannot be null when merging" }
         require(options.conflictStrategy != null) { "conflictStrategy cannot be null when merging" }
         log.d("Conflict detected. Strategy: ${options.conflictStrategy}")

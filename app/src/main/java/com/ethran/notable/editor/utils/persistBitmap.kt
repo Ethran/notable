@@ -29,11 +29,10 @@ private val log = ShipBook.getLogger("bitmapUtils")
 class Provider : FileProvider(R.xml.file_paths)
 
 private const val EQUALITY_THRESHOLD = 0.01f
-private const val THUMBNAIL_WIDTH = 500
+const val THUMBNAIL_WIDTH = 500
 private const val THUMBNAIL_QUALITY = 60
 private const val PREVIEW_QUALITY = 90
 
-fun getThumbnailTargetWidthPx(): Int = THUMBNAIL_WIDTH
 
 fun getThumbnailFile(context: Context, pageID: String): File =
     File(context.filesDir, "pages/previews/thumbs/$pageID")

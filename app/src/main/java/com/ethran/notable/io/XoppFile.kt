@@ -18,6 +18,7 @@ import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.data.db.PageWithData
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.events.AppEvent
@@ -291,7 +292,7 @@ class XoppFile @Inject constructor(
      * @param context The application context.
      * @param uri The URI of the `.xopp` file to import.
      */
-    suspend fun importBook(uri: Uri, savePageToDatabase: suspend (PageContent) -> Unit) {
+    suspend fun importBook(uri: Uri, savePageToDatabase: suspend (PageWithData) -> Unit) {
         log.v("Importing book from $uri")
         ensureNotMainThread("xoppImportBook")
         val inputStream = context.contentResolver.openInputStream(uri) ?: return
@@ -306,7 +307,7 @@ class XoppFile @Inject constructor(
             val page = Page()
             val strokes = parseStrokes(pageElement, page)
             val images = parseImages(pageElement, page)
-            savePageToDatabase(PageContent(page, strokes, images))
+            savePageToDatabase(PageWithData(page, strokes, images))
         }
         log.i("Successfully imported book with ${pages.length} pages.")
     }

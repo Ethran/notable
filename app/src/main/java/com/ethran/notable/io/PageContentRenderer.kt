@@ -9,10 +9,8 @@ import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.Image
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.PageWithData
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.Native
@@ -38,11 +36,6 @@ class PageContentRenderer @Inject constructor(
     private val pageRepo: PageRepository,
     private val appRepository: AppRepository
 ) {
-    data class PageContent(
-        val page: Page,
-        val strokes: List<Stroke>,
-        val images: List<Image>
-    )
 
     suspend fun renderPageBitmap(pageId: String, target: RenderTarget): Bitmap {
         ensureNotMainThread("PageContentRenderer")
@@ -70,12 +63,10 @@ class PageContentRenderer @Inject constructor(
         val scale: Float
     )
 
-    suspend fun loadPageContent(pageId: String): PageContent = withContext(Dispatchers.IO) {
-        val pageWithData = pageRepo.getWithDataById(pageId)
-        PageContent(pageWithData.page, pageWithData.strokes, pageWithData.images)
+    suspend fun loadPageContent(pageId: String): PageWithData = withContext(Dispatchers.IO) {
+        pageRepo.getWithDataById(pageId)
     }
-
-    suspend fun resolveExportBackgroundType(data: PageContent): BackgroundType {
+    suspend fun resolveExportBackgroundType(data: PageWithData): BackgroundType {
         return data.page.notebookId?.let { bookId ->
             val pageNumber = withContext(Dispatchers.IO) {
                 appRepository.getPageNumber(bookId, data.page.id)
@@ -86,7 +77,7 @@ class PageContentRenderer @Inject constructor(
 
     suspend fun drawPage(
         canvas: Canvas,
-        data: PageContent,
+        data: PageWithData,
         scroll: Offset,
         scaleFactor: Float,
         backgroundType: BackgroundType
@@ -108,7 +99,7 @@ class PageContentRenderer @Inject constructor(
     }
 
     // Returns (width, height)
-    fun computeContentDimensions(data: PageContent): Pair<Int, Int> {
+    fun computeContentDimensions(data: PageWithData): Pair<Int, Int> {
         if (data.strokes.isEmpty() && data.images.isEmpty()) {
             return SCREEN_WIDTH to SCREEN_HEIGHT
         }
@@ -119,7 +110,7 @@ class PageContentRenderer @Inject constructor(
         val imageRight = data.images.maxOfOrNull { it.x + it.width } ?: 0
 
         val rawHeight = maxOf(strokeBottom, imageBottom) +
-            if (GlobalAppSettings.current.visualizePdfPagination) 0 else 50
+                if (GlobalAppSettings.current.visualizePdfPagination) 0 else 50
         val rawWidth = maxOf(strokeRight, imageRight) + 50
 
         val height = rawHeight.coerceAtLeast(SCREEN_HEIGHT)

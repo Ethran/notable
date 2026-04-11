@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.annotation.WorkerThread
 import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.db.PageWithData
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.ShipBook
@@ -46,7 +47,7 @@ fun handleFileSaving(
 suspend fun importPdf(
     fileToSave: File,
     options: ImportOptions,
-    savePageToDatabase: suspend (PageContent) -> Unit
+    savePageToDatabase: suspend (PageWithData) -> Unit
 ): String {
     log.v("Importing PDF from")
 
@@ -59,7 +60,7 @@ suspend fun importPdf(
             backgroundType = if (options.linkToExternalFile) BackgroundType.AutoPdf.key
             else BackgroundType.Pdf(i).key
         )
-        savePageToDatabase(PageContent(page, emptyList(), emptyList()))
+        savePageToDatabase(PageWithData(page, emptyList(), emptyList()))
     }
     return "Imported ${fileToSave.name}"
 }

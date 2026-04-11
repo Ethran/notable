@@ -41,6 +41,7 @@ class ThumbnailBackfillQueue @Inject constructor(
     private var lastUpdateMs = 0L
 
     init {
+        // listen for thumbnail generation requests
         applicationScope.launch(ioDispatcher) {
             for (pageId in queue) {
                 processOne(pageId)
