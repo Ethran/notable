@@ -3,13 +3,16 @@ package com.ethran.notable.editor.state
 import android.graphics.Rect
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.strokeBounds
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.logCallStack
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
 
 
@@ -35,7 +38,10 @@ sealed class HistoryBusActions {
     data class MoveHistory(val type: UndoRedoType) : HistoryBusActions()
 }
 
-class History(pageView: PageView) {
+class History @AssistedInject constructor(
+    @Assisted private val pageView: PageView,
+    private val appEventBus: AppEventBus
+) {
     private var undoList: OperationList = mutableListOf()
     private var redoList: OperationList = mutableListOf()
     private val pageModel = pageView
@@ -55,12 +61,11 @@ class History(pageView: PageView) {
                     //moved to refresh after drawing
                     CanvasEventBus.refreshUi.emit(Unit)
                 } else {
-                    SnackState.globalSnackFlow.emit(
-                        SnackConf(
-                            text = "Nothing to undo/redo",
-                            duration = 3000,
-                        )
-                    )
+                    val message = when (actions.type) {
+                        UndoRedoType.Undo -> "Nothing to undo"
+                        UndoRedoType.Redo -> "Nothing to redo"
+                    }
+                    appEventBus.emit(AppEvent.ActionHint(message, 3000))
                 }
             }
 
@@ -145,5 +150,10 @@ class History(pageView: PageView) {
         undoList.add(operations)
         if (undoList.size > 5) undoList.removeAt(0)
         redoList.clear()
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(pageView: PageView): History
     }
 }

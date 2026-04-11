@@ -16,9 +16,7 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.editor.state.PlacementMode
-import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -192,7 +190,6 @@ fun selectImage(
  *
  * @param scope The `CoroutineScope` used to perform asynchronous operations, such as UI refresh.
  * @param page The `PageView` object representing the current page, including its strokes and dimensions.
- * @param selectionState The `SelectionState` object storing the current state of the selection.
  * @param points A list of `SimplePointF` objects defining the user's selection path in page coordinates.
  * points is in page coordinates
  */
@@ -265,7 +262,7 @@ fun handleSelect(
 /**
  * handles selection, and decide if we should exit the animation mode
  */
-suspend fun selectRectangle(
+fun selectRectangle(
     page: PageView,
     coroutineScope: CoroutineScope,
     viewModel: EditorViewModel,
@@ -289,14 +286,14 @@ suspend fun selectRectangle(
             )
         } else {
             setAnimationMode(false)
-            SnackState.globalSnackFlow.emit(
+            viewModel.snackDispatcher.showOrUpdateSnack(
                 SnackConf(
                     text = "There isn't anything.",
                     duration = 3000,
                 )
             )
         }
-    } else SnackState.globalSnackFlow.emit(
+    } else viewModel.snackDispatcher.showOrUpdateSnack( // Show or update!!
         SnackConf(
             text = "Page is empty!",
             duration = 3000,

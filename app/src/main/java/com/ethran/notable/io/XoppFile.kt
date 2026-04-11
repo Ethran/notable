@@ -20,9 +20,11 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.ensureImagesFolder
 import com.ethran.notable.editor.utils.Pen
-import com.ethran.notable.ui.showHint
+
 import com.ethran.notable.utils.ensureNotMainThread
 import com.onyx.android.sdk.api.device.epd.EpdController
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -55,7 +57,8 @@ private const val PRESSURE_FACTOR = 0.5f
 class XoppFile @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val pageRepo: PageRepository,
-    private val bookRepo: BookRepository
+    private val bookRepo: BookRepository,
+    private val appEventBus: AppEventBus
 ) {
     private val log = ShipBook.getLogger("XoppFile")
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
@@ -165,7 +168,7 @@ class XoppFile @Inject constructor(
 
             val uri = image.uri
             if (uri.isNullOrBlank()) {
-                showHint("Image cannot be loaded.")
+                appEventBus.tryEmit(AppEvent.ActionHint("Image cannot be loaded."))
                 continue
             }
 
@@ -185,7 +188,7 @@ class XoppFile @Inject constructor(
             writer.write("</image>\n")
 
             if (!imageWasWritten) {
-                showHint("Image cannot be loaded.")
+                appEventBus.tryEmit(AppEvent.ActionHint("Image cannot be loaded."))
             }
         }
 
@@ -266,6 +269,7 @@ class XoppFile @Inject constructor(
             false
         }
     }
+
 
     private fun escapeXml(value: String): String = buildString(value.length) {
         value.forEach { ch ->

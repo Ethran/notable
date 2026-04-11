@@ -2,8 +2,6 @@ package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
 import android.net.Uri
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
@@ -88,12 +86,4 @@ object CanvasEventBus {
 
     }
 
-    suspend fun waitForDrawingWithSnack() {
-        if (drawingInProgress.isLocked) {
-            val snack = SnackConf(text = "Waiting for drawing to finish…", duration = 60000)
-            SnackState.globalSnackFlow.emit(snack)
-            waitForDrawing()
-            SnackState.cancelGlobalSnack.emit(snack.id)
-        }
-    }
 }

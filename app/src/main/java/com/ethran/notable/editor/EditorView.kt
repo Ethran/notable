@@ -18,7 +18,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.ClipboardStore
-import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
@@ -53,7 +52,6 @@ object EditorDestination : NavigationDestination {
         return "$route/$pageId" + if (bookId != null) "?$BOOK_ID_ARG=$bookId" else ""
     }
 }
-
 
 
 @Composable
@@ -104,9 +102,7 @@ fun EditorView(
             )
         }
 
-        val history = remember {
-            History(page)
-        }
+        val history = remember(page) { viewModel.createHistory(page) }
 
         val editorControlTower = remember {
             EditorControlTower(
@@ -161,7 +157,12 @@ fun EditorView(
                     CanvasCommand.ResetView -> editorControlTower.resetZoomAndScroll()
                     CanvasCommand.ClearAllStrokes -> {
                         CanvasEventBus.clearPageSignal.emit(Unit)
-                        snackManager.displaySnack(SnackConf(text = "Cleared all strokes"))
+                        snackManager.displaySnack(
+                            SnackConf(
+                                text = "Cleared all strokes",
+                                duration = 2000
+                            )
+                        )
                     }
 
                     CanvasCommand.RefreshCanvas -> {

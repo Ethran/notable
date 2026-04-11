@@ -31,6 +31,7 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.editor.ui.toolbar.ToolbarButton
 import com.ethran.notable.io.ThumbnailBackfillQueue
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.viewmodels.QuickNavUiState
 import com.ethran.notable.ui.viewmodels.QuickNavViewModel
@@ -46,6 +47,7 @@ private val logQuickNav = ShipBook.getLogger("QuickNav")
 @InstallIn(SingletonComponent::class)
 interface QuickNavEntryPoint {
     fun thumbnailBackfillQueue(): ThumbnailBackfillQueue
+    fun snackDispatcher(): SnackDispatcher
 }
 
 
@@ -60,18 +62,20 @@ fun QuickNav(
     goToFolder: (String?) -> Unit,
 ) {
     val context = LocalContext.current
-    val thumbnailBackfillQueue = remember(context) {
-        EntryPoints.get(
-            context.applicationContext,
-            QuickNavEntryPoint::class.java
-        ).thumbnailBackfillQueue()
+    val entryPoint = remember(context) {
+        EntryPoints.get(context.applicationContext, QuickNavEntryPoint::class.java)
     }
+    val thumbnailBackfillQueue = entryPoint.thumbnailBackfillQueue()
 
     // Provide the ViewModel using a custom Factory to inject appRepository
     val viewModel: QuickNavViewModel = viewModel(factory = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return QuickNavViewModel(appRepository, thumbnailBackfillQueue) as T
+            return QuickNavViewModel(
+                appRepository = appRepository,
+                thumbnailBackfillQueue = thumbnailBackfillQueue,
+                snackDispatcher = entryPoint.snackDispatcher()
+            ) as T
         }
     })
 

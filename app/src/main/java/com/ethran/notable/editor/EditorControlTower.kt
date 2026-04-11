@@ -14,7 +14,6 @@ import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
-import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -226,7 +225,7 @@ class EditorControlTower(
 
     fun changeSizeOfSelection(scale: Int) {
         if (!viewModel.selectionState.selectedImages.isNullOrEmpty())
-            viewModel.selectionState.resizeImages(scale, scope, page)
+            viewModel.selectionState.resizeImages(scale, page)
         if (!viewModel.selectionState.selectedStrokes.isNullOrEmpty())
             viewModel.selectionState.resizeStrokes(scale, scope, page)
         // Emit a refresh signal to update UI
@@ -245,7 +244,7 @@ class EditorControlTower(
     fun cutSelectionToClipboard(context: Context) {
         clipboardStore.set(viewModel.selectionState.selectionToClipboard(page.scroll, context))
         deleteSelection()
-        showHint("Content cut to clipboard", scope)
+        showHint("Content cut to clipboard")
     }
 
     fun copySelectionToClipboard(context: Context) {
@@ -297,6 +296,8 @@ class EditorControlTower(
         )
         viewModel.selectionState.placementMode = PlacementMode.Paste
 
-        showHint("Pasted content from clipboard", scope)
+        showHint("Pasted content from clipboard")
     }
+
+    fun showHint(text: String) = viewModel.showHint(text)
 }

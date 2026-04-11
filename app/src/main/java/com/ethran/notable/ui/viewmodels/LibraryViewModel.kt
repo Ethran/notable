@@ -17,8 +17,9 @@ import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
 import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.isLatestVersion
+import com.ethran.notable.data.events.AppEventBus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -53,10 +54,12 @@ private data class LibraryDatabaseState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     val appRepository: AppRepository,
+    private val appEventBus: AppEventBus,
     val importEngine: ImportEngine,
     val exportEngine: ExportEngine,
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     val pageDataManager: PageDataManager,
+    private val snackDispatcher: SnackDispatcher,
     @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
 
@@ -107,7 +110,7 @@ class LibraryViewModel @Inject constructor(
     init {
         // Run network/heavy checks in the background
         viewModelScope.launch(Dispatchers.IO) {
-            _isLatestVersion.value = isLatestVersion(context, true)
+            _isLatestVersion.value = isLatestVersion(context, appEventBus, true)
         }
     }
 
@@ -176,16 +179,16 @@ class LibraryViewModel @Inject constructor(
                 if (copy) "Importing PDF background (copy)" else "Setting up observer for PDF"
 
             _isImporting.value = true
-            SnackState.globalSnackFlow.tryEmit(SnackConf(text = snackText, duration = 2000))
+            snackDispatcher.showOrUpdateSnack(SnackConf(text = snackText, duration = 2000))
 
             try {
                 // Ideally, ImportEngine should be injected via Hilt rather than instantiated here
                 importEngine.import(
                     uri, ImportOptions(folderId = _folderId.value, linkToExternalFile = !copy)
                 )
-                SnackState.globalSnackFlow.tryEmit(SnackConf(text = "PDF Import Successful"))
+                snackDispatcher.showOrUpdateSnack(SnackConf(text = "PDF Import Successful"))
             } catch (e: Exception) {
-                SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Import failed: ${e.message}"))
+                snackDispatcher.showOrUpdateSnack(SnackConf(text = "Import failed: ${e.message}"))
             } finally {
                 _isImporting.value = false
             }
@@ -195,7 +198,7 @@ class LibraryViewModel @Inject constructor(
     fun onXoppFile(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             _isImporting.value = true
-            SnackState.globalSnackFlow.tryEmit(
+            snackDispatcher.showOrUpdateSnack(
                 SnackConf(
                     text = "Importing from xopp file...",
                     duration = 2000
@@ -204,9 +207,9 @@ class LibraryViewModel @Inject constructor(
 
             try {
                 importEngine.import(uri, ImportOptions(folderId = _folderId.value))
-                SnackState.globalSnackFlow.tryEmit(SnackConf(text = "XOPP Import Successful"))
+                snackDispatcher.showOrUpdateSnack(SnackConf(text = "XOPP Import Successful", duration = 3000))
             } catch (e: Exception) {
-                SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Import failed: ${e.message}"))
+                snackDispatcher.showOrUpdateSnack(SnackConf(text = "Import failed: ${e.message}"))
             } finally {
                 _isImporting.value = false
             }

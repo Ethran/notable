@@ -12,6 +12,7 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.utils.isLatestVersion
+import com.ethran.notable.data.events.AppEventBus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ data class GestureRowModel(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val kvProxy: KvProxy,
+    private val appEventBus: AppEventBus,
 ) : ViewModel() {
     companion object {}
 
@@ -46,7 +48,7 @@ class SettingsViewModel @Inject constructor(
      */
     fun checkUpdate(context: Context, force: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val result = isLatestVersion(context, force)
+            val result = isLatestVersion(context, appEventBus, force)
             withContext(Dispatchers.Main) {
                 isLatestVersion = result
             }

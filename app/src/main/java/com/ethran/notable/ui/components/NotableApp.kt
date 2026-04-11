@@ -15,6 +15,7 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.NotableNavHost
 import com.ethran.notable.navigation.rememberNotableAppState
 import com.ethran.notable.ui.SnackBar
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.SnackState
 
 
@@ -22,6 +23,7 @@ import com.ethran.notable.ui.SnackState
 fun NotableApp(
     exportEngine: ExportEngine,
     snackState: SnackState,
+    snackDispatcher: SnackDispatcher,
     appRepository: AppRepository
 ) {
     val appNavState = rememberNotableAppState()
@@ -65,5 +67,5 @@ fun NotableApp(
             .height(1.dp)
             .background(Color.Black)
     )
-    SnackBar(state = snackState)
+    SnackBar(state = snackState, dispatcher = snackDispatcher)
 }

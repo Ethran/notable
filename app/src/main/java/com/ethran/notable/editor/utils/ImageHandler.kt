@@ -11,9 +11,9 @@ import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
-import com.ethran.notable.editor.state.SelectionState
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.io.uriToBitmap
-import com.ethran.notable.ui.showHint
+
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -43,10 +43,13 @@ class ImageHandler(
     private fun handleImage(imageUri: Uri) {
         // Convert the image to a software-backed bitmap
         val imageBitmap = uriToBitmap(context, imageUri)?.asImageBitmap()
-        if (imageBitmap == null) showHint(
-            "There was an error during image processing.", coroutineScope
-        )
-        val softwareBitmap = imageBitmap?.asAndroidBitmap()?.copy(Bitmap.Config.ARGB_8888, true)
+        if (imageBitmap == null) {
+            viewModel.snackDispatcher.showOrUpdateSnack(
+                SnackConf(text = "There was an error during image processing.", duration = 3000)
+            )
+            return
+        }
+        val softwareBitmap = imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
         if (softwareBitmap != null) {
             CanvasEventBus.addImageByUri.value = null
 

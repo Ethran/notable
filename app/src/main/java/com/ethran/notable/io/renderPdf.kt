@@ -9,7 +9,6 @@ import androidx.core.graphics.createBitmap
 import com.artifex.mupdf.fitz.Document
 import com.artifex.mupdf.fitz.Matrix
 import com.artifex.mupdf.fitz.android.AndroidDrawDevice
-import com.ethran.notable.ui.SnackState
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
@@ -116,11 +115,11 @@ fun renderPdfPageMuPdf(
 ): Bitmap? {
     val file = File(path)
     if (!file.exists()) {
-        SnackState.logAndShowError("MuPdf", "MuPdf: File not found: $path")
+        log.e("MuPdf: File not found: $path")
         return null
     }
     if (targetWidthPx <= 0) {
-        SnackState.logAndShowError("MuPdf", "MuPdf: invalid targetWidthPx=$targetWidthPx")
+        log.e("MuPdf: invalid targetWidthPx=$targetWidthPx")
         return null
     }
 
@@ -130,11 +129,7 @@ fun renderPdfPageMuPdf(
         doc = Document.openDocument(file.absolutePath)
         val pageCount = doc.countPages()
         if (pageIndex !in 0 until pageCount) {
-            SnackState.logAndShowError(
-                "MuPdf",
-                "MuPdf: invalid pageIndex=${pageIndex + 1} (count=$pageCount)",
-                Log::w
-            )
+            log.w("MuPdf: invalid pageIndex=${pageIndex + 1} (count=$pageCount)")
             return null
         }
 

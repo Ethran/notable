@@ -10,7 +10,7 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +41,7 @@ data class QuickNavUiState(
 class QuickNavViewModel(
     private val appRepository: AppRepository,
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
+    private val snackDispatcher: SnackDispatcher,
 ) : ViewModel() {
     private val pageRepository = appRepository.pageRepository
     private val bookRepository = appRepository.bookRepository
@@ -162,7 +163,7 @@ class QuickNavViewModel(
 
     fun onReturnClick(quickNavSourcePageId: String?) {
         if (quickNavSourcePageId == null) {
-            SnackState.globalSnackFlow.tryEmit(
+            snackDispatcher.showOrUpdateSnack(
                 SnackConf(text = "Can't go back, no QuickNav source page", duration = 4000)
             )
         } else {
