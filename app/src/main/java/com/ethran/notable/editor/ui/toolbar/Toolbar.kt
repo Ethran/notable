@@ -4,15 +4,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -96,243 +97,281 @@ fun ToolbarContent(
                     .height(BUTTON_SIZE.dp)
                     .fillMaxWidth()
             ) {
-                ToolbarButton(
-                    onSelect = { onAction(ToolbarAction.ToggleToolbar) },
-                    vectorIcon = FeatherIcons.EyeOff,
-                    contentDescription = "close toolbar"
-                )
 
-                VerticalDivider()
+                // Left fixed section: close button
+                Row(
+                ) {
+                    ToolbarButton(
+                        onSelect = { onAction(ToolbarAction.ToggleToolbar) },
+                        vectorIcon = FeatherIcons.EyeOff,
+                        contentDescription = "close toolbar"
+                    )
+                }
+                // Left scrollable section: drawing tools
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    VerticalDivider()
 
-                // Pens
-                PenToolbarButton(
-                    pen = Pen.BALLPEN,
-                    icon = R.drawable.ballpen,
-                    isSelected = isSelected(uiState, Pen.BALLPEN),
-                    onSelect = { onAction(ToolbarAction.ChangePen(Pen.BALLPEN)) },
-                    sizes = SIZES_STROKES_DEFAULT,
-                    penSetting = uiState.penSettings[Pen.BALLPEN.penName] ?: PenSetting(
-                        5f,
-                        android.graphics.Color.BLACK
-                    ),
-                    onChangeSetting = { onAction(ToolbarAction.ChangePenSetting(Pen.BALLPEN, it)) })
-
-                if (!GlobalAppSettings.current.monochromeMode) {
-                    listOf(
-                        Triple(Pen.REDBALLPEN, R.drawable.ballpenred, android.graphics.Color.RED),
-                        Triple(
-                            Pen.BLUEBALLPEN,
-                            R.drawable.ballpenblue,
-                            android.graphics.Color.BLUE
+                    // Pens
+                    PenToolbarButton(
+                        pen = Pen.BALLPEN,
+                        icon = R.drawable.ballpen,
+                        isSelected = isSelected(uiState, Pen.BALLPEN),
+                        onSelect = { onAction(ToolbarAction.ChangePen(Pen.BALLPEN)) },
+                        sizes = SIZES_STROKES_DEFAULT,
+                        penSetting = uiState.penSettings[Pen.BALLPEN.penName] ?: PenSetting(
+                            5f,
+                            android.graphics.Color.BLACK
                         ),
-                        Triple(
-                            Pen.GREENBALLPEN,
-                            R.drawable.ballpengreen,
-                            android.graphics.Color.GREEN
-                        )
-                    ).forEach { (pen, icon, defaultColor) ->
-                        PenToolbarButton(
-                            pen = pen,
-                            icon = icon,
-                            isSelected = isSelected(uiState, pen),
-                            onSelect = { onAction(ToolbarAction.ChangePen(pen)) },
-                            sizes = SIZES_STROKES_DEFAULT,
-                            penSetting = uiState.penSettings[pen.penName] ?: PenSetting(
-                                5f,
-                                defaultColor
+                        onChangeSetting = {
+                            onAction(
+                                ToolbarAction.ChangePenSetting(
+                                    Pen.BALLPEN,
+                                    it
+                                )
+                            )
+                        })
+
+                    if (!GlobalAppSettings.current.monochromeMode) {
+                        listOf(
+                            Triple(
+                                Pen.REDBALLPEN,
+                                R.drawable.ballpenred,
+                                android.graphics.Color.RED
                             ),
-                            onChangeSetting = { onAction(ToolbarAction.ChangePenSetting(pen, it)) },
+                            Triple(
+                                Pen.BLUEBALLPEN,
+                                R.drawable.ballpenblue,
+                                android.graphics.Color.BLUE
+                            ),
+                            Triple(
+                                Pen.GREENBALLPEN,
+                                R.drawable.ballpengreen,
+                                android.graphics.Color.GREEN
+                            )
+                        ).forEach { (pen, icon, defaultColor) ->
+                            PenToolbarButton(
+                                pen = pen,
+                                icon = icon,
+                                isSelected = isSelected(uiState, pen),
+                                onSelect = { onAction(ToolbarAction.ChangePen(pen)) },
+                                sizes = SIZES_STROKES_DEFAULT,
+                                penSetting = uiState.penSettings[pen.penName] ?: PenSetting(
+                                    5f,
+                                    defaultColor
+                                ),
+                                onChangeSetting = {
+                                    onAction(
+                                        ToolbarAction.ChangePenSetting(
+                                            pen,
+                                            it
+                                        )
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    if (GlobalAppSettings.current.neoTools) {
+                        PenToolbarButton(
+                            pen = Pen.PENCIL,
+                            icon = R.drawable.pencil,
+                            isSelected = isSelected(uiState, Pen.PENCIL),
+                            onSelect = { onAction(ToolbarAction.ChangePen(Pen.PENCIL)) },
+                            sizes = SIZES_STROKES_DEFAULT,
+                            penSetting = uiState.penSettings[Pen.PENCIL.penName] ?: PenSetting(
+                                5f,
+                                android.graphics.Color.BLACK
+                            ),
+                            onChangeSetting = {
+                                onAction(
+                                    ToolbarAction.ChangePenSetting(
+                                        Pen.PENCIL,
+                                        it
+                                    )
+                                )
+                            }
+                        )
+
+                        PenToolbarButton(
+                            pen = Pen.BRUSH,
+                            icon = R.drawable.brush,
+                            isSelected = isSelected(uiState, Pen.BRUSH),
+                            onSelect = { onAction(ToolbarAction.ChangePen(Pen.BRUSH)) },
+                            sizes = SIZES_STROKES_DEFAULT,
+                            penSetting = uiState.penSettings[Pen.BRUSH.penName] ?: PenSetting(
+                                5f,
+                                android.graphics.Color.BLACK
+                            ),
+                            onChangeSetting = {
+                                onAction(
+                                    ToolbarAction.ChangePenSetting(
+                                        Pen.BRUSH,
+                                        it
+                                    )
+                                )
+                            }
                         )
                     }
-                }
-
-                if (GlobalAppSettings.current.neoTools) {
                     PenToolbarButton(
-                        pen = Pen.PENCIL,
-                        icon = R.drawable.pencil,
-                        isSelected = isSelected(uiState, Pen.PENCIL),
-                        onSelect = { onAction(ToolbarAction.ChangePen(Pen.PENCIL)) },
+                        pen = Pen.FOUNTAIN,
+                        icon = R.drawable.fountain,
+                        isSelected = isSelected(uiState, Pen.FOUNTAIN),
+                        onSelect = { onAction(ToolbarAction.ChangePen(Pen.FOUNTAIN)) },
                         sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = uiState.penSettings[Pen.PENCIL.penName] ?: PenSetting(
+                        penSetting = uiState.penSettings[Pen.FOUNTAIN.penName] ?: PenSetting(
                             5f,
                             android.graphics.Color.BLACK
                         ),
                         onChangeSetting = {
                             onAction(
                                 ToolbarAction.ChangePenSetting(
-                                    Pen.PENCIL,
+                                    Pen.FOUNTAIN,
                                     it
                                 )
                             )
-                        }
+                        },
                     )
 
+                    LineToolbarButton(
+                        unSelect = { onAction(ToolbarAction.ChangeMode(Mode.Draw)) },
+                        icon = R.drawable.line,
+                        isSelected = uiState.mode == Mode.Line,
+                        onSelect = { onAction(ToolbarAction.ChangeMode(Mode.Line)) },
+                    )
+
+                    VerticalDivider()
+
                     PenToolbarButton(
-                        pen = Pen.BRUSH,
-                        icon = R.drawable.brush,
-                        isSelected = isSelected(uiState, Pen.BRUSH),
-                        onSelect = { onAction(ToolbarAction.ChangePen(Pen.BRUSH)) },
-                        sizes = SIZES_STROKES_DEFAULT,
-                        penSetting = uiState.penSettings[Pen.BRUSH.penName] ?: PenSetting(
-                            5f,
-                            android.graphics.Color.BLACK
+                        pen = Pen.MARKER,
+                        icon = R.drawable.marker,
+                        isSelected = isSelected(uiState, Pen.MARKER),
+                        onSelect = { onAction(ToolbarAction.ChangePen(Pen.MARKER)) },
+                        sizes = SIZES_MARKER_DEFAULT,
+                        penSetting = uiState.penSettings[Pen.MARKER.penName] ?: PenSetting(
+                            40f,
+                            android.graphics.Color.LTGRAY
                         ),
                         onChangeSetting = {
                             onAction(
                                 ToolbarAction.ChangePenSetting(
-                                    Pen.BRUSH,
+                                    Pen.MARKER,
                                     it
                                 )
                             )
                         }
                     )
-                }
-                PenToolbarButton(
-                    pen = Pen.FOUNTAIN,
-                    icon = R.drawable.fountain,
-                    isSelected = isSelected(uiState, Pen.FOUNTAIN),
-                    onSelect = { onAction(ToolbarAction.ChangePen(Pen.FOUNTAIN)) },
-                    sizes = SIZES_STROKES_DEFAULT,
-                    penSetting = uiState.penSettings[Pen.FOUNTAIN.penName] ?: PenSetting(
-                        5f,
-                        android.graphics.Color.BLACK
-                    ),
-                    onChangeSetting = {
-                        onAction(
-                            ToolbarAction.ChangePenSetting(
-                                Pen.FOUNTAIN,
-                                it
+
+                    VerticalDivider()
+
+                    EraserToolbarButton(
+                        isSelected = uiState.mode == Mode.Erase,
+                        onSelect = { onAction(ToolbarAction.ChangeMode(Mode.Erase)) },
+                        value = uiState.eraser,
+                        onChange = { onAction(ToolbarAction.ChangeEraser(it)) },
+                        toggleScribbleToErase = { onAction(ToolbarAction.ToggleScribbleToErase(it)) },
+                        onMenuOpenChange = { onAction(ToolbarAction.UpdateMenuOpenTo(it)) },
+                        isMenuOpen = uiState.isStrokeSelectionOpen
+                    )
+
+                    VerticalDivider()
+
+                    ToolbarButton(
+                        isSelected = uiState.mode == Mode.Select,
+                        onSelect = { onAction(ToolbarAction.ChangeMode(Mode.Select)) },
+                        iconId = R.drawable.lasso,
+                        contentDescription = "lasso"
+                    )
+
+                    VerticalDivider()
+
+                    ToolbarButton(
+                        iconId = R.drawable.image,
+                        contentDescription = "Image picker",
+                        onSelect = { pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }
+                    )
+
+                    VerticalDivider()
+
+                    if (uiState.hasClipboard) {
+                        ToolbarButton(
+                            vectorIcon = FeatherIcons.Clipboard,
+                            contentDescription = "paste",
+                            onSelect = { onAction(ToolbarAction.Paste) }
+                        )
+                        VerticalDivider()
+                    }
+
+                    if (uiState.showResetView) {
+                        ToolbarButton(
+                            vectorIcon = FeatherIcons.RefreshCcw,
+                            contentDescription = "reset zoom and scroll",
+                            onSelect = { onAction(ToolbarAction.ResetView) }
+                        )
+                        VerticalDivider()
+                    }
+                } // end left scrollable Row
+
+
+                // Right fixed section: undo/redo, navigation, menu
+                Row {
+                    VerticalDivider()
+
+                    ToolbarButton(
+                        onSelect = { onAction(ToolbarAction.Undo) },
+                        iconId = R.drawable.undo,
+                        contentDescription = "undo"
+                    )
+                    ToolbarButton(
+                        onSelect = { onAction(ToolbarAction.Redo) },
+                        iconId = R.drawable.redo,
+                        contentDescription = "redo"
+                    )
+
+                    VerticalDivider()
+
+                    if (uiState.notebookId != null) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .height(35.dp)
+                                .padding(horizontal = 10.dp)
+                        ) {
+                            Text(
+                                text = uiState.pageNumberInfo,
+                                fontWeight = FontWeight.Light,
+                                modifier = Modifier.noRippleClickable { onAction(ToolbarAction.NavigateToPages) },
+                                textAlign = TextAlign.Center
                             )
-                        )
-                    },
-                )
-
-                LineToolbarButton(
-                    unSelect = { onAction(ToolbarAction.ChangeMode(Mode.Draw)) },
-                    icon = R.drawable.line,
-                    isSelected = uiState.mode == Mode.Line,
-                    onSelect = { onAction(ToolbarAction.ChangeMode(Mode.Line)) },
-                )
-
-                VerticalDivider()
-
-                PenToolbarButton(
-                    pen = Pen.MARKER,
-                    icon = R.drawable.marker,
-                    isSelected = isSelected(uiState, Pen.MARKER),
-                    onSelect = { onAction(ToolbarAction.ChangePen(Pen.MARKER)) },
-                    sizes = SIZES_MARKER_DEFAULT,
-                    penSetting = uiState.penSettings[Pen.MARKER.penName] ?: PenSetting(
-                        40f,
-                        android.graphics.Color.LTGRAY
-                    ),
-                    onChangeSetting = { onAction(ToolbarAction.ChangePenSetting(Pen.MARKER, it)) }
-                )
-
-                VerticalDivider()
-
-                EraserToolbarButton(
-                    isSelected = uiState.mode == Mode.Erase,
-                    onSelect = { onAction(ToolbarAction.ChangeMode(Mode.Erase)) },
-                    value = uiState.eraser,
-                    onChange = { onAction(ToolbarAction.ChangeEraser(it)) },
-                    toggleScribbleToErase = { onAction(ToolbarAction.ToggleScribbleToErase(it)) },
-                    onMenuOpenChange = { onAction(ToolbarAction.UpdateMenuOpenTo(it)) },
-                    isMenuOpen = uiState.isStrokeSelectionOpen
-                )
-
-                VerticalDivider()
-
-                ToolbarButton(
-                    isSelected = uiState.mode == Mode.Select,
-                    onSelect = { onAction(ToolbarAction.ChangeMode(Mode.Select)) },
-                    iconId = R.drawable.lasso,
-                    contentDescription = "lasso"
-                )
-
-                VerticalDivider()
-
-                ToolbarButton(
-                    iconId = R.drawable.image,
-                    contentDescription = "Image picker",
-                    onSelect = { pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }
-                )
-
-                VerticalDivider()
-
-                if (uiState.hasClipboard) {
-                    ToolbarButton(
-                        vectorIcon = FeatherIcons.Clipboard,
-                        contentDescription = "paste",
-                        onSelect = { onAction(ToolbarAction.Paste) }
-                    )
-                    VerticalDivider()
-                }
-
-                if (uiState.showResetView) {
-                    ToolbarButton(
-                        vectorIcon = FeatherIcons.RefreshCcw,
-                        contentDescription = "reset zoom and scroll",
-                        onSelect = { onAction(ToolbarAction.ResetView) }
-                    )
-                    VerticalDivider()
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                VerticalDivider()
-
-                ToolbarButton(
-                    onSelect = { onAction(ToolbarAction.Undo) },
-                    iconId = R.drawable.undo,
-                    contentDescription = "undo"
-                )
-                ToolbarButton(
-                    onSelect = { onAction(ToolbarAction.Redo) },
-                    iconId = R.drawable.redo,
-                    contentDescription = "redo"
-                )
-
-                VerticalDivider()
-
-                if (uiState.notebookId != null) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .height(35.dp)
-                            .padding(horizontal = 10.dp)
-                    ) {
-                        Text(
-                            text = uiState.pageNumberInfo,
-                            fontWeight = FontWeight.Light,
-                            modifier = Modifier.noRippleClickable { onAction(ToolbarAction.NavigateToPages) },
-                            textAlign = TextAlign.Center
-                        )
+                        }
+                        VerticalDivider()
                     }
-                    VerticalDivider()
-                }
 
-                ToolbarButton(
-                    iconId = R.drawable.home,
-                    contentDescription = "library",
-                    onSelect = { onAction(ToolbarAction.NavigateToHome) }
-                )
-
-                VerticalDivider()
-
-                Column {
                     ToolbarButton(
-                        onSelect = { onAction(ToolbarAction.ToggleMenu) },
-                        iconId = R.drawable.menu,
-                        contentDescription = "menu"
+                        iconId = R.drawable.home,
+                        contentDescription = "library",
+                        onSelect = { onAction(ToolbarAction.NavigateToHome) }
                     )
-                    if (uiState.isMenuOpen) {
-                        ToolbarMenu(
-                            uiState = uiState,
-                            onAction = onAction
+
+                    VerticalDivider()
+
+                    Column {
+                        ToolbarButton(
+                            onSelect = { onAction(ToolbarAction.ToggleMenu) },
+                            iconId = R.drawable.menu,
+                            contentDescription = "menu"
                         )
+                        if (uiState.isMenuOpen) {
+                            ToolbarMenu(
+                                uiState = uiState,
+                                onAction = onAction
+                            )
+                        }
                     }
-                }
+                } // end right fixed Row
             }
 
             Box(
