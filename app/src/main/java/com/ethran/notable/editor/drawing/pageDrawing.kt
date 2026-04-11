@@ -10,6 +10,7 @@ import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.ethran.notable.ui.SnackConf
 import androidx.core.graphics.toRect
 import androidx.core.graphics.withClip
 import androidx.core.net.toUri
@@ -22,7 +23,7 @@ import com.ethran.notable.editor.utils.imageBounds
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.io.uriToBitmap
-import com.ethran.notable.ui.showHint
+
 import io.shipbook.shipbooksdk.ShipBook
 
 private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
@@ -160,8 +161,8 @@ fun drawOnCanvasFromPage(
                 "Permission error: Unable to access image."
             } else {
                 "Failed to load images."
-            }
-            showHint(errorMessage, page.coroutineScope)
+            }//TODO: change it!!!
+            page.snackManager.showOrUpdateSnack(SnackConf(text = errorMessage, duration = 4000))
         }
         try {
             page.strokes.forEach { stroke ->
@@ -174,7 +175,7 @@ fun drawOnCanvasFromPage(
             }
         } catch (e: Exception) {
             pageDrawingLog.e("PageView.kt: Drawing strokes failed: ${e.message}", e)
-            showHint("Error drawing strokes", page.coroutineScope)
+            page.snackManager.showOrUpdateSnack(SnackConf(text = "Error drawing strokes", duration = 4000))
         }
     }
 }

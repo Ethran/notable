@@ -2,7 +2,8 @@ package com.ethran.notable.io
 
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
-import com.ethran.notable.ui.SnackState
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +25,8 @@ import javax.inject.Singleton
 class ThumbnailBackfillQueue @Inject constructor(
     @param:ApplicationScope private val applicationScope: CoroutineScope,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-    private val thumbnailGenerator: ThumbnailGenerator
+    private val thumbnailGenerator: ThumbnailGenerator,
+    private val appEventBus: AppEventBus
 ) {
     private val log = ShipBook.getLogger("ThumbnailBackfillQueue")
     private val queue = Channel<String>(Channel.UNLIMITED)
@@ -36,7 +38,6 @@ class ThumbnailBackfillQueue @Inject constructor(
     private var cycleTotal = 0
     private var cycleDone = 0
 
-    private val progressSnackId = "thumbnail-backfill-progress"
     private var lastUpdateMs = 0L
 
     init {
@@ -111,11 +112,7 @@ class ThumbnailBackfillQueue @Inject constructor(
         if (throttled && now - lastUpdateMs < 300) return
 
         lastUpdateMs = now
-        SnackState.showOrUpdateGlobalProgress(
-            id = progressSnackId,
-            current = cycleDone,
-            total = cycleTotal
-        )
+        appEventBus.tryEmit(AppEvent.PreviewBackfillProgress(current = cycleDone, total = cycleTotal))
     }
 
     private fun finalizeCycleLocked() {
@@ -128,10 +125,7 @@ class ThumbnailBackfillQueue @Inject constructor(
         // Use a small delay to ensure the user sees the 100% state or "Done" state
         applicationScope.launch {
             delay(100)
-            SnackState.finishGlobalProgress(
-                id = progressSnackId,
-                resultText = "Previews ready ($done/$total)"
-            )
+            appEventBus.tryEmit(AppEvent.PreviewBackfillCompleted(current = done, total = total))
         }
     }
 }

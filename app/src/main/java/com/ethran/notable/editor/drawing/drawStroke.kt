@@ -8,7 +8,6 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.strokeToTouchPoints
-import com.ethran.notable.ui.SnackState
 import com.onyx.android.sdk.data.note.ShapeCreateArgs
 import com.onyx.android.sdk.pen.NeoBrushPenWrapper
 import com.onyx.android.sdk.pen.NeoCharcoalPenWrapper
@@ -87,7 +86,7 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
                 NeoCharcoalPenWrapper.drawNormalStroke(arg)
             }
             else -> {
-                SnackState.logAndShowError("drawStroke", "Unknown pen type: ${stroke.pen}")
+                strokeDrawingLogger.e("Unknown pen type: ${stroke.pen}")
             }
         }
     } catch (e: Exception) {

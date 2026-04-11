@@ -20,13 +20,15 @@ import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus.drawingInProgress
+import com.ethran.notable.editor.canvas.CanvasEventBus.waitForDrawing
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
-import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.div
+import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.loadPersistBitmap
 import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
@@ -508,7 +510,7 @@ class PageView(
         log.d("Simple update scroll")
         val delta = (dragDelta / zoomLevel.value)
 
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
 
         scroll =
             Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
@@ -549,7 +551,7 @@ class PageView(
         if (deltaInPage == Offset.Zero) return
 
         // before scrolling, make sure that strokes are drawn.
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
 
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
@@ -631,7 +633,7 @@ class PageView(
 
     suspend fun applyZoomAndRedraw(newZoom: Float) {
         zoomLevel.value = newZoom
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -695,7 +697,7 @@ class PageView(
         }
 
         // Flush pending strokes/background before snapshot-based operations
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
 
         val scaleFactor = newZoom / oldZoom
         val screenW = windowedCanvas.width
@@ -866,5 +868,14 @@ class PageView(
 
     private fun toPageCoordinates(rect: Rect): Rect {
         return rect / zoomLevel.value + scroll
+    }
+
+    private suspend fun waitForDrawingWithSnack() {
+        if (drawingInProgress.isLocked) {
+            snackManager.runWithSnack("Waiting for drawing to finish…") {
+                waitForDrawing()
+                "Drawing finished"
+            }
+        }
     }
 }

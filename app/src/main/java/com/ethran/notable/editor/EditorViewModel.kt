@@ -16,6 +16,7 @@ import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.SelectionState
@@ -26,8 +27,7 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
+import com.ethran.notable.ui.SnackDispatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -162,7 +162,9 @@ class EditorViewModel @Inject constructor(
     val appRepository: AppRepository,
     var editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
-    val pageDataManager: PageDataManager
+    val pageDataManager: PageDataManager,
+    val snackDispatcher: SnackDispatcher,
+    private val historyFactory: History.Factory
 ) : ViewModel() {
     // ---- Toolbar / UI State (single flat flow) ----
     private val _toolbarState = MutableStateFlow(ToolbarUiState())
@@ -221,6 +223,8 @@ class EditorViewModel @Inject constructor(
         }
         page.disposeOldPage()
     }
+
+    fun createHistory(page: PageView): History = historyFactory.create(page)
 
     // --------------------------------------------------------
     // Toolbar Action Dispatch
@@ -347,7 +351,7 @@ class EditorViewModel @Inject constructor(
                 val copiedFile = copyImageToDatabase(context, uri)
                 sendCanvasCommand(CanvasCommand.CopyImageToCanvas(copiedFile.toUri()))
             } catch (e: Exception) {
-                logAndShowError("EditorViewModel", "Image import failed: ${e.message}")
+                snackDispatcher.showOrUpdateSnack(SnackConf(text =  "Image import failed: ${e.message}", duration = 3000))
             }
         }
     }
@@ -357,9 +361,9 @@ class EditorViewModel @Inject constructor(
             try {
                 val result = exportEngine.export(target, format)
                 val snack = SnackConf(text = result, duration = 4000)
-                SnackState.globalSnackFlow.emit(snack)
+                snackDispatcher.showOrUpdateSnack(snack)
             } catch (e: Exception) {
-                logAndShowError("EditorViewModel", "Export failed: ${e.message}")
+                snackDispatcher.showOrUpdateSnack(com.ethran.notable.ui.SnackConf(text =  "Export failed: ${e.message}", duration = 3000))
             }
         }
     }
@@ -452,10 +456,7 @@ class EditorViewModel @Inject constructor(
 
         val page = appRepository.pageRepository.getById(pageId)
         if (page == null) {
-            logAndShowError(
-                reason = "EditorViewModel",
-                message = "Could not find page",
-            )
+            snackDispatcher.showOrUpdateSnack(SnackConf(text =  "Could not find page", duration = 3000))
             fixNotebook(bookId, pageId)
             return
         }
@@ -575,7 +576,7 @@ class EditorViewModel @Inject constructor(
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
-            SnackState.globalSnackFlow.emit(snack)
+            snackDispatcher.showOrUpdateSnack(snack)
         }
     }
 

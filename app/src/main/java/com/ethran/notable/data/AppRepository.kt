@@ -10,12 +10,16 @@ import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
+import io.shipbook.shipbooksdk.ShipBook
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private val log = ShipBook.getLogger("appRepository")
 
 @Singleton
 class AppRepository @Inject constructor(
@@ -132,10 +136,8 @@ class AppRepository @Inject constructor(
         try {
             pageRepository.create(page)
         } catch (e: android.database.sqlite.SQLiteConstraintException) {
-            logAndShowError(
-                "createNewPAge",
-                "failed to create page ${e.message}"
-            )
+            log.e("Failed to create page: ${e.message}")
+            // it should return something like a result
             return null
         }
         return page.id
@@ -150,10 +152,7 @@ class AppRepository @Inject constructor(
             bookRepository.addPage(notebookId, page.id, index)
             return page.id
         } catch (e: Exception) {
-            logAndShowError(
-                "newPageInBook",
-                "failed to create page  ${e.message}"
-            )
+            log.e("Failed to create page in book: ${e.message}")
             return null
         }
     }

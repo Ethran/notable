@@ -21,7 +21,6 @@ import com.ethran.notable.editor.utils.offsetImage
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.io.copyBitmapToClipboard
-import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import java.util.Date
@@ -29,6 +28,18 @@ import java.util.UUID
 
 private val log = ShipBook.getLogger("SelectionState")
 
+/**
+ * Represents the current state of a selection within the editor, managing the lifecycle and
+ * transformations of selected items such as strokes and images.
+ *
+ * This class tracks the geometric boundaries, visual representation (bitmap), and
+ * spatial offsets of the selected content. It provides methods for manipulating
+ * the selection, including translation (moving), resizing, duplication, and
+ * integration with the undo/redo history system.
+ *
+ * All coordinate-based properties within this class are intended to be in page coordinates
+ * unless otherwise specified.
+ */
 class SelectionState {
     // all coordinates should be in page coordinates
     var firstPageCut by mutableStateOf<List<SimplePointF>?>(null)
@@ -66,7 +77,7 @@ class SelectionState {
         return selectedImages?.count() == 1 && selectedStrokes.isNullOrEmpty()
     }
 
-    fun resizeImages(scale: Int, scope: CoroutineScope, page: PageView) {
+    fun resizeImages(scale: Int, page: PageView) {
         log.v("resizeImages: scale=$scale")
         val selectedImagesCopy = selectedImages?.map { image ->
             image.copy(
@@ -75,11 +86,8 @@ class SelectionState {
             )
         }
 
-        // Ensure selected images are not null or empty
-        if (selectedImagesCopy.isNullOrEmpty()) {
-            showHint("For now, strokes cannot be resized", scope)
-            return
-        }
+        if (selectedImagesCopy.isNullOrEmpty()) return
+                //TODO: send to appEventBus
 
         selectedImages = selectedImagesCopy
         // Adjust displacement offset by half the size change

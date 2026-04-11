@@ -7,7 +7,6 @@ import androidx.annotation.WorkerThread
 import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.ensureNotMainThread
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
@@ -37,10 +36,7 @@ fun handleFileSaving(
     else {
         val fileName = getFilePathFromUri(context, uri)
         if (fileName == null) {
-            SnackState.logAndShowError(
-                "copyFileToDatabase",
-                "Couldn't determine file path. Does the app have permission to read external storage?"
-            )
+            log.e("Couldn't determine file path. Missing permission for external storage?")
             return null
         } else File(fileName)
     }

@@ -11,8 +11,9 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokeRepository
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
 import javax.inject.Inject
@@ -74,11 +75,12 @@ data class ImportOptions(
  * It is agnostic of the UI and operates on URIs provided to it.
  */
 class ImportEngine @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val pageRepo: PageRepository,
     private val bookRepo: BookRepository,
     private val strokeRepo: StrokeRepository,
-    private val imageRepo: ImageRepository
+    private val imageRepo: ImageRepository,
+    private val appEventBus: AppEventBus
 ) {
     private val log = ShipBook.getLogger("ImportEngine")
     @Inject
@@ -145,8 +147,10 @@ class ImportEngine @Inject constructor(
                 imageRepo.create(pageData.images)
                 bookRepo.addPage(book.id, pageData.page.id)
             } catch (e: Exception) {
-                logAndShowError(
-                    "importBook", "failed import book  ${e.message}"
+                appEventBus.emit(
+                    AppEvent.LogMessage(
+                        "importBook", "failed import book  ${e.message}"
+                    )
                 )
             }
 
@@ -181,8 +185,10 @@ class ImportEngine @Inject constructor(
                     imageRepo.create(pageData.images)
                 bookRepo.addPage(book.id, pageData.page.id)
             } catch (e: Exception) {
-                logAndShowError(
-                    "importBook", "failed import book  ${e.message}"
+                appEventBus.emit(
+                    AppEvent.LogMessage(
+                        "importBook", "failed import book  ${e.message}"
+                    )
                 )
             }
 
