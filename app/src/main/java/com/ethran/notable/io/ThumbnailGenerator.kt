@@ -125,6 +125,7 @@ class ThumbnailGenerator @Inject constructor(
     }
 
     private suspend fun isThumbnailStale(page: Page): Boolean = withContext(ioDispatcher) {
+        return@withContext true
         val thumbFile = getThumbnailFile(context, page.id)
         if (!thumbFile.exists()) return@withContext true
 

@@ -4,7 +4,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.res.imageResource
 import androidx.core.graphics.createBitmap
+import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
@@ -50,8 +54,7 @@ class PageContentRenderer @Inject constructor(
                     canvas = Canvas(bitmap),
                     data = data,
                     scroll = Offset.Zero,
-                    scaleFactor = size.scale,
-                    backgroundType = data.page.getBackgroundType()
+                    scaleFactor = size.scale
                 )
             }
         }
@@ -66,6 +69,7 @@ class PageContentRenderer @Inject constructor(
     suspend fun loadPageContent(pageId: String): PageWithData = withContext(Dispatchers.IO) {
         pageRepo.getWithDataById(pageId)
     }
+
     suspend fun resolveExportBackgroundType(data: PageWithData): BackgroundType {
         return data.page.notebookId?.let { bookId ->
             val pageNumber = withContext(Dispatchers.IO) {
@@ -79,22 +83,47 @@ class PageContentRenderer @Inject constructor(
         canvas: Canvas,
         data: PageWithData,
         scroll: Offset,
-        scaleFactor: Float,
-        backgroundType: BackgroundType
+        scaleFactor: Float
     ) {
+        val resolvedBackgroundType = resolveExportBackgroundType(data)
+
+        val pageNumber = if (resolvedBackgroundType is BackgroundType.Pdf) {
+            resolvedBackgroundType.page
+        } else {
+            -1
+        }
+
+        val bgImage: Bitmap? = withContext(Dispatchers.IO) {
+            when (resolvedBackgroundType) {
+                BackgroundType.Image, BackgroundType.CoverImage, BackgroundType.AutoPdf,
+                is BackgroundType.Pdf, BackgroundType.ImageRepeating -> {
+                    if (resolvedBackgroundType is BackgroundType.Image && data.page.background == "iris") {
+                        val resId = R.drawable.iris
+                        ImageBitmap.imageResource(context.resources, resId).asAndroidBitmap()
+                    } else {
+                        loadBackgroundBitmap(data.page.background, pageNumber, scaleFactor)
+                    }
+                }
+
+                Native -> null
+            }
+        }
+
         withContext(Dispatchers.Default) {
             canvas.scale(scaleFactor, scaleFactor)
-            val scaledScroll = scroll / scaleFactor
-//            drawBg(
-//                context = context,
-//                canvas = canvas,
-//                backgroundType = backgroundType,
-//                background = data.page.background,
-//                scroll = scaledScroll,
-//                scale = scaleFactor
-//            )
-            data.images.forEach { drawImage(context, canvas, it, -scaledScroll) }
-            data.strokes.forEach { drawStroke(canvas, it, -scaledScroll) }
+
+            drawBg(
+                canvas = canvas,
+                backgroundType = resolvedBackgroundType,
+                background = data.page.background,
+                scroll = scroll,
+                resourceBitmap = bgImage,
+                scale = scaleFactor,
+                repeat = resolvedBackgroundType is BackgroundType.ImageRepeating
+            )
+
+            data.images.forEach { drawImage(context, canvas, it, -scroll) }
+            data.strokes.forEach { drawStroke(canvas, it, -scroll) }
         }
     }
 
@@ -144,5 +173,3 @@ class PageContentRenderer @Inject constructor(
         }
     }
 }
-
-
