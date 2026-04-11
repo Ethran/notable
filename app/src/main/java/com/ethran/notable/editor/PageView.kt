@@ -36,7 +36,9 @@ import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.utils.onError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -501,7 +503,14 @@ class PageView(
             pageArea = pageArea,
             ignoredStrokeIds = ignoredStrokeIds,
             ignoredImageIds = ignoredImageIds,
-        )
+        ).onError {
+            snackManager.showOrUpdateSnack(
+                SnackConf(
+                    text = "Error during drawing page area: ${it.userMessage}",
+                    duration = 3000
+                )
+            )
+        }
     }
 
     suspend fun simpleUpdateScroll(dragDelta: Offset) {
