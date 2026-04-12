@@ -6,7 +6,7 @@ import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
-import com.ethran.notable.editor.utils.loadPreview
+import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.selectRectangle
 import com.onyx.android.sdk.extension.isNull
@@ -288,7 +288,7 @@ class CanvasObserverRegistry(
                 val pageUpdatedAtMs = pageDataManager.getPageUpdatedAt(pageId)
 
                 val previewBitmap = withContext(Dispatchers.IO) {
-                    loadPreview(
+                    loadPagePreviewOrFallback(
                         context = drawCanvas.context,
                         pageIdToLoad = pageId,
                         expectedWidth = page.viewWidth,

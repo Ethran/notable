@@ -22,8 +22,8 @@ import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.utils.persistBitmapFull
-import com.ethran.notable.editor.utils.persistBitmapThumbnail
+import com.ethran.notable.editor.utils.savePageFull
+import com.ethran.notable.editor.utils.savePageThumbnail
 import com.ethran.notable.io.IN_IGNORED
 import com.ethran.notable.io.fileObserverEventNames
 import com.ethran.notable.io.loadBackgroundBitmap
@@ -406,14 +406,14 @@ class PageDataManager @Inject constructor(
                     }
 
                     scope.launch(Dispatchers.IO) {
-                        persistBitmapFull(
+                        savePageFull(
                             context,
                             bitmap,
                             pageId,
                             currentScroll,
                             currentZoomLevel
                         )
-                        persistBitmapThumbnail(context, bitmap, pageId)
+                        savePageThumbnail(context, bitmap, pageId)
                     }
                 }
             }

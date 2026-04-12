@@ -23,6 +23,7 @@ import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -49,6 +50,7 @@ class PageContentRenderer @Inject constructor(
             val (contentWidth, contentHeight) = computeContentDimensions(data)
             val size = resolveRenderSize(contentWidth, contentHeight, target)
 
+            Log.e("PageContentRenderer", "size: ${size.width}, ${size.height}, ${size.scale}")
             createBitmap(size.width, size.height).also { bitmap ->
                 drawPage(
                     canvas = Canvas(bitmap),

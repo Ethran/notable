@@ -6,7 +6,7 @@ import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.editor.utils.THUMBNAIL_WIDTH
 import com.ethran.notable.editor.utils.getThumbnailFile
-import com.ethran.notable.editor.utils.persistBitmapThumbnail
+import com.ethran.notable.editor.utils.savePageThumbnail
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -82,7 +82,10 @@ class ThumbnailGenerator @Inject constructor(
 
         val marker = CompletableDeferred<ThumbnailEnsureResult>()
         val acquired = inFlightLock.withLock {
-            inFlight.putIfAbsent(pageId, marker) == null // it will return null if there wasn't any value
+            inFlight.putIfAbsent(
+                pageId,
+                marker
+            ) == null // it will return null if there wasn't any value
         }
 
         if (!acquired) {
@@ -91,7 +94,7 @@ class ThumbnailGenerator @Inject constructor(
         }
 
         try {
-            val result = generateIfNeeded(page)
+            val result = generate(page)
             if (result == ThumbnailEnsureResult.GENERATED) {
                 _thumbnailUpdated.tryEmit(pageId)
             }
@@ -106,9 +109,7 @@ class ThumbnailGenerator @Inject constructor(
     }
 
 
-    private suspend fun generateIfNeeded(page: Page): ThumbnailEnsureResult {
-        if (!isThumbnailStale(page)) return ThumbnailEnsureResult.UP_TO_DATE
-
+    private suspend fun generate(page: Page): ThumbnailEnsureResult {
         val bitmap = pageContentRenderer.renderPageBitmap(
             pageId = page.id,
             target = RenderTarget.Thumbnail(
@@ -116,9 +117,8 @@ class ThumbnailGenerator @Inject constructor(
                 maxHeightPx = Int.MAX_VALUE
             )
         )
-
         bitmap.useAndRecycle { rendered ->
-            persistBitmapThumbnail(context, rendered, page.id)
+            savePageThumbnail(context, rendered, page.id)
         }
         log.d("Thumbnail generated for pageId=${page.id}")
         return ThumbnailEnsureResult.GENERATED
