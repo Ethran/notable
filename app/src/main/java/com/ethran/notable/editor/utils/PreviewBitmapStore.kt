@@ -31,7 +31,7 @@ class Provider : FileProvider(R.xml.file_paths)
 private const val EQUALITY_THRESHOLD = 0.01f
 const val THUMBNAIL_WIDTH = 500
 private const val THUMBNAIL_QUALITY = 60
-private const val PREVIEW_QUALITY = 90
+private const val PREVIEW_QUALITY = 85
 
 fun getThumbnailFile(context: Context, pageID: String): File =
     File(context.filesDir, "pages/previews/thumbs/$pageID.webp")
@@ -84,7 +84,7 @@ private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
                 if (f.delete()) {
                     log.d("savePagePreview: removed old preview ${f.name}")
                 }
-            } catch (t: Throwable) {
+            } catch (_: Throwable) {
                 log.e("savePagePreview: failed to delete old preview ${f.name}")
             }
         }
@@ -254,10 +254,10 @@ private fun readImageFile(file: File): Bitmap? {
         } else {
             log.w("loadPagePreview: failed to decode bitmap from ${file.name}")
             log.d(
-                """
-                exists=${file.exists()}
-                size=${file.length()}
-                name=${'$'}{file.name}
+                $$"""
+                exists=$${file.exists()}
+                size=$${file.length()}
+                name=${file.name}
                 """.trimIndent()
             )
             null
