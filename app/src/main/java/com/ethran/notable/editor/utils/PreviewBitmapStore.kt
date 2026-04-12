@@ -13,6 +13,7 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import com.ethran.notable.R
 import com.ethran.notable.data.ensurePreviewsFullFolder
+import com.ethran.notable.utils.ensureNotMainThread
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +107,7 @@ private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
 fun persistBitmapFull(
     context: Context, bitmap: Bitmap, pageID: String, scroll: Offset?, zoom: Float?
 ) {
+    ensureNotMainThread("persistBitmapFull")
     if (!checkZoomAndScroll(scroll, zoom)) return
     val scrollYInt = scroll!!.y.roundToInt()
     val fileName = buildPreviewFileName(pageID, scrollYInt)
@@ -336,6 +338,7 @@ private fun decodePreview(file: File, expectedNameForLog: String): Bitmap? {
  * Persist a thumbnail for a page.
  */
 fun persistBitmapThumbnail(context: Context, bitmap: Bitmap, pageID: String) {
+    ensureNotMainThread("persistBitmapFull")
     val file = getThumbnailFile(context, pageID)
     file.parentFile?.mkdirs()
     val ratio = bitmap.height.toFloat() / bitmap.width.toFloat()
