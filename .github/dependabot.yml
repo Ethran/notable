@@ -3,67 +3,45 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 # Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
 updates:
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
       interval: "weekly"
-    
-    # Prevent updates for Firebase packages
+
+    # Strictly limit to 2 PRs. 
+    # Usually: one for Onyx, one for "The rest of the world."
+    open-pull-requests-limit: 2
+
+    # GLOBAL RULE: Allow patches AND minor feature updates.
+    # This blocks Major (v1 to v2) breaking changes.
+    allow:
+      - dependency-name: "*"
+        update-types: 
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+
     ignore:
-      - dependency-name: "com.google.firebase:firebase-bom"
-      - dependency-name: "com.google.firebase:firebase-analytics-ktx"
+      # These remain fully manual.
+      - dependency-name: "com.google.firebase:*"
+      - dependency-name: "org.jetbrains.kotlin*"
+      - dependency-name: "com.android.tools.build:*"
+      - dependency-name: "com.google.devtools.ksp*"
+      - dependency-name: "org.lsposed.hiddenapibypass:*"
 
-    # Group common updates to avoid PR spam
     groups:
-      # 1. Compose UI
-      androidx-compose:
-        patterns:
-          - "androidx.compose.*"
-          
-      # 2. Room Database
-      room-db:
-        patterns:
-          - "androidx.room.*"
-
-      # 3. AndroidX Core & Lifecycle (Usually safe, backwards-compatible updates)
-      androidx-core:
-        patterns:
-          - "androidx.core.*"
-          - "androidx.lifecycle.*"
-          - "androidx.activity.*"
-          - "androidx.fragment.*"
-          - "androidx.navigation.*"
-          - "androidx.graphics.*"
-          - "androidx.input.*"
-
-      # 4. Testing Libraries
-      testing-tools:
-        patterns:
-          - "junit.*"
-          - "androidx.test.*"
-          - "androidx.arch.core.*"
-
-      # 5. Dependency Injection (Mismatched Hilt versions break builds, update together)
-      dagger-hilt:
-        patterns:
-          - "com.google.dagger.*"
-          - "androidx.hilt.*"
-
-      # 6. Onyx Hardware SDK
+      # Group A: Onyx SDK
+      # All Onyx updates (Patch or Minor) in one bucket.
       onyx-sdk:
         patterns:
-          - "com.onyx.android.sdk.*"
+          - "com.onyx.android.sdk:*"
 
-      # 7. Reactive Programming
-      rxjava:
+      # Group B: The "Safe" Catch-All
+      # This pulls every other allowed update into a single second PR.
+      general-updates:
         patterns:
-          - "io.reactivex.rxjava2.*"
-
-      # 8. File Compression / Processing
-      compression-tools:
-        patterns:
-          - "org.apache.commons.*"
+          - "*"
+        exclude-patterns:
+          - "com.onyx.android.sdk:*"
           - "at.yawk.lz4.*"
