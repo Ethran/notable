@@ -1,0 +1,69 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    
+    # Prevent updates for Firebase packages
+    ignore:
+      - dependency-name: "com.google.firebase:firebase-bom"
+      - dependency-name: "com.google.firebase:firebase-analytics-ktx"
+
+    # Group common updates to avoid PR spam
+    groups:
+      # 1. Compose UI
+      androidx-compose:
+        patterns:
+          - "androidx.compose.*"
+          
+      # 2. Room Database
+      room-db:
+        patterns:
+          - "androidx.room.*"
+
+      # 3. AndroidX Core & Lifecycle (Usually safe, backwards-compatible updates)
+      androidx-core:
+        patterns:
+          - "androidx.core.*"
+          - "androidx.lifecycle.*"
+          - "androidx.activity.*"
+          - "androidx.fragment.*"
+          - "androidx.navigation.*"
+          - "androidx.graphics.*"
+          - "androidx.input.*"
+
+      # 4. Testing Libraries
+      testing-tools:
+        patterns:
+          - "junit.*"
+          - "androidx.test.*"
+          - "androidx.arch.core.*"
+
+      # 5. Dependency Injection (Mismatched Hilt versions break builds, update together)
+      dagger-hilt:
+        patterns:
+          - "com.google.dagger.*"
+          - "androidx.hilt.*"
+
+      # 6. Onyx Hardware SDK
+      onyx-sdk:
+        patterns:
+          - "com.onyx.android.sdk.*"
+
+      # 7. Reactive Programming
+      rxjava:
+        patterns:
+          - "io.reactivex.rxjava2.*"
+
+      # 8. File Compression / Processing
+      compression-tools:
+        patterns:
+          - "org.apache.commons.*"
+          - "at.yawk.lz4.*"
