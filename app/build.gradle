@@ -129,7 +129,7 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-compat'
     }
 
-    implementation('com.onyx.android.sdk:onyxsdk-pen:1.5.2') {
+    implementation('com.onyx.android.sdk:onyxsdk-pen:1.5.4') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
         exclude group: "com.onyx.android.sdk", module: "onyxsdk-geometry"
