@@ -30,7 +30,7 @@ class ThumbnailBackfillQueue @Inject constructor(
     private val appEventBus: AppEventBus
 ) {
     private val log = ShipBook.getLogger("ThumbnailBackfillQueue")
-    private val queue = Channel<String>(Channel.UNLIMITED)
+    private val queue = Channel<Pair<String, PreviewSaveMode>>(Channel.UNLIMITED)
 
     private val mutex = Mutex()
     private val queuedPageIds = linkedSetOf<String>()
@@ -44,8 +44,8 @@ class ThumbnailBackfillQueue @Inject constructor(
     init {
         // listen for thumbnail generation requests
         applicationScope.launch(ioDispatcher) {
-            for (pageId in queue) {
-                processOne(pageId, PreviewSaveMode.REGULAR)
+            for ((pageId, mode) in queue) {
+                processOne(pageId, mode)
             }
         }
     }
@@ -53,7 +53,7 @@ class ThumbnailBackfillQueue @Inject constructor(
     /**
      * Enqueues a list of [pageIds] for thumbnail generation.
      */
-    fun enqueue(pageIds: List<String>) {
+    fun enqueue(pageIds: List<String>, mode: PreviewSaveMode = PreviewSaveMode.REGULAR) {
         if (pageIds.isEmpty()) return
 
         applicationScope.launch(ioDispatcher) {
@@ -79,7 +79,7 @@ class ThumbnailBackfillQueue @Inject constructor(
             }
 
             added.forEach { pageId ->
-                val sent = queue.trySend(pageId)
+                val sent = queue.trySend(pageId to mode)
                 if (sent.isFailure) {
                     mutex.withLock {
                         queuedPageIds.remove(pageId)

@@ -16,8 +16,10 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
 import com.ethran.notable.io.ThumbnailBackfillQueue
+import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
+import com.ethran.notable.utils.fold
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.data.events.AppEventBus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -183,10 +185,21 @@ class LibraryViewModel @Inject constructor(
 
             try {
                 // Ideally, ImportEngine should be injected via Hilt rather than instantiated here
-                importEngine.import(
+                val result = importEngine.import(
                     uri, ImportOptions(folderId = _folderId.value, linkToExternalFile = !copy)
                 )
-                snackDispatcher.showOrUpdateSnack(SnackConf(text = "PDF Import Successful"))
+                
+                result.fold(
+                    onSuccess = { importedPageIds ->
+                        if (importedPageIds.isNotEmpty()) {
+                            thumbnailBackfillQueue.enqueue(importedPageIds, PreviewSaveMode.STRICT_BW)
+                        }
+                        snackDispatcher.showOrUpdateSnack(SnackConf(text = "PDF Import Successful"))
+                    },
+                    onError = { error ->
+                        snackDispatcher.showOrUpdateSnack(SnackConf(text = "Import failed: ${error.userMessage}"))
+                    }
+                )
             } catch (e: Exception) {
                 snackDispatcher.showOrUpdateSnack(SnackConf(text = "Import failed: ${e.message}"))
             } finally {
@@ -206,8 +219,15 @@ class LibraryViewModel @Inject constructor(
             )
 
             try {
-                importEngine.import(uri, ImportOptions(folderId = _folderId.value))
-                snackDispatcher.showOrUpdateSnack(SnackConf(text = "XOPP Import Successful", duration = 3000))
+                val result = importEngine.import(uri, ImportOptions(folderId = _folderId.value))
+                result.fold(
+                    onSuccess = { _ -> 
+                        snackDispatcher.showOrUpdateSnack(SnackConf(text = "XOPP Import Successful", duration = 3000))
+                    },
+                    onError = { error ->
+                        snackDispatcher.showOrUpdateSnack(SnackConf(text = "Import failed: ${error.userMessage}"))
+                    }
+                )
             } catch (e: Exception) {
                 snackDispatcher.showOrUpdateSnack(SnackConf(text = "Import failed: ${e.message}"))
             } finally {
