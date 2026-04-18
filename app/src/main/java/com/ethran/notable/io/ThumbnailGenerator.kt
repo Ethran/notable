@@ -30,7 +30,7 @@ enum class ThumbnailEnsureResult {
 }
 
 
-const val thumbnailGeneratorStaleMs = 3600000 // 1h
+const val thumbnailGeneratorStaleMs = 60000 // 1 min
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -128,7 +128,6 @@ class ThumbnailGenerator @Inject constructor(
     }
 
     private suspend fun isThumbnailStale(page: Page): Boolean = withContext(ioDispatcher) {
-        return@withContext true
         val thumbFile = getThumbnailFile(context, page.id)
         if (!thumbFile.exists()) return@withContext true
 

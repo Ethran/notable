@@ -442,9 +442,8 @@ object DeviceCompat {
     }
 
     fun isColorDevice(): Boolean {
-        if (!isOnyxDevice) return false
+        if (!isOnyxDevice) return true
         return try {
-            // Uses the method found in your actual SDK jar
             DeviceInfoUtil.isColorDevice()
         } catch (e: Exception) {
             log.e("Failed to check if device is color: ${e.message}")
@@ -452,8 +451,9 @@ object DeviceCompat {
         }
     }
     suspend fun delayBeforeResumingDrawing() {
+        if (!isOnyxDevice) return
         // 500ms for Kaleido Color e-ink, 300ms for monochrome
-        val delayMs = if (DeviceCompat.isColorDevice()) 500L else 300L
+        val delayMs = if (isColorDevice()) 500L else 300L
         log.d("Delaying raw drawing resume for ${delayMs}ms to allow Android UI to settle")
         delay(delayMs)
     }

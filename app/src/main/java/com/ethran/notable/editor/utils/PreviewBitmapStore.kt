@@ -114,7 +114,7 @@ private fun isCacheFresh(file: File, pageUpdatedAtMs: Long?): Boolean {
  * We encode the vertical scroll (rounded to Int) into the name so different vertical positions
  * can have separate cached previews.
  *
- * Format: {pageID}-sy{scrollY}.png
+ * Format: {pageID}-sy{scrollY}.webp
  */
 private fun buildPreviewFileName(pageID: String, scrollY: Int): String = "${pageID}-sy$scrollY.webp"
 

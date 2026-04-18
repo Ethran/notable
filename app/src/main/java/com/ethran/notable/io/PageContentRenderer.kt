@@ -21,7 +21,6 @@ import com.ethran.notable.data.model.BackgroundType.Native
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
-import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -51,7 +50,7 @@ class PageContentRenderer @Inject constructor(
             val (contentWidth, contentHeight) = computeContentDimensions(data)
             val size = resolveRenderSize(contentWidth, contentHeight, target)
 
-            Log.e("PageContentRenderer", "size: ${size.width}, ${size.height}, ${size.scale}")
+            Log.d("PageContentRenderer", "size: ${size.width}, ${size.height}, ${size.scale}")
             createBitmap(size.width, size.height).also { bitmap ->
                 drawPage(
                     canvas = Canvas(bitmap),
