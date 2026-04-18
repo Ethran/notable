@@ -166,7 +166,7 @@ class OnyxInputHandler(
         if(touchHelper == null) return
         log.i("Update is drawing: $toolbarState.isDrawing")
         if (toolbarState.isDrawing) {
-            DeviceCompat.delayBeforeResumingDrawing()
+//            DeviceCompat.delayBeforeResumingDrawing()
             touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
