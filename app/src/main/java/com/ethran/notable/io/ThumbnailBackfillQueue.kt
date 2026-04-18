@@ -1,9 +1,10 @@
 package com.ethran.notable.io
 
-import com.ethran.notable.di.ApplicationScope
-import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
+import com.ethran.notable.di.ApplicationScope
+import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.editor.utils.PreviewSaveMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +30,7 @@ class ThumbnailBackfillQueue @Inject constructor(
     private val appEventBus: AppEventBus
 ) {
     private val log = ShipBook.getLogger("ThumbnailBackfillQueue")
-    private val queue = Channel<String>(Channel.UNLIMITED)
+    private val queue = Channel<Pair<String, PreviewSaveMode>>(Channel.UNLIMITED)
 
     private val mutex = Mutex()
     private val queuedPageIds = linkedSetOf<String>()
@@ -41,9 +42,10 @@ class ThumbnailBackfillQueue @Inject constructor(
     private var lastUpdateMs = 0L
 
     init {
+        // listen for thumbnail generation requests
         applicationScope.launch(ioDispatcher) {
-            for (pageId in queue) {
-                processOne(pageId)
+            for ((pageId, mode) in queue) {
+                processOne(pageId, mode)
             }
         }
     }
@@ -51,7 +53,7 @@ class ThumbnailBackfillQueue @Inject constructor(
     /**
      * Enqueues a list of [pageIds] for thumbnail generation.
      */
-    fun enqueue(pageIds: List<String>) {
+    fun enqueue(pageIds: List<String>, mode: PreviewSaveMode = PreviewSaveMode.REGULAR) {
         if (pageIds.isEmpty()) return
 
         applicationScope.launch(ioDispatcher) {
@@ -77,7 +79,7 @@ class ThumbnailBackfillQueue @Inject constructor(
             }
 
             added.forEach { pageId ->
-                val sent = queue.trySend(pageId)
+                val sent = queue.trySend(pageId to mode)
                 if (sent.isFailure) {
                     mutex.withLock {
                         queuedPageIds.remove(pageId)
@@ -88,9 +90,9 @@ class ThumbnailBackfillQueue @Inject constructor(
         }
     }
 
-    private suspend fun processOne(pageId: String) {
+    private suspend fun processOne(pageId: String, mode: PreviewSaveMode) {
         try {
-            thumbnailGenerator.ensureThumbnail(pageId)
+            thumbnailGenerator.ensureThumbnail(pageId, mode)
         } catch (t: Throwable) {
             log.e("Thumbnail generation failed for pageId=$pageId: ${t.message}")
         } finally {
@@ -112,7 +114,12 @@ class ThumbnailBackfillQueue @Inject constructor(
         if (throttled && now - lastUpdateMs < 300) return
 
         lastUpdateMs = now
-        appEventBus.tryEmit(AppEvent.PreviewBackfillProgress(current = cycleDone, total = cycleTotal))
+        appEventBus.tryEmit(
+            AppEvent.PreviewBackfillProgress(
+                current = cycleDone,
+                total = cycleTotal
+            )
+        )
     }
 
     private fun finalizeCycleLocked() {

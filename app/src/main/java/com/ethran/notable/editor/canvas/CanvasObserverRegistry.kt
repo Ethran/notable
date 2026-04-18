@@ -6,10 +6,9 @@ import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
-import com.ethran.notable.editor.utils.loadPreview
+import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.selectRectangle
-import com.ethran.notable.editor.utils.waitForEpdRefresh
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -217,7 +216,7 @@ class CanvasObserverRegistry(
                     // We need to close all menus
                     if (it) {
                         CanvasEventBus.closeMenusSignal.emit(Unit)
-                        waitForEpdRefresh()
+//                        waitForEpdRefresh()
                     }
                     inputHandler.updateIsDrawing()
                 }
@@ -289,13 +288,12 @@ class CanvasObserverRegistry(
                 val pageUpdatedAtMs = pageDataManager.getPageUpdatedAt(pageId)
 
                 val previewBitmap = withContext(Dispatchers.IO) {
-                    loadPreview(
+                    loadPagePreviewOrFallback(
                         context = drawCanvas.context,
                         pageIdToLoad = pageId,
                         expectedWidth = page.viewWidth,
                         expectedHeight = page.viewHeight,
                         pageNumber = pageNumber,
-                        requireExactMatch = false,
                         pageUpdatedAtMs = pageUpdatedAtMs
                     )
                 }

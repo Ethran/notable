@@ -112,6 +112,19 @@ fun SystemInformationContent(
                 val strokeInfo = uiState.strokeInfo
 
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    // 0) DeviceInfoUtil
+                    SectionTitle("Device Info Util")
+                    InfoRow("Device Info", info.deviceInfoStr, maxLines = 10)
+                    InfoRow("Kernel Info", info.kernelInfo, maxLines = 10)
+                    InfoRow("EMTP Info", info.emtpInfo)
+                    InfoRow("VCom Info", info.vcomInfo)
+                    InfoRow("Is Onyx Device", info.isOnyxDevice.toYesNo())
+                    InfoRow("Is Color Device", info.isColorDevice.toYesNo())
+                    InfoRow("CPU Serial", info.cpuSerial)
+                    InfoRow("Resolution", "${info.resolutionX ?: "?"} x ${info.resolutionY ?: "?"}")
+
+                    DividerMono()
+
                     // 1) Basic system info
                     SectionTitle("Basic System Info")
                     InfoRow("Manufacturer", Build.MANUFACTURER)
@@ -366,6 +379,15 @@ private fun InfoRow(label: String, value: String?, maxLines: Int = 3) {
 @Composable
 fun SystemInformationPreview() {
     val mockSnapshot = DeviceSnapshot(
+        deviceInfoStr = "Mock OS Version",
+        kernelInfo = "Mock Kernel",
+        emtpInfo = "Mock EMTP",
+        vcomInfo = "1.5 V",
+        cpuSerial = "123456",
+        resolutionX = 1404,
+        resolutionY = 1872,
+        isOnyxDevice = true,
+        isColorDevice = false,
 
         // Screen
         epdMode = null,
@@ -474,8 +496,3 @@ private fun Boolean?.toYesNo(): String? = when (this) {
     true -> "Yes"
     false -> "No"
 }
-
-
-
-
-

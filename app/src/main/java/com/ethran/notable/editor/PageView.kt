@@ -10,9 +10,13 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toRect
+import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.CachedBackground
@@ -29,7 +33,7 @@ import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.utils.div
 import com.ethran.notable.editor.utils.divideStrokesFromCut
-import com.ethran.notable.editor.utils.loadPersistBitmap
+import com.ethran.notable.editor.utils.loadHQPagePreview
 import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
@@ -428,7 +432,7 @@ class PageView(
 
     // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {
-        val bitmapFromDisc = loadPersistBitmap(
+        val bitmapFromDisc = loadHQPagePreview(
             context = context,
             pageID = currentPageId,
             scroll = scroll,
@@ -450,10 +454,7 @@ class PageView(
         // draw just background.
         val backgroundType = pageDataManager.getBackgroundType()
         if (backgroundType == BackgroundType.Native) {
-            val bg = pageDataManager.getBackgroundName()
-            drawBg(
-                context, windowedCanvas, backgroundType, bg, scroll, 1f, this
-            )
+            drawBgToCanvas(null)
         } else
             windowedCanvas.drawColor(Color.WHITE)
         return false
@@ -666,18 +667,7 @@ class PageView(
 
         log.d("Redrawing full logical rect: $redrawRect")
         windowedCanvas.drawColor(Color.BLACK)
-        val backgroundType = pageDataManager.getBackgroundType() ?: BackgroundType.Native
-        val bg = pageDataManager.getBackgroundName()
-        drawBg(
-            context,
-            windowedCanvas,
-            backgroundType,
-            bg,
-            scroll,
-            zoomLevel.value,
-            this,
-            redrawRect
-        )
+        drawBgToCanvas(redrawRect)
         pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
 
         drawAreaScreenCoordinates(redrawRect)
@@ -822,6 +812,39 @@ class PageView(
         }
 
     }
+
+    fun drawBgToCanvas(clipRect: Rect?) {
+        val backgroundType = pageDataManager.getBackgroundType() ?: BackgroundType.Native
+        val bg = pageDataManager.getBackgroundName()
+        val pageNumber = currentPageNumber
+        val scale = zoomLevel.value
+        val bgImage: Bitmap? =
+            when (backgroundType) {
+                BackgroundType.Image, BackgroundType.CoverImage, BackgroundType.AutoPdf,
+                is BackgroundType.Pdf, BackgroundType.ImageRepeating -> {
+                    if (backgroundType is BackgroundType.Image && bg == "iris") {
+                        val resId = R.drawable.iris
+                        ImageBitmap.imageResource(context.resources, resId).asAndroidBitmap()
+                    } else {
+                        getOrLoadBackground(bg, pageNumber, scale)
+                    }
+                }
+                BackgroundType.Native -> {
+                    null
+                }
+            }
+        drawBg(
+            canvas = windowedCanvas,
+            backgroundType = backgroundType,
+            background = bg,
+            scroll = scroll,
+            resourceBitmap = bgImage,
+            scale = scale,
+            repeat = false,
+            clipRect = clipRect
+        )
+    }
+
 
     fun updateDimensions(newWidth: Int, newHeight: Int) {
         if (newWidth != viewWidth || newHeight != viewHeight) {

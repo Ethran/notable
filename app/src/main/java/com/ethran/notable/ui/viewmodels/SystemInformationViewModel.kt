@@ -10,6 +10,8 @@ import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.BaseDevice
 import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.style.StrokeStyle
+import com.onyx.android.sdk.utils.DeviceInfoUtil
+import com.ethran.notable.editor.utils.DeviceCompat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +27,17 @@ import javax.inject.Inject
  * All fields are nullable-safe for display; failures are recorded in [errors].
  */
 data class DeviceSnapshot(
+    // DeviceInfoUtil fields
+    val deviceInfoStr: String? = null,
+    val kernelInfo: String? = null,
+    val emtpInfo: String? = null,
+    val vcomInfo: String? = null,
+    val cpuSerial: String? = null,
+    val resolutionX: Int? = null,
+    val resolutionY: Int? = null,
+    val isOnyxDevice: Boolean? = null,
+    val isColorDevice: Boolean? = null,
+
     //classes
     val actualDeviceClass: String? = null,
     val deviceClassHierarchy: String? = null,
@@ -293,7 +306,26 @@ class SystemInformationViewModel @Inject constructor() : ViewModel() {
         val fontHotReload = safeNullable("supportFontHotReload") { base.supportFontHotReload() }
         val fontMap = safeNullable("loadSystemFamilyPathMap") { base.loadSystemFamilyPathMap() }
 
+        // Device Info Util
+        val deviceInfoStr = safeNullable("deviceInfo") { DeviceInfoUtil.deviceInfo() }
+        val kernelInfo = safeNullable("getDeviceKernelInfo") { DeviceInfoUtil.getDeviceKernelInfo() }
+        val emtpInfo = safeNullable("getEMTPInfo") { DeviceInfoUtil.getEMTPInfo() }
+        val vcomInfo = safeNullable("getVComInfo") { DeviceInfoUtil.getVComInfo(context) }
+        val cpuSerial = safeNullable("loadCPUSerial") { DeviceInfoUtil.loadCPUSerial() }
+        val resolution = safeNullable("getScreenResolution") { DeviceInfoUtil.getScreenResolution(context) }
+        val isOnyx = safeNullable("DeviceCompat.isOnyxDevice") { DeviceCompat.isOnyxDevice }
+        val isColor = safeNullable("DeviceCompat.isColorDevice") { DeviceCompat.isColorDevice() }
+
         return DeviceSnapshot(
+            deviceInfoStr = deviceInfoStr,
+            kernelInfo = kernelInfo,
+            emtpInfo = emtpInfo,
+            vcomInfo = vcomInfo,
+            cpuSerial = cpuSerial,
+            resolutionX = resolution?.x,
+            resolutionY = resolution?.y,
+            isOnyxDevice = isOnyx,
+            isColorDevice = isColor,
             actualDeviceClass = actualDeviceClass,
             deviceClassHierarchy = deviceClassHierarchy,
             epdMode = epdMode,

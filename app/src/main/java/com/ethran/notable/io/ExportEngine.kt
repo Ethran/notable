@@ -395,7 +395,6 @@ class ExportEngine @Inject constructor(
         ensureNotMainThread("ExportPdf")
         val data = pageContentRenderer.loadPageContent(pageId)
         val (_, contentHeightPx) = pageContentRenderer.computeContentDimensions(data)
-        val backgroundType = pageContentRenderer.resolveExportBackgroundType(data)
 
         val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH.toFloat()
         val scaledHeight = (contentHeightPx * scaleFactor).toInt()
@@ -412,7 +411,6 @@ class ExportEngine @Inject constructor(
                     data = data,
                     scroll = Offset(0f, currentTop.toFloat()),
                     scaleFactor = scaleFactor,
-                    backgroundType = backgroundType
                 )
                 doc.finishPage(page)
                 currentTop += A4_HEIGHT
@@ -426,7 +424,6 @@ class ExportEngine @Inject constructor(
                 data = data,
                 scroll = Offset.Zero,
                 scaleFactor = scaleFactor,
-                backgroundType = backgroundType
             )
             doc.finishPage(page)
         }

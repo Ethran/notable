@@ -4,9 +4,10 @@ import android.content.Context
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.editor.utils.PreviewSaveMode
+import com.ethran.notable.editor.utils.THUMBNAIL_WIDTH
 import com.ethran.notable.editor.utils.getThumbnailFile
-import com.ethran.notable.editor.utils.getThumbnailTargetWidthPx
-import com.ethran.notable.editor.utils.persistBitmapThumbnail
+import com.ethran.notable.editor.utils.savePageThumbnail
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,14 +16,10 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,6 +28,9 @@ enum class ThumbnailEnsureResult {
     UP_TO_DATE,
     PAGE_NOT_FOUND
 }
+
+
+const val thumbnailGeneratorStaleMs = 60000 // 1 min
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -63,15 +63,12 @@ class ThumbnailGenerator @Inject constructor(
      */
     val thumbnailUpdated = _thumbnailUpdated.asSharedFlow()
 
-    // Map of pageId to its last known generation timestamp (signature)
-    private val _thumbnailSignatures = MutableStateFlow<Map<String, Long>>(emptyMap())
-    val thumbnailSignatures = _thumbnailSignatures.asStateFlow()
 
     /**
      * Checks if a thumbnail is up to date and generates it if necessary.
      * Returns immediately if a generation for the same [pageId] is already in progress.
      */
-    suspend fun ensureThumbnail(pageId: String): ThumbnailEnsureResult {
+    suspend fun ensureThumbnail(pageId: String, mode: PreviewSaveMode): ThumbnailEnsureResult {
         val page = withContext(ioDispatcher) { pageRepository.getById(pageId) }
             ?: return ThumbnailEnsureResult.PAGE_NOT_FOUND
 
@@ -86,12 +83,10 @@ class ThumbnailGenerator @Inject constructor(
 
         val marker = CompletableDeferred<ThumbnailEnsureResult>()
         val acquired = inFlightLock.withLock {
-            if (inFlight.containsKey(pageId)) {
-                false
-            } else {
-                inFlight[pageId] = marker
-                true
-            }
+            inFlight.putIfAbsent(
+                pageId,
+                marker
+            ) == null // it will return null if there wasn't any value
         }
 
         if (!acquired) {
@@ -100,10 +95,8 @@ class ThumbnailGenerator @Inject constructor(
         }
 
         try {
-            val result = generateIfNeeded(page)
+            val result = generate(page, mode)
             if (result == ThumbnailEnsureResult.GENERATED) {
-                val now = System.currentTimeMillis()
-                _thumbnailSignatures.update { it + (pageId to now) }
                 _thumbnailUpdated.tryEmit(pageId)
             }
             marker.complete(result)
@@ -116,33 +109,21 @@ class ThumbnailGenerator @Inject constructor(
         }
     }
 
-    /**
-     * Returns the persistent signature (last modified time) for a thumbnail.
-     * Performs IO.
-     */
-    suspend fun getThumbnailSignature(pageId: String): Long = withContext(ioDispatcher) {
-        val file = getThumbnailFile(context, pageId)
-        if (file.exists()) file.lastModified() else 0L
-    }
 
-    private suspend fun generateIfNeeded(page: Page): ThumbnailEnsureResult {
-        if (!isThumbnailStale(page)) return ThumbnailEnsureResult.UP_TO_DATE
-
-        val targetWidth = getThumbnailTargetWidthPx()
+    private suspend fun generate(
+        page: Page, mode: PreviewSaveMode
+    ): ThumbnailEnsureResult {
         val bitmap = pageContentRenderer.renderPageBitmap(
             pageId = page.id,
             target = RenderTarget.Thumbnail(
-                maxWidthPx = targetWidth,
-                maxHeightPx = Int.MAX_VALUE
+                maxWidthPx = THUMBNAIL_WIDTH,
+                maxHeightPx = null
             )
         )
-
         bitmap.useAndRecycle { rendered ->
-            persistBitmapThumbnail(context, rendered, page.id)
+            savePageThumbnail(context, rendered, page.id, mode)
         }
-        writeThumbnailMeta(page)
-
-        log.d("Thumbnail ensured for pageId=${page.id}")
+        log.d("Thumbnail generated for pageId=${page.id}")
         return ThumbnailEnsureResult.GENERATED
     }
 
@@ -150,38 +131,10 @@ class ThumbnailGenerator @Inject constructor(
         val thumbFile = getThumbnailFile(context, page.id)
         if (!thumbFile.exists()) return@withContext true
 
-        if (page.updatedAt.time > thumbFile.lastModified()) return@withContext true
-
-        val meta = readThumbnailMeta(page.id) ?: return@withContext true
-        meta.updatedAtMs < page.updatedAt.time || meta.scroll != page.scroll
+        if (page.updatedAt.time + thumbnailGeneratorStaleMs > thumbFile.lastModified()) return@withContext true
+        else return@withContext false
     }
 
-    private suspend fun writeThumbnailMeta(page: Page) = withContext(ioDispatcher) {
-        val metaFile = thumbnailMetaFile(page.id)
-        metaFile.parentFile?.mkdirs()
-        metaFile.writeText("${page.updatedAt.time}|${page.scroll}")
-    }
-
-    private fun readThumbnailMeta(pageId: String): ThumbnailMeta? {
-        val metaFile = thumbnailMetaFile(pageId)
-        if (!metaFile.exists()) return null
-
-        val parts = metaFile.readText().split("|")
-        if (parts.size != 2) return null
-        val updatedAtMs = parts[0].toLongOrNull() ?: return null
-        val scroll = parts[1].toIntOrNull() ?: return null
-        return ThumbnailMeta(updatedAtMs = updatedAtMs, scroll = scroll)
-    }
-
-    private fun thumbnailMetaFile(pageId: String): File {
-        val thumbFile = getThumbnailFile(context, pageId)
-        return File(thumbFile.parentFile, "$pageId.meta")
-    }
-
-    private data class ThumbnailMeta(
-        val updatedAtMs: Long,
-        val scroll: Int
-    )
 
     private inline fun android.graphics.Bitmap.useAndRecycle(block: (android.graphics.Bitmap) -> Unit) {
         try {

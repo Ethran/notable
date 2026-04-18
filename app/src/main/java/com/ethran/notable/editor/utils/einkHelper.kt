@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.utils
 
+import android.content.Context
 import android.graphics.Rect
 import android.os.Build
 import android.view.View
@@ -26,6 +27,7 @@ import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.TouchHelper
+import com.onyx.android.sdk.utils.DeviceInfoUtil
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -437,5 +439,22 @@ object DeviceCompat {
         } catch (e: ClassNotFoundException) {
             false
         }
+    }
+
+    fun isColorDevice(): Boolean {
+        if (!isOnyxDevice) return true
+        return try {
+            DeviceInfoUtil.isColorDevice()
+        } catch (e: Exception) {
+            log.e("Failed to check if device is color: ${e.message}")
+            false
+        }
+    }
+    suspend fun delayBeforeResumingDrawing() {
+        if (!isOnyxDevice) return
+        // 500ms for Kaleido Color e-ink, 300ms for monochrome
+        val delayMs = if (isColorDevice()) 500L else 300L
+        log.d("Delaying raw drawing resume for ${delayMs}ms to allow Android UI to settle")
+        delay(delayMs)
     }
 }
