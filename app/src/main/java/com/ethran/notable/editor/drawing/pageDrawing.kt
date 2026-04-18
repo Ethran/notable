@@ -193,10 +193,13 @@ fun drawOnCanvasFromPage(
                 drawStroke(this, stroke, -page.scroll)
             }
         } catch (e: Exception) {
-            val error =  DomainError.DrawingError("Strokes failed: ${e.message ?: e.toString()}")
+            val error = DomainError.DrawingError("Strokes failed: ${e.message ?: e.toString()}")
             pageDrawingLog.e("PageView.kt: ${error.userMessage}", e)
             persistentError = persistentError?.let { it + error } ?: error
         }
     }
+    pageDrawingLog.d(
+        "drawOnCanvasFromPage, finished drawing to canvas: ${canvas.hashCode()}"
+    )
     return persistentError?.let { AppResult.Error(it) } ?: AppResult.Success(Unit)
 }

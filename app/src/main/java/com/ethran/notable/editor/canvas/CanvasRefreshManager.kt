@@ -68,7 +68,7 @@ class CanvasRefreshManager(
 
 
     fun drawCanvasToView(dirtyRect: Rect?) {
-        log.v("Canvas refresh started, dirtyRect: $dirtyRect")
+        log.v("Canvas refresh started, dirtyRect: $dirtyRect, bitmap: ${page.windowedBitmap.hashCode()}, thread: ${Thread.currentThread().name}")
 
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
         var canvas: Canvas? = null

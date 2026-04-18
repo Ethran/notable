@@ -442,10 +442,10 @@ class EditorViewModel @Inject constructor(
      * Re-evaluates whether drawing should be enabled based on menu and selection states.
      */
     fun updateDrawingState() {
-        log.v("updateDrawingState")
+        // It get called three times on canvas creation.
         val shouldBeDrawing = _toolbarState.value.isDrawingAllowed
         _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
-        log.d("Drawing state: $shouldBeDrawing")
+        log.d("updateDrawingState: Drawing state: $shouldBeDrawing")
         viewModelScope.launch {
             if (shouldBeDrawing)
                 DeviceCompat.delayBeforeResumingDrawing()

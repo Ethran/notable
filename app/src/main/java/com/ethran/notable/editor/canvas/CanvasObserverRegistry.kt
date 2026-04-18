@@ -35,6 +35,8 @@ class CanvasObserverRegistry(
     private val pageDataManager = page.pageDataManager
 
     fun registerAll() {
+        // NOTE: Be careful with the dispatchers, choose them wisely.
+
         ImageHandler(drawCanvas.context, page, viewModel, coroutineScope).observeImageUri()
 
         observeRefreshUiImmediately()
@@ -58,7 +60,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeRefreshUiImmediately() {
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.Main) {
             CanvasEventBus.refreshUiImmediately.collect {
                 log.v("Refreshing UI!")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
@@ -71,7 +73,7 @@ class CanvasObserverRegistry(
         // observe forceUpdate, takes rect in screen coordinates
         // given null it will redraw whole page
         // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
-        coroutineScope.launch(Dispatchers.Main.immediate) {
+        coroutineScope.launch(Dispatchers.Main) {
             CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
                 log.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")

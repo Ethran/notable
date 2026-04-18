@@ -284,7 +284,7 @@ class PageView(
                 }
                 // TODO: If we put it in loadPage(…) sometimes it will try to refresh
                 //  without seeing strokes, I have no idea why.
-                coroutineScope.launch(Dispatchers.Main.immediate) {
+                coroutineScope.launch(Dispatchers.Main) {
                     CanvasEventBus.forceUpdate.emit(null)
                 }
 //                sleep(5000)
@@ -444,7 +444,7 @@ class PageView(
             // let's control that the last preview fits the present orientation. Otherwise we'll ask for a redraw.
             if (bitmapFromDisc.height == windowedCanvas.height && bitmapFromDisc.width == windowedCanvas.width) {
                 windowedCanvas.drawBitmap(bitmapFromDisc, 0f, 0f, Paint())
-                log.d("loaded initial bitmap")
+                log.d("loaded initial bitmap, drawing to canvas: ${windowedCanvas.hashCode()}, bitmap: ${windowedBitmap.hashCode()}")
                 return true
             } else
                 log.i("Image preview does not fit canvas area - redrawing")
@@ -457,6 +457,7 @@ class PageView(
             drawBgToCanvas(null)
         } else
             windowedCanvas.drawColor(Color.WHITE)
+        log.d("loaded initial bitmap, drawing to canvas: ${windowedCanvas.hashCode()}, bitmap: ${windowedBitmap.hashCode()}")
         return false
     }
 
