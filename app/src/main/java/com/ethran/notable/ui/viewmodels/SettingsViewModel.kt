@@ -21,7 +21,8 @@ import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
 import com.ethran.notable.sync.WebDAVClient
-import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.isLatestVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -80,7 +81,7 @@ class SettingsViewModel @Inject constructor(
     private val credentialManager: CredentialManager,
     private val syncOrchestrator: SyncOrchestrator,
     private val syncProgressReporter: SyncProgressReporter,
-    private val snackState: SnackState,
+    private val snackDispatcher: SnackDispatcher,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
@@ -317,18 +318,25 @@ class SettingsViewModel @Inject constructor(
         action: suspend () -> SyncResult
     ) {
         appScope.launch {
-            snackState.runWithSnack(textDuring = textDuring, resultDurationMs = 3000) {
+            val snackId = java.util.UUID.randomUUID().toString()
+            snackDispatcher.showOrUpdateSnack(
+                SnackConf(id = snackId, text = textDuring, duration = null)
+            )
+            val message = try {
                 val result = action()
-                val message =
-                    if (result is SyncResult.Success) {
-                        successMessage
-                    } else {
-                        val error = (result as? SyncResult.Failure)?.error?.toString() ?: "Unknown"
-                        "Sync failed: $error"
-                    }
-                _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
-                message
+                if (result is SyncResult.Success) {
+                    successMessage
+                } else {
+                    val error = (result as? SyncResult.Failure)?.error?.toString() ?: "Unknown"
+                    "Sync failed: $error"
+                }
+            } catch (e: Exception) {
+                "Sync failed: ${e.message ?: "Unknown"}"
             }
+            snackDispatcher.showOrUpdateSnack(
+                SnackConf(id = snackId, text = message, duration = 3000)
+            )
+            _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
         }
     }
 
