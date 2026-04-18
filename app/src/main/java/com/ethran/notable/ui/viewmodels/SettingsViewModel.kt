@@ -15,6 +15,7 @@ import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.sync.CredentialManager
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.sync.SyncOrchestrator
+import com.ethran.notable.sync.SyncProgressReporter
 import com.ethran.notable.sync.SyncResult
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncSettings
@@ -78,6 +79,7 @@ class SettingsViewModel @Inject constructor(
     private val kvProxy: KvProxy,
     private val credentialManager: CredentialManager,
     private val syncOrchestrator: SyncOrchestrator,
+    private val syncProgressReporter: SyncProgressReporter,
     private val snackState: SnackState,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
@@ -105,7 +107,7 @@ class SettingsViewModel @Inject constructor(
 
         // Observe sync engine state
         viewModelScope.launch {
-            SyncOrchestrator.syncState.collect { state ->
+            syncProgressReporter.state.collect { state ->
                 syncUiState = syncUiState.copy(syncState = state)
             }
         }

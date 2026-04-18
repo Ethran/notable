@@ -37,11 +37,11 @@ All sync code lives in `com.ethran.notable.sync`. The components and their respo
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     SyncOrchestrator                       │
-│  Orchestrates full sync flow, lock/state, progress.        │
+│  Orchestrates full sync flow, holds syncMutex.             │
 ├─────────────────────────────────────────────────────────────┤
 │  SyncPreflightService      FolderSyncService               │
 │  NotebookReconciliationService  NotebookSyncService         │
-│  SyncForceService                                         │
+│  SyncForceService          SyncProgressReporter (state)    │
 ├─────────────────────────────────────────────────────────────┤
 │  WebDavClientFactoryPort -> WebDavClientFactoryAdapter     │
 │  WebDAVClient (OkHttp, PROPFIND/XML)                       │
@@ -50,9 +50,12 @@ All sync code lives in `com.ethran.notable.sync`. The components and their respo
 
 | File                                                                                                                | Role                                                                                                                                                               |
 |---------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`SyncOrchestrator.kt`](../app/src/main/java/com/ethran/notable/sync/SyncOrchestrator.kt)                           | Core orchestrator. Full sync flow, per-notebook trigger, deletion upload, shared state machine (`SyncState`) and mutex for concurrency control.                    |
+| [`SyncOrchestrator.kt`](../app/src/main/java/com/ethran/notable/sync/SyncOrchestrator.kt)                           | Core orchestrator. Full sync flow, per-notebook trigger, deletion upload. Holds the shared `syncMutex` (companion object) for process-wide concurrency control. Delegates progress/state reporting to `SyncProgressReporter`. |
 | [`SyncPreflightService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPreflightService.kt)                   | Pre-sync checks and server directory bootstrap (`/notable`, `/notebooks`, `/deletions`).                                                                           |
-| [`NotebookReconciliationService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookReconciliationService.kt) | Per-notebook conflict decision (upload/download/no-op) based on manifest timestamps.                                                                               |
+| [`FolderSyncService.kt`](../app/src/main/java/com/ethran/notable/sync/FolderSyncService.kt)                         | Folder hierarchy sync (folders.json merge + upsert).                                                                                                               |
+| [`NotebookReconciliationService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookReconciliationService.kt) | Per-notebook conflict decision (upload/download/no-op) based on manifest timestamps. Reports per-item progress via `SyncProgressReporter.beginItem`/`endItem`.     |
+| [`NotebookSyncService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSyncService.kt)                     | Per-notebook upload/download execution. Reports per-item progress via `SyncProgressReporter.beginItem`/`endItem` when downloading new notebooks.                   |
+| [`SyncProgressReporter.kt`](../app/src/main/java/com/ethran/notable/sync/SyncProgressReporter.kt)                   | `@Singleton` owner of the `SyncState` `StateFlow`. Interface + `SyncProgressReporterImpl` + Hilt `@Binds` module + `SyncProgressReporterEntryPoint`. Write-side API: `beginStep`, `beginItem`, `endItem`, `finishSuccess`, `finishError`, `reset`. Read-side: `state`. Consumers inject `SyncProgressReporter` rather than touching `SyncOrchestrator` for state. |
 | [`SyncForceService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncForceService.kt)                           | Force upload/download flows (full side replacement) used by settings actions.                                                                                      |
 | [`SyncPorts.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPorts.kt)                                         | DI port/adapter for WebDAV client creation (`WebDavClientFactoryPort`).                                                                                            |
 | [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt)                                   | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. Streaming downloads. ETag-aware downloads and `If-Match` guarded uploads for optimistic concurrency. |
@@ -546,11 +549,12 @@ The WebDAV client handles standard server responses that are not errors:
 Sync state is exposed as a `StateFlow<SyncState>` for UI observation:
 
 ```
-Idle → Syncing(step, progress, details) → Success(summary) → Idle
-                                        → Error(error, step, canRetry)
+Idle → Syncing(step, stepProgress, details, item?) → Success(summary) → Idle
+                                                  → Error(error, step, canRetry)
 ```
 
-- `Syncing` includes a `SyncStep` enum and float progress (0.0-1.0) for progress indication.
+- `Syncing` includes a `SyncStep` enum, a float `stepProgress` (0.0–1.0) for the current step, a `details` string, and an optional `item: ItemProgress?` (`index`, `total`, `name`) set by services that loop over notebooks (`NotebookReconciliationService`, `NotebookSyncService`).
+- `SyncState` is owned by `SyncProgressReporter` (Hilt `@Singleton`). `SyncSettingsTab` renders it via `SyncProgressPanel`, using helpers `SyncStep.displayName()`, `overallProgressOf(Syncing)`, and `stepBandEnd(SyncStep)` to map per-step progress onto an overall bar.
 - `Success` auto-resets to `Idle` after 3 seconds.
 - `Error` persists until the next sync attempt.
 
@@ -593,5 +597,5 @@ Potential enhancements beyond the current implementation, roughly ordered by imp
 
 ---
 
-**Version**: 1.4
-**Last Updated**: 2026-04-03
+**Version**: 1.5
+**Last Updated**: 2026-04-18

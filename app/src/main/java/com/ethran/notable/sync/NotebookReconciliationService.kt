@@ -11,7 +11,8 @@ class NotebookReconciliationService @Inject constructor(
     private val appRepository: AppRepository,
     private val credentialManager: CredentialManager,
     private val syncPreflightService: SyncPreflightService,
-    private val notebookSyncService: NotebookSyncService
+    private val notebookSyncService: NotebookSyncService,
+    private val reporter: SyncProgressReporter
 ) {
     private val notebookSerializer = NotebookSerializer()
     private val logger = SyncLogger
@@ -19,14 +20,17 @@ class NotebookReconciliationService @Inject constructor(
     suspend fun syncExistingNotebooks(webdavClient: WebDAVClient): Set<String> {
         val localNotebooks = appRepository.bookRepository.getAll()
         val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
+        val total = localNotebooks.size
 
-        localNotebooks.forEach { notebook ->
+        localNotebooks.forEachIndexed { i, notebook ->
+            reporter.beginItem(index = i + 1, total = total, name = notebook.title)
             try {
                 syncNotebook(notebook.id, webdavClient)
             } catch (e: Exception) {
                 logger.e(TAG, "Failed to sync ${notebook.title}: ${e.message}")
             }
         }
+        reporter.endItem()
 
         return preDownloadNotebookIds
     }

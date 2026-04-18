@@ -621,7 +621,7 @@ fun ManualSyncButton(
     val label by remember(syncState) {
         derivedStateOf {
             when (syncState) {
-                is SyncState.Syncing -> "Syncing... ${(syncState.progress * 100).toInt()}%"
+                is SyncState.Syncing -> "Syncing\u2026"
                 is SyncState.Success -> "Successfully Synced"
                 is SyncState.Error -> "Sync Failed"
                 else -> "Sync Now"
@@ -629,17 +629,98 @@ fun ManualSyncButton(
         }
     }
 
-    Button(
-        onClick = onManualSync,
-        enabled = syncState is SyncState.Idle && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (syncState is SyncState.Syncing) {
+            SyncProgressPanel(syncState)
+        }
+        Button(
+            onClick = onManualSync,
+            enabled = syncState is SyncState.Idle && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            colors = eInkButtonColors(),
+            shape = EInkButtonShape
+        ) {
+            Text(label, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SyncProgressPanel(syncing: SyncState.Syncing) {
+    val overall = overallProgressOf(syncing).coerceIn(0f, 1f)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp),
-        colors = eInkButtonColors(),
-        shape = EInkButtonShape
+            .border(1.dp, MaterialTheme.colors.onSurface)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(label, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = syncing.currentStep.displayName(),
+                style = MaterialTheme.typography.body2,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colors.onSurface
+            )
+            Text(
+                text = "${(overall * 100).toInt()}%",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onSurface
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .border(1.dp, MaterialTheme.colors.onSurface)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(overall)
+                    .height(6.dp)
+                    .background(MaterialTheme.colors.onSurface)
+            )
+        }
+        syncing.item?.let { item ->
+            Text(
+                text = "Notebook ${item.index} of ${item.total} \u00b7 ${item.name}",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface
+            )
+        }
     }
+}
+
+private fun SyncStep.displayName(): String = when (this) {
+    SyncStep.INITIALIZING -> "Preparing"
+    SyncStep.SYNCING_FOLDERS -> "Syncing folders"
+    SyncStep.APPLYING_DELETIONS -> "Applying deletions"
+    SyncStep.SYNCING_NOTEBOOKS -> "Syncing notebooks"
+    SyncStep.DOWNLOADING_NEW -> "Downloading new notebooks"
+    SyncStep.UPLOADING_DELETIONS -> "Uploading deletions"
+    SyncStep.FINALIZING -> "Finalizing"
+}
+
+private fun overallProgressOf(s: SyncState.Syncing): Float {
+    val start = s.stepProgress
+    val end = stepBandEnd(s.currentStep)
+    val frac = s.item?.let { it.index.toFloat() / it.total.coerceAtLeast(1) } ?: 0f
+    return start + (end - start) * frac
+}
+
+private fun stepBandEnd(step: SyncStep): Float = when (step) {
+    SyncStep.INITIALIZING -> 0.1f
+    SyncStep.SYNCING_FOLDERS -> 0.2f
+    SyncStep.APPLYING_DELETIONS -> 0.3f
+    SyncStep.SYNCING_NOTEBOOKS -> 0.6f
+    SyncStep.DOWNLOADING_NEW -> 0.8f
+    SyncStep.UPLOADING_DELETIONS -> 0.9f
+    SyncStep.FINALIZING -> 1.0f
 }
 
 @Composable

@@ -12,7 +12,8 @@ import javax.inject.Singleton
 
 @Singleton
 class NotebookSyncService @Inject constructor(
-    private val appRepository: AppRepository
+    private val appRepository: AppRepository,
+    private val reporter: SyncProgressReporter
 ) {
     private val notebookSerializer = NotebookSerializer()
     private val TAG = "NotebookSyncService"
@@ -105,7 +106,9 @@ class NotebookSyncService @Inject constructor(
                 .filter { it !in settings.syncedNotebookIds }
         if (newNotebookIds.isNotEmpty()) {
             sLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
-            for (notebookId in newNotebookIds) {
+            val total = newNotebookIds.size
+            newNotebookIds.forEachIndexed { i, notebookId ->
+                reporter.beginItem(index = i + 1, total = total, name = notebookId)
                 try {
                     sLog.i(TAG, "Downloading new notebook from server: $notebookId")
                     downloadNotebook(notebookId, webdavClient)
@@ -113,6 +116,7 @@ class NotebookSyncService @Inject constructor(
                     sLog.e(TAG, "Failed to download $notebookId: ${e.message}")
                 }
             }
+            reporter.endItem()
         } else {
             sLog.i(TAG, "No new notebooks on server")
         }
