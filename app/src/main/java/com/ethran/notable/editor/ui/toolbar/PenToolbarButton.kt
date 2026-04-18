@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
+import io.shipbook.shipbooksdk.Log
 
 @Composable
 fun PenToolbarButton(
@@ -20,15 +21,16 @@ fun PenToolbarButton(
     sizes: List<Pair<String, Float>>,
     penSetting: PenSetting,
     onChangeSetting: (PenSetting) -> Unit,
-    onStrokeMenuOpenChange: ((Boolean) -> Unit)? = null
+//    onStrokeMenuOpenChange: ((Boolean) -> Unit)? = null
 ) {
     var isStrokeMenuOpen by remember { mutableStateOf(false) }
 
-    if (onStrokeMenuOpenChange != null) {
-        LaunchedEffect(isStrokeMenuOpen) {
-            onStrokeMenuOpenChange(isStrokeMenuOpen)
-        }
-    }
+//    if (onStrokeMenuOpenChange != null) {
+//        LaunchedEffect(isStrokeMenuOpen) {
+//            Log.d("PenToolbarButton", "isStrokeMenuOpen: $isStrokeMenuOpen")
+//            onStrokeMenuOpenChange(isStrokeMenuOpen)
+//        }
+//    }
 
 
     Box {

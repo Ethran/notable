@@ -103,6 +103,7 @@ class CanvasObserverRegistry(
                 if (hasFocus) {
                     inputHandler.updatePenAndStroke() // The setting might been changed by other app.
                     drawCanvas.drawCanvasToView(null)
+                    viewModel.updateDrawingState()
                 } else {
                     CanvasEventBus.isDrawing.emit(false)
                 }

@@ -666,7 +666,7 @@ class PageView(
         val redrawRect = Rect(0, 0, windowedBitmap.width, windowedBitmap.height)
 
         log.d("Redrawing full logical rect: $redrawRect")
-        windowedCanvas.drawColor(Color.BLACK)
+        windowedCanvas.drawColor(Color.GREEN)
         drawBgToCanvas(redrawRect)
         pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
 

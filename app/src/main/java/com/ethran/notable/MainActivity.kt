@@ -167,6 +167,13 @@ class MainActivity : ComponentActivity() {
             CanvasEventBus.onFocusChange.emit(hasFocus)
         }
     }
+    override fun onResume() {
+        super.onResume()
+        enableFullScreen()
+        lifecycleScope.launch {
+            CanvasEventBus.onFocusChange.emit(true)
+        }
+    }
 
 
     // when the screen orientation is changed, set new screen width restart is not necessary,
