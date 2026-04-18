@@ -142,7 +142,7 @@ fun loadPageFull(
             log.i("loadPagePreview: cache is stale for ${targetFile.name}")
             return null
         }
-        return readImageFile(targetFile)
+        return decodeBitmapFromFile(targetFile)
     }
 
     // Try finding the freshest file starting with pageID
@@ -156,7 +156,7 @@ fun loadPageFull(
     }
 
     val newest = candidates.maxByOrNull { it.lastModified() } ?: candidates.first()
-    return readImageFile(newest)
+    return decodeBitmapFromFile(newest)
 }
 
 suspend fun loadPagePreviewOrFallback(
@@ -186,7 +186,7 @@ suspend fun loadPagePreviewOrFallback(
     if (bitmapFromDisk == null && !requireExactMatch) {
         val thumbFile = getThumbnailFile(context, pageIdToLoad)
         if (thumbFile.exists()) {
-            bitmapFromDisk = readImageFile(thumbFile)
+            bitmapFromDisk = decodeBitmapFromFile(thumbFile)
         }
     }
 
@@ -245,14 +245,14 @@ private fun createPlaceholderPreview(
     return bmp
 }
 
-private fun readImageFile(file: File): Bitmap? {
+private fun decodeBitmapFromFile(file: File): Bitmap? {
     return try {
         val imgBitmap = BitmapFactory.decodeFile(file.absolutePath)
         if (imgBitmap != null) {
-            log.d("loadPagePreview: loaded cached preview '${file.name}'")
+            log.d("decodeBitmapFromFile: loaded cached preview '${file.name}'")
             imgBitmap
         } else {
-            log.w("loadPagePreview: failed to decode bitmap from ${file.name}")
+            log.w("decodeBitmapFromFile: failed to decode bitmap from ${file.name}")
             log.d(
                 $$"""
                 exists=$${file.exists()}
@@ -263,7 +263,7 @@ private fun readImageFile(file: File): Bitmap? {
             null
         }
     } catch (e: Exception) {
-        log.e("loadPagePreview: Exception while loading bitmap: ${e.message}")
+        log.e("decodeBitmapFromFile: Exception while loading bitmap: ${e.message}")
         null
     }
 }
