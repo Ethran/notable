@@ -233,6 +233,7 @@ interface SyncOrchestratorEntryPoint {
     fun syncOrchestrator(): SyncOrchestrator
     fun kvProxy(): KvProxy
     fun credentialManager(): CredentialManager
+    fun snackDispatcher(): com.ethran.notable.ui.SnackDispatcher
 }
 
 sealed class SyncResult {

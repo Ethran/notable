@@ -6,7 +6,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.ethran.notable.R
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackDispatcher
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
 
@@ -169,8 +169,11 @@ class SyncWorker(
         }
     }
 
-    private suspend fun showSyncSnack(textResId: Int) {
-        SnackState.globalSnackFlow.emit(
+    private fun showSyncSnack(textResId: Int) {
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext, SyncOrchestratorEntryPoint::class.java
+        )
+        entryPoint.snackDispatcher().showOrUpdateSnack(
             SnackConf(
                 text = applicationContext.getString(textResId),
                 duration = 3000
