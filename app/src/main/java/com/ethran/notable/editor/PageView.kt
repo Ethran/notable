@@ -270,6 +270,7 @@ class PageView(
     }
 
     private fun loadPage() {
+//        loadingJob?.cancel()
         logCache.i("Init from persist layer, pageId: $currentPageId")
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
         loadingJob = coroutineScope.launch(Dispatchers.IO) {

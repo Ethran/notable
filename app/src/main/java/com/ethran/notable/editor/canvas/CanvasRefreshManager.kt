@@ -66,8 +66,9 @@ class CanvasRefreshManager(
         resetScreenFreeze(touchHelper)
     }
 
-
+    //    private val renderScope = CoroutineScope(Dispatchers.Main)
     fun drawCanvasToView(dirtyRect: Rect?) {
+//        renderScope.launch {
         log.v("Canvas refresh started, dirtyRect: $dirtyRect, bitmap: ${page.windowedBitmap.hashCode()}, thread: ${Thread.currentThread().name}")
 
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
@@ -103,6 +104,7 @@ class CanvasRefreshManager(
                 log.w("Surface released during unlock", e)
             }
         }
+//        }
     }
 
 
