@@ -4,6 +4,7 @@ import android.content.Context
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.editor.utils.THUMBNAIL_WIDTH
 import com.ethran.notable.editor.utils.getThumbnailFile
 import com.ethran.notable.editor.utils.savePageThumbnail
@@ -67,7 +68,7 @@ class ThumbnailGenerator @Inject constructor(
      * Checks if a thumbnail is up to date and generates it if necessary.
      * Returns immediately if a generation for the same [pageId] is already in progress.
      */
-    suspend fun ensureThumbnail(pageId: String): ThumbnailEnsureResult {
+    suspend fun ensureThumbnail(pageId: String, mode: PreviewSaveMode): ThumbnailEnsureResult {
         val page = withContext(ioDispatcher) { pageRepository.getById(pageId) }
             ?: return ThumbnailEnsureResult.PAGE_NOT_FOUND
 
@@ -94,7 +95,7 @@ class ThumbnailGenerator @Inject constructor(
         }
 
         try {
-            val result = generate(page)
+            val result = generate(page, mode)
             if (result == ThumbnailEnsureResult.GENERATED) {
                 _thumbnailUpdated.tryEmit(pageId)
             }
@@ -109,16 +110,18 @@ class ThumbnailGenerator @Inject constructor(
     }
 
 
-    private suspend fun generate(page: Page): ThumbnailEnsureResult {
+    private suspend fun generate(
+        page: Page, mode: PreviewSaveMode
+    ): ThumbnailEnsureResult {
         val bitmap = pageContentRenderer.renderPageBitmap(
             pageId = page.id,
             target = RenderTarget.Thumbnail(
                 maxWidthPx = THUMBNAIL_WIDTH,
-                maxHeightPx = Int.MAX_VALUE
+                maxHeightPx = null
             )
         )
         bitmap.useAndRecycle { rendered ->
-            savePageThumbnail(context, rendered, page.id)
+            savePageThumbnail(context, rendered, page.id, mode)
         }
         log.d("Thumbnail generated for pageId=${page.id}")
         return ThumbnailEnsureResult.GENERATED

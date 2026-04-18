@@ -1,9 +1,10 @@
 package com.ethran.notable.io
 
-import com.ethran.notable.di.ApplicationScope
-import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
+import com.ethran.notable.di.ApplicationScope
+import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.editor.utils.PreviewSaveMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +45,7 @@ class ThumbnailBackfillQueue @Inject constructor(
         // listen for thumbnail generation requests
         applicationScope.launch(ioDispatcher) {
             for (pageId in queue) {
-                processOne(pageId)
+                processOne(pageId, PreviewSaveMode.REGULAR)
             }
         }
     }
@@ -89,9 +90,9 @@ class ThumbnailBackfillQueue @Inject constructor(
         }
     }
 
-    private suspend fun processOne(pageId: String) {
+    private suspend fun processOne(pageId: String, mode: PreviewSaveMode) {
         try {
-            thumbnailGenerator.ensureThumbnail(pageId)
+            thumbnailGenerator.ensureThumbnail(pageId, mode)
         } catch (t: Throwable) {
             log.e("Thumbnail generation failed for pageId=$pageId: ${t.message}")
         } finally {
@@ -113,7 +114,12 @@ class ThumbnailBackfillQueue @Inject constructor(
         if (throttled && now - lastUpdateMs < 300) return
 
         lastUpdateMs = now
-        appEventBus.tryEmit(AppEvent.PreviewBackfillProgress(current = cycleDone, total = cycleTotal))
+        appEventBus.tryEmit(
+            AppEvent.PreviewBackfillProgress(
+                current = cycleDone,
+                total = cycleTotal
+            )
+        )
     }
 
     private fun finalizeCycleLocked() {

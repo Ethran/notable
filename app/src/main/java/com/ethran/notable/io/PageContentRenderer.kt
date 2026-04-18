@@ -21,6 +21,7 @@ import com.ethran.notable.data.model.BackgroundType.Native
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.drawStroke
+import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -32,7 +33,7 @@ import kotlin.math.min
 
 sealed class RenderTarget {
     object Full : RenderTarget()
-    data class Thumbnail(val maxWidthPx: Int, val maxHeightPx: Int) : RenderTarget()
+    data class Thumbnail(val maxWidthPx: Int? = null, val maxHeightPx: Int? = null) : RenderTarget()
 }
 
 @Singleton
@@ -152,25 +153,47 @@ class PageContentRenderer @Inject constructor(
     private fun resolveRenderSize(
         contentWidth: Int,
         contentHeight: Int,
-        target: RenderTarget
+        target: RenderTarget,
     ): RenderSize {
         return when (target) {
             RenderTarget.Full -> RenderSize(contentWidth, contentHeight, 1f)
             is RenderTarget.Thumbnail -> {
-                val boundedWidth = target.maxWidthPx.coerceAtLeast(1)
-                val boundedHeight = target.maxHeightPx.coerceAtLeast(1)
+                val screenRatio = SCREEN_HEIGHT.toFloat() / SCREEN_WIDTH.toFloat()
 
-                val scale = min(
-                    1f,
-                    min(
-                        boundedWidth.toFloat() / contentWidth.toFloat(),
-                        boundedHeight.toFloat() / contentHeight.toFloat()
+                val width: Int
+                val height: Int
+                val scale: Float
+
+                if (target.maxWidthPx != null && target.maxHeightPx == null) {
+                    val w = target.maxWidthPx.coerceAtLeast(1)
+                    width = w
+                    height = (w * screenRatio).toInt()
+                    scale = w.toFloat() / contentWidth.toFloat()
+                } else if (target.maxHeightPx != null && target.maxWidthPx == null) {
+                    val h = target.maxHeightPx.coerceAtLeast(1)
+                    height = h
+                    width = (h / screenRatio).toInt()
+                    scale = h.toFloat() / contentHeight.toFloat()
+                } else if (target.maxWidthPx != null && target.maxHeightPx != null) {
+                    val boundedWidth = target.maxWidthPx.coerceAtLeast(1)
+                    val boundedHeight = target.maxHeightPx.coerceAtLeast(1)
+                    scale = min(
+                        1f,
+                        min(
+                            boundedWidth.toFloat() / contentWidth.toFloat(),
+                            boundedHeight.toFloat() / contentHeight.toFloat()
+                        )
                     )
-                )
+                    width = (contentWidth * scale).toInt()
+                    height = (contentHeight * scale).toInt()
+                } else {
+                    val w = com.ethran.notable.editor.utils.THUMBNAIL_WIDTH.coerceAtLeast(1)
+                    width = w
+                    height = (w * screenRatio).toInt()
+                    scale = w.toFloat() / contentWidth.toFloat()
+                }
 
-                val width = (contentWidth * scale).toInt().coerceAtLeast(1)
-                val height = (contentHeight * scale).toInt().coerceAtLeast(1)
-                RenderSize(width, height, scale)
+                RenderSize(width.coerceAtLeast(1), height.coerceAtLeast(1), scale)
             }
         }
     }

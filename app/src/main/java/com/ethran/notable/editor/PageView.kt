@@ -33,7 +33,7 @@ import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.utils.div
 import com.ethran.notable.editor.utils.divideStrokesFromCut
-import com.ethran.notable.editor.utils.loadPageFull
+import com.ethran.notable.editor.utils.loadHQPagePreview
 import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
@@ -432,7 +432,7 @@ class PageView(
 
     // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {
-        val bitmapFromDisc = loadPageFull(
+        val bitmapFromDisc = loadHQPagePreview(
             context = context,
             pageID = currentPageId,
             scroll = scroll,

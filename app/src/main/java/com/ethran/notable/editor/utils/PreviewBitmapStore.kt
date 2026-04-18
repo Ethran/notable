@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Build
@@ -32,6 +34,55 @@ private const val EQUALITY_THRESHOLD = 0.01f
 const val THUMBNAIL_WIDTH = 500
 private const val THUMBNAIL_QUALITY = 60
 private const val PREVIEW_QUALITY = 85
+
+enum class PreviewSaveMode {
+    STRICT_BW,  // Threshold to black & white, lossless max compression (WebP Lossless effort 100)
+    REGULAR     // Grayscale or Color depending on device
+}
+
+private data class StorageOptimization(
+    val bitmap: Bitmap,
+    val format: Bitmap.CompressFormat,
+    val quality: Int
+)
+
+private fun optimizeBitmapForStorage(
+    bitmap: Bitmap,
+    mode: PreviewSaveMode,
+    isThumbnail: Boolean
+): StorageOptimization {
+    if (mode == PreviewSaveMode.STRICT_BW) {
+        // Apply threshold for absolute B&W. WebP Lossless scale factor (effort) is passed via quality: 100 is max effort.
+        return StorageOptimization(bitmap.toThresholded(), webpLosslessFormat, 100)
+    }
+
+    // REGULAR mode
+    val isColor = DeviceCompat.isColorDevice()
+    val isOnyx = DeviceCompat.isOnyxDevice
+
+    if (!isColor || isOnyx) {
+        val config = Bitmap.Config.RGB_565
+        val optimized = createBitmap(bitmap.width, bitmap.height, config)
+        val canvas = Canvas(optimized)
+        val paint = Paint().apply {
+            if (!isColor) {
+                colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+            }
+        }
+        canvas.drawBitmap(bitmap, 0f, 0f, paint)
+
+        // WebP Lossless generates excellent small files for UI/grayscale handwriting.
+        // When choosing lossless WEBP, the compression effort uses exactly `100` to yield smallest file.
+        val format = if (!isThumbnail) webpLosslessFormat else webpLossyFormat
+        val quality = if (!isThumbnail) 100 else THUMBNAIL_QUALITY
+
+        return StorageOptimization(optimized, format, quality)
+    }
+
+    // Standard color saves
+    val quality = if (isThumbnail) THUMBNAIL_QUALITY else PREVIEW_QUALITY
+    return StorageOptimization(bitmap, webpLossyFormat, quality)
+}
 
 fun getThumbnailFile(context: Context, pageID: String): File =
     File(context.filesDir, "pages/previews/thumbs/$pageID.webp")
@@ -67,12 +118,11 @@ private fun isCacheFresh(file: File, pageUpdatedAtMs: Long?): Boolean {
  */
 private fun buildPreviewFileName(pageID: String, scrollY: Int): String = "${pageID}-sy$scrollY.webp"
 
-val webpCompressFormat: Bitmap.CompressFormat
-    get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        Bitmap.CompressFormat.WEBP_LOSSY
-    } else {
-        Bitmap.CompressFormat.WEBP
-    }
+val webpLossyFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+    Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+
+val webpLosslessFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+    Bitmap.CompressFormat.WEBP_LOSSLESS else Bitmap.CompressFormat.WEBP
 
 /**
  *   Remove other variants for this page (legacy + other scrollY encodings)
@@ -82,19 +132,19 @@ private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
         if (f.name != latestPreview && f.name.startsWith(pageID)) {
             try {
                 if (f.delete()) {
-                    log.d("savePagePreview: removed old preview ${f.name}")
+                    log.d("saveHQPagePreview: removed old preview ${f.name}")
                 }
             } catch (_: Throwable) {
-                log.e("savePagePreview: failed to delete old preview ${f.name}")
+                log.e("saveHQPagePreview: failed to delete old preview ${f.name}")
             }
         }
     }
 }
 
-fun savePageFull(
-    context: Context, bitmap: Bitmap, pageID: String, scroll: Offset?, zoom: Float?
+fun saveHQPagePreview(
+    context: Context, bitmap: Bitmap, pageID: String, scroll: Offset?, zoom: Float?, mode: PreviewSaveMode = PreviewSaveMode.REGULAR
 ) {
-    ensureNotMainThread("savePagePreview")
+    ensureNotMainThread("saveHQPagePreview")
     if (!checkZoomAndScroll(scroll, zoom)) return
 
     val scrollYInt = scroll!!.y.roundToInt()
@@ -102,23 +152,29 @@ fun savePageFull(
     val dir = ensurePreviewsFullFolder(context)
     val file = File(dir, fileName)
 
+    val optimized = optimizeBitmapForStorage(bitmap, mode, isThumbnail = false)
+
     try {
         file.outputStream().buffered().use { os ->
-            val success = bitmap.compress(webpCompressFormat, PREVIEW_QUALITY, os)
+            val success = optimized.bitmap.compress(optimized.format, optimized.quality, os)
             if (!success) {
-                log.e("savePagePreview: Failed to compress bitmap")
-                return
+                log.e("saveHQPagePreview: Failed to compress bitmap")
+                return@use
             }
-            log.d("savePagePreview: cached preview saved as $fileName (scrollY=$scrollYInt)")
+            log.d("saveHQPagePreview: cached preview saved as $fileName (scrollY=$scrollYInt)")
         }
         removeOldBitmaps(dir, fileName, pageID)
     } catch (e: Exception) {
-        log.e("savePagePreview: Exception while saving preview: ${e.message}")
-        logCallStack("savePagePreview")
+        log.e("saveHQPagePreview: Exception while saving preview: ${e.message}")
+        logCallStack("saveHQPagePreview")
+    } finally {
+        if (optimized.bitmap != bitmap) {
+            optimized.bitmap.recycle()
+        }
     }
 }
 
-fun loadPageFull(
+fun loadHQPagePreview(
     context: Context,
     pageID: String,
     scroll: Offset?,
@@ -135,11 +191,11 @@ fun loadPageFull(
         val targetFile = File(dir, expectedFileName)
 
         if (!targetFile.exists()) {
-            log.i("loadPagePreview: no exact-match cache (expected $expectedFileName)")
+            log.i("loadHQPagePreview: no exact-match cache (expected $expectedFileName)")
             return null
         }
         if (!isCacheFresh(targetFile, pageUpdatedAtMs)) {
-            log.i("loadPagePreview: cache is stale for ${targetFile.name}")
+            log.i("loadHQPagePreview: cache is stale for ${targetFile.name}")
             return null
         }
         return decodeBitmapFromFile(targetFile)
@@ -151,7 +207,7 @@ fun loadPageFull(
             ?.toList()?.filter { isCacheFresh(it, pageUpdatedAtMs) }.orEmpty()
 
     if (candidates.isEmpty()) {
-        log.i("loadPagePreview: no native cache file for pageID=$pageID")
+        log.i("loadHQPagePreview: no native cache file for pageID=$pageID")
         return null
     }
 
@@ -165,12 +221,11 @@ suspend fun loadPagePreviewOrFallback(
     expectedWidth: Int,
     expectedHeight: Int,
     pageNumber: Int?,
-    pageUpdatedAtMs: Long?,
-    requireExactMatch: Boolean = true,
+    pageUpdatedAtMs: Long?
 ): Bitmap = withContext(Dispatchers.IO) {
-    // Load from disk (full quality folder)
+    // Load from disk (full quality folder) ignoring requireExactMatch initially to find any full image
     var bitmapFromDisk: Bitmap? = try {
-        loadPageFull(
+        loadHQPagePreview(
             context,
             pageIdToLoad,
             null,
@@ -183,7 +238,7 @@ suspend fun loadPagePreviewOrFallback(
         null
     }
 
-    if (bitmapFromDisk == null && !requireExactMatch) {
+    if (bitmapFromDisk == null) {
         val thumbFile = getThumbnailFile(context, pageIdToLoad)
         if (thumbFile.exists()) {
             bitmapFromDisk = decodeBitmapFromFile(thumbFile)
@@ -271,24 +326,55 @@ private fun decodeBitmapFromFile(file: File): Bitmap? {
 /**
  * Persist a thumbnail for a page.
  */
-fun savePageThumbnail(context: Context, bitmap: Bitmap, pageID: String) {
+fun savePageThumbnail(
+    context: Context, bitmap: Bitmap, pageID: String, mode: PreviewSaveMode = PreviewSaveMode.REGULAR
+) {
     ensureNotMainThread("savePageThumbnail")
     val file = getThumbnailFile(context, pageID)
     file.parentFile?.mkdirs()
 
     val ratio = bitmap.height.toFloat() / bitmap.width.toFloat()
     val scaledBitmap = bitmap.scale(THUMBNAIL_WIDTH, (THUMBNAIL_WIDTH * ratio).toInt(), false)
+    val optimized = optimizeBitmapForStorage(scaledBitmap, mode, isThumbnail = true)
 
     try {
         file.outputStream().buffered().use { os ->
-            scaledBitmap.compress(webpCompressFormat, THUMBNAIL_QUALITY, os)
+            optimized.bitmap.compress(optimized.format, optimized.quality, os)
         }
     } catch (e: Exception) {
         log.e("savePageThumbnail: Exception while saving thumbnail: ${e.message}")
         logCallStack("savePageThumbnail")
     }
 
+    if (optimized.bitmap != scaledBitmap) {
+        optimized.bitmap.recycle()
+    }
     if (scaledBitmap != bitmap) {
         scaledBitmap.recycle()
     }
+}
+
+
+fun Bitmap.toThresholded(threshold: Int = 180): Bitmap {
+    val result = createBitmap(width, height, Bitmap.Config.RGB_565)
+    val canvas = Canvas(result)
+    val paint = Paint().apply {
+        colorFilter = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
+            // R output = 0.299R + 0.587G + 0.114B (luminance)
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0.299f, 0.587f, 0.114f, 0f, 0f,
+            0f,     0f,     0f,     1f, 0f
+        )))
+    }
+    canvas.drawBitmap(this, 0f, 0f, paint)
+    // now threshold: push every pixel to pure black or white
+    val pixels = IntArray(width * height)
+    result.getPixels(pixels, 0, width, 0, 0, width, height)
+    for (i in pixels.indices) {
+        val lum = Color.red(pixels[i]) // R=G=B after desaturate
+        pixels[i] = if (lum < threshold) Color.BLACK else Color.WHITE
+    }
+    result.setPixels(pixels, 0, width, 0, 0, width, height)
+    return result
 }

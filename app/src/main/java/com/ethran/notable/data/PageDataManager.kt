@@ -22,7 +22,7 @@ import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.utils.savePageFull
+import com.ethran.notable.editor.utils.saveHQPagePreview
 import com.ethran.notable.editor.utils.savePageThumbnail
 import com.ethran.notable.io.IN_IGNORED
 import com.ethran.notable.io.fileObserverEventNames
@@ -245,7 +245,12 @@ class PageDataManager @Inject constructor(
         } catch (e: Exception) {
             // All other unexpected exceptions
             log.e("Error caching neighbor pages", e)
-            appEventBus.tryEmit(AppEvent.ActionHint("Error encountered while caching neighbors", 5000))
+            appEventBus.tryEmit(
+                AppEvent.ActionHint(
+                    "Error encountered while caching neighbors",
+                    5000
+                )
+            )
 
         }
 
@@ -406,7 +411,7 @@ class PageDataManager @Inject constructor(
                     }
 
                     scope.launch(Dispatchers.IO) {
-                        savePageFull(
+                        saveHQPagePreview(
                             context,
                             bitmap,
                             pageId,
@@ -746,7 +751,12 @@ class PageDataManager @Inject constructor(
                             }
                             if (!waitForFileAvailable(filePath)) {
                                 log.w("File changed, but does not exist: $filePath")
-                                appEventBus.tryEmit(AppEvent.ActionHint("Background does not exist", 3000))
+                                appEventBus.tryEmit(
+                                    AppEvent.ActionHint(
+                                        "Background does not exist",
+                                        3000
+                                    )
+                                )
                                 return@launch
                             } else
                                 observeBackgroundFile(pageId, filePath)
@@ -780,7 +790,12 @@ class PageDataManager @Inject constructor(
                             invalidateBackground(pid)
                             if (pid == currentPage) {
                                 CanvasEventBus.forceUpdate.emit(null)
-                                appEventBus.tryEmit(AppEvent.ActionHint("Background file changed", 4000))
+                                appEventBus.tryEmit(
+                                    AppEvent.ActionHint(
+                                        "Background file changed",
+                                        4000
+                                    )
+                                )
                             }
                         }
                     }
