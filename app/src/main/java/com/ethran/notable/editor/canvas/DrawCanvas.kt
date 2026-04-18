@@ -26,6 +26,7 @@ import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
+import java.lang.Thread.sleep
 
 
 val pressure = EpdController.getMaxTouchPressure()

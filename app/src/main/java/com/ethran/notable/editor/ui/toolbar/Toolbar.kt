@@ -273,7 +273,7 @@ fun ToolbarContent(
                         value = uiState.eraser,
                         onChange = { onAction(ToolbarAction.ChangeEraser(it)) },
                         toggleScribbleToErase = { onAction(ToolbarAction.ToggleScribbleToErase(it)) },
-                        onMenuOpenChange = { onAction(ToolbarAction.UpdateMenuOpenTo(it)) },
+                        onMenuOpenChange = { onAction(ToolbarAction.ToggleEraserManu(it)) },
                         isMenuOpen = uiState.isStrokeSelectionOpen
                     )
 
