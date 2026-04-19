@@ -27,7 +27,7 @@ import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -166,6 +166,7 @@ class EditorViewModel @Inject constructor(
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,
     private val syncOrchestrator: SyncOrchestrator,
+    private val snackDispatcher: SnackDispatcher,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
@@ -361,8 +362,7 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = exportEngine.export(target, format)
-                val snack = SnackConf(text = result, duration = 4000)
-                SnackState.globalSnackFlow.emit(snack)
+                snackDispatcher.showOrUpdateSnack(SnackConf(text = result, duration = 4000))
             } catch (e: Exception) {
                 logAndShowError("EditorViewModel", "Export failed: ${e.message}")
             }
@@ -514,7 +514,7 @@ class EditorViewModel @Inject constructor(
         if (bookId != null) {
             appRepository.bookRepository.removePage(bookId, pageId)
         }
-        SnackState.globalSnackFlow.tryEmit(
+        snackDispatcher.showOrUpdateSnack(
             SnackConf(
                 text = "Could not find page, returning to library", duration = 4000
             )
@@ -578,8 +578,9 @@ class EditorViewModel @Inject constructor(
             _toolbarState.update { it.copy(pageId = newPageId) }
         } else {
             Log.d("EditorView", "Tried to change to same page!")
-            val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
-            SnackState.globalSnackFlow.emit(snack)
+            snackDispatcher.showOrUpdateSnack(
+                SnackConf(text = "Tried to change to same page!", duration = 4000)
+            )
         }
     }
 
