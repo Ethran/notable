@@ -57,8 +57,8 @@ import com.ethran.notable.editor.ui.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.NotebookCard
 import com.ethran.notable.ui.components.ShowPagesRow
@@ -355,6 +355,7 @@ fun NotebookImportPanel(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val snackState = LocalSnackContext.current
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
 
     showPdfImportChoiceDialog?.let { uri ->
@@ -413,7 +414,7 @@ fun NotebookImportPanel(
                     }
                 } catch (e: Exception) {
                     log.e("contentPicker failed: ${e.message}", e)
-                    SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Importing failed: ${e.message}"))
+                    snackState.showOrUpdateSnack(SnackConf(text = "Importing failed: ${e.message}"))
                 }
             }
             // Import Notebook (Bottom Half)
@@ -493,6 +494,7 @@ fun LibraryContentPreview() {
 //        onImportXopp = {})
 }
 
+@Suppress("UnusedVariable")
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Preview(showBackground = true, name = "Library - Update Available & Importing")
 @Composable

@@ -7,10 +7,11 @@ import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -48,7 +49,7 @@ import kotlin.math.min
 class OnyxInputHandler(
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
-    private val state: EditorState,
+    private val viewModel: EditorViewModel,
     private val history: History,
     private val coroutineScope: CoroutineScope,
     private val strokeHistoryBatch: MutableList<String>,
@@ -56,6 +57,7 @@ class OnyxInputHandler(
     var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
     private val log = ShipBook.getLogger("DrawCanvas")
+    private val toolbarState get() = viewModel.toolbarState.value
 
     // TODO: As OnyxInput is not done by lazy, which forces evaluation of the touchHelper
     //       lazy during DrawCanvas construction.
@@ -129,14 +131,14 @@ class OnyxInputHandler(
         if(touchHelper == null) return
         // it takes around 11 ms to run on Note 4c.
         log.i("Update pen and stroke")
-        when (state.mode) {
+        when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(state.pen))
-                ?.setStrokeWidth(state.penSettings[state.pen.penName]!!.strokeSize * page.zoomLevel.value)
-                ?.setStrokeColor(state.penSettings[state.pen.penName]!!.color)
+            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
+                ?.setStrokeWidth(toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize * page.zoomLevel.value)
+                ?.setStrokeColor(toolbarState.penSettings[toolbarState.pen.penName]!!.color)
 
             Mode.Erase -> {
-                when (state.eraser) {
+                when (toolbarState.eraser) {
                     Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
                         ?.setStrokeWidth(30f)
                         ?.setStrokeColor(Color.GRAY)
@@ -163,8 +165,8 @@ class OnyxInputHandler(
 
     suspend fun updateIsDrawing() {
         if(touchHelper == null) return
-        log.i("Update is drawing: ${state.isDrawing}")
-        if (state.isDrawing) {
+        log.i("Update is drawing: $toolbarState.isDrawing")
+        if (toolbarState.isDrawing) {
             touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
@@ -182,7 +184,7 @@ class OnyxInputHandler(
         coroutineScope.launch {
             onSurfaceInit(drawCanvas)
             val toolbarHeight =
-                if (state.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
+                if (toolbarState.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
             setupSurface(
                 drawCanvas,
                 touchHelper,
@@ -202,14 +204,17 @@ class OnyxInputHandler(
         // Need testing if it will be better to do in main thread on, in separate.
         // thread(start = true, isDaemon = false, priority = Thread.MAX_PRIORITY) {
 
-        when (drawCanvas.getActualState().mode) {
+        when (toolbarState.mode) {
             Mode.Erase -> onRawErasingList(plist)
             Mode.Select -> {
                 thread {
                     val points =
                         copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
                     handleSelect(
-                        coroutineScope, drawCanvas.page, drawCanvas.getActualState(), points
+                        scope = coroutineScope,
+                        page = drawCanvas.page,
+                        viewModel = viewModel,
+                        points = points
                     )
                     val boundingBox = calculateBoundingBox(points) { Pair(it.x, it.y) }.toRect()
                     val padding = 10
@@ -246,9 +251,9 @@ class OnyxInputHandler(
                         handleDraw(
                             drawCanvas.page,
                             strokeHistoryBatch,
-                            drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.strokeSize,
-                            drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.color,
-                            drawCanvas.getActualState().pen,
+                            toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize,
+                            toolbarState.penSettings[toolbarState.pen.penName]!!.color,
+                            toolbarState.pen,
                             linePoints
                         )
 
@@ -283,7 +288,7 @@ class OnyxInputHandler(
                             page,
                             scaledPoints,
                             history,
-                            drawCanvas.getActualState().pen,
+                            toolbarState.pen,
                             currentLastStrokeEndTime,
                             firstPointTime
                         )
@@ -293,9 +298,9 @@ class OnyxInputHandler(
                             handleDraw(
                                 drawCanvas.page,
                                 strokeHistoryBatch,
-                                drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.strokeSize,
-                                drawCanvas.getActualState().penSettings[drawCanvas.getActualState().pen.penName]!!.color,
-                                drawCanvas.getActualState().pen,
+                                toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize,
+                                toolbarState.penSettings[toolbarState.pen.penName]!!.color,
+                                toolbarState.pen,
                                 scaledPoints
                             )
                         } else {
@@ -340,7 +345,7 @@ class OnyxInputHandler(
             drawCanvas.page,
             history,
             points,
-            eraser = drawCanvas.getActualState().eraser
+            eraser = toolbarState.eraser
         )
         if (zoneEffected != null)
             drawCanvas.refreshManager.refreshUi(zoneEffected)

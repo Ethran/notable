@@ -60,17 +60,17 @@ import com.ethran.notable.BuildConfig
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.navigation.NavigationDestination
-import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.showHint
+import com.ethran.notable.ui.LocalSnackContext
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.DebugSettings
 import com.ethran.notable.ui.components.GeneralSettings
 import com.ethran.notable.ui.components.GesturesSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.viewmodels.GestureRowModel
 import com.ethran.notable.ui.viewmodels.SettingsViewModel
-import com.ethran.notable.ui.viewmodels.SyncSettingsEffect
 import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
 import com.ethran.notable.utils.isNext
+import kotlinx.coroutines.launch
 
 
 object SettingsDestination : NavigationDestination {
@@ -90,14 +90,6 @@ fun SettingsView(
 
     LaunchedEffect(Unit) {
         viewModel.checkUpdate(context, force = false)
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.syncEffects.collect { effect ->
-            when (effect) {
-                is SyncSettingsEffect.ShowHint -> showHint(effect.message, scope)
-            }
-        }
     }
 
     @Suppress("KotlinConstantConditions") val versionString = remember {
@@ -288,10 +280,18 @@ private fun SettingsTabRow(tabs: List<String>, selectedTab: Int, onTabSelected: 
 @Composable
 fun GitHubSponsorButton(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val snackState = LocalSnackContext.current
+    val scope = rememberCoroutineScope()
     Box(
         modifier = modifier
             .background(color = Color(0xFF24292E), shape = RoundedCornerShape(25.dp))
-            .clickable { openInBrowser(context, "https://github.com/sponsors/ethran") },
+            .clickable {
+                openInBrowser(context, "https://github.com/sponsors/ethran") {
+                    scope.launch {
+                        snackState.displaySnack(SnackConf(text = it, duration = 3000))
+                    }
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -318,6 +318,8 @@ fun UpdateActions(
     isLatestVersion: Boolean, onCheckUpdate: (Boolean) -> Unit, modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val snackState = LocalSnackContext.current
+    val scope = rememberCoroutineScope()
     if (!isLatestVersion) {
         Column(modifier = modifier) {
             Text(
@@ -327,7 +329,13 @@ fun UpdateActions(
             )
             Spacer(Modifier.height(10.dp))
             Button(
-                onClick = { openInBrowser(context, "https://github.com/ethran/notable/releases") },
+                onClick = {
+                    openInBrowser(context, "https://github.com/ethran/notable/releases") {
+                        scope.launch {
+                            snackState.displaySnack(SnackConf(text = it, duration = 3000))
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Upgrade, contentDescription = null)
@@ -345,17 +353,14 @@ fun UpdateActions(
 }
 
 
-fun openInBrowser(context: Context, uriString: String) {
+fun openInBrowser(context: Context, uriString: String, onError: (String) -> Unit) {
     val urlIntent = Intent(Intent.ACTION_VIEW, uriString.toUri())
     try {
         context.startActivity(urlIntent)
     } catch (_: ActivityNotFoundException) {
-        // log and show error
-        SnackState.logAndShowError(
-            "openInBrowser",
-            "No application can handle this request. Please install a web browser.",
-            Log::w
-        )
+        val message = "No application can handle this request. Please install a web browser."
+        Log.w("openInBrowser", message)
+        onError(message)
     }
 }
 

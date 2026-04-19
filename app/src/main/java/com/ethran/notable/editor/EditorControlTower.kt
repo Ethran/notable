@@ -5,22 +5,16 @@ import android.graphics.Bitmap
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.HistoryBusActions
 import com.ethran.notable.editor.state.Mode
-import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.state.Operation
+import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.state.SelectionState
-import com.ethran.notable.editor.state.UndoRedoType
-import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
-import com.ethran.notable.editor.utils.strokeBounds
-import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.sync.SyncLogger
-import com.ethran.notable.ui.showHint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,8 +30,8 @@ class EditorControlTower(
     private val scope: CoroutineScope,
     val page: PageView,
     private var history: History,
-    private val state: EditorState,
-    private val syncOrchestrator: SyncOrchestrator,
+    private val viewModel: EditorViewModel,
+    private val clipboardStore: ClipboardStore,
 ) {
     private var scrollInProgress = Mutex()
     private var scrollJob: Job? = null
@@ -77,8 +71,8 @@ class EditorControlTower(
         scrollJob = scope.launch(Dispatchers.Main.immediate) {
             scrollInProgress.withLock {
                 val scaledDelta = (delta / page.zoomLevel.value)
-                if (state.mode == Mode.Select) {
-                    if (state.selectionState.firstPageCut != null) {
+                if (viewModel.toolbarState.value.mode == Mode.Select) {
+                    if (viewModel.selectionState.firstPageCut != null) {
                         onOpenPageCut(scaledDelta)
                     } else {
                         onPageScroll(-delta)
@@ -109,7 +103,7 @@ class EditorControlTower(
 
         // Switch to Main thread for Compose state mutations
         withContext(Dispatchers.Main) {
-            state.viewModel.changePage(id)
+            viewModel.changePage(id)
             history.cleanHistory()
         }
 
@@ -125,53 +119,53 @@ class EditorControlTower(
     private suspend fun triggerSyncForPage(pageId: String?) {
         if (pageId == null) return
         try {
-            syncOrchestrator.syncFromPageId(pageId)
+            viewModel.syncFromPageId(pageId)
         } catch (e: Exception) {
-            // Log but don't crash the UI thread
             SyncLogger.e("EditorControlTower", "Sync failed: ${e.message}")
         }
     }
 
     fun setIsDrawing(value: Boolean) {
-        if (state.isDrawing == value) {
+        if (viewModel.toolbarState.value.isDrawing == value) {
             logEditorControlTower.w("IsDrawing already set to $value")
             return
         }
-        state.isDrawing = value
+        scope.launch { CanvasEventBus.isDrawing.emit(value) }
     }
 
     fun toggleTool() {
-        state.viewModel.onToolbarAction(ToolbarAction.ChangeMode(if (state.mode == Mode.Draw) Mode.Erase else Mode.Draw))
+        val mode = viewModel.toolbarState.value.mode
+        viewModel.onToolbarAction(ToolbarAction.ChangeMode(if (mode == Mode.Draw) Mode.Erase else Mode.Draw))
     }
 
     fun toggleZen() {
-        state.viewModel.onToolbarAction(ToolbarAction.ToggleToolbar)
+        viewModel.onToolbarAction(ToolbarAction.ToggleToolbar)
     }
 
     fun getSnapshotOfSelectionState(): SelectionState {
-        return state.selectionState
+        return viewModel.selectionState
     }
 
     fun getSelectedBitmap(): Bitmap {
-        return state.selectionState.selectedBitmap!!
+        return requireNotNull(viewModel.selectionState.selectedBitmap)
     }
 
     fun goToNextPage() {
         logEditorControlTower.i("Going to next page")
-        state.viewModel.goToNextPage()
+        viewModel.goToNextPage()
         history.cleanHistory()
     }
 
     fun goToPreviousPage() {
         logEditorControlTower.i("Going to previous page")
-        state.viewModel.goToPreviousPage()
+        viewModel.goToPreviousPage()
         history.cleanHistory()
     }
 
     fun undo() {
         scope.launch {
             logEditorControlTower.i("Undo called")
-            history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
+            history.undo()
 //            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
@@ -179,14 +173,14 @@ class EditorControlTower(
     fun redo() {
         scope.launch {
             logEditorControlTower.i("Redo called")
-            history.handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
+            history.redo()
 //            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
     fun onPinchToZoom(delta: Float, center: Offset?) {
         if (!page.isTransformationAllowed) return
-        if (state.mode == Mode.Select)
+        if (viewModel.toolbarState.value.mode == Mode.Select)
             return
         scope.launch {
             scrollInProgress.withLock {
@@ -208,37 +202,19 @@ class EditorControlTower(
         }
     }
 
-    // TODO: add description
     private fun onOpenPageCut(offset: Offset) {
-        if (offset.x < 0 || offset.y < 0) return
-        val cutLine = state.selectionState.firstPageCut!!
-
-        val (_, previousStrokes) = divideStrokesFromCut(page.strokes, cutLine)
-
-        // calculate new strokes to add to the page
-        val nextStrokes = previousStrokes.map { stroke ->
-            stroke.copy(
-                points = stroke.points.map { point ->
-                    point.copy(x = point.x + offset.x, y = point.y + offset.y)
-                }, top = stroke.top + offset.y, bottom = stroke.bottom + offset.y,
-                left = stroke.left + offset.x, right = stroke.right + offset.x
-            )
-        }
-
-        // remove and paste
-        page.removeStrokes(strokeIds = previousStrokes.map { it.id })
-        page.addStrokes(nextStrokes)
+        val cutLine = viewModel.selectionState.firstPageCut ?: return
+        val result = page.applyPageCutOffset(cutLine, offset) ?: return
 
         // commit to history
         history.addOperationsToHistory(
             listOf(
-                Operation.DeleteStroke(nextStrokes.map { it.id }),
-                Operation.AddStroke(previousStrokes)
+                Operation.DeleteStroke(result.movedStrokes.map { it.id }),
+                Operation.AddStroke(result.previousStrokes)
             )
         )
 
-        state.selectionState.reset()
-        page.drawAreaScreenCoordinates(strokeBounds(previousStrokes + nextStrokes))
+        viewModel.selectionState.reset()
     }
 
     private suspend fun onPageScroll(dragDelta: Offset) {
@@ -252,29 +228,25 @@ class EditorControlTower(
 
     // when selection is moved, we need to redraw canvas
     fun applySelectionDisplace() {
-        val operationList = state.selectionState.applySelectionDisplace(page)
-        if (!operationList.isNullOrEmpty()) {
-            history.addOperationsToHistory(operationList)
-        }
+        viewModel.selectionState.applySelectionDisplaceAndCommit(page, history)
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
     fun deleteSelection() {
-        val operationList = state.selectionState.deleteSelection(page)
-        history.addOperationsToHistory(operationList)
-        state.isDrawing = true
+        viewModel.selectionState.deleteSelectionAndCommit(page, history)
+        setIsDrawing(true)
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 
     fun changeSizeOfSelection(scale: Int) {
-        if (!state.selectionState.selectedImages.isNullOrEmpty())
-            state.selectionState.resizeImages(scale, scope, page)
-        if (!state.selectionState.selectedStrokes.isNullOrEmpty())
-            state.selectionState.resizeStrokes(scale, scope, page)
+        if (!viewModel.selectionState.selectedImages.isNullOrEmpty())
+            viewModel.selectionState.resizeImages(scale, page)
+        if (!viewModel.selectionState.selectedStrokes.isNullOrEmpty())
+            viewModel.selectionState.resizeStrokes(scale, scope, page)
         // Emit a refresh signal to update UI
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
@@ -284,18 +256,18 @@ class EditorControlTower(
     fun duplicateSelection() {
         // finish ongoing movement
         applySelectionDisplace()
-        state.selectionState.duplicateSelection()
+        viewModel.selectionState.duplicateSelection()
 
     }
 
     fun cutSelectionToClipboard(context: Context) {
-        state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
+        clipboardStore.set(viewModel.selectionState.selectionToClipboard(page.scroll, context))
         deleteSelection()
-        showHint("Content cut to clipboard", scope)
+        showHint("Content cut to clipboard")
     }
 
     fun copySelectionToClipboard(context: Context) {
-        state.clipboard = state.selectionState.selectionToClipboard(page.scroll, context)
+        clipboardStore.set(viewModel.selectionState.selectionToClipboard(page.scroll, context))
     }
 
 
@@ -303,7 +275,7 @@ class EditorControlTower(
         // finish ongoing movement
         applySelectionDisplace()
 
-        val (strokes, images) = state.clipboard ?: return
+        val (strokes, images) = clipboardStore.get() ?: return
 
         val now = Date()
         val scrollPos = page.scroll
@@ -334,9 +306,17 @@ class EditorControlTower(
             )
         }
 
-        selectImagesAndStrokes(scope, page, state, pastedImages, pastedStrokes)
-        state.selectionState.placementMode = PlacementMode.Paste
+        selectImagesAndStrokes(
+            scope = scope,
+            page = page,
+            viewModel = viewModel,
+            imagesToSelect = pastedImages,
+            strokesToSelect = pastedStrokes
+        )
+        viewModel.selectionState.placementMode = PlacementMode.Paste
 
-        showHint("Pasted content from clipboard", scope)
+        showHint("Pasted content from clipboard")
     }
+
+    fun showHint(text: String) = viewModel.showHint(text)
 }

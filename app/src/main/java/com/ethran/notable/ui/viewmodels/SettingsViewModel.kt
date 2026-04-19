@@ -24,12 +24,11 @@ import com.ethran.notable.sync.WebDAVClient
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.isLatestVersion
+import com.ethran.notable.data.events.AppEventBus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -70,10 +69,6 @@ data class SyncSettingsUiState(
         get() = username != savedUsername || (password.isNotEmpty() && password != savedPassword)
 }
 
-sealed class SyncSettingsEffect {
-    data class ShowHint(val message: String) : SyncSettingsEffect()
-}
-
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
@@ -82,6 +77,7 @@ class SettingsViewModel @Inject constructor(
     private val syncOrchestrator: SyncOrchestrator,
     private val syncProgressReporter: SyncProgressReporter,
     private val snackDispatcher: SnackDispatcher,
+    private val appEventBus: AppEventBus,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
 
@@ -94,9 +90,6 @@ class SettingsViewModel @Inject constructor(
 
     var syncUiState by mutableStateOf(SyncSettingsUiState())
         private set
-
-    private val _syncEffects = MutableSharedFlow<SyncSettingsEffect>()
-    val syncEffects = _syncEffects.asSharedFlow()
 
     init {
         // Observe logs
@@ -143,7 +136,7 @@ class SettingsViewModel @Inject constructor(
      */
     fun checkUpdate(context: Context, force: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val result = isLatestVersion(context, force)
+            val result = isLatestVersion(context, appEventBus, force)
             withContext(Dispatchers.Main) {
                 isLatestVersion = result
             }
@@ -190,7 +183,9 @@ class SettingsViewModel @Inject constructor(
                      withContext(Dispatchers.Main) {
                          syncUiState = syncUiState.copy(savedUsername = username)
                          SyncLogger.i("Settings", "Username updated to: $username")
-                         _syncEffects.emit(SyncSettingsEffect.ShowHint("Credentials updated"))
+                         snackDispatcher.showOrUpdateSnack(
+                             SnackConf(text = "Credentials updated", duration = 3000)
+                         )
                      }
                  }
              }
@@ -208,9 +203,7 @@ class SettingsViewModel @Inject constructor(
         )
 
         SyncLogger.i("Settings", "Credentials saved for user: $username")
-        viewModelScope.launch {
-            _syncEffects.emit(SyncSettingsEffect.ShowHint("Credentials saved"))
-        }
+        snackDispatcher.showOrUpdateSnack(SnackConf(text = "Credentials saved", duration = 3000))
     }
 
     fun onTestConnection() {
@@ -336,7 +329,6 @@ class SettingsViewModel @Inject constructor(
             snackDispatcher.showOrUpdateSnack(
                 SnackConf(id = snackId, text = message, duration = 3000)
             )
-            _syncEffects.emit(SyncSettingsEffect.ShowHint(message))
         }
     }
 

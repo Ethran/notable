@@ -6,13 +6,14 @@ import android.net.Uri
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.ethran.notable.data.db.Image
+import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.PlacementMode
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.drawing.drawImage
-import com.ethran.notable.editor.state.EditorState
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.io.uriToBitmap
-import com.ethran.notable.ui.showHint
+
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -22,10 +23,10 @@ import kotlinx.coroutines.launch
 class ImageHandler(
     private val context: Context,
     private val page: PageView,
-    private val state: EditorState,
+    private val viewModel: EditorViewModel,
     private val coroutineScope: CoroutineScope
 ) {
-    private val logImageHandler = ShipBook.Companion.getLogger("ImageHandler")
+    private val logImageHandler = ShipBook.getLogger("ImageHandler")
 
      fun observeImageUri() {
         coroutineScope.launch {
@@ -42,10 +43,13 @@ class ImageHandler(
     private fun handleImage(imageUri: Uri) {
         // Convert the image to a software-backed bitmap
         val imageBitmap = uriToBitmap(context, imageUri)?.asImageBitmap()
-        if (imageBitmap == null) showHint(
-            "There was an error during image processing.", coroutineScope
-        )
-        val softwareBitmap = imageBitmap?.asAndroidBitmap()?.copy(Bitmap.Config.ARGB_8888, true)
+        if (imageBitmap == null) {
+            viewModel.snackDispatcher.showOrUpdateSnack(
+                SnackConf(text = "There was an error during image processing.", duration = 3000)
+            )
+            return
+        }
+        val softwareBitmap = imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
         if (softwareBitmap != null) {
             CanvasEventBus.addImageByUri.value = null
 
@@ -67,13 +71,13 @@ class ImageHandler(
             drawImage(
                 context, page.windowedCanvas, imageToSave, -page.scroll
             )
-            selectImage(coroutineScope, page, state, imageToSave)
+            selectImage(coroutineScope, page, viewModel,  imageToSave)
             // image will be added to database when released, the same as with paste element.
-            state.selectionState.placementMode = PlacementMode.Paste
+            viewModel.selectionState.placementMode = PlacementMode.Paste
             // make sure, that after regaining focus, we wont go back to drawing mode
         } else {
             // Handle cases where the bitmap could not be created
-            Log.Companion.e("ImageProcessing", "Failed to create software bitmap from URI.")
+            Log.e("ImageProcessing", "Failed to create software bitmap from URI.")
         }
     }
 }

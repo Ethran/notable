@@ -17,6 +17,8 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.state.ClipboardStore
+import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.Eraser
@@ -28,7 +30,6 @@ import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -166,13 +167,19 @@ class EditorViewModel @Inject constructor(
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,
     private val syncOrchestrator: SyncOrchestrator,
-    private val snackDispatcher: SnackDispatcher,
+    val snackDispatcher: SnackDispatcher,
+    private val historyFactory: History.Factory,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
-
     // ---- Toolbar / UI State (single flat flow) ----
     private val _toolbarState = MutableStateFlow(ToolbarUiState())
     val toolbarState: StateFlow<ToolbarUiState> = _toolbarState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            ClipboardStore.content.collect { setHasClipboard(it != null) }
+        }
+    }
 
     // ---- One-Time Events (Channels) ----
     private val uiEventChannel = Channel<EditorUiEvent>(Channel.BUFFERED)
@@ -227,6 +234,8 @@ class EditorViewModel @Inject constructor(
         // 3. Cleanup page resources
         page.disposeOldPage()
     }
+
+    fun createHistory(page: PageView): History = historyFactory.create(page)
 
     // --------------------------------------------------------
     // Toolbar Action Dispatch
@@ -312,6 +321,9 @@ class EditorViewModel @Inject constructor(
             saveToolbarState()
         }
         updateDrawingState()
+        viewModelScope.launch {
+            CanvasEventBus.refreshUi.emit(Unit)
+        }
     }
 
     private fun handleEraserChange(eraser: Eraser) {
@@ -353,7 +365,12 @@ class EditorViewModel @Inject constructor(
                 val copiedFile = copyImageToDatabase(context, uri)
                 sendCanvasCommand(CanvasCommand.CopyImageToCanvas(copiedFile.toUri()))
             } catch (e: Exception) {
-                logAndShowError("EditorViewModel", "Image import failed: ${e.message}")
+                snackDispatcher.showOrUpdateSnack(
+                    SnackConf(
+                        text = "Image import failed: ${e.message}",
+                        duration = 3000
+                    )
+                )
             }
         }
     }
@@ -364,7 +381,12 @@ class EditorViewModel @Inject constructor(
                 val result = exportEngine.export(target, format)
                 snackDispatcher.showOrUpdateSnack(SnackConf(text = result, duration = 4000))
             } catch (e: Exception) {
-                logAndShowError("EditorViewModel", "Export failed: ${e.message}")
+                snackDispatcher.showOrUpdateSnack(
+                    SnackConf(
+                        text = "Export failed: ${e.message}",
+                        duration = 3000
+                    )
+                )
             }
         }
     }
@@ -456,10 +478,13 @@ class EditorViewModel @Inject constructor(
         this.bookId = bookId
 
         val page = appRepository.pageRepository.getById(pageId)
+
         if (page == null) {
-            logAndShowError(
-                reason = "EditorViewModel",
-                message = "Could not find page",
+            snackDispatcher.showOrUpdateSnack(
+                SnackConf(
+                    text = "Could not find page",
+                    duration = 3000
+                )
             )
             fixNotebook(bookId, pageId)
             return
@@ -509,21 +534,28 @@ class EditorViewModel @Inject constructor(
     /**
      * Attempts to repair potential inconsistencies in the notebook's data structure.
      */
-    suspend fun fixNotebook(bookId: String?, pageId: String) {
-        log.i("Could not find page, cleaning book and returning to library")
-        if (bookId != null) {
-            appRepository.bookRepository.removePage(bookId, pageId)
-        }
+    fun fixNotebook(bookId: String?, pageId: String) {
+        log.i("Could not find page, prompting for repair")
         snackDispatcher.showOrUpdateSnack(
             SnackConf(
-                text = "Could not find page, returning to library", duration = 4000
+                text = "Could not find page",
+                duration = 60000,
+                actions = listOf(
+                    "Remove bad page" to {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            if (bookId != null) {
+                                appRepository.bookRepository.removePage(bookId, pageId)
+                            }
+                            sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
+                        }
+                    }
+                )
             )
         )
-        sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
     }
 
     // --------------------------------------------------------
-    // Page Navigation (from EditorState)
+    // Page navigation
     // --------------------------------------------------------
 
     private suspend fun getNextPageId(): String? {
@@ -630,6 +662,10 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    fun setDrawingStateFromCanvas(isDrawing: Boolean) {
+        _toolbarState.update { it.copy(isDrawing = isDrawing) }
+    }
+
     // --------------------------------------------------------
     // Event / Command Helpers
     // --------------------------------------------------------
@@ -655,5 +691,16 @@ class EditorViewModel @Inject constructor(
             Pen.MARKER.penName to PenSetting(40f, Color.LTGRAY),
             Pen.FOUNTAIN.penName to PenSetting(5f, Color.BLACK)
         )
+    }
+
+
+    fun showHint(message: String, durationMs: Int = 1500) {
+        snackDispatcher.showOrUpdateSnack(
+            SnackConf(text = message, duration = durationMs)
+        )
+    }
+
+    suspend fun syncFromPageId(pageId: String) {
+        syncOrchestrator.syncFromPageId(pageId)
     }
 }

@@ -36,7 +36,9 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.sync.CredentialManager
 import com.ethran.notable.sync.SyncScheduler
+import com.ethran.notable.ui.AppEventUiBridge
 import com.ethran.notable.ui.LocalSnackContext
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.NotableApp
 import com.ethran.notable.ui.theme.InkaTheme
@@ -85,7 +87,10 @@ class MainActivity : ComponentActivity() {
     lateinit var credentialManager: dagger.Lazy<CredentialManager>
 
     @Inject
-    lateinit var snackState: SnackState
+    lateinit var snackDispatcher: SnackDispatcher
+
+    @Inject
+    lateinit var appEventUiBridge: AppEventUiBridge
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,8 +104,7 @@ class MainActivity : ComponentActivity() {
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
 
-        snackState.registerGlobalSnackObserver()
-        snackState.registerCancelGlobalSnackObserver()
+        val snackState = SnackState()
 
         setContent {
             var isInitialized by remember { mutableStateOf(false) }
@@ -133,6 +137,7 @@ class MainActivity : ComponentActivity() {
                             // Call .get() here so they are only instantiated AFTER the permission check runs
                             exportEngine = exportEngineLazy.get(),
                             snackState = snackState,
+                            snackDispatcher = snackDispatcher,
                             appRepository = appRepositoryLazy.get()
                         )
                     } else {

@@ -17,8 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.state.EditorState
-import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
@@ -26,14 +25,11 @@ import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
 import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.navigation.NavigationDestination
-import com.ethran.notable.sync.SyncOrchestratorEntryPoint
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
-import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
@@ -106,22 +102,16 @@ fun EditorView(
             )
         }
 
-        val history = remember {
-            History(page)
-        }
-
-        // Create EditorState wrapper for backward compatibility
-        val editorState = remember(viewModel, page) {
-            EditorState(viewModel)
-        }
+        val history = remember(page) { viewModel.createHistory(page) }
 
         val editorControlTower = remember {
-            // Obtain SyncOrchestrator from Hilt entry point for use in non-Hilt-managed objects
-            val entry = EntryPointAccessors.fromApplication(
-                context.applicationContext, SyncOrchestratorEntryPoint::class.java
+            EditorControlTower(
+                scope = scope,
+                page = page,
+                history = history,
+                viewModel = viewModel,
+                clipboardStore = ClipboardStore,
             )
-            val syncOrchestrator = entry.syncOrchestrator()
-            EditorControlTower(scope, page, history, editorState, syncOrchestrator)
         }
 
 
@@ -169,7 +159,12 @@ fun EditorView(
                     CanvasCommand.ResetView -> editorControlTower.resetZoomAndScroll()
                     CanvasCommand.ClearAllStrokes -> {
                         CanvasEventBus.clearPageSignal.emit(Unit)
-                        snackManager.displaySnack(SnackConf(text = "Cleared all strokes"))
+                        snackManager.displaySnack(
+                            SnackConf(
+                                text = "Cleared all strokes",
+                                duration = 2000
+                            )
+                        )
                     }
 
                     CanvasCommand.RefreshCanvas -> {
@@ -199,11 +194,7 @@ fun EditorView(
             }
         }
 
-        // Collect toolbar state and sync EditorState (keeps snapshotFlow observers in canvas alive)
         val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
-        LaunchedEffect(toolbarState) {
-            editorState.syncFrom(toolbarState)
-        }
 
         // Observe pageId changes from ViewModel state for navigation
         LaunchedEffect(viewModel) {
@@ -241,7 +232,9 @@ fun EditorView(
         InkaTheme {
             EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                state = editorState, page = page, history = history
+                viewModel = viewModel,
+                page = page,
+                history = history
             )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower

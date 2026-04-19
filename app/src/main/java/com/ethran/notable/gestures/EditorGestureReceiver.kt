@@ -23,7 +23,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.ui.SelectionVisualCues
-import com.ethran.notable.ui.showHint
+
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
@@ -52,10 +52,9 @@ fun EditorGestureReceiver(
                         val down = awaitFirstDown()
 
                         // We should not get any stylus events
-                        require(
-                            down.type != PointerType.Stylus ||
-                                    down.type == PointerType.Eraser
-                        )
+                        if (down.type == PointerType.Stylus || down.type == PointerType.Eraser) {
+                            return@awaitEachGesture // Escapes the current gesture loop, waits for the next one
+                        }
 
 
                         // testing if it will fixed exception:
@@ -123,12 +122,12 @@ fun EditorGestureReceiver(
                                     controlTower.setIsDrawing(false) // unfreeze the screen
                                     crossPosition = gestureState.getLastPositionIO()
                                     rectangleBounds = gestureState.calculateRectangleBounds()
-                                    showHint("Selection mode!", coroutineScope, 1500)
+                                    controlTower.showHint("Selection mode!")
                                 }
                                 gestureState.checkSmoothScrolling()
                                 gestureState.checkContinuousZoom()
                                 if (gestureState.checkHoldingTwoFingers())
-                                    showHint("Drag mode!", coroutineScope, 1500)
+                                    controlTower.showHint("Drag mode!")
 
                             }
                             if (gestureState.gestureMode == GestureMode.Scroll) {
@@ -200,10 +199,7 @@ fun EditorGestureReceiver(
                                             System.currentTimeMillis() - gestureState.lastTimestamp
                                         log.v("Second down detected: ${secondDown.type}, position: ${secondDown.position}, deltaTime: $deltaTime")
                                         if (deltaTime < DOUBLE_TAP_MIN_MS) {
-                                            showHint(
-                                                text = "Too quick for double click! time between: $deltaTime",
-                                                coroutineScope
-                                            )
+                                            controlTower.showHint("Too quick for double click! time between: $deltaTime")
                                             return@withTimeoutOrNull null
                                         } else {
                                             log.v("double click!")
@@ -317,4 +313,3 @@ private fun resolveGesture(
         }
     }
 }
-

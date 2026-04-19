@@ -10,9 +10,13 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toRect
+import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.CachedBackground
@@ -21,17 +25,24 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.canvas.CanvasEventBus.drawingInProgress
+import com.ethran.notable.editor.canvas.CanvasEventBus.waitForDrawing
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.utils.div
-import com.ethran.notable.editor.utils.loadPersistBitmap
+import com.ethran.notable.editor.utils.divideStrokesFromCut
+import com.ethran.notable.editor.utils.loadHQPagePreview
 import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
+import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.utils.onError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +59,11 @@ import kotlin.math.min
 import kotlin.system.measureTimeMillis
 
 const val OVERLAP = 2
+
+data class PageCutMoveResult(
+    val previousStrokes: List<Stroke>,
+    val movedStrokes: List<Stroke>,
+)
 
 /**
  * Manages the state and rendering of a single page within the editor.
@@ -304,6 +320,34 @@ class PageView(
         persistBitmapDebounced()
     }
 
+    fun applyPageCutOffset(cutLine: List<SimplePointF>, offset: Offset): PageCutMoveResult? {
+        if (offset.x < 0 || offset.y < 0) return null
+
+        val (_, previousStrokes) = divideStrokesFromCut(strokes, cutLine)
+        if (previousStrokes.isEmpty()) return null
+
+        val movedStrokes = previousStrokes.map { stroke ->
+            stroke.copy(
+                points = stroke.points.map { point ->
+                    point.copy(x = point.x + offset.x, y = point.y + offset.y)
+                },
+                top = stroke.top + offset.y,
+                bottom = stroke.bottom + offset.y,
+                left = stroke.left + offset.x,
+                right = stroke.right + offset.x
+            )
+        }
+
+        removeStrokes(strokeIds = previousStrokes.map { it.id })
+        addStrokes(movedStrokes)
+        drawAreaScreenCoordinates(strokeBounds(previousStrokes + movedStrokes))
+
+        return PageCutMoveResult(
+            previousStrokes = previousStrokes,
+            movedStrokes = movedStrokes,
+        )
+    }
+
     // Completely updates strokes
     fun updateStrokes(strokesToUpdate: List<Stroke>) {
         // TODO: Clean it up, move some logic to pageDataManager
@@ -388,7 +432,7 @@ class PageView(
 
     // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {
-        val bitmapFromDisc = loadPersistBitmap(
+        val bitmapFromDisc = loadHQPagePreview(
             context = context,
             pageID = currentPageId,
             scroll = scroll,
@@ -410,10 +454,7 @@ class PageView(
         // draw just background.
         val backgroundType = pageDataManager.getBackgroundType()
         if (backgroundType == BackgroundType.Native) {
-            val bg = pageDataManager.getBackgroundName()
-            drawBg(
-                context, windowedCanvas, backgroundType, bg, scroll, 1f, this
-            )
+            drawBgToCanvas(null)
         } else
             windowedCanvas.drawColor(Color.WHITE)
         return false
@@ -463,7 +504,14 @@ class PageView(
             pageArea = pageArea,
             ignoredStrokeIds = ignoredStrokeIds,
             ignoredImageIds = ignoredImageIds,
-        )
+        ).onError {
+            snackManager.showOrUpdateSnack(
+                SnackConf(
+                    text = "Error during drawing page area: ${it.userMessage}",
+                    duration = 3000
+                )
+            )
+        }
     }
 
     suspend fun simpleUpdateScroll(dragDelta: Offset) {
@@ -472,7 +520,7 @@ class PageView(
         log.d("Simple update scroll")
         val delta = (dragDelta / zoomLevel.value)
 
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
 
         scroll =
             Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
@@ -513,7 +561,7 @@ class PageView(
         if (deltaInPage == Offset.Zero) return
 
         // before scrolling, make sure that strokes are drawn.
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
 
         scroll += deltaInPage
         // To avoid rounding errors, we just calculate it again.
@@ -595,7 +643,7 @@ class PageView(
 
     suspend fun applyZoomAndRedraw(newZoom: Float) {
         zoomLevel.value = newZoom
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -619,18 +667,7 @@ class PageView(
 
         log.d("Redrawing full logical rect: $redrawRect")
         windowedCanvas.drawColor(Color.BLACK)
-        val backgroundType = pageDataManager.getBackgroundType() ?: BackgroundType.Native
-        val bg = pageDataManager.getBackgroundName()
-        drawBg(
-            context,
-            windowedCanvas,
-            backgroundType,
-            bg,
-            scroll,
-            zoomLevel.value,
-            this,
-            redrawRect
-        )
+        drawBgToCanvas(redrawRect)
         pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
 
         drawAreaScreenCoordinates(redrawRect)
@@ -659,7 +696,7 @@ class PageView(
         }
 
         // Flush pending strokes/background before snapshot-based operations
-        CanvasEventBus.waitForDrawingWithSnack()
+        waitForDrawingWithSnack()
 
         val scaleFactor = newZoom / oldZoom
         val screenW = windowedCanvas.width
@@ -776,6 +813,39 @@ class PageView(
 
     }
 
+    fun drawBgToCanvas(clipRect: Rect?) {
+        val backgroundType = pageDataManager.getBackgroundType() ?: BackgroundType.Native
+        val bg = pageDataManager.getBackgroundName()
+        val pageNumber = currentPageNumber
+        val scale = zoomLevel.value
+        val bgImage: Bitmap? =
+            when (backgroundType) {
+                BackgroundType.Image, BackgroundType.CoverImage, BackgroundType.AutoPdf,
+                is BackgroundType.Pdf, BackgroundType.ImageRepeating -> {
+                    if (backgroundType is BackgroundType.Image && bg == "iris") {
+                        val resId = R.drawable.iris
+                        ImageBitmap.imageResource(context.resources, resId).asAndroidBitmap()
+                    } else {
+                        getOrLoadBackground(bg, pageNumber, scale)
+                    }
+                }
+                BackgroundType.Native -> {
+                    null
+                }
+            }
+        drawBg(
+            canvas = windowedCanvas,
+            backgroundType = backgroundType,
+            background = bg,
+            scroll = scroll,
+            resourceBitmap = bgImage,
+            scale = scale,
+            repeat = false,
+            clipRect = clipRect
+        )
+    }
+
+
     fun updateDimensions(newWidth: Int, newHeight: Int) {
         if (newWidth != viewWidth || newHeight != viewHeight) {
             log.d("Updating dimensions: $newWidth x $newHeight")
@@ -830,5 +900,14 @@ class PageView(
 
     private fun toPageCoordinates(rect: Rect): Rect {
         return rect / zoomLevel.value + scroll
+    }
+
+    private suspend fun waitForDrawingWithSnack() {
+        if (drawingInProgress.isLocked) {
+            snackManager.runWithSnack("Waiting for drawing to finish…", resultDurationMs = 0) {
+                waitForDrawing()
+                "Drawing finished"
+            }
+        }
     }
 }

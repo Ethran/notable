@@ -15,21 +15,19 @@ import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.getBackgroundType
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.utils.persistBitmapFull
-import com.ethran.notable.editor.utils.persistBitmapThumbnail
+import com.ethran.notable.editor.utils.saveHQPagePreview
+import com.ethran.notable.editor.utils.savePageThumbnail
 import com.ethran.notable.io.IN_IGNORED
 import com.ethran.notable.io.fileObserverEventNames
 import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.io.waitForFileAvailable
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
-import com.ethran.notable.ui.showHint
 import com.ethran.notable.utils.chunked
 import com.onyx.android.sdk.extension.isNotNull
 import com.onyx.android.sdk.extension.isNull
@@ -73,7 +71,8 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
 // Cache manager companion object
 @Singleton
 class PageDataManager @Inject constructor(
-    private val appRepository: AppRepository
+    private val appRepository: AppRepository,
+    private val appEventBus: AppEventBus
 ) {
     val log = ShipBook.getLogger("PageDataManager")
     private val dataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -134,7 +133,7 @@ class PageDataManager @Inject constructor(
         val job = jobLock.withLock { dataLoadingJobs[pageId] }
         if (job == null || job.isCancelled) {
             log.e("Illegal state: Job missing or cancelled for $pageId.")
-            showHint("Illegal state: Job: ${job}.")
+            appEventBus.tryEmit(AppEvent.ActionHint("Illegal state: Job: $job.", 3000))
             return
         }
         job.join()
@@ -252,7 +251,12 @@ class PageDataManager @Inject constructor(
         } catch (e: Exception) {
             // All other unexpected exceptions
             log.e("Error caching neighbor pages", e)
-            showHint("Error encountered while caching neighbors", duration = 5000)
+            appEventBus.tryEmit(
+                AppEvent.ActionHint(
+                    "Error encountered while caching neighbors",
+                    5000
+                )
+            )
 
         }
 
@@ -350,10 +354,11 @@ class PageDataManager @Inject constructor(
 
         // 3) Reconcile: if they disagree, warn and clear
         if (jobSnapshot.isNotNull() && dataLoaded != jobDone) {
-            logAndShowError(
-                "PageDataManager.validatePageDataLoaded",
-                "Inconsistent state for page($pageId): dataLoaded=$dataLoaded," +
-                        " jobDone=$jobDone, job=$jobSnapshot, trying to fix."
+            appEventBus.tryEmit(
+                AppEvent.LogMessage(
+                    reason = "PageDataManager.validatePageDataLoaded",
+                    message = "Inconsistent state for page($pageId): dataLoaded=$dataLoaded, jobDone=$jobDone, job=$jobSnapshot, trying to fix."
+                )
             )
             dataLoadingScope.launch {
                 // Cancel/remove any job for this page
@@ -412,14 +417,14 @@ class PageDataManager @Inject constructor(
                     }
 
                     scope.launch(Dispatchers.IO) {
-                        persistBitmapFull(
+                        saveHQPagePreview(
                             context,
                             bitmap,
                             pageId,
                             currentScroll,
                             currentZoomLevel
                         )
-                        persistBitmapThumbnail(context, bitmap, pageId)
+                        savePageThumbnail(context, bitmap, pageId)
                     }
                 }
             }
@@ -585,9 +590,11 @@ class PageDataManager @Inject constructor(
             } catch (_: SQLiteConstraintException) {
                 // There were some rare bugs when strokes weren't unique when inserting from history
                 // I'm not sure if it's still a problem, let's just show the message
-                logAndShowError(
-                    "saveStrokesToPersistLayer",
-                    "Attempted to create strokes that already exist"
+                appEventBus.tryEmit(
+                    AppEvent.LogMessage(
+                        reason = "saveStrokesToPersistLayer",
+                        message = "Attempted to create strokes that already exist"
+                    )
                 )
                 appRepository.strokeRepository.update(strokes)
             }
@@ -702,7 +709,7 @@ class PageDataManager @Inject constructor(
      * If a background is associated with the page and is present in the cache, it returns the
      * [CachedBackground] object.
      *
-     * If no background is found for the given `pageId`, it returns a default, empty
+     * If no background is found for the current `pageId`, it returns a default, empty
      * [CachedBackground] object to prevent null pointer exceptions downstream.
      *
      * @param pageId The unique identifier of the page for which to retrieve the background.
@@ -761,8 +768,11 @@ class PageDataManager @Inject constructor(
                             }
                             if (!waitForFileAvailable(filePath)) {
                                 log.w("File changed, but does not exist: $filePath")
-                                SnackState.globalSnackFlow.emit(
-                                    SnackConf(text = "Background does not exist", duration = 3000)
+                                appEventBus.tryEmit(
+                                    AppEvent.ActionHint(
+                                        "Background does not exist",
+                                        3000
+                                    )
                                 )
                                 return@launch
                             } else
@@ -797,8 +807,11 @@ class PageDataManager @Inject constructor(
                             invalidateBackground(pid)
                             if (pid == currentPage) {
                                 CanvasEventBus.forceUpdate.emit(null)
-                                SnackState.globalSnackFlow.emit(
-                                    SnackConf(text = "Background file changed", duration = 4000)
+                                appEventBus.tryEmit(
+                                    AppEvent.ActionHint(
+                                        "Background file changed",
+                                        4000
+                                    )
                                 )
                             }
                         }
@@ -859,9 +872,11 @@ class PageDataManager @Inject constructor(
     fun removePage(pageId: String): Boolean {
         log.d("Removing page $pageId")
         if (pageId == currentPage) {
-            logAndShowError(
-                "PageDataManager.removePage",
-                "Cannot remove current page, there is a bug in code",
+            appEventBus.tryEmit(
+                AppEvent.LogMessage(
+                    reason = "PageDataManager.removePage",
+                    message = "Cannot remove current page, there is a bug in code"
+                )
             )
             return false
         }

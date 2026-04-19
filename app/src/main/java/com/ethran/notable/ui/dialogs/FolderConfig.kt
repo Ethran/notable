@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.FolderRepository
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.ui.noRippleClickable
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
@@ -55,7 +54,7 @@ fun FolderConfigDialog(folderRepository: FolderRepository,
     LaunchedEffect(folderId) {
         val f = folderRepository.get(folderId)
         if (f == null) {
-            logAndShowError("FolderConfigDialog", "Folder not found")
+            io.shipbook.shipbooksdk.Log.e("FolderConfigDialog", "Folder not found")
             onClose()
         } else {
             folder = f

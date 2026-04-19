@@ -15,12 +15,13 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.ui.components.getFolderList
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
@@ -61,6 +62,7 @@ class ExportEngine @Inject constructor(
     private val pageRepo: PageRepository,
     private val bookRepo: BookRepository,
     private val pageContentRenderer: PageContentRenderer,
+    private val appEventBus: AppEventBus,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
@@ -91,9 +93,11 @@ class ExportEngine @Inject constructor(
             val uriStr = try {
                 bookRepo.getById(bookId)?.linkedExternalUri
             } catch (e: Exception) {
-                logAndShowError(
-                    "exportToLinkedFileAsync",
-                    "Error reading linked export path: ${e.message}"
+                appEventBus.emit(
+                    AppEvent.LogMessage(
+                        "exportToLinkedFileAsync",
+                        "Error reading linked export path: ${e.message}"
+                    )
                 )
                 return@launch
             }
@@ -113,9 +117,11 @@ class ExportEngine @Inject constructor(
                 )
                 log.i("Linked export successful")
             } catch (e: Exception) {
-                logAndShowError(
-                    "exportToLinkedFileAsync",
-                    "Error exporting linked file: ${e.message}"
+                appEventBus.emit(
+                    AppEvent.LogMessage(
+                        "exportToLinkedFileAsync",
+                        "Error exporting linked file: ${e.message}"
+                    )
                 )
             }
         }
@@ -389,7 +395,6 @@ class ExportEngine @Inject constructor(
         ensureNotMainThread("ExportPdf")
         val data = pageContentRenderer.loadPageContent(pageId)
         val (_, contentHeightPx) = pageContentRenderer.computeContentDimensions(data)
-        val backgroundType = pageContentRenderer.resolveExportBackgroundType(data)
 
         val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH.toFloat()
         val scaledHeight = (contentHeightPx * scaleFactor).toInt()
@@ -406,7 +411,6 @@ class ExportEngine @Inject constructor(
                     data = data,
                     scroll = Offset(0f, currentTop.toFloat()),
                     scaleFactor = scaleFactor,
-                    backgroundType = backgroundType
                 )
                 doc.finishPage(page)
                 currentTop += A4_HEIGHT
@@ -420,7 +424,6 @@ class ExportEngine @Inject constructor(
                 data = data,
                 scroll = Offset.Zero,
                 scaleFactor = scaleFactor,
-                backgroundType = backgroundType
             )
             doc.finishPage(page)
         }
@@ -521,6 +524,9 @@ class ExportEngine @Inject constructor(
             }
 
             "Saved $displayName"
+        } catch (e: OutOfMemoryError) {
+            log.e("Save error (OOM): ${e.message}")
+            "Not enough memory to save $displayName"
         } catch (e: Exception) {
             log.e("Save error: ${e.message}")
             "Error saving $displayName"

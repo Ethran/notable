@@ -6,9 +6,9 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Looper
 import com.ethran.notable.data.model.SimplePointF
+import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.selectPaint
-import com.ethran.notable.editor.state.EditorState
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.pointsToPath
 import com.ethran.notable.editor.utils.refreshScreenRegion
@@ -21,7 +21,7 @@ import io.shipbook.shipbooksdk.ShipBook
 class CanvasRefreshManager(
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
-    private val state: EditorState,
+    private val viewModel: EditorViewModel,
     private val touchHelper: TouchHelper?
 ) {
     private val log = ShipBook.getLogger("DrawCanvas")
@@ -35,7 +35,7 @@ class CanvasRefreshManager(
             log.w("Drawing is still in progress there might be a bug.")
 
         // Use only if you have confidence that there are no strokes being drawn at the moment
-        if (!state.isDrawing) {
+        if (!viewModel.toolbarState.value.isDrawing) {
             log.w("Not in drawing mode, skipping unfreezing")
             return
         }
@@ -47,7 +47,7 @@ class CanvasRefreshManager(
     suspend fun refreshUiSuspend() {
         // Do not use, if refresh need to be preformed without delay.
         // This function waits for strokes to be fully rendered.
-        if (!state.isDrawing) {
+        if (!viewModel.toolbarState.value.isDrawing) {
             CanvasEventBus.waitForDrawing()
             drawCanvasToView(null)
             log.w("Not in drawing mode -- refreshUi ")
@@ -78,9 +78,9 @@ class CanvasRefreshManager(
 
             canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
 
-            if (drawCanvas.getActualState().mode == Mode.Select) {
+            if (viewModel.toolbarState.value.mode == Mode.Select) {
                 // render selection, but only within dirtyRect
-                drawCanvas.getActualState().selectionState.firstPageCut?.let { cutPoints ->
+                viewModel.selectionState.firstPageCut?.let { cutPoints ->
                     log.i("render cut")
                     val path = pointsToPath(cutPoints.map {
                         SimplePointF(
