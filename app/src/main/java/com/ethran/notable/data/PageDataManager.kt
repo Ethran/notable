@@ -36,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
@@ -149,7 +150,7 @@ class PageDataManager @Inject constructor(
     ): Job {
         log.d("getOrStartLoadingJob($pageId)")
         //             PageDataManager.ensureMemoryAvailable(15)
-        return jobLock.withLock {
+        val job = jobLock.withLock {
             val existing = dataLoadingJobs[pageId]
             when {
                 existing?.isActive == true -> {
@@ -178,6 +179,8 @@ class PageDataManager @Inject constructor(
                 else -> error("Unexpected job state, for Page($pageId)")
             }
         }
+        log.d("getOrStartLoadingJob: finished, got job: $job")
+        return job
     }
 
     /**
@@ -523,6 +526,7 @@ class PageDataManager @Inject constructor(
     }
 
     fun indexStrokes(scope: CoroutineScope, pageId: String) {
+        // TODO: it Does use lock, is it safe?
         scope.launch {
             strokesById[pageId] =
                 hashMapOf(*strokes[pageId]!!.map { s -> s.id to s }.toTypedArray())
@@ -838,9 +842,13 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    fun updateOnExit(targetPageId: String) {
+    fun onExit(targetPageId: String, windowedBitmap: Bitmap, scope: CoroutineScope) {
         log.i("Page exit, is page loaded: ${validatePageDataLoaded(targetPageId)}")
         if (validatePageDataLoaded(targetPageId)) {
+            cacheBitmap(targetPageId, windowedBitmap)
+            scope.launch {
+                saveTopic.emit(targetPageId)
+            }
             recomputeHeight(targetPageId)
             calculateMemoryUsage(targetPageId, 0)
             // TODO: if we exited the book, we should clear the cache.
@@ -915,18 +923,19 @@ class PageDataManager @Inject constructor(
                 toCancel = dataLoadingJobs.filter { (_, job) ->
                     job.isActive
                 }.map { (pageId, _) -> pageId }
-                // Cancel and remove pages outside the lock
-                for (pageId in toCancel) {
-                    if (ignoredPageIds.contains(pageId)) continue
-                    val job = jobLock.withLock { dataLoadingJobs[pageId] }
-                    if (job != null && job.isActive) {
-                        job.cancel()
-                        log.d("Cancelled job for page $pageId")
-                    }
-                    log.d("Cancelling page $pageId")
-                    removePage(pageId)
-                }
             }
+            // Cancel and remove pages outside the lock
+            for (pageId in toCancel) {
+                if (ignoredPageIds.contains(pageId)) continue
+                val job = jobLock.withLock { dataLoadingJobs[pageId] }
+                if (job != null && job.isActive) {
+                    job.cancel()
+                    log.d("Cancelled job for page $pageId")
+                }
+                log.d("Cancelling page $pageId")
+                removePage(pageId)
+            }
+
         }
     }
 
@@ -958,12 +967,15 @@ class PageDataManager @Inject constructor(
         log.d("reduceCache($maxPages)")
         synchronized(accessLock) {
             while (strokes.size > maxPages) {
-                val oldestPage = strokes.iterator().next().key
-                if (oldestPage == currentPage)
-                    continue
-                log.d("Clearing page (oldest) $oldestPage, requested by reduceCache")
-                if (!removePage(oldestPage)) {
-                    log.e("Illegal state: Could not remove page $oldestPage")
+                // Find the first page in the LinkedHashMap that isn't the current page
+                val pageToRemove = strokes.keys.firstOrNull { it != currentPage }
+                if (pageToRemove == null) {
+                    log.d("ReduceCache: nothing to remove, current page is the only one")
+                    break // Only the current page is left, we can't reduce further
+                }
+                log.d("Clearing page (oldest) $pageToRemove, requested by reduceCache")
+                if (!removePage(pageToRemove)) {
+                    log.e("Illegal state: Could not remove page $pageToRemove")
                     break
                 }
             }

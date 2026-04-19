@@ -212,11 +212,9 @@ class PageView(
      */
     fun changePage(newPageId: String) {
         val oldId = currentPageId
+
         coroutineScope.launch(Dispatchers.IO) {
-            pageDataManager.updateOnExit(oldId)
-            persistBitmapDebounced(oldId)
-        }
-        coroutineScope.launch(Dispatchers.IO) {
+            pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
             pageDataManager.setPage(newPageId)
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
             pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
@@ -255,8 +253,7 @@ class PageView(
     */
     fun disposeOldPage() {
         log.d("Dispose old page")
-        pageDataManager.updateOnExit(currentPageId)
-        persistBitmapDebounced(currentPageId)
+        pageDataManager.onExit(currentPageId, windowedBitmap, coroutineScope)
         cleanJob()
     }
 
@@ -286,6 +283,7 @@ class PageView(
                 // TODO: If we put it in loadPage(…) sometimes it will try to refresh
                 //  without seeing strokes, I have no idea why.
                 coroutineScope.launch(Dispatchers.Main) {
+//                    delay(100)
                     CanvasEventBus.forceUpdate.emit(null)
                 }
 //                sleep(5000)
@@ -318,7 +316,7 @@ class PageView(
         saveStrokesToPersistLayer(strokesToAdd)
         pageDataManager.indexStrokes(coroutineScope, currentPageId)
 
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
     }
 
     fun applyPageCutOffset(cutLine: List<SimplePointF>, offset: Offset): PageCutMoveResult? {
@@ -359,7 +357,7 @@ class PageView(
         updateHeightForChange(strokesToUpdate)
         pageDataManager.updateStrokesInDb(strokesToUpdate)
         pageDataManager.indexStrokes(coroutineScope, currentPageId)
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
     }
 
     fun removeStrokes(strokeIds: List<String>) {
@@ -368,7 +366,7 @@ class PageView(
         pageDataManager.indexStrokes(coroutineScope, currentPageId)
         pageDataManager.recomputeHeight(currentPageId)
 
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
     }
 
     fun getStrokes(strokeIds: List<String>): List<Stroke?> {
@@ -396,7 +394,7 @@ class PageView(
         saveImagesToPersistLayer(listOf(imageToAdd))
         pageDataManager.indexImages(coroutineScope, currentPageId)
 
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
     }
 
     fun addImage(imageToAdd: List<Image>) {
@@ -408,7 +406,7 @@ class PageView(
         saveImagesToPersistLayer(imageToAdd)
         pageDataManager.indexImages(coroutineScope, currentPageId)
 
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
     }
 
     fun removeImages(imageIds: List<String>) {
@@ -416,7 +414,7 @@ class PageView(
         removeImagesFromPersistLayer(imageIds)
         pageDataManager.indexImages(coroutineScope, currentPageId)
         pageDataManager.recomputeHeight(currentPageId)
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
     }
 
     fun getImage(imageId: String): Image? = pageDataManager.getImage(imageId, currentPageId)
@@ -589,7 +587,7 @@ class PageView(
             height
         )
 
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
         saveToPersistLayer()
     }
 
@@ -750,7 +748,7 @@ class PageView(
 
         if (scaleFactor < 1f) redrawOutsideRect(dstRect.toRect(), screenW, screenH)
 
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
         saveToPersistLayer()
         log.i(
             "Zoom updated using snapshot scaling. " +
@@ -810,7 +808,7 @@ class PageView(
         pageDataManager.refreshPageFromDb()
         withContext(Dispatchers.Main) {
             drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
-            persistBitmapDebounced()
+//            persistBitmapDebounced()
         }
 
     }
@@ -831,6 +829,7 @@ class PageView(
                         getOrLoadBackground(bg, pageNumber, scale)
                     }
                 }
+
                 BackgroundType.Native -> {
                     null
                 }
@@ -867,20 +866,9 @@ class PageView(
         coroutineScope.launch {
             CanvasEventBus.forceUpdate.emit(null)
         }
-        persistBitmapDebounced()
+//        persistBitmapDebounced()
     }
 
-    // should be run after every modification of widowedBitmap.
-    // Especially, on major ones -- this persistent bitmap will be used to reinitialize page.
-    // if its not correct, might cause ghosting
-    private fun persistBitmapDebounced(pageId: String = this.currentPageId) {
-        coroutineScope.launch {
-            // Make sure that persisting bitmap gets the newest possible bitmap
-            // TODO: There might still be some nasty race conditions.
-            pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
-            pageDataManager.saveTopic.emit(pageId)
-        }
-    }
 
     private fun saveToPersistLayer() = pageDataManager.setScrollInDb()
 
