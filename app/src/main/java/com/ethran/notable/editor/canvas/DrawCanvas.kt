@@ -26,6 +26,7 @@ import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
+import java.lang.Thread.sleep
 
 
 val pressure = EpdController.getMaxTouchPressure()
@@ -154,36 +155,43 @@ class DrawCanvas(
 
 
     fun drawCanvasToView(dirtyRect: Rect?) {
-        val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
-        var canvas: Canvas? = null
-        try {
-            // Lock the canvas only for the dirtyRect region
-            canvas = this.holder.lockCanvas(zoneToRedraw) ?: return
-
-            canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
-
-            if (viewModel.toolbarState.value.mode == Mode.Select) {
-                // render selection, but only within dirtyRect
-                viewModel.selectionState.firstPageCut?.let { cutPoints ->
-                    log.i("render cut")
-                    val path = pointsToPath(cutPoints.map {
-                        SimplePointF(
-                            it.x - page.scroll.x, it.y - page.scroll.y
-                        )
-                    })
-                    canvas.drawPath(path, selectPaint)
-                }
-            }
-        } catch (e: IllegalStateException) {
-            log.w("Surface released during draw", e)
-            // ignore — surface is gone
-        } finally {
+        post {
+            val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+            var canvas: Canvas? = null
             try {
-                if (canvas != null) {
-                    holder.unlockCanvasAndPost(canvas)
+                log.d("Attempting to lock canvas for zone: $zoneToRedraw on thread: ${Thread.currentThread().name}")
+                // Lock the canvas only for the dirtyRect region
+                canvas = this.holder.lockCanvas(zoneToRedraw)
+                if (canvas == null) {
+                    log.e("FAILED to lock canvas! Surface is likely invalid, destroyed, or locked by another thread.")
+                    return@post
+                }
+                sleep(100) //for debugging, but I'm not sure if it increases chance for a bug
+                canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
+
+                if (viewModel.toolbarState.value.mode == Mode.Select) {
+                    // render selection, but only within dirtyRect
+                    viewModel.selectionState.firstPageCut?.let { cutPoints ->
+                        log.i("render cut")
+                        val path = pointsToPath(cutPoints.map {
+                            SimplePointF(
+                                it.x - page.scroll.x, it.y - page.scroll.y
+                            )
+                        })
+                        canvas.drawPath(path, selectPaint)
+                    }
                 }
             } catch (e: IllegalStateException) {
-                log.w("Surface released during unlock", e)
+                log.w("Surface released during draw", e)
+                // ignore — surface is gone
+            } finally {
+                try {
+                    if (canvas != null) {
+                        holder.unlockCanvasAndPost(canvas)
+                    }
+                } catch (e: IllegalStateException) {
+                    log.w("Surface released during unlock", e)
+                }
             }
         }
     }

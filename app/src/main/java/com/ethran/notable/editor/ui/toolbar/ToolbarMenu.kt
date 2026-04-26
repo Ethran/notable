@@ -25,9 +25,9 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
+import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportFormat
@@ -41,13 +41,15 @@ import com.ethran.notable.ui.noRippleClickable
 @Composable
 fun ToolbarMenu(
     uiState: ToolbarUiState,
-    onAction: (ToolbarAction) -> Unit
+    onAction: (ToolbarAction) -> Unit,
 ) {
     val context = LocalContext.current
 
     Popup(
         alignment = Alignment.TopEnd,
-        onDismissRequest = { onAction(ToolbarAction.ToggleMenu) },
+        onDismissRequest = {
+                onAction(ToolbarAction.ToggleMenu)
+        },
         offset = IntOffset(
             convertDpToPixel((-10).dp, context).toInt(),
             convertDpToPixel(50.dp, context).toInt()
