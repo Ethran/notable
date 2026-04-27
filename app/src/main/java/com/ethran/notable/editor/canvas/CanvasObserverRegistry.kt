@@ -287,6 +287,7 @@ class CanvasObserverRegistry(
     private fun observeQuickNav() {
         coroutineScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
+                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — scrub already ended
                 val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
                 val pageUpdatedAtMs = pageDataManager.getPageUpdatedAt(pageId)
 
@@ -307,6 +308,7 @@ class CanvasObserverRegistry(
                 }
 
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
+                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — race lost
                 drawCanvas.restoreCanvas(zoneToRedraw, previewBitmap)
             }
         }

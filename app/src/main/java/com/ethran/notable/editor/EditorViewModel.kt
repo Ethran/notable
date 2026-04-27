@@ -593,12 +593,12 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
-//            loadBookData(bookId, newPageId)
             _toolbarState.update { it.copy(pageId = newPageId) }
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
             snackDispatcher.showOrUpdateSnack(snack)
+            CanvasEventBus.restoreCanvas.emit(Unit)
         }
     }
 
@@ -610,15 +610,10 @@ class EditorViewModel @Inject constructor(
     fun changePage(id: String) {
         log.d("Changing page to $id, from $currentPageId")
         viewModelScope.launch(Dispatchers.IO) {
-            // 1. Notify the PageView about the change
-
-            // 2. Update the persistent layer
-
-            // 3. Update the UI state
+            // Update the UI state
             updateOpenedPage(id)
 
-
-            // 4. Clean the selection state
+            // Clean the selection state
             selectionState.reset()
         }
     }

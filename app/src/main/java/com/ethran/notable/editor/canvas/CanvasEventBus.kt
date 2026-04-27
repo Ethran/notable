@@ -49,7 +49,9 @@ object CanvasEventBus {
 
 
     // For QuickNav scrolling with previews
-    val saveCurrent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val saveCurrent = MutableSharedFlow<Unit>()
+
+    val isScrubbing = MutableStateFlow<Boolean> (false)
     val previewPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val restoreCanvas = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
