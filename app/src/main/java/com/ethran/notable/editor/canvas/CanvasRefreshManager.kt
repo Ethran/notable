@@ -17,7 +17,6 @@ import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
-import java.lang.Thread.sleep
 
 class CanvasRefreshManager(
     private val drawCanvas: DrawCanvas,
@@ -79,7 +78,6 @@ class CanvasRefreshManager(
                     log.e("FAILED to lock canvas! Surface is likely invalid, destroyed, or locked by another thread.")
                     return@post
                 }
-                sleep(100) //for debugging, but I'm not sure if it increases chance for a bug
                 canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
 
                 if (viewModel.toolbarState.value.mode == Mode.Select) {
