@@ -212,6 +212,7 @@ class PageView(
      */
     fun changePage(newPageId: String) {
         val oldId = currentPageId
+        log.d("changePage Entry: $oldId -> $newPageId")
 
         coroutineScope.launch(Dispatchers.IO) {
             pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
@@ -443,7 +444,7 @@ class PageView(
             // let's control that the last preview fits the present orientation. Otherwise we'll ask for a redraw.
             if (bitmapFromDisc.height == windowedCanvas.height && bitmapFromDisc.width == windowedCanvas.width) {
                 windowedCanvas.drawBitmap(bitmapFromDisc, 0f, 0f, Paint())
-                log.d("loaded initial bitmap, drawing to canvas: ${windowedCanvas.hashCode()}, bitmap: ${windowedBitmap.hashCode()}")
+                log.d("loaded initial bitmap, drawing to canvas: ${windowedCanvas.hashCode()}, bitmap: ${windowedBitmap.hashCode()}, page: $currentPageId")
                 return true
             } else
                 log.i("Image preview does not fit canvas area - redrawing")
@@ -456,7 +457,7 @@ class PageView(
             drawBgToCanvas(null)
         } else
             windowedCanvas.drawColor(Color.WHITE)
-        log.d("loaded initial bitmap, drawing to canvas: ${windowedCanvas.hashCode()}, bitmap: ${windowedBitmap.hashCode()}")
+        log.d("loaded initial bitmap, drawing to canvas: ${windowedCanvas.hashCode()}, bitmap: ${windowedBitmap.hashCode()}, page: $currentPageId")
         return false
     }
 

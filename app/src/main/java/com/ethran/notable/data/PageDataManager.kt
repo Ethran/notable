@@ -188,6 +188,7 @@ class PageDataManager @Inject constructor(
      */
     suspend fun requestCurrentPageLoadJoin(
     ) {
+        // TODO: It is possible to trigger this assert, it need to be handled more gracefully.
         assert(currentPage == pageFromDb?.id)
         val bookId = pageFromDb?.notebookId
         log.d("requestCurrentPageLoadJoin($currentPage)")

@@ -43,10 +43,16 @@ class EditorControlTower(
         changePageObserverJob = scope.launch {
             CanvasEventBus.changePage.collect { pageId ->
                 logEditorControlTower.d("Change to page $pageId")
-                switchPage(pageId)
+
+                // Switch to Main thread for Compose state mutations
+                withContext(Dispatchers.Main) {
+                    viewModel.changePage(pageId)
+                    history.cleanHistory()
+                }
+                // no need for this, we are listening for change of current page,
+                // in EditorView
 //                page.changePage(pageId)
                 refreshScreen()
-//                CanvasEventBus.refreshUi.emit(Unit)
             }
         }
     }
@@ -85,26 +91,6 @@ class EditorControlTower(
         return Offset.Zero // All handled
     }
 
-    /**
-     * Switches the currently active page.
-     *
-     * This function updates the editor state, clears the undo/redo history,
-     * and instructs the page view to load and display the content of the new page.
-     *
-     * @param id The unique identifier of the page to switch to.
-     */
-    private suspend fun switchPage(id: String) {
-        // Switch to Main thread for Compose state mutations
-        withContext(Dispatchers.Main) {
-            viewModel.changePage(id)
-            history.cleanHistory()
-        }
-
-//        // Switch to (or ensure we are on) IO thread for Database operations
-//        withContext(Dispatchers.IO) {
-//            page.changePage(id)
-//        }
-    }
 
     fun setIsDrawing(value: Boolean) {
         if (viewModel.toolbarState.value.isDrawing == value) {

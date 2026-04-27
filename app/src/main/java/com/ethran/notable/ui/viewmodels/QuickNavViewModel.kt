@@ -136,29 +136,45 @@ class QuickNavViewModel(
     // --- Scrubber Actions ---
 
     fun onScrubStart() {
-        lastScrubEndTargetPageId = null
-        CanvasEventBus.saveCurrent.tryEmit(Unit)
+        viewModelScope.launch {
+            lastScrubEndTargetPageId = null
+            CanvasEventBus.saveCurrent.emit(Unit)
+            CanvasEventBus.isScrubbing.emit(true)
+        }
     }
 
     fun onScrubPreview(index: Int) {
         val pageIds = _uiState.value.bookPageIds
-        if (index in pageIds.indices) {
-            CanvasEventBus.previewPage.tryEmit(pageIds[index])
+        viewModelScope.launch {
+            if (index in pageIds.indices) {
+                CanvasEventBus.previewPage.tryEmit(pageIds[index])
+            }
         }
     }
 
     fun onScrubEnd(index: Int) {
-        log.v("onScrubEnd: $index")
-        CanvasEventBus.restoreCanvas.tryEmit(Unit)
-
         val pageIds = _uiState.value.bookPageIds
         val targetPageId = pageIds.getOrNull(index) ?: return
 
-        // Gesture end callbacks can fire more than once; ignore repeated commit for same target.
-        if (targetPageId == lastScrubEndTargetPageId) return
-        lastScrubEndTargetPageId = targetPageId
+        viewModelScope.launch {
+            log.v("onScrubEnd: $index")
 
-        CanvasEventBus.changePage.tryEmit(targetPageId)
+            // moved, to be only run if we are changing page to the current page
+//            CanvasEventBus.restoreCanvas.emit(Unit)
+
+            CanvasEventBus.isScrubbing.emit(false)
+
+            // Gesture end callbacks can fire more than once; ignore repeated commit for same target.
+            if (targetPageId == lastScrubEndTargetPageId)
+            {
+                log.e("Events can be send multiple times, really")
+                return@launch
+            }
+            lastScrubEndTargetPageId = targetPageId
+
+
+            CanvasEventBus.changePage.emit(targetPageId)
+        }
     }
 
     fun onReturnClick(quickNavSourcePageId: String?) {

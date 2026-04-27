@@ -172,7 +172,7 @@ class OnyxInputHandler(
             // Check if drawing is completed
             CanvasEventBus.waitForDrawing()
             // draw to view, before showing drawing, avoid stutter
-            drawCanvas.drawCanvasToView(null)
+            drawCanvas.refreshManager.drawCanvasToView(null)
             touchHelper!!.setRawDrawingEnabled(false)
         }
     }
@@ -305,7 +305,7 @@ class OnyxInputHandler(
                             )
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
-                            drawCanvas.drawCanvasToView(erasedByScribbleDirtyRect)
+                            drawCanvas.refreshManager.drawCanvasToView(erasedByScribbleDirtyRect)
                             partialRefreshRegionOnce(
                                 drawCanvas,
                                 erasedByScribbleDirtyRect,
