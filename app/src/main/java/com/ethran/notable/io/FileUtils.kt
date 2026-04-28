@@ -18,6 +18,7 @@ import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.utils.UriUtils.getDataColumn
+import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.delay
 import java.io.File
@@ -256,12 +257,14 @@ suspend fun waitForFileAvailable(
     var count = 1
     while (System.currentTimeMillis() - start < timeoutMs) {
         if (file.exists() && file.length() > 0) {
+            Log.d("waitForFileAvailable", "File available: $filePath, size=${file.length()}")
             return true
         }
         delay(intervalMs)
         intervalMs += count * count // Quadratic growth
         count++
     }
+    Log.d("waitForFileAvailable", "File not available: $filePath")
     return false
 }
 
