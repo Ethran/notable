@@ -36,7 +36,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
@@ -666,6 +665,16 @@ class PageDataManager @Inject constructor(
     }
 
     fun setBackground(pageId: String, background: CachedBackground) {
+        if (background.bitmap == null) {
+            val msg = "setBackground: skipping cache write, bitmap is null (id=${background.id})"
+            log.w(msg)
+            appEventBus.tryEmit(
+                AppEvent.GenericError(
+                    msg
+                )
+            )
+            return
+        }
         dataScope.launch {
             // we assume that the pageId is in current notebook.
             val observeBg = appRepository.isObservable(pageFromDb?.notebookId)
@@ -749,26 +758,38 @@ class PageDataManager @Inject constructor(
                         val eventString = fileObserverEventNames(event)
 
                         log.d("Background file changed: $filePath [event=$eventString]")
+
+                        // HANDLE DELETION / RE-REGISTRATION
                         if (event == DELETE || event == DELETE_SELF) {
-                            log.d("Background file deleted.")
+                            log.d("Background file deleted. Waiting for recreation...")
                             synchronized(fileObservers) {
                                 fileObservers.remove(filePath)?.stopWatching()
                             }
+
                             if (!waitForFileAvailable(filePath)) {
-                                log.w("File changed, but does not exist: $filePath")
+                                log.w("File disappeared and did not return: $filePath")
                                 appEventBus.tryEmit(
                                     AppEvent.ActionHint(
                                         "Background does not exist",
                                         3000
                                     )
                                 )
-                                return@launch
-                            } else
+                            } else {
+                                // RE-REGISTER: This starts a new observer on the new file handle
                                 observeBackgroundFile(pageId, filePath)
+                            }
+
+                            // IMPORTANT: Return here. Do NOT emit invalidateFileFlow.
+                            // We wait for the CLOSE_WRITE event from the NEW observer.
+                            return@launch
                         }
 
-
-                        invalidateFileFlow.emit(filePath)
+                        // HANDLE ACTUAL DATA UPDATES
+                        // Only emit when the file is ready to be read (CLOSE_WRITE or MOVED_TO)
+                        if (event == CLOSE_WRITE || event == MOVED_TO) {
+                            log.d("File is stable. Invalidating flow for: $filePath")
+                            invalidateFileFlow.emit(filePath)
+                        }
                     }
                 }
             }
