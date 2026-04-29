@@ -83,6 +83,6 @@ fun loadBackgroundBitmap(filePath: String, pageNumber: Int, scale: Float): Bitma
         renderPdfPageMuPdf(filePath, pageNumber, targetWidth.toInt(), resolutionModifier = 1.5f)
     else
         renderPdfPageAndroid(file, pageNumber, targetWidth.toInt(), resolutionModifier = 1.2f)
-    timer.end("loaded background, newBitmap: $newBitmap")
+    timer.end("loaded background")
     return newBitmap
 }
