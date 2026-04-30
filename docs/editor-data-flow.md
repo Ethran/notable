@@ -12,11 +12,11 @@ Contents:
 
 ## `PageDataManager`
 
-`PageDataManager` is a singleton (`object`) that acts as the central repository for all page-related content. It abstracts the underlying data sources (like the Room database and file system) from the rest of the application.
+`PageDataManager` is an injected class that acts as the central repository for all page-related content. It abstracts the underlying data sources (like the Room database and file system) from the rest of the application.
 
 - **Responsibilities**:
     - Fetching strokes, images, and other page elements from the database.
-    - Caching frequently accessed data to improve performance.
+    - Caching frequently accessed data to improve performance, including memory management via component callbacks (`onTrimMemory`).
     - Persisting new or modified data back to the database.
 - **Role**: It serves as a single source of truth for page content, ensuring data consistency and providing a clean API for the editor components to request and submit data.
 
@@ -24,14 +24,14 @@ Contents:
 
 ## Data Loading Process
 
-The process of loading a page's data into the editor follows a clear path orchestrated by the `EditorControlTower`.
+The process of loading a page's data into the editor follows a clear path orchestrated by the `EditorViewModel` and `PageDataManager`.
 
-1.  **Initiation**: When the editor is opened for a specific page, the `EditorControlTower` is created with an `EditorState` that contains the required `pageId`.
+1.  **Initiation**: When the editor is opened for a specific page, the `EditorViewModel` receives the required `pageId` and `notebookId`.
 
-2.  **Request**: The `EditorControlTower` uses its `CoroutineScope` to launch an asynchronous request to the `PageDataManager` for the strokes and other content associated with the `pageId`.
+2.  **Request**: The `EditorViewModel` or `PageView` issues a request to the `PageDataManager` to asynchronously load the strokes, images, and other content associated with the `pageId`.
 
-3.  **Fetching & Caching**: `PageDataManager` retrieves the data from the database. It may also utilize an in-memory cache to avoid redundant database queries if the data has been recently accessed.
+3.  **Fetching & Caching**: `PageDataManager` retrieves the data from the database within an asynchronous Coroutine job. It utilizes an in-memory cache (`LinkedHashMap`) to avoid redundant database queries if the data has been recently accessed, and uses locking (`Mutex`) to avoid concurrent loads of the same page.
 
-4.  **Delivery**: Once the data is retrieved, it is passed to the `PageView`.
+4.  **Delivery**: Once the data is retrieved and the loading job is marked complete, the cached data is available for consumption by the UI.
 
-5.  **Rendering**: `PageView` then uses this data to instruct its `DrawCanvas` component on what to render on the screen. This separation ensures that the `PageView` manages the "what" (the data) while the `DrawCanvas` handles the "how" (the actual drawing operations).
+5.  **Rendering**: `DrawCanvas` interacts with `PageView` and `EditorViewModel` to fetch this loaded data, instructing its `Canvas` on what to render on the screen.
