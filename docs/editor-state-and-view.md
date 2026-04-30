@@ -5,73 +5,83 @@ This document explains how the editor identifies which page to display and how t
 **It was created by AI, and should be checked for correctness. Refer to code for actual implementation.**
 
 Contents:
-- `EditorState`
+- `EditorViewModel`
 - `EditorControlTower`
 - `PageView`
 - `DrawCanvas`
 
 ---
 
-## `EditorState`
+## `EditorViewModel`
 
-The `EditorState` class is a simple, immutable data holder that represents the "context" of the editor session. Its primary role is to answer the question: "What are we currently editing?"
+The `EditorViewModel` is an Android `ViewModel` that holds the editor UI state and integrates with the `PageDataManager` to manage data loading and saving.
 
-```kotlin
-class EditorState(
-    val bookId: String? = null, 
-    val pageId: String, 
-    val pageView: PageView
-)
-```
-
-- It holds the unique `pageId` which is the key identifier for all data loading and state management operations.
-- The presence of a `bookId` provides additional context if the page belongs to a notebook.
+- **Role**:
+    - Manages state flows for UI such as currently selected pen, eraser settings, and editor mode.
+    - Tracks the current `pageId` and `notebookId` being edited.
+    - Injects required global state components and caches user preferences.
 
 ---
 
 ## `EditorControlTower`
 
-The `EditorControlTower` is the central coordinator for the editor. It holds the `EditorState` and uses it to manage all other components.
+The `EditorControlTower` is the central coordinator for the editor logic, bridging UI interactions, gestures, and canvas drawing.
+
+```kotlin
+class EditorControlTower(
+    private val scope: CoroutineScope,
+    val page: PageView,
+    private var history: History,
+    private val viewModel: EditorViewModel,
+    private val clipboardStore: ClipboardStore,
+)
+```
 
 - **Role**:
-    - Initializes the editor environment based on the provided `EditorState`.
-    - Orchestrates the flow of data from `PageDataManager` to the `PageView`.
-    - Manages editor-wide concerns like the undo/redo `History`.
+    - Coordinates between `PageView`, `EditorViewModel`, and the undo/redo `History`.
+    - Handles tool interactions (selecting, moving strokes).
+    - Orchestrates operations like scrolling, panning, and background manipulation.
 
 ---
 
 ## `PageView`
 
-`PageView` is the main Android `View` for the editor. It is responsible for setting up the drawing surface and handling user interactions like touch input and gestures (zooming, panning).
+`PageView` manages the data representing the current visual frame of the document being edited. It is responsible for setting up the spatial properties and handling interactions in coordinate space.
 
 ```kotlin
 class PageView(
     val context: Context,
     val coroutineScope: CoroutineScope,
-    var id: String, // The pageId it is currently displaying
+    val pageDataManager: PageDataManager,
+    val initialPageId: String,
     var viewWidth: Int,
     var viewHeight: Int,
-    val snackManager: SnackState
+    val snackManager: SnackState,
 )
 ```
 
-- It owns the `DrawCanvas` and other UI elements.
-- It translates raw touch events into drawing commands or navigation gestures, which are then processed by the `EditorControlTower` or `DrawCanvas`.
+- **Responsibilities**:
+    - Translates screen inputs to logical coordinates on the page.
+    - Manages the size and offset (pan/zoom level) of the page view.
+    - Serves as the middle layer that provides the current geometry structure to the actual drawing surface (`DrawCanvas`).
 
 ---
 
 ## `DrawCanvas`
 
-The `DrawCanvas` is a specialized component, likely a custom `View` or a class that operates directly on a `Canvas`, dedicated to the low-level task of rendering.
+The `DrawCanvas` component, now residing in `canvas/DrawCanvas.kt`, handles the low-level rendering.
 
 ```kotlin
-// Example structure
-class DrawCanvas(context: Context) : View(context) {
-    // ...
-}
+class DrawCanvas(
+    context: Context,
+    val coroutineScope: CoroutineScope,
+    val viewModel: EditorViewModel,
+    val page: PageView,
+    val history: History
+) : SurfaceView(context)
 ```
 
 - **Responsibilities**:
-    - Directly handles `Canvas` drawing operations (e.g., `drawPath`).
-    - Renders the strokes, images, and background that it receives from the `PageView`.
-    - It is optimized for high-performance drawing and does not contain business logic. Its only job is to draw what it's told to draw.
+    - Implements a `SurfaceView` optimized for high-performance drawing.
+    - Renders the strokes, images, and background.
+    - Tracks touch events, including distinguishing between stylus and eraser (`MotionEvent.TOOL_TYPE_STYLUS` / `TOOL_TYPE_ERASER`), and dispatching drawing operations correctly.

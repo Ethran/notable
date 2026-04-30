@@ -7,6 +7,7 @@ import com.ethran.notable.editor.utils.Pen
 import kotlinx.serialization.SerialName
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
 @kotlinx.serialization.Serializable
 data class StrokePoint(
@@ -56,43 +57,53 @@ data class Stroke(
 @Dao
 interface StrokeDao {
     @Insert
-    fun create(stroke: Stroke): Long
+    suspend fun create(stroke: Stroke): Long
 
     @Insert
-    fun create(strokes: List<Stroke>)
+    suspend fun create(strokes: List<Stroke>)
 
     @Update
-    fun update(stroke: Stroke)
+    suspend fun update(stroke: Stroke)
+
+    @Update
+    suspend fun update(strokes: List<Stroke>)
 
     @Query("DELETE FROM stroke WHERE id IN (:ids)")
-    fun deleteAll(ids: List<String>)
+    suspend fun deleteAll(ids: List<String>)
 
     @Transaction
     @Query("SELECT * FROM stroke WHERE id =:strokeId")
-    fun getById(strokeId: String): Stroke
+    suspend fun getById(strokeId: String): Stroke
 
 }
 
-class StrokeRepository(context: Context) {
-    var db = AppDatabase.getDatabase(context).strokeDao()
+class StrokeRepository @Inject constructor(
+    private val db: StrokeDao
+) {
 
-    fun create(stroke: Stroke): Long {
+    suspend fun create(stroke: Stroke): Long {
         return db.create(stroke)
     }
 
-    fun create(strokes: List<Stroke>) {
+    suspend fun create(strokes: List<Stroke>) {
         return db.create(strokes)
     }
 
-    fun update(stroke: Stroke) {
+    suspend fun update(stroke: Stroke) {
         return db.update(stroke)
     }
 
-    fun deleteAll(ids: List<String>) {
-        return db.deleteAll(ids)
+    suspend fun update(strokes: List<Stroke>) {
+        return db.update(strokes)
     }
 
-    fun getStrokeWithPointsById(strokeId: String): Stroke {
+    suspend fun deleteAll(ids: List<String>) {
+        ids.chunked(900).forEach { batch ->
+            db.deleteAll(batch)
+        }
+    }
+
+    suspend fun getStrokeWithPointsById(strokeId: String): Stroke {
         return db.getById(strokeId)
     }
 }

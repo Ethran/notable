@@ -3,9 +3,9 @@ package com.ethran.notable.utils
 import android.content.Context
 import android.content.pm.PackageManager
 import com.ethran.notable.BuildConfig
-import com.ethran.notable.TAG
-import com.ethran.notable.ui.showHint
-import io.shipbook.shipbooksdk.Log
+import com.ethran.notable.data.events.AppEventBus
+import com.ethran.notable.data.events.AppEvent
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.serialization.json.Json
 import java.net.URL
 import java.sql.Timestamp
@@ -14,6 +14,8 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Date
+
+private val log = ShipBook.getLogger("versionChecker")
 
 @Suppress("PropertyName")
 @kotlinx.serialization.Serializable
@@ -146,7 +148,7 @@ fun getCurrentVersionName(context: Context): String? {
 // cache
 var isLatestVersion: Boolean? = null
 
-fun isLatestVersion(context: Context, force: Boolean = false): Boolean {
+fun isLatestVersion(context: Context, appEventBus: AppEventBus, force: Boolean = false): Boolean {
     if (!force && isLatestVersion != null) return isLatestVersion!!
 
     try {
@@ -161,7 +163,7 @@ fun isLatestVersion(context: Context, force: Boolean = false): Boolean {
             if (latestVersion == null || currentVersion == null) {
                 throw Exception("One of the version is null - comparison is impossible")
             }
-            Log.i(TAG, "Version is $currentVersion and latest on repo is $latestVersion")
+            log.i("Version is $currentVersion and latest on repo is $latestVersion")
             val latest = Version.fromTimestamp(latestVersion)
 
             val current = Version.fromString(currentVersion)
@@ -174,11 +176,11 @@ fun isLatestVersion(context: Context, force: Boolean = false): Boolean {
 
             isLatestVersion = current.compareTo(latest) != -1
             if (!isLatestVersion!!) {
-                showHint(
+                appEventBus.tryEmit(AppEvent.ActionHint(
                     "A newer preview version is available!\n" +
                             "You are using released $current, and newest is from ${latest}.",
-                    duration = 5000
-                )
+                    5000
+                ))
             }
             return isLatestVersion!!
         } else {
@@ -200,18 +202,18 @@ fun isLatestVersion(context: Context, force: Boolean = false): Boolean {
 
             isLatestVersion = current.compareTo(latest) != -1
             if (!isLatestVersion!!) {
-                showHint(
+                appEventBus.tryEmit(AppEvent.ActionHint(
                     "A newer stable version is available!\n" +
                             "You are using ${current}, while the latest is $latest.",
-                    duration = 5000
-                )
+                    5000
+                ))
             }
             return isLatestVersion!!
         }
 
 
     } catch (e: Exception) {
-        Log.i(TAG, "Failed to fetch latest release version: ${e.message}")
+        log.i("Failed to fetch latest release version: ${e.message}")
         return true
     }
 }

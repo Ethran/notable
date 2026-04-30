@@ -1,6 +1,5 @@
 package com.ethran.notable.editor.drawing
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -10,22 +9,13 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
-import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.utils.scaleRect
-import com.ethran.notable.io.getPdfPageCount
-import com.ethran.notable.io.loadBackgroundBitmap
-import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.extension.copy
-import com.onyx.android.sdk.extension.isNotNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.cos
 import kotlin.math.floor
@@ -34,7 +24,7 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private val backgroundsLog = ShipBook.getLogger("BackgroundsLog")
+private val log = ShipBook.getLogger("BackgroundsLog")
 
 const val padding = 0
 const val lineHeight = 80
@@ -185,40 +175,6 @@ fun drawHexagon(canvas: Canvas, centerX: Float, centerY: Float, r: Float) {
     canvas.drawPath(path, defaultPaintStroke)
 }
 
-fun drawBackgroundImages(
-    context: Context,
-    canvas: Canvas,
-    backgroundImage: String,
-    scroll: Offset,
-    page: PageView? = null,
-    scale: Float = 1.0F,
-    repeat: Boolean = false,
-) {
-    try {
-        val imageBitmap = when (backgroundImage) {
-            "iris" -> {
-                val resId = R.drawable.iris
-                ImageBitmap.imageResource(context.resources, resId).asAndroidBitmap()
-            }
-
-            else -> {
-                if (page != null) {
-                    page.getOrLoadBackground(backgroundImage, -1, scale)
-                } else {
-                    loadBackgroundBitmap(backgroundImage, -1, scale)
-                }
-            }
-        }
-
-        if (imageBitmap != null) {
-            drawBitmapToCanvas(canvas, imageBitmap, scroll, scale, repeat)
-        } else {
-            backgroundsLog.e("Failed to load image from $backgroundImage")
-        }
-    } catch (e: Exception) {
-        backgroundsLog.e("Error loading background image: ${e.message}", e)
-    }
-}
 
 fun drawTitleBox(canvas: Canvas) {
 
@@ -256,37 +212,6 @@ fun drawTitleBox(canvas: Canvas) {
     canvas.drawRoundRect(rectF, cornerRadius, cornerRadius, borderPaint)
 }
 
-
-fun drawPdfPage(
-    canvas: Canvas,
-    pdfUriString: String,
-    pageNumber: Int,
-    scroll: Offset,
-    page: PageView? = null,
-    scale: Float = 1.0f
-) {
-    if (pageNumber < 0) {
-        backgroundsLog.e("Page number should not be ${pageNumber}, uri: $pdfUriString")
-        logCallStack("DrawPdfPage")
-        return
-    }
-    try {
-        val imageBitmap = if (page != null) {
-            page.getOrLoadBackground(pdfUriString, pageNumber, scale)
-        } else {
-            // here, if we don't have page, we assume are doing export,
-            // so background have to be in better quality
-            // (it is scaled down, but still takes whole screen, not like when we render it)
-            loadBackgroundBitmap(pdfUriString, pageNumber, 1f)
-        }
-        if (imageBitmap.isNotNull()) {
-            drawBitmapToCanvas(canvas, imageBitmap, scroll, scale, false)
-        }
-
-    } catch (e: Exception) {
-        backgroundsLog.e("drawPdfPage: Failed to render PDF", e)
-    }
-}
 
 fun drawBitmapToCanvas(
     canvas: Canvas, imageBitmap: Bitmap, scroll: Offset, scale: Float, repeat: Boolean
@@ -342,49 +267,23 @@ fun drawBitmapToCanvas(
 }
 
 fun drawBg(
-    context: Context,
     canvas: Canvas,
     backgroundType: BackgroundType,
     background: String,
     scroll: Offset = Offset.Zero,
-    scale: Float = 1f, // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
-    page: PageView? = null,
-    clipRect: Rect? = null // before the scaling
+    resourceBitmap: Bitmap?,
+    scale: Float = 1f,          // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
+    repeat: Boolean = false,    // for repeating image
+    clipRect: Rect? = null,     // before the scaling
 ) {
+
+    log.v("Loading the background")
     clipRect?.let {
         canvas.save()
         canvas.clipRect(scaleRect(it, scale))
     }
     when (backgroundType) {
-        is BackgroundType.Image -> {
-            drawBackgroundImages(context, canvas, background, scroll, page, scale)
-        }
-
-        is BackgroundType.ImageRepeating -> {
-            drawBackgroundImages(context, canvas, background, scroll, page, scale, true)
-        }
-
-        is BackgroundType.CoverImage -> {
-            drawBackgroundImages(context, canvas, background, Offset.Zero, page, scale)
-            drawTitleBox(canvas)
-        }
-
-        is BackgroundType.AutoPdf -> {
-            if (page == null) return
-            val pageNumber = page.currentPageNumber
-            if (0 <= pageNumber && pageNumber < getPdfPageCount(background)) drawPdfPage(
-                canvas, background, pageNumber, scroll, page, scale
-            )
-            else {
-                backgroundsLog.w("Page number $pageNumber is out of bounds")
-                canvas.drawColor(Color.WHITE)
-            }
-        }
-
-        is BackgroundType.Pdf -> {
-            drawPdfPage(canvas, background, backgroundType.page, scroll, page, scale)
-        }
-
+        // draw native background for it we don't need a resource
         is BackgroundType.Native -> {
             when (background) {
                 "blank" -> canvas.drawColor(Color.WHITE)
@@ -395,6 +294,18 @@ fun drawBg(
                 else -> {
                     throw IllegalArgumentException("Unknown background type: $background")
                 }
+            }
+        }
+
+        else -> {
+            if (resourceBitmap != null) {
+                drawBitmapToCanvas(canvas, resourceBitmap, scroll, scale, repeat)
+                if (backgroundType is BackgroundType.CoverImage) {
+                    drawTitleBox(canvas)
+                }
+            } else {
+                log.i("No resource provided to draw, maybe out of pages in pdf?")
+                canvas.drawColor(Color.WHITE)
             }
         }
     }
@@ -452,7 +363,7 @@ fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
                 "Subpage ${pageNum + 1}", 20f - scroll.x, yPosScaled + 30f, textPaint
             )
         } else {
-            backgroundsLog.d("Skipping line at $yPos (above visible area)")
+            log.d("Skipping line at $yPos (above visible area)")
         }
         yPos += pageHeight
         pageNum++

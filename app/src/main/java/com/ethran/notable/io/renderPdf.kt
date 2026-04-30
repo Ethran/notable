@@ -1,7 +1,6 @@
 package com.ethran.notable.io
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -10,10 +9,9 @@ import androidx.core.graphics.createBitmap
 import com.artifex.mupdf.fitz.Document
 import com.artifex.mupdf.fitz.Matrix
 import com.artifex.mupdf.fitz.android.AndroidDrawDevice
-import com.ethran.notable.TAG
 import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /* -----------------------------------------------------------------------
@@ -26,6 +24,8 @@ import kotlin.math.roundToInt
  *   - MuPDF path tries partial rendering by translating matrix; if that fails,
  *     it falls back to full render + crop.
  * ---------------------------------------------------------------------- */
+
+private val log = ShipBook.getLogger("renderPdf")
 
 /* ---------------------- Android native (alpha) ----------------------- */
 
@@ -47,15 +47,15 @@ fun renderPdfPageAndroid(
     clipOut: Rect? = null
 ): Bitmap? {
     if (!file.exists()) {
-        Log.e(TAG, "AndroidPdf: file not found: ${file.absolutePath}")
+        log.e("AndroidPdf: file not found: ${file.absolutePath}")
         return null
     }
     if (targetWidthPx <= 0) {
-        Log.e(TAG, "AndroidPdf: invalid targetWidthPx=$targetWidthPx")
+        log.e("AndroidPdf: invalid targetWidthPx=$targetWidthPx")
         return null
     }
     if (resolutionModifier <= 1.0f) {
-        Log.w(TAG, "Are you sure you want to use low resolution modifier?: $resolutionModifier")
+        log.w("Are you sure you want to use low resolution modifier?: $resolutionModifier")
     }
 
     val safeResolution = resolutionModifier.coerceIn(0.5f, 3f)
@@ -67,7 +67,7 @@ fun renderPdfPageAndroid(
         renderer = PdfRenderer(pfd)
 
         if (pageIndex !in 0 until renderer.pageCount) {
-            Log.e(TAG, "AndroidPdf: invalid pageIndex=$pageIndex (count=${renderer.pageCount})")
+            log.e("AndroidPdf: invalid pageIndex=$pageIndex (count=${renderer.pageCount})")
             return null
         }
 
@@ -76,7 +76,7 @@ fun renderPdfPageAndroid(
             val pageW = page.width
             val pageH = page.height
             if (pageW <= 0 || pageH <= 0) {
-                Log.e(TAG, "AndroidPdf: invalid intrinsic size $pageW x $pageH")
+                log.e("AndroidPdf: invalid intrinsic size $pageW x $pageH")
                 return null
             }
 
@@ -94,9 +94,9 @@ fun renderPdfPageAndroid(
             return bitmap
         }
     } catch (oom: OutOfMemoryError) {
-        Log.e(TAG, "AndroidPdf: OOM rendering page $pageIndex: ${oom.message}")
+        log.e("AndroidPdf: OOM rendering page $pageIndex: ${oom.message}")
     } catch (e: Exception) {
-        Log.e(TAG, "AndroidPdf: Error rendering page $pageIndex: ${e.message}", e)
+        log.e("AndroidPdf: Error rendering page $pageIndex: ${e.message}", e)
     } finally {
         try { renderer?.close() } catch (_: Exception) {}
         try { pfd?.close() } catch (_: Exception) {}
@@ -115,11 +115,11 @@ fun renderPdfPageMuPdf(
 ): Bitmap? {
     val file = File(path)
     if (!file.exists()) {
-        Log.e(TAG, "MuPdf: file not found: $path")
+        log.e("MuPdf: File not found: $path")
         return null
     }
     if (targetWidthPx <= 0) {
-        Log.e(TAG, "MuPdf: invalid targetWidthPx=$targetWidthPx")
+        log.e("MuPdf: invalid targetWidthPx=$targetWidthPx")
         return null
     }
 
@@ -129,7 +129,7 @@ fun renderPdfPageMuPdf(
         doc = Document.openDocument(file.absolutePath)
         val pageCount = doc.countPages()
         if (pageIndex !in 0 until pageCount) {
-            Log.e(TAG, "MuPdf: invalid pageIndex=$pageIndex (count=$pageCount)")
+            log.w("MuPdf: invalid pageIndex=${pageIndex + 1} (count=$pageCount)")
             return null
         }
 
@@ -140,7 +140,7 @@ fun renderPdfPageMuPdf(
             val pageWpt = (bounds.x1 - bounds.x0)
             val pageHpt = (bounds.y1 - bounds.y0)
             if (pageWpt <= 0f || pageHpt <= 0f) {
-                Log.e(TAG, "MuPdf: invalid page bounds: $bounds")
+                log.e("MuPdf: invalid page bounds: $bounds")
                 return null
             }
 
@@ -172,10 +172,7 @@ fun renderPdfPageMuPdf(
                     }
                     return bitmap
                 } catch (t: Throwable) {
-                    Log.w(
-                        TAG,
-                        "MuPdf: partial render optimization failed (${t.message}), falling back."
-                    )
+                    log.w("MuPdf: partial render optimization failed (${t.message}), falling back.")
                     // fall through to full render path
                 }
             }
@@ -195,11 +192,11 @@ fun renderPdfPageMuPdf(
             page.destroy()
         }
     } catch (oom: OutOfMemoryError) {
-        Log.e(TAG, "MuPdf: OOM rendering page $pageIndex: ${oom.message}")
+        log.e("MuPdf: OOM rendering page $pageIndex: ${oom.message}")
     } catch (e: NoClassDefFoundError) {
-        Log.e(TAG, "MuPdf: Fitz classes not found (missing dependency).", e)
+        log.e("MuPdf: Fitz classes not found (missing dependency).", e)
     } catch (e: Exception) {
-        Log.e(TAG, "MuPdf: Error rendering page $pageIndex: ${e.message}", e)
+        log.e("MuPdf: Error rendering page $pageIndex: ${e.message}", e)
     } finally {
         doc?.destroy()
     }
@@ -236,7 +233,7 @@ private fun Bitmap.cropTo(rect: Rect): Bitmap? {
         this.recycle()
         cropped
     } catch (e: Exception) {
-        Log.e(TAG, "Crop failed: ${e.message}", e)
+        log.e("Crop failed: ${e.message}", e)
         this
     }
 }

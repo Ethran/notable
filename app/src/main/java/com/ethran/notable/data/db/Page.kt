@@ -1,6 +1,5 @@
 package com.ethran.notable.data.db
 
-import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.room.ColumnInfo
 import androidx.room.Dao
@@ -16,6 +15,7 @@ import androidx.room.Update
 import com.ethran.notable.data.model.BackgroundType
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
 @Entity(
     foreignKeys = [ForeignKey(
@@ -39,15 +39,17 @@ data class Page(
     val createdAt: Date = Date(), val updatedAt: Date = Date()
 )
 
-data class PageWithStrokes(
-    @Embedded val page: Page, @Relation(
-        parentColumn = "id", entityColumn = "pageId", entity = Stroke::class
-    ) val strokes: List<Stroke>
-)
-
-data class PageWithImages(
-    @Embedded val page: Page, @Relation(
-        parentColumn = "id", entityColumn = "pageId", entity = Image::class
+data class PageWithData(
+    @Embedded val page: Page,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "pageId",
+        entity = Stroke::class
+    ) val strokes: List<Stroke>,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "pageId",
+        entity = Image::class
     ) val images: List<Image>
 )
 
@@ -56,79 +58,63 @@ data class PageWithImages(
 @Dao
 interface PageDao {
     @Query("SELECT * FROM page WHERE id IN (:ids)")
-    fun getByIds(ids: List<String>): List<Page>
+    suspend fun getByIds(ids: List<String>): List<Page>
 
     @Query("SELECT * FROM page WHERE id = (:pageId)")
-    fun getById(pageId: String): Page?
+    suspend fun getById(pageId: String): Page?
 
     @Transaction
     @Query("SELECT * FROM page WHERE id =:pageId")
-    fun getPageWithStrokesById(pageId: String): PageWithStrokes
-
-    @Transaction
-    @Query("SELECT * FROM page WHERE id =:pageId")
-    suspend fun getPageWithStrokesByIdSuspend(pageId: String): PageWithStrokes
-
-    @Transaction
-    @Query("SELECT * FROM page WHERE id =:pageId")
-    fun getPageWithImagesById(pageId: String): PageWithImages
+    suspend fun getPageWithDataById(pageId: String): PageWithData
 
     @Query("UPDATE page SET scroll=:scroll WHERE id =:pageId")
-    fun updateScroll(pageId: String, scroll: Int)
+    suspend fun updateScroll(pageId: String, scroll: Int)
 
     @Query("SELECT * FROM page WHERE notebookId is null AND parentFolderId is :folderId")
     fun getSinglePagesInFolder(folderId: String? = null): LiveData<List<Page>>
 
     @Insert
-    fun create(page: Page): Long
+    suspend fun create(page: Page): Long
 
     @Update
-    fun update(page: Page)
+    suspend fun update(page: Page)
 
     @Query("DELETE FROM page WHERE id = :pageId")
-    fun delete(pageId: String)
+    suspend fun delete(pageId: String)
 }
 
-class PageRepository(context: Context) {
-    var db = AppDatabase.getDatabase(context).pageDao()
-
-    fun create(page: Page): Long {
+class PageRepository @Inject constructor(
+    private val db: PageDao
+) {
+    suspend fun create(page: Page): Long {
         return db.create(page)
     }
 
-    fun updateScroll(id: String, scroll: Int) {
+    suspend fun updateScroll(id: String, scroll: Int) {
         return db.updateScroll(id, scroll)
     }
 
-    fun getById(pageId: String): Page? {
+    suspend fun getById(pageId: String): Page? {
         return db.getById(pageId)
     }
 
-    fun getByIds(ids: List<String>): List<Page> {
+    suspend fun getByIds(ids: List<String>): List<Page> {
         return db.getByIds(ids)
     }
-
-    fun getWithStrokeById(pageId: String): PageWithStrokes {
-        return db.getPageWithStrokesById(pageId)
+    suspend fun getWithDataById(pageId: String): PageWithData {
+        return db.getPageWithDataById(pageId)
     }
 
-    suspend fun getWithStrokeByIdSuspend(pageId: String): PageWithStrokes {
-        return db.getPageWithStrokesByIdSuspend(pageId)
-    }
-
-    fun getWithImageById(pageId: String): PageWithImages {
-        return db.getPageWithImagesById(pageId)
-    }
 
     fun getSinglePagesInFolder(folderId: String? = null): LiveData<List<Page>> {
         return db.getSinglePagesInFolder(folderId)
     }
 
-    fun update(page: Page) {
+    suspend fun update(page: Page) {
         return db.update(page)
     }
 
-    fun delete(pageId: String) {
+    suspend fun delete(pageId: String) {
         return db.delete(pageId)
     }
 
@@ -137,4 +123,14 @@ class PageRepository(context: Context) {
 
 fun Page.getBackgroundType(): BackgroundType {
     return BackgroundType.fromKey(backgroundType)
+}
+
+// TODO: make it better
+suspend fun Page.getParentFolder(bookRepository: BookRepository): String? {
+    return if (notebookId != null) {
+        val notebook = bookRepository.getById(notebookId)
+        notebook?.parentFolderId
+    } else {
+        parentFolderId
+    }
 }

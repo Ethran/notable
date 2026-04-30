@@ -1,6 +1,5 @@
 package com.ethran.notable.ui.views
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,7 +32,6 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,24 +41,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.R
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
-import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.ui.toolbar.Topbar
+import com.ethran.notable.editor.EditorDestination
+import com.ethran.notable.editor.ui.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
-import com.ethran.notable.io.ImportEngine
-import com.ethran.notable.io.ImportOptions
+import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.NotebookCard
 import com.ethran.notable.ui.components.ShowPagesRow
@@ -69,108 +66,155 @@ import com.ethran.notable.ui.dialogs.FolderConfigDialog
 import com.ethran.notable.ui.dialogs.NotebookConfigDialog
 import com.ethran.notable.ui.dialogs.PdfImportChoiceDialog
 import com.ethran.notable.ui.noRippleClickable
-import com.ethran.notable.utils.isLatestVersion
-import com.onyx.android.sdk.extension.isNullOrEmpty
+import com.ethran.notable.ui.viewmodels.LibraryUiState
+import com.ethran.notable.ui.viewmodels.LibraryViewModel
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
 import compose.icons.feathericons.Folder
 import compose.icons.feathericons.FolderPlus
 import compose.icons.feathericons.Settings
 import compose.icons.feathericons.Upload
-import io.shipbook.shipbooksdk.Log
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlin.concurrent.thread
+import io.shipbook.shipbooksdk.ShipBook
 
-@ExperimentalFoundationApi
-@ExperimentalComposeUiApi
-@Composable
-fun Library(navController: NavController, folderId: String? = null) {
-    PageDataManager.cancelLoadingPages()
 
-    val context = LocalContext.current
-
-    val appRepository = AppRepository(LocalContext.current)
-
-    val books by appRepository.bookRepository.getAllInFolder(folderId).observeAsState()
-    val singlePages by appRepository.pageRepository.getSinglePagesInFolder(folderId)
-        .observeAsState()
-    val folders by appRepository.folderRepository.getAllInFolder(folderId).observeAsState()
-    val bookRepository = BookRepository(LocalContext.current)
-
-    var isLatestVersion by remember {
-        mutableStateOf(true)
+object LibraryDestination : NavigationDestination {
+    override val route = "library"
+    const val FOLDER_ID_ARG = "folderId"
+    val routeWithArgs = "$route?$FOLDER_ID_ARG={$FOLDER_ID_ARG}"
+    fun createRoute(folderId: String? = null): String {
+        return if (folderId != null) "$route?$FOLDER_ID_ARG=$folderId" else route
     }
-    LaunchedEffect(key1 = Unit, block = {
-        thread {
-            isLatestVersion = isLatestVersion(context, true)
-        }
-    })
+}
+
+private val log = ShipBook.getLogger("HomeView")
+
+@Composable
+fun Library(
+    navController: NavController,
+    folderId: String? = null,
+    goToPage: (String) -> Unit = {},
+    onCreateNewQuickPage: (String?) -> Unit = {},
+    viewModel: LibraryViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(folderId) {
+        viewModel.loadFolder(folderId)
+    }
+
+    LibraryContent(
+        appRepository = viewModel.appRepository,
+        exportEngine = viewModel.exportEngine,
+        uiState = uiState,
+        onNavigateToFolder = { id -> navController.navigate(LibraryDestination.createRoute(id)) },
+        onNavigateToSettings = { navController.navigate("settings") },
+        onNavigateToEditor = { pageId, bookId ->
+            navController.navigate(EditorDestination.createRoute(pageId, bookId))
+        },
+        goToPage = goToPage,
+        onCreateNewQuickPage = { onCreateNewQuickPage(uiState.folderId) },
+        onCreateNewFolder = viewModel::createNewFolder,
+        onDeleteEmptyBook = viewModel::deleteEmptyBook,
+        onCreateNewNotebook = viewModel::onCreateNewNotebook,
+        onImportPdf = viewModel::onPdfFile,
+        onImportXopp = viewModel::onXoppFile,
+        onPreviewMissing = viewModel::onPreviewRequested
+
+    )
+}
 
 
-    Column(
-        Modifier.fillMaxSize()
-    ) {
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
+@Composable
+fun LibraryContent(
+    appRepository: AppRepository,
+    exportEngine: ExportEngine,
+    uiState: LibraryUiState,
+    onNavigateToFolder: (String?) -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToEditor: (String, String) -> Unit,
+    goToPage: (String) -> Unit,
+    onCreateNewQuickPage: () -> Unit,
+    onCreateNewFolder: () -> Unit,
+    onDeleteEmptyBook: (String) -> Unit,
+    onCreateNewNotebook: () -> Unit,
+    onImportPdf: (Uri, Boolean) -> Unit,
+    onImportXopp: (Uri) -> Unit,
+    onPreviewMissing: (String) -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
         Topbar {
             Row(Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.weight(1f))
                 BadgedBox(
                     badge = {
-                        if (!isLatestVersion) Badge(
+                        if (!uiState.isLatestVersion) Badge(
                             backgroundColor = Color.Black,
                             modifier = Modifier.offset((-12).dp, 10.dp)
                         )
                     }) {
                     Icon(
-                        imageVector = FeatherIcons.Settings,
-                        contentDescription = "",
+                        imageVector = FeatherIcons.Settings, contentDescription = "Settings",
                         Modifier
                             .padding(8.dp)
-                            .noRippleClickable {
-                                navController.navigate("settings")
-                            })
+                            .noRippleClickable(onClick = onNavigateToSettings)
+                    )
                 }
             }
-            Row(
-                Modifier.padding(10.dp)
-            ) {
-                BreadCrumb(folderId = folderId) { navController.navigate("library" + if (it == null) "" else "?folderId=${it}") }
+            Row(Modifier.padding(10.dp)) {
+                BreadCrumb(
+                    folders = uiState.breadcrumbFolders, onSelectFolderId = onNavigateToFolder
+                )
             }
 
         }
 
-        Column(
-            Modifier.padding(10.dp)
-        ) {
+        Column(Modifier.padding(10.dp)) {
             Spacer(Modifier.height(10.dp))
-            FolderList(context, folders, navController, appRepository, folderId)
 
-            Spacer(Modifier.height(10.dp))
-            ShowPagesRow(
-                singlePages,
-                navController,
-                appRepository,
-                folderId,
-                title = context.getString(R.string.home_quick_pages)
+            FolderList(
+                appRepository = appRepository,
+                folders = uiState.folders,
+                onNavigateToFolder = onNavigateToFolder,
+                onCreateNewFolder = onCreateNewFolder
             )
 
             Spacer(Modifier.height(10.dp))
-            NotebookGrid(context, books, navController, bookRepository, folderId)
+            ShowPagesRow(
+                appRepository = appRepository,
+                pages = uiState.singlePages,
+                currentPageId = null,
+                title = stringResource(R.string.home_quick_pages), onSelectPage = goToPage,
+                showAddQuickPage = true,
+                onCreateNewQuickPage = onCreateNewQuickPage,
+                onPreviewMissing = onPreviewMissing
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            NotebookGrid(
+                appRepository = appRepository,
+                exportEngine = exportEngine,
+                books = uiState.books,
+                isImporting = uiState.isImporting,
+                onNavigateToEditor = onNavigateToEditor,
+                onDeleteEmptyBook = onDeleteEmptyBook,
+                onCreateNewNotebook = onCreateNewNotebook,
+                onImportPdf = onImportPdf,
+                onImportXopp = onImportXopp,
+                onPreviewMissing = onPreviewMissing
+            )
         }
     }
 
 
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun FolderList(
-    context: Context,
-    folders: List<Folder>?,
-    navController: NavController,
     appRepository: AppRepository,
-    folderId: String?
+    folders: List<Folder>,
+    onNavigateToFolder: (String) -> Unit, onCreateNewFolder: () -> Unit
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -184,43 +228,37 @@ fun FolderList(
                 Modifier
                     .border(0.5.dp, Color.Black)
                     .padding(horizontal = 10.dp, vertical = 5.dp)
-                    .noRippleClickable {
-                        val folder = Folder(parentFolderId = folderId)
-                        appRepository.folderRepository.create(folder)
-                    }) {
+                    .noRippleClickable(onClick = onCreateNewFolder)
+            ) {
                 Icon(
-                    imageVector = FeatherIcons.FolderPlus,
-                    contentDescription = "Add Folder Icon",
+                    imageVector = FeatherIcons.FolderPlus, contentDescription = "Add Folder",
                     Modifier.height(20.dp)
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(text = context.getString(R.string.home_add_new_folder))
+                Text(text = stringResource(R.string.home_add_new_folder))
             }
         }
-        if (!folders.isNullOrEmpty()) {
+
+        if (folders.isNotEmpty()) {
             items(folders) { folder ->
                 var isFolderSettingsOpen by remember { mutableStateOf(false) }
                 if (isFolderSettingsOpen) FolderConfigDialog(
-                    folderId = folder.id, onClose = {
-                        Log.i(TAG, "Closing Directory Dialog")
+                    appRepository.folderRepository,
+                    folderId = folder.id,
+                    onClose = {
+                        log.i("Closing Directory Dialog")
                         isFolderSettingsOpen = false
                     })
                 Row(
                     Modifier
                         .combinedClickable(
-                            onClick = {
-                                navController.navigate("library?folderId=${folder.id}")
-                            },
-                            onLongClick = {
-                                isFolderSettingsOpen = !isFolderSettingsOpen
-                            },
-                        )
+                            onClick = { onNavigateToFolder(folder.id) },
+                            onLongClick = { isFolderSettingsOpen = true })
                         .border(0.5.dp, Color.Black)
                         .padding(10.dp, 5.dp)
                 ) {
                     Icon(
-                        imageVector = FeatherIcons.Folder,
-                        contentDescription = "folder icon",
+                        imageVector = FeatherIcons.Folder, contentDescription = "Folder",
                         Modifier.height(20.dp)
                     )
                     Spacer(Modifier.width(10.dp))
@@ -231,19 +269,20 @@ fun FolderList(
     }
 }
 
-
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun NotebookGrid(
-    context: Context,
-    books: List<Notebook>?,
-    navController: NavController,
-    bookRepository: BookRepository,
-    folderId: String?
+    appRepository: AppRepository,
+    exportEngine: ExportEngine,
+    books: List<Notebook>,
+    isImporting: Boolean,
+    onNavigateToEditor: (String, String) -> Unit,
+    onDeleteEmptyBook: (String) -> Unit,
+    onCreateNewNotebook: () -> Unit,
+    onImportPdf: (Uri, Boolean) -> Unit,
+    onImportXopp: (Uri) -> Unit,
+    onPreviewMissing: (String) -> Unit
 ) {
-    var importInProgress = false
-
-    Text(text = context.getString(R.string.home_notebooks))
+    Text(text = stringResource(R.string.home_notebooks))
     Spacer(Modifier.height(10.dp))
     LazyVerticalGrid(
         columns = GridCells.Adaptive(100.dp),
@@ -253,19 +292,20 @@ fun NotebookGrid(
     ) {
         item {
             NotebookImportPanel(
-                context = context,
-                bookRepository = bookRepository,
-                parentFolderId = folderId,
-                onStartImport = { importInProgress = true },
-                onEndImport = { importInProgress = false })
+                onCreateNewNotebook = onCreateNewNotebook,
+                onImportPdf = onImportPdf,
+                onImportXopp = onImportXopp
+            )
         }
-        if (!books.isNullOrEmpty()) {
+
+        if (books.isNotEmpty()) {
             items(books.reversed()) { book ->
                 if (book.pageIds.isEmpty()) {
-                    if (!importInProgress) {
-                        EmptyBookWarningHandler(emptyBook = book, onDelete = {
-                            bookRepository.delete(book.id)
-                        }, onDismiss = { })
+                    if (!isImporting) {
+                        EmptyBookWarningHandler(
+                            emptyBook = book,
+                            onDelete = { onDeleteEmptyBook(book.id) },
+                            onDismiss = { })
                     }
                     return@items
                 }
@@ -275,12 +315,17 @@ fun NotebookGrid(
                     title = book.title,
                     pageIds = book.pageIds,
                     openPageId = book.openPageId,
-                    onOpen = { bookId, pageId ->
-                        navController.navigate("books/$bookId/pages/$pageId")
-                    },
-                    onOpenSettings = { isSettingsOpen = true })
-                if (isSettingsOpen) NotebookConfigDialog(
-                    bookId = book.id, onClose = { isSettingsOpen = false })
+                    onOpen = { bookId, pageId -> onNavigateToEditor(pageId, bookId) },
+                    onOpenSettings = { isSettingsOpen = true },
+                    onPreviewMissing = onPreviewMissing
+                )
+
+                if (isSettingsOpen) {
+                    NotebookConfigDialog(
+                        appRepository,
+                        exportEngine = exportEngine,
+                        bookId = book.id, onClose = { isSettingsOpen = false })
+                }
             }
         }
     }
@@ -288,68 +333,23 @@ fun NotebookGrid(
 
 @Composable
 fun NotebookImportPanel(
-    context: Context,
-    bookRepository: BookRepository,
-    parentFolderId: String?,
-    onStartImport: () -> Unit,
-    onEndImport: () -> Unit,
+    onCreateNewNotebook: () -> Unit,
+    onImportPdf: (Uri, Boolean) -> Unit,
+    onImportXopp: (Uri) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val snackManager = LocalSnackContext.current
-
-    fun onCreateNew() {
-        bookRepository.create(
-            Notebook(
-                parentFolderId = parentFolderId,
-                defaultBackground = GlobalAppSettings.current.defaultNativeTemplate,
-                defaultBackgroundType = BackgroundType.Native.key
-            )
-        )
-    }
-
-    fun onPdfFile(uri: Uri, copy: Boolean) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val snackText = if (copy) {
-                "Importing PDF background (copy)"
-            } else {
-                "Setting up observer for PDF"
-            }
-            onStartImport()
-            snackManager.runWithSnack(snackText) {
-                ImportEngine(context).import(
-                    uri,
-                    ImportOptions(folderId = parentFolderId, linkToExternalFile = !copy)
-                )
-            }
-            onEndImport()
-        }
-    }
-
-    fun onXoppFile(uri: Uri) {
-        CoroutineScope(Dispatchers.IO).launch {
-            onStartImport()
-            snackManager.showSnackDuring("importing from xopp file") {
-                ImportEngine(context).import(
-                    uri, ImportOptions(folderId = parentFolderId)
-                )
-            }
-            onEndImport()
-        }
-    }
-
-
+    val context = LocalContext.current
+    val snackState = LocalSnackContext.current
     var showPdfImportChoiceDialog by remember { mutableStateOf<Uri?>(null) }
 
     showPdfImportChoiceDialog?.let { uri ->
         PdfImportChoiceDialog(uri = uri, onCopy = { uri ->
             showPdfImportChoiceDialog = null
-            onPdfFile(uri, /* copy= */ true)
-        }, onObserve = { uri ->
+            onImportPdf(uri, /* copy= */ true)
+        }, onObserve = {
             showPdfImportChoiceDialog = null
-            onPdfFile(uri, /* copy= */ false)
-        }, onDismiss = {
-            showPdfImportChoiceDialog = null
-        })
+            onImportPdf(it, /* copy= */ false)
+        }, onDismiss = { showPdfImportChoiceDialog = null })
     }
 
 
@@ -370,15 +370,11 @@ fun NotebookImportPanel(
                     .fillMaxWidth()
                     .background(Color.LightGray.copy(alpha = 0.3f))
                     .border(2.dp, Color.Black, RectangleShape)
-                    .noRippleClickable {
-                        onCreateNew()
-
-                    }) {
+                    .noRippleClickable(onClick = onCreateNewNotebook)
+            ) {
                 Icon(
-                    imageVector = FeatherIcons.FilePlus,
-                    contentDescription = "Add Quick Page",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(40.dp),
+                    imageVector = FeatherIcons.FilePlus, contentDescription = "Create Notebook",
+                    tint = Color.Gray, modifier = Modifier.size(40.dp)
                 )
             }
 
@@ -386,26 +382,23 @@ fun NotebookImportPanel(
                 contract = ActivityResultContracts.OpenDocument()
             ) { uri: Uri? ->
                 if (uri == null) {
-                    Log.w(
-                        TAG,
-                        "PickVisualMedia: uri is null (user cancelled or provider returned null)"
-                    )
+                    log.w("PickVisualMedia: uri is null (user cancelled or provider returned null)")
                     return@rememberLauncherForActivityResult
                 }
                 try {
 
                     val mimeType = context.contentResolver.getType(uri)
-                    Log.d(TAG, "Selected file mimeType: $mimeType, uri: $uri")
+                    log.d("Selected file mimeType: $mimeType, uri: $uri")
                     if (mimeType == "application/pdf" || uri.toString()
                             .endsWith(".pdf", ignoreCase = true)
                     ) {
                         showPdfImportChoiceDialog = uri
                     } else {
-                        onXoppFile(uri)
+                        onImportXopp(uri)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "contentPicker failed: ${e.message}", e)
-                    SnackState.globalSnackFlow.tryEmit(SnackConf(text = "Importing failed: ${e.message}"))
+                    log.e("contentPicker failed: ${e.message}", e)
+                    snackState.showOrUpdateSnack(SnackConf(text = "Importing failed: ${e.message}"))
                 }
             }
             // Import Notebook (Bottom Half)
@@ -437,4 +430,79 @@ fun NotebookImportPanel(
             }
         }
     }
+}
+
+
+@Preview(
+    showBackground = true,
+    name = "Library - Default State",
+    widthDp = 800,
+    heightDp = 1200
+)
+@Composable
+fun LibraryContentPreview() {
+    // 1. Create a dummy UI state with mock data
+    val mockUiState = LibraryUiState(
+        folderId = null,
+        isLatestVersion = true,
+        isImporting = false,
+        breadcrumbFolders = listOf(
+            // Optional: Add mock breadcrumbs if you want to preview nested folder state
+             Folder(id = "root", title = "Home", parentFolderId = null)
+        ),
+        folders = listOf(
+            // Adjust constructor arguments based on your exact entity definition
+            Folder(id = "folder_1", title = "Work Notes", parentFolderId = null),
+            Folder(id = "folder_2", title = "Personal", parentFolderId = null)
+        ),
+        books = listOf(
+            // Needs pageIds to render the card (empty books show a warning)
+            Notebook(id = "book_1", title = "Meeting Minutes", pageIds = listOf("page1", "page2")),
+            Notebook(id = "book_2", title = "Journal", pageIds = listOf("page3"))
+        ),
+        singlePages = emptyList() // Populate with mock Page() objects if you want to see Quick Pages
+    )
+
+    // 2. Render the stateless component with empty lambdas
+//    LibraryContent(
+//        uiState = mockUiState,
+//        onNavigateToFolder = {},
+//        onNavigateToSettings = {},
+//        onNavigateToEditor = { _, _ -> },
+//        goToPage = {},
+//        onCreateNewQuickPage = {},
+//        onCreateNewFolder = {},
+//        onDeleteEmptyBook = {},
+//        onCreateNewNotebook = {},
+//        onImportPdf = { _, _ -> },
+//        onImportXopp = {})
+}
+
+@Suppress("UnusedVariable")
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
+@Preview(showBackground = true, name = "Library - Update Available & Importing")
+@Composable
+fun LibraryContentUpdatePreview() {
+    val mockUiState = LibraryUiState(
+        folderId = "folder_1",
+        isLatestVersion = false, // Will show the red badge on the settings icon
+        isImporting = true,      // Will hide the delete warning for empty books
+        breadcrumbFolders = emptyList(),
+        folders = emptyList(),
+        books = emptyList(),
+        singlePages = emptyList()
+    )
+
+//    LibraryContent(
+//        uiState = mockUiState,
+//        onNavigateToFolder = {},
+//        onNavigateToSettings = {},
+//        onNavigateToEditor = { _, _ -> },
+//        goToPage = {},
+//        onCreateNewQuickPage = {},
+//        onCreateNewFolder = {},
+//        onDeleteEmptyBook = {},
+//        onCreateNewNotebook = {},
+//        onImportPdf = { _, _ -> },
+//        onImportXopp = {})
 }

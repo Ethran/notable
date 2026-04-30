@@ -27,6 +27,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import com.ethran.notable.ui.noRippleClickable
 
+/**
+ * A composable function that creates a dropdown-style select menu.
+ *
+ * It displays the currently selected value and, when clicked, opens a popup
+ * with a list of all available options. Selecting an option from the list
+ * updates the state and closes the popup.
+ *
+ * @param T The type of the value for each option.
+ * @param options A list of pairs, where each pair contains a value of type [T] and its corresponding display string.
+ * @param value The currently selected value of type [T].
+ * @param onChange A callback function that is invoked with the new value of type [T] when an option is selected.
+ */
 @Composable
 fun <T> SelectMenu(options: List<Pair<T, String>>, value: T, onChange: (T) -> Unit) {
     var isExpanded by remember { mutableStateOf(false) }

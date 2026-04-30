@@ -1,8 +1,6 @@
 package com.ethran.notable.editor
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -11,167 +9,238 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.navigation.NavController
-import com.ethran.notable.TAG
-import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.EditorSettingCacheManager
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.state.EditorState
-import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.ui.EditorGestureReceiver
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
-import com.ethran.notable.editor.ui.toolbar.Toolbar
-import com.ethran.notable.io.exportToLinkedFile
+import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
+import com.ethran.notable.gestures.EditorGestureReceiver
+import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
+
+private val log = ShipBook.getLogger("EditorView")
+
+object EditorDestination : NavigationDestination {
+    override val route = "editor"
+
+    const val PAGE_ID_ARG = "pageId"
+    const val BOOK_ID_ARG = "bookId"
+
+    // Unified route: editor/{pageId}?bookId={bookId}
+    val routeWithArgs = "$route/{$PAGE_ID_ARG}?$BOOK_ID_ARG={$BOOK_ID_ARG}"
+
+    /**
+     * Helper to create the path. If bookId is null, it just won't be appended.
+     */
+    fun createRoute(pageId: String, bookId: String? = null): String {
+        return "$route/$pageId" + if (bookId != null) "?$BOOK_ID_ARG=$bookId" else ""
+    }
+}
 
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-@ExperimentalFoundationApi
 fun EditorView(
-    navController: NavController, bookId: String?, pageId: String, onPageChange: (String) -> Unit
+    initialPageId: String,
+    bookId: String?,
+    isQuickNavOpen: Boolean,
+
+    // navigation callbacks
+    onPageChange: (String) -> Unit,
+    goToLibrary: (folderId: String?) -> Unit,
+    goToPages: (bookId: String) -> Unit,
+    goToBugReport: () -> Unit,
+
+    viewModel: EditorViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val snackManager = LocalSnackContext.current
     val scope = rememberCoroutineScope()
-    val appRepository = remember { AppRepository(context) }
 
-    // control if we do have a page
-    if (appRepository.pageRepository.getById(pageId) == null) {
-        if (bookId != null) {
-            // clean the book
-            Log.i(TAG, "Could not find page, Cleaning book")
-            SnackState.globalSnackFlow.tryEmit(
-                SnackConf(
-                    text = "Could not find page, cleaning book",
-                    duration = 4000
-                )
-            )
-            appRepository.bookRepository.removePage(bookId, pageId)
-        }
-        navController.navigate("library")
-        return
+    // Single point of entry for loading book data based on the pageId from Navigation
+    // Should not be used for regular page switching
+    LaunchedEffect(initialPageId) {
+        log.v("EditorView: pageId changed to $initialPageId, loading data")
+        viewModel.loadToolbarState(bookId, initialPageId)
     }
-    var currentPageId by remember { mutableStateOf(pageId) }
+
+    // Sync isQuickNavOpen to ViewModel
+    LaunchedEffect(isQuickNavOpen) {
+        viewModel.onToolbarAction(ToolbarAction.UpdateQuickNavOpen(isQuickNavOpen))
+    }
+
 
     BoxWithConstraints {
         val height = convertDpToPixel(this.maxHeight, context).toInt()
         val width = convertDpToPixel(this.maxWidth, context).toInt()
 
-
+        // Here we load initial page into the memory
         val page = remember {
             PageView(
                 context = context,
                 coroutineScope = scope,
-                id = currentPageId,
+                pageDataManager = viewModel.pageDataManager,
+                initialPageId = initialPageId,
                 viewWidth = width,
                 viewHeight = height,
-                snackManager = snackManager
+                snackManager = snackManager,
             )
         }
 
-        val editorState =
-            remember { EditorState(bookId = bookId, pageId = currentPageId, pageView = page) }
+        val history = remember(page) { viewModel.createHistory(page) }
 
-        val history = remember {
-            History(scope, page)
-        }
         val editorControlTower = remember {
-            EditorControlTower(scope, page, history, editorState)
+            EditorControlTower(
+                scope = scope,
+                page = page,
+                history = history,
+                viewModel = viewModel,
+                clipboardStore = ClipboardStore,
+            )
         }
 
-        // update opened page
-        LaunchedEffect(currentPageId) {
-            if (bookId != null) {
-                appRepository.bookRepository.setOpenPageId(bookId, currentPageId)
+
+        // Initialize ViewModel with persisted settings on first composition
+        LaunchedEffect(Unit) {
+            viewModel.initFromPersistedSettings()
+            viewModel.updateDrawingState()
+        }
+
+        DisposableEffect(editorControlTower) {
+            editorControlTower.registerObservers()
+            onDispose {
+                editorControlTower.unregisterObservers()
             }
-            if (currentPageId != pageId) {
-                onPageChange(currentPageId)
+        }
+
+        // Collect UI Events from ViewModel (navigation )
+        LaunchedEffect(Unit) {
+            viewModel.uiEvents.collect { event ->
+                when (event) {
+                    is EditorUiEvent.NavigateToLibrary -> {
+                        goToLibrary(event.folderId)
+                    }
+
+                    is EditorUiEvent.NavigateToPages -> {
+                        goToPages(event.bookId)
+                    }
+
+                    EditorUiEvent.NavigateToBugReport -> {
+                        goToBugReport()
+                    }
+                }
             }
+        }
+
+        // Collect Canvas Commands from ViewModel
+        LaunchedEffect(Unit) {
+            viewModel.canvasCommands.collect { command ->
+                when (command) {
+                    CanvasCommand.Undo -> editorControlTower.undo()
+                    CanvasCommand.Redo -> editorControlTower.redo()
+                    CanvasCommand.Paste -> editorControlTower.pasteFromClipboard()
+                    CanvasCommand.ResetView -> editorControlTower.resetZoomAndScroll()
+                    CanvasCommand.ClearAllStrokes -> {
+                        CanvasEventBus.clearPageSignal.emit(Unit)
+                        snackManager.displaySnack(
+                            SnackConf(
+                                text = "Cleared all strokes",
+                                duration = 2000
+                            )
+                        )
+                    }
+
+                    CanvasCommand.RefreshCanvas -> {
+                        CanvasEventBus.reloadFromDb.emit(Unit)
+                    }
+
+                    is CanvasCommand.CopyImageToCanvas -> {
+                        CanvasEventBus.addImageByUri.value = command.uri
+                    }
+                }
+            }
+        }
+
+        // Handle Canvas signals in UI
+        LaunchedEffect(Unit) {
+            CanvasEventBus.closeMenusSignal.collect {
+                log.d("Closing all menus")
+                viewModel.onToolbarAction(ToolbarAction.CloseAllMenus)
+            }
+        }
+
+        // Handle focus changes from Canvas
+//        LaunchedEffect(Unit) {
+//            CanvasEventBus.onFocusChange.collect { hasFocus ->
+//                log.d("Canvas has focus: $hasFocus")
+//                if (hasFocus)
+//                    viewModel.updateDrawingState()
+//
+//            }
+//        }
+
+        val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
+
+        // Observe pageId changes from ViewModel state for navigation
+        LaunchedEffect(viewModel) {
+            snapshotFlow { toolbarState.pageId }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .drop(1) // Skip initial emission from loadBookData
+                .collect { newPageId ->
+                    log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")
+                    // update the PageView
+                    page.changePage(newPageId)
+
+                    // update the navigation state
+                    onPageChange(newPageId)
+                }
+        }
+
+        // Sync PageView state to ViewModel for Toolbar rendering
+        val zoomLevel by page.zoomLevel.collectAsStateWithLifecycle()
+        val selectionActive = viewModel.selectionState.isNonEmpty()
+        LaunchedEffect(
+            zoomLevel,
+            selectionActive
+        ) {
+            log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
+            viewModel.setShowResetView(zoomLevel != 1.0f)
+            viewModel.setSelectionActive(selectionActive)
         }
 
         DisposableEffect(Unit) {
             onDispose {
-                // finish selection operation
-                editorState.selectionState.applySelectionDisplace(page)
-                exportToLinkedFile(context, bookId, appRepository.bookRepository)
-                page.disposeOldPage()
+                viewModel.onDispose(page)
             }
         }
 
-        // TODO put in editorSetting class
-        LaunchedEffect(
-            editorState.isToolbarOpen,
-            editorState.pen,
-            editorState.penSettings,
-            editorState.mode,
-            editorState.eraser
-        ) {
-            Log.i(TAG, "EditorView: saving")
-            EditorSettingCacheManager.setEditorSettings(
-                context,
-                EditorSettingCacheManager.EditorSettings(
-                    isToolbarOpen = editorState.isToolbarOpen,
-                    mode = editorState.mode,
-                    pen = editorState.pen,
-                    eraser = editorState.eraser,
-                    penSettings = editorState.penSettings
-                )
-            )
-        }
 
-        fun goToNextPage(): String? {
-            return if (bookId != null) {
-                val newPageId = appRepository.getNextPageIdFromBookAndPageOrCreate(
-                    pageId = currentPageId, notebookId = bookId
-                )
-                currentPageId = newPageId
-                newPageId
-            } else
-                null
-        }
-
-        fun goToPreviousPage(): String? {
-            return if (bookId != null) {
-                val newPageId = appRepository.getPreviousPageIdFromBookAndPage(
-                    pageId = currentPageId, notebookId = bookId
-                )
-                if (newPageId != null)
-                    currentPageId = newPageId
-                newPageId
-            } else null
-        }
 
         InkaTheme {
+            EditorGestureReceiver(controlTower = editorControlTower)
             EditorSurface(
-                state = editorState, page = page, history = history
-            )
-            EditorGestureReceiver(
-                goToNextPage = ::goToNextPage,
-                goToPreviousPage = ::goToPreviousPage,
-                controlTower = editorControlTower,
-                state = editorState
+                viewModel = viewModel,
+                page = page,
+                history = history
             )
             SelectedBitmap(
-                context = context,
-                editorState = editorState,
-                controlTower = editorControlTower
+                context = context, controlTower = editorControlTower
             )
             Row(
                 modifier = Modifier
@@ -179,36 +248,11 @@ fun EditorView(
                     .fillMaxHeight()
             ) {
                 Spacer(modifier = Modifier.weight(1f))
-                ScrollIndicator(state = editorState)
+                ScrollIndicator(viewModel = viewModel, page = page)
             }
-            PositionedToolbar(navController, editorState, editorControlTower)
-            HorizontalScrollIndicator(state = editorState)
-        }
-    }
-}
-
-
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-fun PositionedToolbar(
-    navController: NavController, editorState: EditorState, editorControlTower: EditorControlTower
-) {
-    val position = GlobalAppSettings.current.toolbarPosition
-
-    when (position) {
-        AppSettings.Position.Top -> {
-            Toolbar(navController, editorState, editorControlTower)
-        }
-
-        AppSettings.Position.Bottom -> {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                Toolbar(navController, editorState, editorControlTower)
-            }
+            PositionedToolbar(
+                viewModel = viewModel, onDrawingStateCheck = { viewModel.updateDrawingState() })
+            HorizontalScrollIndicator(viewModel = viewModel, page = page)
         }
     }
 }

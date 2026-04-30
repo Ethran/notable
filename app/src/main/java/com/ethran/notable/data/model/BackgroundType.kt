@@ -1,9 +1,9 @@
 package com.ethran.notable.data.model
 
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
+
+private val log = ShipBook.getLogger("BackgroundType")
 
 sealed class BackgroundType(val key: String, val folderName: String) {
     data object Image : BackgroundType("image", "images")
@@ -18,14 +18,12 @@ sealed class BackgroundType(val key: String, val folderName: String) {
     // Static page of pdf
     data class Pdf(val page: Int) : BackgroundType("pdf$page", "pdfs")
 
-    fun AutoPdf.getPage(appRepository: AppRepository, bookId: String?, pageId: String): Int? {
+    suspend fun AutoPdf.getPage(appRepository: AppRepository, bookId: String?, pageId: String): Int? {
         if (bookId == null) return 0
         return try {
             appRepository.getPageNumber(bookId, pageId)
         } catch (e: Exception) {
-            logAndShowError(
-                "PageView.currentPageNumber", "Error getting page number: ${e.message}"
-            )
+            log.e("PageView.currentPageNumber: Error getting page number: ${e.message}")
             null
         }
     }
@@ -42,7 +40,7 @@ sealed class BackgroundType(val key: String, val folderName: String) {
             }
 
             else -> {
-                Log.e(TAG, "BackgroundType.fromKey: Unknown key: $key")
+                log.e("BackgroundType.fromKey: Unknown key: $key")
                 Native
             } // fallback
         }
@@ -52,7 +50,7 @@ sealed class BackgroundType(val key: String, val folderName: String) {
         when (this) {
             AutoPdf ->
                 if (currentPage == null) {
-                    Log.e(TAG, "BackgroundType.resolveForExport: missing currentPage for AutoPdf")
+                    log.e("BackgroundType.resolveForExport: missing currentPage for AutoPdf")
                     Native
                 } else {
                     Pdf(currentPage)

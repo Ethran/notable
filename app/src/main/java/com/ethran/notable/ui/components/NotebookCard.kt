@@ -23,13 +23,14 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NotebookCard(
+    modifier: Modifier = Modifier,
     bookId: String,
     title: String,
     pageIds: List<String>,
     openPageId: String?,
     onOpen: (bookId: String, pageId: String) -> Unit,
     onOpenSettings: (bookId: String) -> Unit,
-    modifier: Modifier = Modifier
+    onPreviewMissing: (String) -> Unit = {},
 ) {
 
     Box(
@@ -50,7 +51,10 @@ fun NotebookCard(
                     .border(1.dp, Color.Black, RectangleShape)
                     .combinedClickable(
                         onClick = { onOpen(bookId, openPageId ?: pageIds[0]) },
-                        onLongClick = { onOpenSettings(bookId) }), pageId)
+                        onLongClick = { onOpenSettings(bookId) }),
+                pageId = pageId,
+                onPreviewMissing = onPreviewMissing
+            )
         }
         Text(
             text = pageIds.size.toString(),
