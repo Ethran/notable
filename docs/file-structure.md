@@ -3,35 +3,50 @@
 A concise map of the codebase so you can find things fast and know where new code belongs.
 
 app/src/main/AndroidManifest.xml
-- Component declarations. Provider lives under editor/utils.
+- Component declarations.
 
 com.ethran.notable/
 - data/ — Data and persistence
-    - db/ — Room entities, DAOs, migrations, repositories
-        - Add: new tables (Entity), DAOs, Repositories, migration specs
-    - datastore/ — App/editor settings and cache
-        - Add: AppSettings fields, GlobalAppSettings, EditorSettingCacheManager
-    - model/ — Small data types used by data/db
-    - AppRepository.kt — Cross-repository operations
-    - PageDataManager.kt — Page cache, background handling, invalidation
+    - db/ — Room database (Db.kt), entities (Notebook, Page, Stroke, Image, Folder), and migrations.
+    - datastore/ — App settings and editor cache (AppSettings.kt).
+    - model/ — Common data types (BackgroundType, SimplePointF).
+    - AppRepository.kt — Main entry point for data operations, coordinating multiple repositories.
+    - PageDataManager.kt — Handles page-specific data, caching, and background loading.
 
-- editor/ — Handles everything related to drawing
-    - drawing/ — Low-level rendering (drawImage, drawStroke, etc.)
-    - state/ — Editor state machine and modes (EditorState, Mode, PlacementMode)
-    - utils/ — Editor tools/utilities (Pen, Eraser, NamedSettings, Provider, selection helpers)
-    - DrawCanvas.kt, PageView.kt — Editor surfaces and helpers
-    - Add: new tools/modes, rendering helpers, editor-only utilities
+- editor/ — The core note-taking engine
+    - canvas/ — Hardware-specific drawing and refresh logic (DrawCanvas, OnyxInputHandler, RefreshManager).
+    - drawing/ — Low-level rendering logic (OpenGLRenderer, Stroke/Line rendering, Page drawing).
+    - state/ — Editor-specific state management:
+        - history.kt — Undo/Redo logic.
+        - Clipboard.kt — Copy/Paste support for strokes and images.
+        - SelectionState.kt — Tracking selected elements.
+        - EditorTypes.kt — Basic editor enums (Mode, PlacementMode).
+    - ui/ — Editor-specific UI components (Topbar, PageMenu, Selector).
+        - toolbar/ — Complex toolbar implementation and various tool buttons.
+    - utils/ — Internal editor utilities (Pen/Eraser logic, Operations, Input handling).
+    - EditorViewModel.kt — Orchestrates editor state and UI interactions.
+    - EditorControlTower.kt — High-level coordination of editor components.
+    - PageView.kt — The main composable representing a single page.
 
-- floatingEditor/ — Not used; artifact from old development (kept for now)
+- io/ — File and bitmap I/O
+    - ImportEngine.kt / ExportEngine.kt — Handling .xopp and PDF files.
+    - PageContentRenderer.kt / ThumbnailGenerator.kt — Generating visuals from page data.
+    - FileUtils.kt, share.kt — Generic file and sharing helpers.
 
-- ui/ — Screens, navigation, common UI (Router, Snackbar system, permission helpers)
-    - Add: new screens/components, routes in Router
+- navigation/ — App-wide routing and navigation (NotableNavHost, NotableNavigator).
 
-- io/ — File/bitmap/background I/O helpers
-    - Add: import/export, background loading, file ops
+- ui/ — General application UI (Compose-based)
+    - views/ — Main screen destinations (Home, Pages, Settings, Welcome).
+    - viewmodels/ — Logic for the main screens.
+    - components/ — Reusable UI widgets (QuickNav, NotebookCard, Settings elements).
+    - dialogs/ — Modals for configuration and confirmation.
+    - theme/ — App styling (Colors, Type, Theme).
 
-- utils/ — Small, generic helpers shared across features
-    - Prefer feature-local utils (e.g., editor/utils) before adding here
+- gestures/ — Custom gesture detection (QuickNav gestures, Editor receiver).
+
+- di/ — Dependency injection (Hilt modules).
+
+- utils/ — Generic helpers (Permissions, Debugging, Flow extensions).
 
 app/schemas/com.ethran.notable.data.db.AppDatabase/
-- Room schema snapshots for auto-migrations (versioned JSON files)
+- Room schema snapshots (versioned JSON files).

@@ -5,35 +5,29 @@ import android.content.ClipboardManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Environment
 import androidx.compose.ui.geometry.Offset
-import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
-import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.TAG
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.db.BookRepository
-import com.ethran.notable.data.db.Image
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.data.db.getBackgroundType
-import com.ethran.notable.editor.drawing.drawBg
-import com.ethran.notable.editor.drawing.drawImage
-import com.ethran.notable.editor.drawing.drawStroke
-import com.ethran.notable.ui.SnackState.Companion.logAndShowError
+import com.ethran.notable.di.ApplicationScope
+import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.ensureNotMainThread
-import io.shipbook.shipbooksdk.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -42,6 +36,8 @@ import java.io.IOException
 import java.io.OutputStream
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /* ---------------------------- Public API ---------------------------- */
 
@@ -59,12 +55,21 @@ data class ExportOptions(
     val fileName: String? = null
 )
 
-class ExportEngine(
-    private val context: Context,
-    private val pageRepo: PageRepository = PageRepository(context),
-    private val bookRepo: BookRepository = BookRepository(context)
+@Singleton
+class ExportEngine @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val appRepository: AppRepository,
+    private val pageRepo: PageRepository,
+    private val bookRepo: BookRepository,
+    private val pageContentRenderer: PageContentRenderer,
+    private val appEventBus: AppEventBus,
+    @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
     private val log = ShipBook.getLogger("ExportEngine")
+
+    @Inject
+    lateinit var xoppFile : XoppFile
 
     suspend fun export(
         target: ExportTarget, format: ExportFormat, options: ExportOptions = ExportOptions()
@@ -80,6 +85,45 @@ class ExportEngine(
             )
 
             ExportFormat.XOPP -> exportAsXopp(target, folderUri, baseFileName, options)
+        }
+    }
+
+    fun exportToLinkedFileAsync(bookId: String) {
+        applicationScope.launch {
+            val uriStr = try {
+                bookRepo.getById(bookId)?.linkedExternalUri
+            } catch (e: Exception) {
+                appEventBus.emit(
+                    AppEvent.LogMessage(
+                        "exportToLinkedFileAsync",
+                        "Error reading linked export path: ${e.message}"
+                    )
+                )
+                return@launch
+            }
+
+            if (uriStr.isNullOrBlank()) return@launch
+
+            try {
+                log.i("Exporting book to linked file, uri: $uriStr")
+                export(
+                    target = ExportTarget.Book(bookId),
+                    format = ExportFormat.XOPP,
+                    options = ExportOptions(
+                        copyToClipboard = false,
+                        targetFolderUri = uriStr.toUri(),
+                        overwrite = true
+                    )
+                )
+                log.i("Linked export successful")
+            } catch (e: Exception) {
+                appEventBus.emit(
+                    AppEvent.LogMessage(
+                        "exportToLinkedFileAsync",
+                        "Error exporting linked file: ${e.message}"
+                    )
+                )
+            }
         }
     }
 
@@ -144,7 +188,7 @@ class ExportEngine(
         when (target) {
             is ExportTarget.Page -> {
                 val pageId = target.pageId
-                val bitmap = renderBitmapForPage(pageId)
+                val bitmap = pageContentRenderer.renderPageBitmap(pageId, RenderTarget.Full)
                 bitmap.useAndRecycle { bmp ->
                     val bytes = bmp.toBytes(compressFormat)
                     saveBytes(
@@ -163,14 +207,14 @@ class ExportEngine(
                 // Export each page separately (same folder = book title)
                 book.pageIds.forEachIndexed { index, pageId ->
                     val fileName = "$baseFileName-p${index + 1}"
-                    val bitmap = renderBitmapForPage(pageId)
+                    val bitmap = pageContentRenderer.renderPageBitmap(pageId, RenderTarget.Full)
                     bitmap.useAndRecycle { bmp ->
                         val bytes = bmp.toBytes(compressFormat)
                         saveBytes(folderUri, fileName, ext, mime, options.overwrite, bytes)
                     }
                 }
                 if (options.copyToClipboard) {
-                    Log.w(TAG, "Can't copy book links or images to clipboard -- batch export.")
+                    log.w("Can't copy book links or images to clipboard -- batch export.")
                 }
                 return "Book exported: ${book.title} (${book.pageIds.size} pages)"
             }
@@ -191,7 +235,7 @@ class ExportEngine(
             mimeType = "application/x-xopp",
             overwrite = options.overwrite
         ) { out ->
-            XoppFile(context).writeToXoppStream(target, out)
+            xoppFile.writeToXoppStream(target, out)
         }
     }
 
@@ -215,7 +259,7 @@ class ExportEngine(
      *
      * - If options.saveToUri is provided, it must point to a directory (tree/document folder Uri or file:// directory).
      */
-    fun createFileNameAndFolder(
+    suspend fun createFileNameAndFolder(
         target: ExportTarget, format: ExportFormat, options: ExportOptions
     ): Pair<Uri, String> {
         val fileName =
@@ -250,13 +294,12 @@ class ExportEngine(
      *
      * @return A path without leading/trailing slashes, or an empty string.
      */
-    fun createSubfolderName(target: ExportTarget, format: ExportFormat): String {
+    suspend fun createSubfolderName(target: ExportTarget, format: ExportFormat): String {
         // Helper to build a full folder hierarchy path from a parent folder ID.
-        fun buildFolderPath(parentFolderId: String?): String {
+        suspend fun buildFolderPath(parentFolderId: String?): String {
             return parentFolderId?.let {
                 // Fetches folder hierarchy and joins their sanitized titles with "/".
-                getFolderList(context, it)
-                    .reversed()
+                getFolderList(appRepository, it)
                     .joinToString("/") { folder -> sanitizeFileName(folder.title) }
             }.orEmpty()
         }
@@ -318,7 +361,7 @@ class ExportEngine(
      * Page export in book: BookTitle-p<PageNumber> (or p?)
      * Quick page: quickpage-<timestamp>
      */
-    fun createFileName(target: ExportTarget): String {
+    suspend fun createFileName(target: ExportTarget): String {
         return when (target) {
             is ExportTarget.Book -> {
                 val book =
@@ -335,8 +378,8 @@ class ExportEngine(
                 if (book != null) {
                     // Page inside a book
                     val bookTitle = sanitizeFileName(book.title)
-                    val pageNumber = getPageNumber(page.notebookId, page.id)?.plus(1)
-                    val pageToken = if ((pageNumber ?: 0) >= 1) "p$pageNumber" else "p_"
+                    val pageNumber = getPageNumber(book.id, page.id).plus(1)
+                    val pageToken = if (pageNumber >= 1) "p$pageNumber" else "p_"
                     "$bookTitle-$pageToken"
                 } else {
                     val timeStamp = getReadableUtcTimestamp()
@@ -348,10 +391,10 @@ class ExportEngine(
 
     /* -------------------- Shared Drawing & PDF Helpers -------------------- */
 
-    private fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int) {
+    private suspend fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int) {
         ensureNotMainThread("ExportPdf")
-        val data = fetchPageData(pageId)
-        val (_, contentHeightPx) = computeContentDimensions(data)
+        val data = pageContentRenderer.loadPageContent(pageId)
+        val (_, contentHeightPx) = pageContentRenderer.computeContentDimensions(data)
 
         val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH.toFloat()
         val scaledHeight = (contentHeightPx * scaleFactor).toInt()
@@ -363,11 +406,11 @@ class ExportEngine(
                 val pageInfo =
                     PdfDocument.PageInfo.Builder(A4_WIDTH, A4_HEIGHT, logicalPageNumber).create()
                 val page = doc.startPage(pageInfo)
-                drawPage(
+                pageContentRenderer.drawPage(
                     canvas = page.canvas,
                     data = data,
                     scroll = Offset(0f, currentTop.toFloat()),
-                    scaleFactor = scaleFactor
+                    scaleFactor = scaleFactor,
                 )
                 doc.finishPage(page)
                 currentTop += A4_HEIGHT
@@ -376,78 +419,16 @@ class ExportEngine(
         } else {
             val pageInfo = PdfDocument.PageInfo.Builder(A4_WIDTH, scaledHeight, pageNumber).create()
             val page = doc.startPage(pageInfo)
-            drawPage(
-                canvas = page.canvas, data = data, scroll = Offset.Zero, scaleFactor = scaleFactor
+            pageContentRenderer.drawPage(
+                canvas = page.canvas,
+                data = data,
+                scroll = Offset.Zero,
+                scaleFactor = scaleFactor,
             )
             doc.finishPage(page)
         }
     }
 
-    private fun renderBitmapForPage(pageId: String): Bitmap {
-        ensureNotMainThread("ExportBitmap")
-        val data = fetchPageData(pageId)
-        val (contentWidth, contentHeight) = computeContentDimensions(data)
-
-        val bitmap = createBitmap(contentWidth, contentHeight)
-        val canvas = Canvas(bitmap)
-
-        // Scale = 1f (bitmap is native logical size)
-        drawBg(context, canvas, data.page.getBackgroundType(), data.page.background)
-        data.images.forEach { drawImage(context, canvas, it, Offset.Zero) }
-        data.strokes.forEach { drawStroke(canvas, it, Offset.Zero) }
-
-        return bitmap
-    }
-
-    private fun drawPage(
-        canvas: Canvas, data: PageData, scroll: Offset, scaleFactor: Float
-    ) {
-        canvas.scale(scaleFactor, scaleFactor)
-        val scaledScroll = scroll / scaleFactor
-        drawBg(
-            context,
-            canvas,
-            data.page.getBackgroundType()
-                .resolveForExport(getPageNumber(data.page.notebookId, data.page.id)),
-            data.page.background,
-            scaledScroll,
-            scaleFactor
-        )
-        data.images.forEach { drawImage(context, canvas, it, -scaledScroll) }
-        data.strokes.forEach { drawStroke(canvas, it, -scaledScroll) }
-    }
-
-    /* -------------------- Data Fetch / Dimension Calculation -------------------- */
-
-    private data class PageData(
-        val page: Page, val strokes: List<Stroke>, val images: List<Image>
-    )
-
-    private fun fetchPageData(pageId: String): PageData {
-        val (page, strokes) = pageRepo.getWithStrokeById(pageId)
-        val (_, images) = pageRepo.getWithImageById(pageId)
-        return PageData(page, strokes, images)
-    }
-
-    // Returns (width, height)
-    private fun computeContentDimensions(data: PageData): Pair<Int, Int> {
-        if (data.strokes.isEmpty() && data.images.isEmpty()) {
-            return SCREEN_WIDTH to SCREEN_HEIGHT
-        }
-        val strokeBottom = data.strokes.maxOfOrNull { it.bottom.toInt() } ?: 0
-        val strokeRight = data.strokes.maxOfOrNull { it.right.toInt() } ?: 0
-        val imageBottom = data.images.maxOfOrNull { (it.y + it.height) } ?: 0
-        val imageRight = data.images.maxOfOrNull { (it.x + it.width) } ?: 0
-
-        val rawHeight = maxOf(
-            strokeBottom, imageBottom
-        ) + if (GlobalAppSettings.current.visualizePdfPagination) 0 else 50
-        val rawWidth = maxOf(strokeRight, imageRight) + 50
-
-        val height = rawHeight.coerceAtLeast(SCREEN_HEIGHT)
-        val width = rawWidth.coerceAtLeast(SCREEN_WIDTH)
-        return width to height
-    }
 
     /* -------------------- Saving Helpers -------------------- */
 
@@ -519,7 +500,7 @@ class ExportEngine(
         mimeType: String,
         overwrite: Boolean,
         writer: suspend (OutputStream) -> Unit
-    ): String = withContext(Dispatchers.IO) {
+    ): String = withContext(ioDispatcher) {
         val displayName = if (extension.isBlank()) fileName else "$fileName.$extension"
         try {
             val dest = createOrGetFileInDir(folderUri, displayName, mimeType, overwrite)
@@ -543,8 +524,11 @@ class ExportEngine(
             }
 
             "Saved $displayName"
+        } catch (e: OutOfMemoryError) {
+            log.e("Save error (OOM): ${e.message}")
+            "Not enough memory to save $displayName"
         } catch (e: Exception) {
-            Log.e(TAG, "Save error: ${e.message}")
+            log.e("Save error: ${e.message}")
             "Error saving $displayName"
         }
     }
@@ -772,13 +756,9 @@ class ExportEngine(
         parts.filter { it.isNotBlank() }
 
     // Retrieves the 0-based page number of a specific page within a book.
-    fun getPageNumber(bookId: String?, id: String): Int? {
-        return try {
-            AppRepository(context).getPageNumber(bookId, id)
-        } catch (e: Exception) {
-            logAndShowError("getPageNumber", "${e.message}")
-            0
-        }
+    suspend fun getPageNumber(bookId: String, id: String): Int {
+        return appRepository.getPageNumber(bookId, id)
+
     }
 
 }

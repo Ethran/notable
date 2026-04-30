@@ -1,13 +1,14 @@
 package com.ethran.notable.editor.utils
 
 import androidx.core.graphics.toRect
-import com.ethran.notable.TAG
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.PageView
 import com.onyx.android.sdk.api.device.epd.EpdController
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 
+
+private val log = ShipBook.getLogger("draw")
 
 // touchpoints are in page coordinates
 fun handleDraw(
@@ -27,7 +28,7 @@ fun handleDraw(
         val stroke = Stroke(
             size = strokeSize,
             pen = pen,
-            pageId = page.id,
+            pageId = page.currentPageId,
             top = boundingBox.top,
             bottom = boundingBox.bottom,
             left = boundingBox.left,
@@ -41,6 +42,6 @@ fun handleDraw(
         page.drawAreaPageCoordinates(strokeBounds(stroke).toRect())
         historyBucket.add(stroke.id)
     } catch (e: Exception) {
-        Log.e(TAG, "Handle Draw: An error occurred while handling the drawing: ${e.message}")
+        log.e("Handle Draw: An error occurred while handling the drawing: ${e.message}")
     }
 }

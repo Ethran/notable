@@ -11,7 +11,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.toOffset
 import androidx.core.graphics.createBitmap
-import com.ethran.notable.TAG
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.SimplePointF
@@ -22,12 +21,29 @@ import com.ethran.notable.editor.utils.offsetImage
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.io.copyBitmapToClipboard
-import com.ethran.notable.ui.showHint
-import io.shipbook.shipbooksdk.Log
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.plus
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import java.util.Date
 import java.util.UUID
 
+private val log = ShipBook.getLogger("SelectionState")
+
+/**
+ * Represents the current state of a selection within the editor, managing the lifecycle and
+ * transformations of selected items such as strokes and images.
+ *
+ * This class tracks the geometric boundaries, visual representation (bitmap), and
+ * spatial offsets of the selected content. It provides methods for manipulating
+ * the selection, including translation (moving), resizing, duplication, and
+ * integration with the undo/redo history system.
+ *
+ * All coordinate-based properties within this class are intended to be in page coordinates
+ * unless otherwise specified.
+ */
 class SelectionState {
     // all coordinates should be in page coordinates
     var firstPageCut by mutableStateOf<List<SimplePointF>?>(null)
@@ -44,6 +60,7 @@ class SelectionState {
     var placementMode by mutableStateOf<PlacementMode?>(null)
 
     fun reset() {
+        log.v("reset")
         selectedStrokes = null
         selectedImages = null
         secondPageCut = null
@@ -64,7 +81,9 @@ class SelectionState {
         return selectedImages?.count() == 1 && selectedStrokes.isNullOrEmpty()
     }
 
-    fun resizeImages(scale: Int, scope: CoroutineScope, page: PageView) {
+    fun resizeImages(scale: Int, page: PageView): AppResult<Unit, DomainError> {
+        log.v("resizeImages: scale=$scale")
+
         val selectedImagesCopy = selectedImages?.map { image ->
             image.copy(
                 height = image.height + (image.height * scale / 100),
@@ -72,98 +91,118 @@ class SelectionState {
             )
         }
 
-        // Ensure selected images are not null or empty
         if (selectedImagesCopy.isNullOrEmpty()) {
-            showHint("For now, strokes cannot be resized", scope)
-            return
+            return AppResult.Error(DomainError.UnexpectedState("No images selected for resizing."))
         }
 
         selectedImages = selectedImagesCopy
         // Adjust displacement offset by half the size change
         val sizeChange = selectedImagesCopy.firstOrNull()?.let { image ->
             IntOffset(
-                x = (image.width * scale / 200),
-                y = (image.height * scale / 200)
+                x = (image.width * scale / 200), y = (image.height * scale / 200)
             )
-        } ?: IntOffset.Companion.Zero
+        } ?: IntOffset.Zero
 
         val pageBounds = imageBoundsInt(selectedImagesCopy)
         selectionRect = page.toScreenCoordinates(pageBounds)
 
-        selectionDisplaceOffset =
-            selectionDisplaceOffset?.let { it - sizeChange }
-                ?: IntOffset.Companion.Zero
+        selectionDisplaceOffset = selectionDisplaceOffset?.let { it - sizeChange } ?: IntOffset.Zero
 
-        val selectedBitmapNew = createBitmap(pageBounds.width(), pageBounds.height())
-        val selectedCanvas = Canvas(selectedBitmapNew)
-        selectedImagesCopy.forEach {
-            drawImage(
-                page.context,
-                selectedCanvas,
-                it,
-                Offset(-it.x.toFloat(), -it.y.toFloat())
-            )
+        // 1. Safe Bitmap Creation
+        val selectedBitmapNew = try {
+            // createBitmap can throw IllegalArgumentException if width/height <= 0
+            // or OutOfMemoryError if the scale is massive.
+            createBitmap(pageBounds.width(), pageBounds.height())
+        } catch (e: Exception) {
+            log.e("Failed to create resized bitmap", e)
+            return AppResult.Error(DomainError.DrawingError("Failed to allocate memory for resized image."))
+        } catch (e: OutOfMemoryError) {
+            log.e("OOM on resized bitmap", e)
+            return AppResult.Error(DomainError.DrawingError("Image is too large to resize."))
         }
 
-        // set state
+        val selectedCanvas = Canvas(selectedBitmapNew)
+
+        // 2. The Accumulator
+        var accumulatedError: DomainError? = null
+
+        // 3. The Loop
+        selectedImagesCopy.forEach { image ->
+            drawImage(
+                page.context, selectedCanvas, image, Offset(-image.x.toFloat(), -image.y.toFloat())
+            ).onError { error ->
+                accumulatedError = accumulatedError?.let { it + error } ?: error
+            }
+        }
+
+        // 4. Final State Update & Return
         selectedBitmap = selectedBitmapNew
+
+        return accumulatedError?.let { AppResult.Error(it) } ?: AppResult.Success(Unit)
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun resizeStrokes(scale: Int, scope: CoroutineScope, page: PageView) {
+        log.v("resizeStrokes: scale=$scale")
         //TODO: implement this
     }
 
+    /**
+     * Deletes the currently selected strokes and images from the page.
+     *
+     * This function identifies the selected images and strokes, removes them from the given [page],
+     * and creates a list of undo [Operation]s. After deletion, it resets the selection state.
+     *
+     * @param page The [PageView] from which the selected items should be removed.
+     * @return A list of [Operation]s that can be used to undo the deletion (e.g., re-adding the deleted items).
+     */
     fun deleteSelection(page: PageView): List<Operation> {
-        val operationList = listOf<Operation>()
+        log.v("deleteSelection: images=${selectedImages?.size}, strokes=${selectedStrokes?.size}")
+        val operationList = mutableListOf<Operation>()
         val selectedImagesToRemove = selectedImages
         if (!selectedImagesToRemove.isNullOrEmpty()) {
             val imageIds: List<String> = selectedImagesToRemove.map { it.id }
-            Log.i(TAG, "removing images")
+            log.i("removing images")
             page.removeImages(imageIds)
+            operationList += Operation.AddImage(selectedImagesToRemove)
         }
         val selectedStrokesToRemove = selectedStrokes
         if (!selectedStrokesToRemove.isNullOrEmpty()) {
             val strokeIds: List<String> = selectedStrokesToRemove.map { it.id }
-            Log.i(TAG, "removing strokes")
+            log.i("removing strokes")
             page.removeStrokes(strokeIds)
-            operationList.plus(Operation.AddStroke(selectedStrokesToRemove))
+            operationList += Operation.AddStroke(selectedStrokesToRemove)
         }
         reset()
         return operationList
     }
 
     fun duplicateSelection() {
+        log.v("duplicateSelection")
         // set operation to paste only
         placementMode = PlacementMode.Paste
         if (!selectedStrokes.isNullOrEmpty())
         // change the selected stokes' ids - it's a copy
             selectedStrokes = selectedStrokes!!.map {
                 it.copy(
-                    id = UUID
-                        .randomUUID()
-                        .toString(),
-                    createdAt = Date()
+                    id = UUID.randomUUID().toString(), createdAt = Date()
                 )
             }
-        if (!selectedImages.isNullOrEmpty())
-            selectedImages = selectedImages!!.map {
-                it.copy(
-                    id = UUID
-                        .randomUUID()
-                        .toString(),
-                    createdAt = Date()
-                )
-            }
+        if (!selectedImages.isNullOrEmpty()) selectedImages = selectedImages!!.map {
+            it.copy(
+                id = UUID.randomUUID().toString(), createdAt = Date()
+            )
+        }
         // move the selection a bit, to show the copy
         selectionDisplaceOffset = IntOffset(
-            x = selectionDisplaceOffset!!.x + 50,
-            y = selectionDisplaceOffset!!.y + 50,
+            x = (selectionDisplaceOffset?.x ?: 0) + 50,
+            y = (selectionDisplaceOffset?.y ?: 0) + 50,
         )
     }
 
     // Moves strokes, and redraws canvas.
     fun applySelectionDisplace(page: PageView): List<Operation>? {
+        log.v("applySelectionDisplace: offset=$selectionDisplaceOffset, mode=$placementMode")
 
         if (selectionDisplaceOffset == null) return null
         if (selectionRect == null) return null
@@ -183,46 +222,60 @@ class SelectionState {
                 offsetStroke(it, offset = offset.toOffset())
             }
 
-            if (placementMode == PlacementMode.Move)
-                page.removeStrokes(selectedStrokesCopy.map { it.id })
+            if (placementMode == PlacementMode.Move) {
+                page.updateStrokes(displacedStrokes)
+            } else {
+                page.addStrokes(displacedStrokes)
+            }
 
-            page.addStrokes(displacedStrokes)
-
-
-            if (offset.x > 0 || offset.y > 0) {
-                // A displacement happened, we can create a history for this
+            if (offset.x != 0 || offset.y != 0 || placementMode == PlacementMode.Paste) {
+                // A displacement happened or this is a paste commit - create history for this
                 operationList += Operation.DeleteStroke(displacedStrokes.map { it.id })
                 // in case we are on a move operation, this history point re-adds the original strokes
-                if (placementMode == PlacementMode.Move)
-                    operationList += Operation.AddStroke(selectedStrokesCopy)
+                if (placementMode == PlacementMode.Move) operationList += Operation.AddStroke(
+                    selectedStrokesCopy
+                )
             }
         }
         if (!selectedImagesCopy.isNullOrEmpty()) {
-            Log.Companion.i(TAG, "Commit images to history.")
+            log.i("Commit images to history.")
 
             val displacedImages = selectedImagesCopy.map {
                 offsetImage(it, offset = offset.toOffset())
             }
-            if (placementMode == PlacementMode.Move)
-                page.removeImages(selectedImagesCopy.map { it.id })
+            if (placementMode == PlacementMode.Move) page.removeImages(selectedImagesCopy.map { it.id })
 
             page.addImage(displacedImages)
 
-            if (offset.x != 0 || offset.y != 0) {
+            if (offset.x != 0 || offset.y != 0 || placementMode == PlacementMode.Paste) {
                 // TODO: find why sometimes we add two times same operation.
-                // A displacement happened, we can create a history for this
+                // A displacement happened or this is a paste commit - create history for this
                 // To undo changes we first remove image
                 operationList += Operation.DeleteImage(displacedImages.map { it.id })
                 // then add the original images, only if we intended to move it.
-                if (placementMode == PlacementMode.Move)
-                    operationList += Operation.AddImage(selectedImagesCopy)
+                if (placementMode == PlacementMode.Move) operationList += Operation.AddImage(
+                    selectedImagesCopy
+                )
             }
         }
         page.drawAreaPageCoordinates(finalZone)
         return operationList
     }
 
+    fun applySelectionDisplaceAndCommit(page: PageView, history: History): Boolean {
+        val operationList = applySelectionDisplace(page)
+        if (operationList.isNullOrEmpty()) return false
+        history.addOperationsToHistory(operationList)
+        return true
+    }
+
+    fun deleteSelectionAndCommit(page: PageView, history: History) {
+        val operationList = deleteSelection(page)
+        history.addOperationsToHistory(operationList)
+    }
+
     fun selectionToClipboard(scrollPos: Offset, context: Context): ClipboardContent {
+        log.v("selectionToClipboard: scrollPos=$scrollPos, images=${selectedImages?.size}, strokes=${selectedStrokes?.size}")
 
         val strokes = selectedStrokes?.map {
             offsetStroke(it, offset = -scrollPos)
@@ -236,8 +289,7 @@ class SelectionState {
             copyBitmapToClipboard(context, it)
         }
         return ClipboardContent(
-            strokes = strokes ?: emptyList(),
-            images = images ?: emptyList()
+            strokes = strokes ?: emptyList(), images = images ?: emptyList()
         )
     }
 }

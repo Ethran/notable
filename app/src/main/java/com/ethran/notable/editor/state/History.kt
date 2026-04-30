@@ -3,16 +3,17 @@ package com.ethran.notable.editor.state
 import android.graphics.Rect
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.editor.DrawCanvas
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.imageBoundsInt
 import com.ethran.notable.editor.utils.strokeBounds
-import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackState
+import com.ethran.notable.utils.logCallStack
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.launch
 
 
 sealed class Operation {
@@ -37,60 +38,52 @@ sealed class HistoryBusActions {
     data class MoveHistory(val type: UndoRedoType) : HistoryBusActions()
 }
 
-class History(coroutineScope: CoroutineScope, pageView: PageView) {
-
+class History @AssistedInject constructor(
+    @Assisted private val pageView: PageView,
+    private val appEventBus: AppEventBus
+) {
     private var undoList: OperationList = mutableListOf()
     private var redoList: OperationList = mutableListOf()
     private val pageModel = pageView
 
-    // TODO maybe not in a companion object ?
-    companion object {
-        val historyBus = MutableSharedFlow<HistoryBusActions>()
-        suspend fun registerHistoryOperationBlock(operationBlock: OperationBlock) {
-            historyBus.emit(HistoryBusActions.RegisterHistoryOperationBlock(operationBlock))
-        }
-
-        suspend fun moveHistory(type: UndoRedoType) {
-            historyBus.emit(HistoryBusActions.MoveHistory(type))
-        }
-    }
-
-
-    init {
-        coroutineScope.launch {
-            historyBus.collect {
-                when (it) {
-                    is HistoryBusActions.MoveHistory -> {
-                        // Wait for commit to history to complete
-                        if (it.type == UndoRedoType.Undo) {
-                            DrawCanvas.commitCompletion = CompletableDeferred()
-                            DrawCanvas.commitHistorySignalImmediately.emit(Unit)
-                            DrawCanvas.commitCompletion.await()
-                        }
-                        val zoneAffected = undoRedo(type = it.type)
-                        if (zoneAffected != null) {
-                            pageView.drawAreaPageCoordinates(zoneAffected)
-                            //moved to refresh after drawing
-                            DrawCanvas.refreshUi.emit(Unit)
-                        } else {
-                            SnackState.globalSnackFlow.emit(
-                                SnackConf(
-                                    text = "Nothing to undo/redo",
-                                    duration = 3000,
-                                )
-                            )
-                        }
+    suspend fun handleHistoryBusActions(actions: HistoryBusActions) {
+        when (actions) {
+            is HistoryBusActions.MoveHistory -> {
+                // Wait for commit to history to complete
+                if (actions.type == UndoRedoType.Undo) {
+                    CanvasEventBus.commitCompletion = CompletableDeferred()
+                    CanvasEventBus.commitHistorySignalImmediately.emit(Unit)
+                    CanvasEventBus.commitCompletion.await()
+                }
+                val zoneAffected = undoRedo(type = actions.type)
+                if (zoneAffected != null) {
+                    pageModel.drawAreaPageCoordinates(zoneAffected)
+                    //moved to refresh after drawing
+                    CanvasEventBus.refreshUi.emit(Unit)
+                } else {
+                    val message = when (actions.type) {
+                        UndoRedoType.Undo -> "Nothing to undo"
+                        UndoRedoType.Redo -> "Nothing to redo"
                     }
-
-                    is HistoryBusActions.RegisterHistoryOperationBlock -> {
-                        addOperationsToHistory(it.operationBlock)
-                    }
-
-                    else -> {}
+                    appEventBus.emit(AppEvent.ActionHint(message, 3000))
                 }
             }
+
+            is HistoryBusActions.RegisterHistoryOperationBlock -> {
+                addOperationsToHistory(actions.operationBlock)
+            }
+
         }
     }
+
+    suspend fun undo() {
+        handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
+    }
+
+    suspend fun redo() {
+        handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
+    }
+
 
     fun cleanHistory() {
         undoList.clear()
@@ -124,10 +117,6 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
                 pageModel.removeImages(operation.imageIds)
                 return Operation.AddImage(images = images) to imageBoundsInt(images)
             }
-
-            else -> {
-                throw (Error("Unhandled history operation"))
-            }
         }
     }
 
@@ -137,7 +126,7 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
         val targetList =
             if (type == UndoRedoType.Undo) redoList else undoList
 
-        if (originList.size == 0) return null
+        if (originList.isEmpty()) return null
 
         val operationBlock = originList.removeAt(originList.lastIndex)
         val revertOperations = mutableListOf<Operation>()
@@ -154,8 +143,17 @@ class History(coroutineScope: CoroutineScope, pageView: PageView) {
     }
 
     fun addOperationsToHistory(operations: OperationBlock) {
+        if (operations.isEmpty()) {
+            logCallStack("History: No operations to add to history")
+            return
+        }
         undoList.add(operations)
         if (undoList.size > 5) undoList.removeAt(0)
         redoList.clear()
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(pageView: PageView): History
     }
 }

@@ -1,4 +1,4 @@
-package com.ethran.notable.editor.state
+package com.ethran.notable.gestures
 
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.launch
+import kotlin.collections.iterator
 import kotlin.math.abs
 import kotlin.math.sqrt
 

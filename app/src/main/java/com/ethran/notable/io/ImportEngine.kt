@@ -3,27 +3,21 @@ package com.ethran.notable.io
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.WorkerThread
-import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
-import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.Notebook
-import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.PageWithData
+import com.ethran.notable.data.db.StrokeRepository
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.plus
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
-
-
-/**
- * A standardized data structure representing a page and its content,
- * as parsed from an import file. This is used to pass data from a
- * file parser to the ImportEngine.
- */
-data class PageContent(
-    val page: Page,
-    val strokes: List<Stroke>,
-    val images: List<Image>
-)
+import javax.inject.Inject
 
 
 /**
@@ -69,12 +63,18 @@ data class ImportOptions(
  * The engine responsible for handling the logic of importing files into the app.
  * It is agnostic of the UI and operates on URIs provided to it.
  */
-class ImportEngine(
-    private val context: Context,
-    private val pageRepo: PageRepository = PageRepository(context),
-    private val bookRepo: BookRepository = BookRepository(context)
+class ImportEngine @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val pageRepo: PageRepository,
+    private val bookRepo: BookRepository,
+    private val strokeRepo: StrokeRepository,
+    private val imageRepo: ImageRepository,
+    private val appEventBus: AppEventBus
 ) {
     private val log = ShipBook.getLogger("ImportEngine")
+
+    @Inject
+    lateinit var xoppFile: XoppFile
 
     /**
      * Imports a notebook from the given URI. It recognizes the file type and
@@ -85,13 +85,13 @@ class ImportEngine(
      * @return An [String] indicating success or failure.
      */
     @WorkerThread
-    fun import(
+    suspend fun import(
         uri: Uri,
         options: ImportOptions = ImportOptions()
-    ): String {
+    ): AppResult<List<String>, DomainError> {
         val mimeType = context.contentResolver.getType(uri)
         if (options.fileType != null && mimeType != options.fileType)
-            throw IllegalArgumentException("File type mismatch. Expected: ${options.fileType}, Actual: $mimeType")
+            return AppResult.Error(DomainError.UnexpectedState("File type mismatch. Expected: ${options.fileType}, Actual: $mimeType"))
 
         val bookTitle = sanitizeNotebookName(options.bookTitle ?: getFileName(uri))
         log.d("Starting import for uri: $uri, mimeType: $mimeType, fileName: $bookTitle")
@@ -99,11 +99,9 @@ class ImportEngine(
         if (options.saveToBookId != null)
             TODO("Implement logic to save into an existing book (ID: ${options.saveToBookId})")
 
-
         val optionsWithTitle = options.copy(
             bookTitle = bookTitle,
         )
-
 
         return when {
             XoppFile.isXoppFile(mimeType, bookTitle) -> handleImportXopp(uri, optionsWithTitle)
@@ -111,12 +109,12 @@ class ImportEngine(
             else -> {
                 val errorMessage = "Unsupported file type: $mimeType"
                 log.w(errorMessage)
-                errorMessage
+                AppResult.Error(DomainError.UnexpectedState(errorMessage))
             }
         }
     }
 
-    private fun handleImportXopp(uri: Uri, options: ImportOptions): String {
+    private suspend fun handleImportXopp(uri: Uri, options: ImportOptions): AppResult<List<String>, DomainError> {
         log.d("Importing Xopp file...")
         require(options.bookTitle != null) { "bookTitle cannot be null when importing Xopp file" }
         val book = Notebook(
@@ -127,49 +125,70 @@ class ImportEngine(
         )
         bookRepo.createEmpty(book)
 
+        val importedPageIds = mutableListOf<String>()
+        var persistentError: DomainError? = null
 
-        val strokeRepo = AppDatabase.Companion.getDatabase(context).strokeDao()
-        val imageRepo = AppDatabase.Companion.getDatabase(context).ImageDao()
-        XoppFile(context).importBook(uri) { pageData ->
-            // TODO: handle conflict with existing pages, make sure that we won't insert the same strokes that already exist.
-            pageRepo.create(pageData.page.copy(notebookId = book.id))
-            strokeRepo.create(pageData.strokes)
-            imageRepo.create(pageData.images)
-            bookRepo.addPage(book.id, pageData.page.id)
-
+        xoppFile.importBook(uri) { pageData ->
+            try {
+                // TODO: handle conflict with existing pages, make sure that we won't insert the same strokes that already exist.
+                pageRepo.create(pageData.page.copy(notebookId = book.id))
+                strokeRepo.create(pageData.strokes)
+                imageRepo.create(pageData.images)
+                bookRepo.addPage(book.id, pageData.page.id)
+                importedPageIds.add(pageData.page.id)
+            } catch (e: Exception) {
+                val errMessage = "failed import book  ${e.message}"
+                appEventBus.emit(AppEvent.LogMessage("importBook", errMessage))
+                val error = DomainError.DatabaseError(errMessage)
+                persistentError = persistentError?.let { it + error } ?: error
+            }
         }
-        return "Imported Xopp file"
+        
+        return persistentError?.let { AppResult.Error(it) } ?: AppResult.Success(importedPageIds)
     }
 
-    private fun handleImportPDF(uri: Uri, options: ImportOptions): String {
+    private suspend fun handleImportPDF(uri: Uri, options: ImportOptions): AppResult<List<String>, DomainError> {
         log.d("Importing Pdf file...")
         require(options.bookTitle != null) { "bookTitle cannot be null when importing Pdf file" }
+
+        val fileToSave = handleFileSaving(context, uri, options)
+            ?: return AppResult.Error(DomainError.UnexpectedState("Couldn't determine file path. Does the app have permission to read external storage?"))
+
+        val filePath = fileToSave.toString()
 
         val book = Notebook(
             title = options.bookTitle,
             parentFolderId = options.folderId,
-            defaultBackground = uri.toString(),
+            defaultBackground = filePath,
             defaultBackgroundType = BackgroundType.AutoPdf.key
         )
         bookRepo.createEmpty(book)
 
-        val strokeRepo = AppDatabase.Companion.getDatabase(context).strokeDao()
-        val imageRepo = AppDatabase.Companion.getDatabase(context).ImageDao()
-        importPdf(context, uri, options) { pageData ->
-            pageRepo.create(pageData.page.copy(notebookId = book.id))
-            if (pageData.strokes.isNotEmpty())
-                strokeRepo.create(pageData.strokes)
-            if (pageData.images.isNotEmpty())
-                imageRepo.create(pageData.images)
+        val importedPageIds = mutableListOf<String>()
+        var persistentError: DomainError? = null
 
-            bookRepo.addPage(book.id, pageData.page.id)
-
+        importPdf(fileToSave, options) { pageData ->
+            try {
+                pageRepo.create(pageData.page.copy(notebookId = book.id))
+                if (pageData.strokes.isNotEmpty())
+                    strokeRepo.create(pageData.strokes)
+                if (pageData.images.isNotEmpty())
+                    imageRepo.create(pageData.images)
+                bookRepo.addPage(book.id, pageData.page.id)
+                importedPageIds.add(pageData.page.id)
+            } catch (e: Exception) {
+                val errMessage = "failed import book  ${e.message}"
+                appEventBus.emit(AppEvent.LogMessage("importBook", errMessage))
+                val error = DomainError.DatabaseError(errMessage)
+                persistentError = persistentError?.let { it + error } ?: error
+            }
         }
-        return "Imported Pdf file"
+        
+        return persistentError?.let { AppResult.Error(it) } ?: AppResult.Success(importedPageIds)
     }
 
 
-    private fun merge(fileData: PageContent, options: ImportOptions) {
+    private fun merge(fileData: PageWithData, options: ImportOptions) {
         require(options.saveToBookId != null) { "saveToBookId cannot be null when merging" }
         require(options.conflictStrategy != null) { "conflictStrategy cannot be null when merging" }
         log.d("Conflict detected. Strategy: ${options.conflictStrategy}")

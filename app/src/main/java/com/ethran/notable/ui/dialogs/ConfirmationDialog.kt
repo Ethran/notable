@@ -1,6 +1,5 @@
 package com.ethran.notable.ui.dialogs
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,8 +23,6 @@ import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportOptions
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.SnackState
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
@@ -84,12 +82,13 @@ fun ShowConfirmationDialog(
 
 @Composable
 fun ShowExportDialog(
+    exportEngine: ExportEngine,
     snackManager: SnackState,
     bookId: String,
-    context: Context,
     onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     Dialog(onDismissRequest = { onCancel() }) {
         Column(
             modifier = Modifier
@@ -115,11 +114,11 @@ fun ShowExportDialog(
                 )
                 ActionButton(
                     text = "Export as PDF", onClick = {
-                        CoroutineScope(Dispatchers.IO).launch {
+                        scope.launch {
                             snackManager.runWithSnack(
                                 "Exporting book to PDF.."
                             ) {
-                                ExportEngine(context).export(
+                                exportEngine.export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.PDF,
                                     options = ExportOptions(
@@ -134,11 +133,11 @@ fun ShowExportDialog(
                     })
                 ActionButton(
                     text = "Export as Xopp", onClick = {
-                        CoroutineScope(Dispatchers.IO).launch {
+                        scope.launch {
                             snackManager.runWithSnack(
                                 "Exporting the book to xopp..."
                             ) {
-                                ExportEngine(context).export(
+                               exportEngine.export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.XOPP,
                                 )

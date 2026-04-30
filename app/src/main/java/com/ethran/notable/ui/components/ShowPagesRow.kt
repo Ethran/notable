@@ -1,6 +1,5 @@
 package com.ethran.notable.ui.components
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,9 +26,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.ui.PageMenu
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.ui.noRippleClickable
@@ -38,39 +35,18 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.FilePlus
 import io.shipbook.shipbooksdk.ShipBook
 
-private val logPagesRow = ShipBook.getLogger("QuickNav")
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ShowPagesRow(
-    singlePages: List<Page>?,
-    navController: NavController,
     appRepository: AppRepository,
-    folderId: String?,
-    showAddQuickPage: Boolean = true,
+    pages: List<Page>?,
     currentPageId: String? = null,
-    title: String? = "Quick Pages"
+    title: String? = "Quick Pages",
+    onSelectPage: (String) -> Unit,
+    showAddQuickPage: Boolean = false,
+    onCreateNewQuickPage: () -> Unit = {},
+    onPreviewMissing: (String) -> Unit = {},
 ) {
-
-    fun onSelectPage(pageId: String) {
-        // Navigate to selected page
-        val bookId = runCatching {
-            appRepository.pageRepository.getById(pageId)?.notebookId
-        }.onFailure {
-            logPagesRow.d(
-                "failed to resolve bookId for $pageId",
-                it
-            )
-        }.getOrNull()
-
-        val url = if (bookId == null) {
-            "pages/$pageId"
-        } else {
-            "books/$bookId/pages/$pageId"
-        }
-        logPagesRow.d("navigate -> $url")
-        navController.navigate(url)
-    }
 
     if (title != null) {
         Text(text = title)
@@ -93,14 +69,8 @@ fun ShowPagesRow(
                         .aspectRatio(3f / 4f)
                         .border(1.dp, Color.Gray, RectangleShape)
                         .noRippleClickable {
-                            val page = Page(
-                                notebookId = null,
-                                background = GlobalAppSettings.current.defaultNativeTemplate,
-                                backgroundType = BackgroundType.Native.key,
-                                parentFolderId = folderId
-                            )
-                            appRepository.pageRepository.create(page)
-                            navController.navigate("pages/${page.id}")
+                            onCreateNewQuickPage()
+
                         }) {
                     Icon(
                         imageVector = FeatherIcons.FilePlus,
@@ -112,8 +82,8 @@ fun ShowPagesRow(
             }
         }
         // Render existing pages
-        if (!singlePages.isNullOrEmpty()) {
-            items(singlePages.reversed()) { page ->
+        if (!pages.isNullOrEmpty()) {
+            items(pages.reversed()) { page ->
                 val pageId = page.id
                 var isPageSelected by remember { mutableStateOf(false) }
                 Box {
@@ -134,9 +104,11 @@ fun ShowPagesRow(
                                 Color.Black,
                                 RectangleShape
                             ),
-                        pageId = pageId
+                        pageId = pageId,
+                        onPreviewMissing = onPreviewMissing
                     )
                     if (isPageSelected) PageMenu(
+                        appRepository = appRepository,
                         pageId = pageId, canDelete = true, onClose = { isPageSelected = false })
                 }
             }
