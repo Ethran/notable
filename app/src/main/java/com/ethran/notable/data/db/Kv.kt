@@ -101,12 +101,14 @@ class KvProxy @Inject constructor(
     private val cryptoHelper: CryptoHelper
 ) {
     private val log = ShipBook.getLogger("KvProxy")
+    private val json = Json //{ ignoreUnknownKeys = true }
+
 
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
         return kvRepository.getLive(key).map {
             if (it == null) return@map default
             val jsonValue = it.value
-            Json.decodeFromString(serializer, jsonValue)
+            json.decodeFromString(serializer, jsonValue)
         }
     }
 
@@ -114,12 +116,12 @@ class KvProxy @Inject constructor(
         val kv = kvRepository.get(key)
             ?: return@withContext null //returns null when there is no database
         val jsonValue = kv.value
-        Json.decodeFromString(serializer, jsonValue)
+        json.decodeFromString(serializer, jsonValue)
     }
 
 
     suspend fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
-        val jsonValue = Json.encodeToString(serializer, value)
+        val jsonValue = json.encodeToString(serializer, value)
         log.i("Setting $key to $value")
         kvRepository.set(Kv(key, jsonValue))
     }
@@ -134,7 +136,7 @@ class KvProxy @Inject constructor(
 
     suspend fun getSyncSettings(): SyncSettings = withContext(Dispatchers.IO) {
         val settings = kvRepository.get(SYNC_SETTINGS_KEY)
-            ?.let { Json.decodeFromString(SyncSettings.serializer(), it.value) }
+            ?.let { json.decodeFromString(SyncSettings.serializer(), it.value) }
             ?: return@withContext SyncSettings()
 
         if (settings.password.isBlank()) return@withContext settings
