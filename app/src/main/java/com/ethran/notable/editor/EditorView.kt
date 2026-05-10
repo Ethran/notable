@@ -187,12 +187,14 @@ fun EditorView(
         }
 
         // Handle focus changes from Canvas
-        LaunchedEffect(Unit) {
-            CanvasEventBus.onFocusChange.collect { hasFocus ->
-                log.d("Canvas has focus: $hasFocus")
-                viewModel.onFocusChanged(hasFocus)
-            }
-        }
+//        LaunchedEffect(Unit) {
+//            CanvasEventBus.onFocusChange.collect { hasFocus ->
+//                log.d("Canvas has focus: $hasFocus")
+//                if (hasFocus)
+//                    viewModel.updateDrawingState()
+//
+//            }
+//        }
 
         val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
 

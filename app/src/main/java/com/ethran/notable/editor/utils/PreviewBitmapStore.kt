@@ -150,21 +150,30 @@ fun saveHQPagePreview(
     val scrollYInt = scroll!!.y.roundToInt()
     val fileName = buildPreviewFileName(pageID, scrollYInt)
     val dir = ensurePreviewsFullFolder(context)
-    val file = File(dir, fileName)
+    val finalFile = File(dir, fileName)
+    val tempFile = File(dir, "$fileName.tmp")
 
     val optimized = optimizeBitmapForStorage(bitmap, mode, isThumbnail = false)
 
     try {
-        file.outputStream().buffered().use { os ->
+        tempFile.outputStream().buffered().use { os ->
             val success = optimized.bitmap.compress(optimized.format, optimized.quality, os)
             if (!success) {
                 log.e("saveHQPagePreview: Failed to compress bitmap")
+                tempFile.delete()
                 return@use
             }
-            log.d("saveHQPagePreview: cached preview saved as $fileName (scrollY=$scrollYInt)")
         }
-        removeOldBitmaps(dir, fileName, pageID)
+        if (tempFile.exists() && tempFile.length() > 0) {
+            tempFile.renameTo(finalFile)
+            log.d("saveHQPagePreview: cached preview saved as $fileName (scrollY=$scrollYInt)")
+            removeOldBitmaps(dir, fileName, pageID)
+        } else {
+            log.e("saveHQPagePreview: temp file missing or empty, aborting rename")
+            tempFile.delete()
+        }
     } catch (e: Exception) {
+        tempFile.delete()
         log.e("saveHQPagePreview: Exception while saving preview: ${e.message}")
         logCallStack("saveHQPagePreview")
     } finally {
@@ -301,24 +310,29 @@ private fun createPlaceholderPreview(
 }
 
 private fun decodeBitmapFromFile(file: File): Bitmap? {
+    if (!file.exists()) {
+        log.w("decodeBitmapFromFile: file does not exist: ${file.name}")
+        return null
+    }
+    if (file.length() == 0L) {
+        log.w("decodeBitmapFromFile: file is zero bytes, deleting: ${file.name}")
+        file.delete()
+        return null
+    }
     return try {
         val imgBitmap = BitmapFactory.decodeFile(file.absolutePath)
         if (imgBitmap != null) {
             log.d("decodeBitmapFromFile: loaded cached preview '${file.name}'")
             imgBitmap
         } else {
-            log.w("decodeBitmapFromFile: failed to decode bitmap from ${file.name}")
-            log.d(
-                $$"""
-                exists=$${file.exists()}
-                size=$${file.length()}
-                name=${file.name}
-                """.trimIndent()
-            )
+            log.w("decodeBitmapFromFile: failed to decode bitmap from ${file.name}, deleting")
+            log.d("exists=${file.exists()} size=${file.length()} name=${file.name}")
+            file.delete()
             null
         }
     } catch (e: Exception) {
         log.e("decodeBitmapFromFile: Exception while loading bitmap: ${e.message}")
+        file.delete()
         null
     }
 }
@@ -330,27 +344,37 @@ fun savePageThumbnail(
     context: Context, bitmap: Bitmap, pageID: String, mode: PreviewSaveMode = PreviewSaveMode.REGULAR
 ) {
     ensureNotMainThread("savePageThumbnail")
-    val file = getThumbnailFile(context, pageID)
-    file.parentFile?.mkdirs()
+    val finalFile = getThumbnailFile(context, pageID)
+    finalFile.parentFile?.mkdirs()
+    val tempFile = File(finalFile.parentFile, "${finalFile.name}.tmp")
 
     val ratio = bitmap.height.toFloat() / bitmap.width.toFloat()
     val scaledBitmap = bitmap.scale(THUMBNAIL_WIDTH, (THUMBNAIL_WIDTH * ratio).toInt(), false)
     val optimized = optimizeBitmapForStorage(scaledBitmap, mode, isThumbnail = true)
 
     try {
-        file.outputStream().buffered().use { os ->
-            optimized.bitmap.compress(optimized.format, optimized.quality, os)
+        tempFile.outputStream().buffered().use { os ->
+            val success = optimized.bitmap.compress(optimized.format, optimized.quality, os)
+            if (!success) {
+                log.e("savePageThumbnail: Failed to compress bitmap")
+                tempFile.delete()
+                return
+            }
+        }
+        if (tempFile.exists() && tempFile.length() > 0) {
+            tempFile.renameTo(finalFile)
+            log.d("savePageThumbnail: thumbnail saved for $pageID")
+        } else {
+            log.e("savePageThumbnail: temp file missing or empty, aborting rename")
+            tempFile.delete()
         }
     } catch (e: Exception) {
+        tempFile.delete()
         log.e("savePageThumbnail: Exception while saving thumbnail: ${e.message}")
         logCallStack("savePageThumbnail")
-    }
-
-    if (optimized.bitmap != scaledBitmap) {
-        optimized.bitmap.recycle()
-    }
-    if (scaledBitmap != bitmap) {
-        scaledBitmap.recycle()
+    } finally {
+        if (optimized.bitmap != scaledBitmap) optimized.bitmap.recycle()
+        if (scaledBitmap != bitmap) scaledBitmap.recycle()
     }
 }
 

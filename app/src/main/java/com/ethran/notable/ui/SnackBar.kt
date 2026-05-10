@@ -81,7 +81,7 @@ class SnackState {
         task: suspend () -> T,
     ): T {
         val dismissSnack =
-            displaySnack(SnackConf(text = text, duration = null)) // Ensure it doesn't timeout
+            displaySnack(SnackConf(text = text, duration = null)) 
 
         return try {
             task()
@@ -183,6 +183,16 @@ private fun SnackItem(snack: SnackConf, onDismiss: (String) -> Unit) {
                                     .padding(horizontal = 12.dp, vertical = 6.dp))
                         }
                     }
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "x",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .noRippleClickable { onDismiss(snack.id) }
+                            .padding(1.dp)
+                    )
                 }
             } else {
                 snack.content?.invoke()

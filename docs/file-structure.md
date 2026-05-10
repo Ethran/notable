@@ -17,7 +17,7 @@ com.ethran.notable/
     - canvas/ — Hardware-specific drawing and refresh logic (DrawCanvas, OnyxInputHandler, RefreshManager).
     - drawing/ — Low-level rendering logic (OpenGLRenderer, Stroke/Line rendering, Page drawing).
     - state/ — Editor-specific state management:
-        - history.kt — Undo/Redo logic.
+        - History.kt — Undo/Redo logic.
         - Clipboard.kt — Copy/Paste support for strokes and images.
         - SelectionState.kt — Tracking selected elements.
         - EditorTypes.kt — Basic editor enums (Mode, PlacementMode).

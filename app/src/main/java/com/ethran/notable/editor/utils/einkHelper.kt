@@ -29,6 +29,8 @@ import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.utils.DeviceInfoUtil
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -319,6 +321,7 @@ fun restoreDefaults(view: View) {
 
 fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelper?) {
     if(touchHelper == null) return
+//    touchHelper.isRawDrawingRenderEnabled = false
     refreshScreenRegion(view, dirtyRect)
     resetScreenFreeze(touchHelper)
     // we need to wait before refreshing, as onyx library has its own buffer that needs to be updated. Otherwise we will refresh to correct, then  incorrect and then correct state.
@@ -332,8 +335,11 @@ fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
         log.w("touchHelper is null")
         return
     }
-    touchHelper.isRawDrawingRenderEnabled = false
-    touchHelper.isRawDrawingRenderEnabled = true
+    CoroutineScope(Dispatchers.Default).launch {
+        touchHelper.isRawDrawingRenderEnabled = false
+        DeviceCompat.delayBeforeResumingDrawing()
+        touchHelper.isRawDrawingRenderEnabled = true
+    }
 //    setRawDrawingEnabled(false)
 //    setRawDrawingEnabled(true)
 }
@@ -454,7 +460,8 @@ object DeviceCompat {
         if (!isOnyxDevice) return
         // 500ms for Kaleido Color e-ink, 300ms for monochrome
         val delayMs = if (isColorDevice()) 500L else 300L
-        log.d("Delaying raw drawing resume for ${delayMs}ms to allow Android UI to settle")
+        log.d("delayBeforeResumingDrawing: Delaying raw drawing resume for ${delayMs}ms to allow Android UI to settle")
         delay(delayMs)
+        log.d("delayBeforeResumingDrawing: Resuming raw drawing")
     }
 }

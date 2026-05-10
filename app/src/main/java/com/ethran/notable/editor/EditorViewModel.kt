@@ -21,6 +21,7 @@ import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.SelectionState
+import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
@@ -106,7 +107,7 @@ sealed class ToolbarAction {
     data class ChangePenSetting(val pen: Pen, val setting: PenSetting) : ToolbarAction()
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
     object ToggleMenu : ToolbarAction()
-    data class UpdateMenuOpenTo(val isOpen: Boolean) : ToolbarAction()
+    data class ToggleEraserManu(val isOpen: Boolean) : ToolbarAction()
     data class ToggleBackgroundSelector(val isOpen: Boolean) : ToolbarAction()
     data class ToggleScribbleToErase(val enabled: Boolean) : ToolbarAction()
 
@@ -261,17 +262,17 @@ class EditorViewModel @Inject constructor(
             is ToolbarAction.ChangeEraser -> handleEraserChange(action.eraser)
             is ToolbarAction.ToggleMenu -> {
                 _toolbarState.update { it.copy(isMenuOpen = !it.isMenuOpen) }
-                updateDrawingState()
+//                updateDrawingState() // on focus change is doing this
             }
 
-            is ToolbarAction.UpdateMenuOpenTo -> {
+            is ToolbarAction.ToggleEraserManu -> {
                 _toolbarState.update { it.copy(isStrokeSelectionOpen = action.isOpen) }
-                updateDrawingState()
+//                updateDrawingState() // on focus change is doing this
             }
 
             is ToolbarAction.ToggleBackgroundSelector -> {
                 _toolbarState.update { it.copy(isBackgroundSelectorModalOpen = action.isOpen) }
-                updateDrawingState()
+//                updateDrawingState() // on focus change is doing this
             }
 
             is ToolbarAction.ToggleScribbleToErase -> updateScribbleToErase(action.enabled)
@@ -451,18 +452,14 @@ class EditorViewModel @Inject constructor(
      * Re-evaluates whether drawing should be enabled based on menu and selection states.
      */
     fun updateDrawingState() {
-        log.v("updateDrawingState")
+        // It get called three times on canvas creation.
         val shouldBeDrawing = _toolbarState.value.isDrawingAllowed
         _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
-        log.d("Drawing state: $shouldBeDrawing")
+        log.d("updateDrawingState: Drawing state: $shouldBeDrawing")
         viewModelScope.launch {
+            if (shouldBeDrawing)
+                DeviceCompat.delayBeforeResumingDrawing()
             CanvasEventBus.isDrawing.emit(shouldBeDrawing)
-        }
-    }
-
-    fun onFocusChanged(isFocused: Boolean) {
-        if (isFocused) {
-            updateDrawingState()
         }
     }
 
@@ -606,13 +603,12 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
-//            loadBookData(bookId, newPageId)
             _toolbarState.update { it.copy(pageId = newPageId) }
         } else {
             Log.d("EditorView", "Tried to change to same page!")
-            snackDispatcher.showOrUpdateSnack(
-                SnackConf(text = "Tried to change to same page!", duration = 4000)
-            )
+            val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
+            snackDispatcher.showOrUpdateSnack(snack)
+            CanvasEventBus.restoreCanvas.emit(Unit)
         }
     }
 
@@ -624,15 +620,10 @@ class EditorViewModel @Inject constructor(
     fun changePage(id: String) {
         log.d("Changing page to $id, from $currentPageId")
         viewModelScope.launch(Dispatchers.IO) {
-            // 1. Notify the PageView about the change
-
-            // 2. Update the persistent layer
-
-            // 3. Update the UI state
+            // Update the UI state
             updateOpenedPage(id)
 
-
-            // 4. Clean the selection state
+            // Clean the selection state
             selectionState.reset()
         }
     }

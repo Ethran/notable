@@ -98,7 +98,9 @@ class StrokeRepository @Inject constructor(
     }
 
     suspend fun deleteAll(ids: List<String>) {
-        return db.deleteAll(ids)
+        ids.chunked(900).forEach { batch ->
+            db.deleteAll(batch)
+        }
     }
 
     suspend fun getStrokeWithPointsById(strokeId: String): Stroke {

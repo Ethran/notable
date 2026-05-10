@@ -125,7 +125,7 @@ dependencies {
     implementation 'androidx.input:input-motionprediction:1.0.0'
 
     //implementation fileTree(dir: 'libs', include: ['*.aar'])
-    implementation('com.onyx.android.sdk:onyxsdk-device:1.3.4') {
+    implementation('com.onyx.android.sdk:onyxsdk-device:1.3.5') {
         exclude group: 'com.android.support', module: 'support-compat'
     }
 

@@ -66,41 +66,45 @@ class CanvasRefreshManager(
         resetScreenFreeze(touchHelper)
     }
 
-
     fun drawCanvasToView(dirtyRect: Rect?) {
-        log.v("Canvas refresh started, dirtyRect: $dirtyRect")
-
-        val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
-        var canvas: Canvas? = null
-        try {
-            // Lock the canvas only for the dirtyRect region
-            canvas = drawCanvas.holder.lockCanvas(zoneToRedraw) ?: return
-
-            canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
-
-            if (viewModel.toolbarState.value.mode == Mode.Select) {
-                // render selection, but only within dirtyRect
-                viewModel.selectionState.firstPageCut?.let { cutPoints ->
-                    log.i("render cut")
-                    val path = pointsToPath(cutPoints.map {
-                        SimplePointF(
-                            it.x - page.scroll.x, it.y - page.scroll.y
-                        )
-                    })
-                    canvas.drawPath(path, selectPaint)
-                }
-            }
-        } catch (e: IllegalStateException) {
-            log.w("Surface released during draw", e)
-            // ignore — surface is gone
-        } finally {
+        drawCanvas.post {
+            val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+            var canvas: Canvas? = null
             try {
-                if (canvas != null) {
-                    drawCanvas.holder.unlockCanvasAndPost(canvas)
+                log.v("Canvas refresh started, dirtyRect: $zoneToRedraw, bitmap: ${page.windowedBitmap.hashCode()}, thread: ${Thread.currentThread().name}")
+                // Lock the canvas only for the dirtyRect region
+                canvas = drawCanvas.holder.lockCanvas(zoneToRedraw)
+                if (canvas == null) {
+                    log.e("FAILED to lock canvas! Surface is likely invalid, destroyed, or locked by another thread.")
+                    return@post
                 }
-                log.v("Canvas refreshed")
+                canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
+
+                if (viewModel.toolbarState.value.mode == Mode.Select) {
+                    // render selection, but only within dirtyRect
+                    viewModel.selectionState.firstPageCut?.let { cutPoints ->
+                        log.i("render cut")
+                        val path = pointsToPath(cutPoints.map {
+                            SimplePointF(
+                                it.x - page.scroll.x, it.y - page.scroll.y
+                            )
+                        })
+                        canvas.drawPath(path, selectPaint)
+                    }
+                }
             } catch (e: IllegalStateException) {
-                log.w("Surface released during unlock", e)
+                log.w("Surface released during draw", e)
+                // ignore — surface is gone
+            } finally {
+                try {
+                    if (canvas != null) {
+                        log.d("drawCanvasToView: page=${page.currentPageId} bitmap=${page.windowedBitmap.hashCode()}")
+                        drawCanvas.holder.unlockCanvasAndPost(canvas)
+                    }
+                    log.v("Canvas refreshed")
+                } catch (e: IllegalStateException) {
+                    log.w("Surface released during unlock", e)
+                }
             }
         }
     }
@@ -118,6 +122,7 @@ class CanvasRefreshManager(
                 Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
             } finally {
                 if (surfaceCanvas != null) {
+                    log.d("restoreCanvas: page=${page.currentPageId} bitmap=${bitmap.hashCode()}")
                     holder.unlockCanvasAndPost(surfaceCanvas)
                 }
                 // Trigger partial refresh

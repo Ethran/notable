@@ -2,28 +2,18 @@ package com.ethran.notable.editor.canvas
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
-import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
-import com.ethran.notable.editor.utils.pointsToPath
-import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.onyx.android.sdk.api.device.epd.EpdController
-import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 
@@ -90,7 +80,7 @@ class DrawCanvas(
         )
         strokeHistoryBatch.clear()
         //testing if it will help with undo hiding strokes.
-        drawCanvasToView(null)
+        refreshManager.drawCanvasToView(null)
     }
 
 
@@ -153,63 +143,6 @@ class DrawCanvas(
 
         this.holder.addCallback(surfaceCallback)
 
-    }
-
-
-    fun drawCanvasToView(dirtyRect: Rect?) {
-        val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
-        var canvas: Canvas? = null
-        try {
-            // Lock the canvas only for the dirtyRect region
-            canvas = this.holder.lockCanvas(zoneToRedraw) ?: return
-
-            canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
-
-            if (viewModel.toolbarState.value.mode == Mode.Select) {
-                // render selection, but only within dirtyRect
-                viewModel.selectionState.firstPageCut?.let { cutPoints ->
-                    log.i("render cut")
-                    val path = pointsToPath(cutPoints.map {
-                        SimplePointF(
-                            it.x - page.scroll.x, it.y - page.scroll.y
-                        )
-                    })
-                    canvas.drawPath(path, selectPaint)
-                }
-            }
-        } catch (e: IllegalStateException) {
-            log.w("Surface released during draw", e)
-            // ignore — surface is gone
-        } finally {
-            try {
-                if (canvas != null) {
-                    holder.unlockCanvasAndPost(canvas)
-                }
-            } catch (e: IllegalStateException) {
-                log.w("Surface released during unlock", e)
-            }
-        }
-    }
-
-
-    fun restoreCanvas(dirtyRect: Rect, bitmap: Bitmap = page.windowedBitmap) {
-        post {
-            val holder = this@DrawCanvas.holder
-            var surfaceCanvas: Canvas? = null
-            try {
-                surfaceCanvas = holder.lockCanvas(dirtyRect)
-                // Draw the preview bitmap scaled to fit the dirty rect
-                surfaceCanvas.drawBitmap(bitmap, dirtyRect, dirtyRect, null)
-            } catch (e: Exception) {
-                Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
-            } finally {
-                if (surfaceCanvas != null) {
-                    holder.unlockCanvasAndPost(surfaceCanvas)
-                }
-                // Trigger partial refresh
-                refreshScreenRegion(this@DrawCanvas, dirtyRect)
-            }
-        }
     }
 
 }

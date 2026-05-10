@@ -11,7 +11,6 @@ import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -167,12 +166,13 @@ class OnyxInputHandler(
         if(touchHelper == null) return
         log.i("Update is drawing: $toolbarState.isDrawing")
         if (toolbarState.isDrawing) {
+//            DeviceCompat.delayBeforeResumingDrawing()
             touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
             CanvasEventBus.waitForDrawing()
             // draw to view, before showing drawing, avoid stutter
-            drawCanvas.drawCanvasToView(null)
+            drawCanvas.refreshManager.drawCanvasToView(null)
             touchHelper!!.setRawDrawingEnabled(false)
         }
     }
@@ -305,7 +305,7 @@ class OnyxInputHandler(
                             )
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
-                            drawCanvas.drawCanvasToView(erasedByScribbleDirtyRect)
+                            drawCanvas.refreshManager.drawCanvasToView(erasedByScribbleDirtyRect)
                             partialRefreshRegionOnce(
                                 drawCanvas,
                                 erasedByScribbleDirtyRect,
