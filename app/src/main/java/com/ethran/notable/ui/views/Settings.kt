@@ -3,6 +3,7 @@ package com.ethran.notable.ui.views
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,6 +68,7 @@ import com.ethran.notable.ui.components.GesturesSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.viewmodels.GestureRowModel
 import com.ethran.notable.ui.viewmodels.SettingsViewModel
+import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
 import com.ethran.notable.utils.isNext
 import kotlinx.coroutines.launch
 
@@ -105,7 +107,22 @@ fun SettingsView(
         },
         onUpdateSettings = { viewModel.updateSettings(it) },
         listOfGestures = viewModel.getGestureRows(),
-        availableGestures = viewModel.availableGestures
+        availableGestures = viewModel.availableGestures,
+        syncUiState = viewModel.syncUiState,
+        syncCallbacks = SyncSettingsCallbacks(
+            onUpdateSyncSettings = viewModel::updateSyncSettings,
+            onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
+            onSaveCredentials = viewModel::onSaveCredentials,
+            onTestConnection = viewModel::onTestConnection,
+            onManualSync = viewModel::onManualSync,
+            onClearSyncLogs = viewModel::onClearSyncLogs,
+            danger = SyncDangerCallbacks(
+                onForceUploadRequested = viewModel::onForceUploadRequested,
+                onForceDownloadRequested = viewModel::onForceDownloadRequested,
+                onConfirmForceUpload = viewModel::onConfirmForceUpload,
+                onConfirmForceDownload = viewModel::onConfirmForceDownload,
+            ),
+        )
     )
 }
 
@@ -121,12 +138,15 @@ fun SettingsContent(
     onUpdateSettings: (AppSettings) -> Unit,
     selectedTabInitial: Int = 0,
     listOfGestures: List<GestureRowModel> = emptyList(),
-    availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList()
+    availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList(),
+    syncUiState: SyncSettingsUiState = SyncSettingsUiState(),
+    syncCallbacks: SyncSettingsCallbacks = SyncSettingsCallbacks(),
 ) {
     var selectedTab by remember { mutableIntStateOf(selectedTabInitial) }
     val tabs = listOf(
         stringResource(R.string.settings_tab_general_name),
         stringResource(R.string.settings_tab_gestures_name),
+        stringResource(R.string.settings_tab_sync_name),
         stringResource(R.string.settings_tab_debug_name)
     )
 
@@ -156,7 +176,12 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-                    2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
+                    2 -> SyncSettings(
+                        state = syncUiState,
+                        callbacks = syncCallbacks,
+                    )
+
+                    3 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
                 }
             }
 
@@ -172,7 +197,8 @@ fun SettingsContent(
                             .fillMaxWidth()
                     )
                     UpdateActions(
-                        isLatestVersion = isLatestVersion, onCheckUpdate = onCheckUpdate,
+                        isLatestVersion = isLatestVersion,
+                        onCheckUpdate = onCheckUpdate,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 30.dp, vertical = 8.dp)
@@ -231,8 +257,7 @@ private fun SettingsTabRow(tabs: List<String>, selectedTab: Int, onTabSelected: 
         tabs.forEachIndexed { index, title ->
             Tab(selected = selectedTab == index, onClick = { onTabSelected(index) }, text = {
                 Text(
-                    text = title,
-                    color = if (selectedTab == index) MaterialTheme.colors.onSurface
+                    text = title, color = if (selectedTab == index) MaterialTheme.colors.onSurface
                     else MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                 )
             })
@@ -316,9 +341,6 @@ fun UpdateActions(
 }
 
 
-
-
-
 fun openInBrowser(context: Context, uriString: String, onError: (String) -> Unit) {
     val urlIntent = Intent(Intent.ACTION_VIEW, uriString.toUri())
     try {
@@ -393,7 +415,34 @@ fun SettingsPreviewDebug() {
             goToSystemInfo = {},
             onCheckUpdate = {},
             onUpdateSettings = {},
-            selectedTabInitial = 2
+            selectedTabInitial = 3
+        )
+    }
+}
+@Preview(
+    name = "Light",
+    showBackground = true,
+    device = "spec:width=360dp,height=600dp"
+)
+@Preview(
+    name = "Dark",
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+    showBackground = true,
+    device = "spec:width=360dp,height=600dp"
+)
+@Composable
+fun SettingsPreviewSync() {
+    InkaTheme {
+        SettingsContent(
+            versionString = "v1.0.0",
+            settings = AppSettings(version = 1),
+            isLatestVersion = true,
+            onBack = {},
+            goToWelcome = {},
+            goToSystemInfo = {},
+            onCheckUpdate = {},
+            onUpdateSettings = {},
+            selectedTabInitial = 2,
         )
     }
 }

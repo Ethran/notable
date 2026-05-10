@@ -212,7 +212,10 @@ class PageDataManager @Inject constructor(
     }
 
     suspend fun cacheNeighbors() {
-        assert(currentPage == pageFromDb?.id)
+        if (currentPage != pageFromDb?.id) {
+            log.e("Skipping neighbors cache for invalid current page: current=$currentPage db=${pageFromDb?.id}")
+            return
+        }
         val bookId = pageFromDb?.notebookId ?: return
 
         log.d("cacheNeighbors($currentPage)")
@@ -578,6 +581,7 @@ class PageDataManager @Inject constructor(
     fun updateStrokesInDb(strokes: List<Stroke>) {
         dataScope.launch {
             appRepository.strokeRepository.update(strokes)
+            updateParentNotebookTimestamp()
         }
     }
 
@@ -596,25 +600,35 @@ class PageDataManager @Inject constructor(
                 )
                 appRepository.strokeRepository.update(strokes)
             }
+            updateParentNotebookTimestamp()
         }
     }
 
     fun saveImagesToDb(images: List<Image>) {
         dataScope.launch {
             appRepository.imageRepository.create(images)
+            updateParentNotebookTimestamp()
         }
     }
 
     fun removeStrokesFromDb(strokes: List<String>) {
         dataScope.launch {
             appRepository.strokeRepository.deleteAll(strokes)
+            updateParentNotebookTimestamp()
         }
     }
 
     fun removeImagesFromDb(images: List<String>) {
         dataScope.launch {
             appRepository.imageRepository.deleteAll(images)
+            updateParentNotebookTimestamp()
         }
+    }
+
+    private suspend fun updateParentNotebookTimestamp() {
+        val notebookId = pageFromDb?.notebookId ?: return
+        val notebook = appRepository.bookRepository.getById(notebookId) ?: return
+        appRepository.bookRepository.update(notebook)
     }
 
     fun setScrollInDb() {

@@ -387,6 +387,7 @@ class PageView(
 
     private fun saveImagesToPersistLayer(image: List<Image>) = pageDataManager.saveImagesToDb(image)
 
+
     fun addImage(imageToAdd: Image) {
         images += listOf(imageToAdd)
         val bottomPlusPadding = imageToAdd.x + imageToAdd.height + 50
@@ -428,7 +429,6 @@ class PageView(
 
     private fun removeImagesFromPersistLayer(imageIds: List<String>) =
         pageDataManager.removeImagesFromDb(imageIds)
-
 
     // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {

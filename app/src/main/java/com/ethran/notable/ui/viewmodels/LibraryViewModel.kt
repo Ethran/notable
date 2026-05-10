@@ -22,6 +22,7 @@ import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.fold
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.data.events.AppEventBus
+import com.ethran.notable.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +63,7 @@ class LibraryViewModel @Inject constructor(
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     val pageDataManager: PageDataManager,
     private val snackDispatcher: SnackDispatcher,
+    val syncScheduler: SyncScheduler,
     @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
 
@@ -71,6 +73,8 @@ class LibraryViewModel @Inject constructor(
 
     private val _folderId = MutableStateFlow<String?>(null)
     private val _isImporting = MutableStateFlow(false)
+    private val _newlyCreatedBookId = MutableStateFlow<String?>(null)
+    val newlyCreatedBookId: StateFlow<String?> = _newlyCreatedBookId
     private val _isLatestVersion = MutableStateFlow(true)
     private val _breadcrumbFolders = MutableStateFlow<List<Folder>>(emptyList())
 
@@ -164,15 +168,18 @@ class LibraryViewModel @Inject constructor(
     fun onCreateNewNotebook() {
         viewModelScope.launch(Dispatchers.IO) {
             val settings = GlobalAppSettings.current
-
-            bookRepository.create(
-                Notebook(
-                    parentFolderId = _folderId.value,
-                    defaultBackground = settings.defaultNativeTemplate,
-                    defaultBackgroundType = BackgroundType.Native.key
-                )
+            val notebook = Notebook(
+                parentFolderId = _folderId.value,
+                defaultBackground = settings.defaultNativeTemplate,
+                defaultBackgroundType = BackgroundType.Native.key
             )
+            bookRepository.create(notebook)
+            _newlyCreatedBookId.value = notebook.id
         }
+    }
+
+    fun clearNewlyCreatedBookId() {
+        _newlyCreatedBookId.value = null
     }
 
     fun onPdfFile(uri: Uri, copy: Boolean) {

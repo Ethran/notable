@@ -14,6 +14,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.ClipboardStore
@@ -27,12 +28,14 @@ import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -160,12 +163,14 @@ sealed class EditorUiEvent {
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    val appRepository: AppRepository,
-    var editorSettingCacheManager: EditorSettingCacheManager,
+    private val appRepository: AppRepository,
+    private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,
+    private val syncOrchestrator: SyncOrchestrator,
     val snackDispatcher: SnackDispatcher,
-    private val historyFactory: History.Factory
+    private val historyFactory: History.Factory,
+    @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
     // ---- Toolbar / UI State (single flat flow) ----
     private val _toolbarState = MutableStateFlow(ToolbarUiState())
@@ -216,12 +221,18 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Called when the EditorView is being disposed.
+     * Performs cleanup, exports linked files, and triggers auto-sync.
+     */
     fun onDispose(page: PageView) {
-        // finish selection operation
+        // 1. Finish selection operation
         selectionState.applySelectionDisplace(page)
         bookId?.let { bookId ->
             exportEngine.exportToLinkedFileAsync(bookId)
         }
+
+        // 3. Cleanup page resources
         page.disposeOldPage()
     }
 
@@ -369,8 +380,7 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = exportEngine.export(target, format)
-                val snack = SnackConf(text = result, duration = 4000)
-                snackDispatcher.showOrUpdateSnack(snack)
+                snackDispatcher.showOrUpdateSnack(SnackConf(text = result, duration = 4000))
             } catch (e: Exception) {
                 snackDispatcher.showOrUpdateSnack(
                     SnackConf(
@@ -593,7 +603,9 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
+            val oldPage = currentPageId
             _toolbarState.update { it.copy(pageId = newPageId) }
+            syncFromPageId(oldPage)
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
@@ -675,10 +687,13 @@ class EditorViewModel @Inject constructor(
     }
 
 
-    // Hints for Editor
     fun showHint(message: String, durationMs: Int = 1500) {
         snackDispatcher.showOrUpdateSnack(
             SnackConf(text = message, duration = durationMs)
         )
+    }
+
+    suspend fun syncFromPageId(pageId: String) {
+        syncOrchestrator.syncFromPageId(pageId)
     }
 }
