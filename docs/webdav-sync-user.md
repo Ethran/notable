@@ -222,7 +222,7 @@ Notable stores your data on the WebDAV server in the following structure:
 
 ## Privacy & Security
 
-- **Credentials**: Stored securely using Android's `EncryptedSharedPreferences` (AES-256-GCM, backed by Android Keystore)
+- **Credentials**: Stored securely in the app's key-value Room table (`KvProxy`) and encrypted using the app's `CryptoHelper` which uses an AES-GCM key in the AndroidKeyStore.
 - **Data in transit**: Uses HTTPS for secure communication (recommended)
 - **Data at rest**: Depends on your WebDAV provider's security
 - **No third-party cloud service**: Your data only goes to the WebDAV server you specify

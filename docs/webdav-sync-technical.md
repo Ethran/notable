@@ -58,12 +58,12 @@ All sync code lives in `com.ethran.notable.sync`. The components and their respo
 | [`SyncProgressReporter.kt`](../app/src/main/java/com/ethran/notable/sync/SyncProgressReporter.kt)                   | `@Singleton` owner of the `SyncState` `StateFlow`. Interface + `SyncProgressReporterImpl` + Hilt `@Binds` module + `SyncProgressReporterEntryPoint`. Write-side API: `beginStep`, `beginItem`, `endItem`, `finishSuccess`, `finishError`, `reset`. Read-side: `state`. Consumers inject `SyncProgressReporter` rather than touching `SyncOrchestrator` for state. |
 | [`SyncForceService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncForceService.kt)                           | Force upload/download flows (full side replacement) used by settings actions.                                                                                      |
 | [`SyncPorts.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPorts.kt)                                         | DI port/adapter for WebDAV client creation (`WebDavClientFactoryPort`).                                                                                            |
-| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt)                                   | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. Streaming downloads. ETag-aware downloads and `If-Match` guarded uploads for optimistic concurrency. |
+| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt)                                   | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. File uploads/downloads and metadata (ETag) support. `If-Match`-guarded uploads for optimistic concurrency. |
 | [`NotebookSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/NotebookSerializer.kt)           | Serializes/deserializes notebooks, pages, strokes, and images to/from JSON. Stroke points are embedded as base64-encoded [SB1 binary](database-structure.md) data. |
 | [`FolderSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/FolderSerializer.kt)               | Serializes/deserializes the folder hierarchy to/from `folders.json`.                                                                                               |
 | [`SyncWorker.kt`](../app/src/main/java/com/ethran/notable/sync/SyncWorker.kt)                                       | `CoroutineWorker` for WorkManager integration. Checks connectivity and credentials before delegating to `SyncOrchestrator`.                                        |
 | [`SyncScheduler.kt`](../app/src/main/java/com/ethran/notable/sync/SyncScheduler.kt)                                 | Schedules/cancels periodic sync via WorkManager.                                                                                                                   |
-| [`CredentialManager.kt`](../app/src/main/java/com/ethran/notable/sync/CredentialManager.kt)                         | Stores WebDAV credentials in `EncryptedSharedPreferences` (AES-256-GCM).                                                                                           |
+| `KvProxy` (Room `kv` table) + [`CryptoHelper.kt`](../app/src/main/java/com/ethran/notable/data/db/CryptoHelper.kt) | Credentials are persisted to the app key-value Room table and encrypted using the app's `CryptoHelper` (AES-GCM keys held in the AndroidKeyStore).                 |
 | [`ConnectivityChecker.kt`](../app/src/main/java/com/ethran/notable/sync/ConnectivityChecker.kt)                     | Queries Android `ConnectivityManager` for network/WiFi availability.                                                                                               |
 | [`SyncLogger.kt`](../app/src/main/java/com/ethran/notable/sync/SyncLogger.kt)                                       | Maintains a ring buffer of recent log entries (exposed as `StateFlow`) for the sync UI.                                                                            |
 
@@ -78,7 +78,7 @@ operations on a single device (see section 7.2 for multi-device concurrency).
 
 ```
 1. INITIALIZE
-   ├── Load AppSettings and credentials
+   ├── Load SyncSettings and credentials
    ├── Construct WebDAVClient
    └── Ensure /notable/, /notable/notebooks/, /notable/deletions/ exist on server (MKCOL)
 
@@ -122,7 +122,7 @@ operations on a single device (see section 7.2 for multi-device concurrency).
 
 7. FINALIZE
    ├── Update syncedNotebookIds = current set of all local notebook IDs
-   └── Persist to AppSettings
+   └── Persist to SyncSettings
 ```
 
 ### 3.2 Per-Notebook Upload
@@ -214,8 +214,7 @@ the server without running a full sync:
   "title": "My Notebook",
   "pageIds": [
     "page-uuid-1",
-    "page-uuid-2",
-    ...
+    "page-uuid-2"
   ],
   "openPageId": "page-uuid-1",
   "parentFolderId": "folder-uuid-or-null",
@@ -404,7 +403,7 @@ Folders use a simpler per-folder last-writer-wins merge:
 
 Detecting that a notebook was deleted locally (as opposed to never existing) requires comparing the
 current set of local notebook IDs against the set from the last successful sync (`syncedNotebookIds`
-in AppSettings):
+in SyncSettings):
 
 ```
 locallyDeleted = syncedNotebookIds - currentLocalNotebookIds
@@ -461,14 +460,11 @@ their clock differs from the server.
 
 ### 6.1 Credential Storage
 
-Credentials are stored using Android's `EncryptedSharedPreferences` (from
-`androidx.security:security-crypto`):
-
-- **Master key**: AES-256-GCM, managed by Android Keystore.
-- **Key encryption**: AES-256-SIV (deterministic authenticated encryption for preference keys).
-- **Value encryption**: AES-256-GCM (authenticated encryption for preference values).
-- Credentials are stored separately from the main app database (`KvProxy`), ensuring they are always
-  encrypted at rest regardless of device encryption state.
+Credentials (server URL, username, password) are persisted via the app `KvProxy` (Room `kv` table).
+Passwords are encrypted/decrypted using the app's `CryptoHelper` which uses an AES-GCM key stored in
+the AndroidKeyStore. The `KvProxy` stores the encrypted password blob in the Room table; on read it
+attempts to decrypt and returns an empty password on decryption failure. This project does not use
+`EncryptedSharedPreferences` for sync credentials.
 
 ### 6.2 Transport Security
 
@@ -479,9 +475,8 @@ Credentials are stored using Android's `EncryptedSharedPreferences` (from
 
 ### 6.3 Logging
 
-- `SyncLogger` never logs credentials or authentication headers.
-- Debug logging of PROPFIND responses is truncated to 1500 characters to prevent sensitive directory
-  listings from filling logs.
+- `SyncLogger` never logs credentials or authentication headers. It keeps a recent-history buffer (last 50 entries) exposed as a `StateFlow` for the UI and forwards logs to ShipBook.
+- PROPFIND responses are parsed by `WebDAVClient` but the logger does not perform automatic truncation of response bodies in the current implementation.
 
 ---
 
@@ -567,7 +562,7 @@ Idle → Syncing(step, stepProgress, details, item?) → Success(summary) → Id
 | Dependency                                         | Purpose                               |
 |----------------------------------------------------|---------------------------------------|
 | `com.squareup.okhttp3:okhttp`                      | HTTP client for all WebDAV operations |
-| `androidx.security:security-crypto`                | Encrypted credential storage          |
+| `Android KeyStore (used via CryptoHelper)`         | Encrypt/decrypt sync passwords (AES-GCM keys managed by AndroidKeyStore) |
 | `org.jetbrains.kotlinx:kotlinx-serialization-json` | JSON serialization/deserialization    |
 | `androidx.work:work-runtime-ktx`                   | Background sync scheduling            |
 
