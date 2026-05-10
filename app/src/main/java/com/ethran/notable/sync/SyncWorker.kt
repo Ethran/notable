@@ -49,7 +49,7 @@ class SyncWorker(
         }
 
         // Check if we have credentials
-        if (syncSettings.username.isBlank() || syncSettings.encryptedPassword.isBlank()) {
+        if (syncSettings.username.isBlank() || syncSettings.password.isBlank()) {
             Log.w(TAG, "No credentials stored, skipping sync")
             return Result.success()
         }

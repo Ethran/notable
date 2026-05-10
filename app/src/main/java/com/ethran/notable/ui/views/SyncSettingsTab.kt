@@ -2,8 +2,8 @@ package com.ethran.notable.ui.views
 
 import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,22 +69,6 @@ import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 
-data class SyncCredentialsCallbacks(
-    val onServerUrlChange: (String) -> Unit = {},
-    val onUsernameChange: (String) -> Unit = {},
-    val onPasswordChange: (String) -> Unit = {},
-    val onTogglePasswordVisibility: () -> Unit = {},
-    val onSaveCredentials: () -> Unit = {},
-)
-
-data class SyncBehaviorCallbacks(
-    val onToggleSyncEnabled: (Boolean) -> Unit = {},
-    val onAutoSyncChanged: (Boolean) -> Unit = {},
-    val onSyncIntervalChanged: (Int) -> Unit = {},
-    val onSyncOnCloseChanged: (Boolean) -> Unit = {},
-    val onWifiOnlyChanged: (Boolean) -> Unit = {},
-)
-
 data class SyncDangerCallbacks(
     val onForceUploadRequested: (Boolean) -> Unit = {},
     val onForceDownloadRequested: (Boolean) -> Unit = {},
@@ -93,8 +77,9 @@ data class SyncDangerCallbacks(
 )
 
 data class SyncSettingsCallbacks(
-    val credentials: SyncCredentialsCallbacks = SyncCredentialsCallbacks(),
-    val behavior: SyncBehaviorCallbacks = SyncBehaviorCallbacks(),
+    val onUpdateSyncSettings: (SyncSettings, Boolean) -> Unit = { _, _ -> },
+    val onTogglePasswordVisibility: () -> Unit = {},
+    val onSaveCredentials: () -> Unit = {},
     val onTestConnection: () -> Unit = {},
     val onManualSync: () -> Unit = {},
     val onClearSyncLogs: () -> Unit = {},
@@ -110,12 +95,12 @@ fun SyncSettings(
     state: SyncSettingsUiState,
     callbacks: SyncSettingsCallbacks,
 ) {
-    val isConfigured by remember(state.isPasswordSaved, state.serverUrl) {
-        derivedStateOf { state.isPasswordSaved && state.serverUrl.isNotEmpty() }
+    val isConfigured by remember(state.isPasswordSaved, state.syncSettings.serverUrl) {
+        derivedStateOf { state.isPasswordSaved && state.syncSettings.serverUrl.isNotEmpty() }
     }
-    val serverSectionTitle by remember(isConfigured, state.serverUrl) {
+    val serverSectionTitle by remember(isConfigured, state.syncSettings.serverUrl) {
         derivedStateOf {
-            if (isConfigured) "Server: ${state.serverUrl.take(25)}..." else "Connection Setup"
+            if (isConfigured) "Server: ${state.syncSettings.serverUrl.take(25)}..." else "Connection Setup"
         }
     }
     var showServerConfig by remember { mutableStateOf(!isConfigured) }
@@ -145,7 +130,7 @@ fun SyncSettings(
         if (isConfigured) {
             Spacer(modifier = Modifier.height(24.dp))
 
-            SyncBehaviorSection(state = state, callbacks = callbacks)
+            SyncBehaviorSection(state = state, onUpdate = callbacks.onUpdateSyncSettings)
 
             if (state.syncSettings.syncEnabled) {
                 Spacer(modifier = Modifier.height(24.dp))
@@ -188,15 +173,11 @@ private fun ConnectionSection(
         onHeaderClick = { if (isConfigured) onToggleSection() }
     ) {
         SyncCredentialFields(
-            serverUrl = state.serverUrl,
-            username = state.username,
-            password = state.password,
+            settings = state.syncSettings,
             isPasswordSaved = state.isPasswordSaved,
             passwordVisible = state.passwordVisible,
-            onServerUrlChange = callbacks.credentials.onServerUrlChange,
-            onUsernameChange = callbacks.credentials.onUsernameChange,
-            onPasswordChange = callbacks.credentials.onPasswordChange,
-            onTogglePasswordVisibility = callbacks.credentials.onTogglePasswordVisibility
+            onUpdate = callbacks.onUpdateSyncSettings,
+            onTogglePasswordVisibility = callbacks.onTogglePasswordVisibility
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -204,15 +185,15 @@ private fun ConnectionSection(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             EInkActionButton(
                 text = "Save Credentials",
-                onClick = callbacks.credentials.onSaveCredentials,
-                enabled = state.credentialsChanged && state.username.isNotEmpty(),
+                onClick = callbacks.onSaveCredentials,
+                enabled = state.credentialsDirty && state.syncSettings.username.isNotEmpty(),
                 modifier = Modifier.weight(1f),
                 isBold = true
             )
             EInkActionButton(
                 text = if (state.testingConnection) "Testing..." else "Test Connection",
                 onClick = callbacks.onTestConnection,
-                enabled = !state.testingConnection && state.serverUrl.isNotEmpty(),
+                enabled = !state.testingConnection && state.syncSettings.serverUrl.isNotEmpty(),
                 modifier = Modifier.weight(1f),
                 isSecondary = true
             )
@@ -228,18 +209,34 @@ private fun ConnectionSection(
 @Composable
 private fun SyncBehaviorSection(
     state: SyncSettingsUiState,
-    callbacks: SyncSettingsCallbacks,
+    onUpdate: (SyncSettings, Boolean) -> Unit,
 ) {
     EInkSection(title = "Sync Behavior", icon = Icons.Default.Settings) {
-        SyncEnableToggle(state.syncSettings, callbacks.behavior.onToggleSyncEnabled)
+        SettingToggleRow(
+            label = "Enable WebDAV Sync",
+            value = state.syncSettings.syncEnabled,
+            onToggle = { onUpdate(state.syncSettings.copy(syncEnabled = it), true) }
+        )
 
         if (state.syncSettings.syncEnabled) {
-            SyncControlToggles(
-                syncSettings = state.syncSettings,
-                onAutoSyncChanged = callbacks.behavior.onAutoSyncChanged,
-                onSyncIntervalChanged = callbacks.behavior.onSyncIntervalChanged,
-                onSyncOnCloseChanged = callbacks.behavior.onSyncOnCloseChanged,
-                onWifiOnlyChanged = callbacks.behavior.onWifiOnlyChanged
+            SettingToggleRow(
+                label = "Auto-sync (every ${state.syncSettings.syncInterval}m)",
+                value = state.syncSettings.autoSync,
+                onToggle = { onUpdate(state.syncSettings.copy(autoSync = it), true) }
+            )
+            SyncIntervalSelector(
+                intervalMinutes = state.syncSettings.syncInterval,
+                onIntervalChanged = { onUpdate(state.syncSettings.copy(syncInterval = it), true) }
+            )
+            SettingToggleRow(
+                label = "Sync when closing notes",
+                value = state.syncSettings.syncOnNoteClose,
+                onToggle = { onUpdate(state.syncSettings.copy(syncOnNoteClose = it), true) }
+            )
+            SettingToggleRow(
+                label = "Use WiFi only",
+                value = state.syncSettings.wifiOnly,
+                onToggle = { onUpdate(state.syncSettings.copy(wifiOnly = it), true) }
             )
         }
     }
@@ -253,7 +250,6 @@ private fun SyncActionsSection(
     EInkSection(title = "Manual Actions", icon = Icons.Default.Sync) {
         ManualSyncButton(
             syncSettings = state.syncSettings,
-            serverUrl = state.serverUrl,
             syncState = state.syncState,
             onManualSync = callbacks.onManualSync
         )
@@ -407,26 +403,22 @@ fun ConnectionStatusText(result: AppResult<ConnectionTestResult, DomainError>) {
 
 @Composable
 fun SyncCredentialFields(
-    serverUrl: String,
-    username: String,
-    password: String,
+    settings: SyncSettings,
     isPasswordSaved: Boolean,
     passwordVisible: Boolean,
-    onServerUrlChange: (String) -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
+    onUpdate: (SyncSettings, Boolean) -> Unit,
     onTogglePasswordVisibility: () -> Unit
 ) {
     EInkTextField(
         label = "Server URL",
-        value = serverUrl,
-        onValueChange = onServerUrlChange,
+        value = settings.serverUrl,
+        onValueChange = { onUpdate(settings.copy(serverUrl = it), false) },
         placeholder = "https://example.com/dav/"
     )
     
-    if (serverUrl.isNotEmpty()) {
+    if (settings.serverUrl.isNotEmpty()) {
         Text(
-            "Path: ${serverUrl.trimEnd('/')}/notable/",
+            "Path: ${settings.serverUrl.trimEnd('/')}/notable/",
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
             modifier = Modifier.padding(top = 2.dp, start = 4.dp)
@@ -437,8 +429,8 @@ fun SyncCredentialFields(
 
     EInkTextField(
         label = "Username",
-        value = username,
-        onValueChange = onUsernameChange
+        value = settings.username,
+        onValueChange = { onUpdate(settings.copy(username = it), false) }
     )
 
     Spacer(modifier = Modifier.height(16.dp))
@@ -458,7 +450,7 @@ fun SyncCredentialFields(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
-                if (password.isEmpty() && isPasswordSaved) {
+                if (settings.password.isEmpty() && isPasswordSaved) {
                     Text(
                         "(unchanged)", 
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f), 
@@ -466,8 +458,8 @@ fun SyncCredentialFields(
                     )
                 }
                 BasicTextField(
-                    value = password,
-                    onValueChange = onPasswordChange,
+                    value = settings.password,
+                    onValueChange = { onUpdate(settings.copy(password = it), false) },
                     textStyle = TextStyle(
                         fontFamily = FontFamily.Monospace, 
                         fontSize = 14.sp,
@@ -541,46 +533,6 @@ fun eInkButtonColors(isSecondary: Boolean = false) = ButtonDefaults.buttonColors
 )
 
 @Composable
-fun SyncEnableToggle(
-    syncSettings: SyncSettings, onToggleSyncEnabled: (Boolean) -> Unit
-) {
-    SettingToggleRow(
-        label = "Enable WebDAV Sync",
-        value = syncSettings.syncEnabled,
-        onToggle = onToggleSyncEnabled
-    )
-}
-
-@Composable
-fun SyncControlToggles(
-    syncSettings: SyncSettings,
-    onAutoSyncChanged: (Boolean) -> Unit,
-    onSyncIntervalChanged: (Int) -> Unit,
-    onSyncOnCloseChanged: (Boolean) -> Unit,
-    onWifiOnlyChanged: (Boolean) -> Unit
-) {
-    SettingToggleRow(
-        label = "Auto-sync (every ${syncSettings.syncInterval}m)",
-        value = syncSettings.autoSync,
-        onToggle = onAutoSyncChanged
-    )
-    SyncIntervalSelector(
-        intervalMinutes = syncSettings.syncInterval,
-        onIntervalChanged = onSyncIntervalChanged
-    )
-    SettingToggleRow(
-        label = "Sync when closing notes",
-        value = syncSettings.syncOnNoteClose,
-        onToggle = onSyncOnCloseChanged
-    )
-    SettingToggleRow(
-        label = "Use WiFi only",
-        value = syncSettings.wifiOnly,
-        onToggle = onWifiOnlyChanged
-    )
-}
-
-@Composable
 private fun SyncIntervalSelector(
     intervalMinutes: Int,
     onIntervalChanged: (Int) -> Unit,
@@ -628,7 +580,7 @@ private fun SyncIntervalSelector(
 
 @Composable
 fun ManualSyncButton(
-    syncSettings: SyncSettings, serverUrl: String, syncState: SyncState, onManualSync: () -> Unit
+    syncSettings: SyncSettings, syncState: SyncState, onManualSync: () -> Unit
 ) {
     val label by remember(syncState) {
         derivedStateOf {
@@ -647,7 +599,7 @@ fun ManualSyncButton(
         }
         Button(
             onClick = onManualSync,
-            enabled = syncState is SyncState.Idle && syncSettings.syncEnabled && serverUrl.isNotEmpty(),
+            enabled = syncState is SyncState.Idle && syncSettings.syncEnabled && syncSettings.serverUrl.isNotEmpty(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
@@ -910,7 +862,6 @@ private fun EInkActionButton(
     showBackground = true,
     uiMode = Configuration.UI_MODE_NIGHT_YES,
     name = "Dark Mode",
-//    heightDp = 500
 )
 @Preview(
     showBackground = true,
@@ -924,14 +875,11 @@ fun SyncSettingsContentPreview() {
             Box(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 SyncSettings(
                     state = SyncSettingsUiState(
-                        serverUrl = "https://webdav.example.com",
-                        username = "demo",
-                        password = "secret",
-                        savedUsername = "demo",
-                        savedPassword = "secret",
                         syncSettings = SyncSettings(
                             syncEnabled = true,
-                            serverUrl = "https://webdav.example.com"
+                            serverUrl = "https://webdav.example.com",
+                            username = "demo",
+                            password = "secret"
                         )
                     ), callbacks = SyncSettingsCallbacks()
                 )
@@ -948,11 +896,11 @@ fun SyncSettingsConfiguredPreview() {
         Surface(color = MaterialTheme.colors.background) {
             SyncSettings(
                 state = SyncSettingsUiState(
-                    serverUrl = "https://webdav.example.com/dav/",
-                    username = "demo_user",
                     isPasswordSaved = true,
                     syncSettings = SyncSettings(
                         syncEnabled = true,
+                        serverUrl = "https://webdav.example.com/dav/",
+                        username = "demo_user",
                         lastSyncTime = "2024-03-20 14:30:05"
                     )
                 ),
@@ -969,8 +917,6 @@ fun SyncSettingsSyncingPreview() {
         Surface(color = MaterialTheme.colors.background) {
             SyncSettings(
                 state = SyncSettingsUiState(
-                    serverUrl = "https://webdav.example.com/dav/",
-                    username = "demo_user",
                     isPasswordSaved = true,
                     syncState = SyncState.Syncing(
                         SyncStep.SYNCING_NOTEBOOKS,
@@ -979,6 +925,8 @@ fun SyncSettingsSyncingPreview() {
                     ),
                     syncSettings = SyncSettings(
                         syncEnabled = true,
+                        serverUrl = "https://webdav.example.com/dav/",
+                        username = "demo_user",
                         lastSyncTime = "2024-03-20 14:30:05"
                     )
                 ),

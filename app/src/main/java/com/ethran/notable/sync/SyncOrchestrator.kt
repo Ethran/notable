@@ -57,7 +57,7 @@ class SyncOrchestrator @Inject constructor(
                 return@withContext AppResult.Error(error)
             }
 
-            if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+            if (settings.username.isBlank() || settings.password.isBlank()) {
                 val error = DomainError.SyncAuthError
                 reporter.finishError(error, false)
                 return@withContext AppResult.Error(error)
@@ -72,7 +72,7 @@ class SyncOrchestrator @Inject constructor(
             val client = webDavClientFactory.create(
                 settings.serverUrl,
                 settings.username,
-                settings.encryptedPassword
+                settings.password
             )
 
             syncPreflightService.checkClockSkew(client).onFailure { error ->
@@ -177,13 +177,13 @@ class SyncOrchestrator @Inject constructor(
             if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
 
             syncPreflightService.checkWifiConstraint().onSuccess {
-                if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+                if (settings.username.isBlank() || settings.password.isBlank()) {
                     return@withContext AppResult.Error(DomainError.SyncAuthError)
                 }
                 val client = webDavClientFactory.create(
                     settings.serverUrl,
                     settings.username,
-                    settings.encryptedPassword
+                    settings.password
                 )
                 return@withContext notebookReconciliationService.syncNotebook(notebookId, client)
             }
@@ -207,14 +207,14 @@ class SyncOrchestrator @Inject constructor(
             if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
 
             return@withContext syncPreflightService.checkWifiConstraint().flatMap {
-                if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+                if (settings.username.isBlank() || settings.password.isBlank()) {
                     return@flatMap AppResult.Error(DomainError.SyncAuthError)
                 }
                 val client =
                     webDavClientFactory.create(
                         settings.serverUrl,
                         settings.username,
-                        settings.encryptedPassword
+                        settings.password
                     )
 
                 val path = SyncPaths.notebookDir(notebookId)

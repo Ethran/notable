@@ -86,7 +86,6 @@ fun SettingsView(
 ) {
     val context = LocalContext.current
     val settings = viewModel.settings
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.checkUpdate(context, force = false)
@@ -111,20 +110,9 @@ fun SettingsView(
         availableGestures = viewModel.availableGestures,
         syncUiState = viewModel.syncUiState,
         syncCallbacks = SyncSettingsCallbacks(
-            credentials = SyncCredentialsCallbacks(
-                onServerUrlChange = viewModel::onServerUrlChanged,
-                onUsernameChange = viewModel::onUsernameChanged,
-                onPasswordChange = viewModel::onPasswordChanged,
-                onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
-                onSaveCredentials = viewModel::onSaveCredentials,
-            ),
-            behavior = SyncBehaviorCallbacks(
-                onToggleSyncEnabled = viewModel::onSyncEnabledChanged,
-                onAutoSyncChanged = viewModel::onAutoSyncChanged,
-                onSyncIntervalChanged = viewModel::onSyncIntervalChanged,
-                onSyncOnCloseChanged = viewModel::onSyncOnNoteCloseChanged,
-                onWifiOnlyChanged = viewModel::onWifiOnlyChanged,
-            ),
+            onUpdateSyncSettings = viewModel::updateSyncSettings,
+            onTogglePasswordVisibility = viewModel::onTogglePasswordVisibility,
+            onSaveCredentials = viewModel::onSaveCredentials,
             onTestConnection = viewModel::onTestConnection,
             onManualSync = viewModel::onManualSync,
             onClearSyncLogs = viewModel::onClearSyncLogs,

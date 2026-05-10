@@ -9,7 +9,7 @@ data class SyncSettings(
     val syncEnabled: Boolean = false,
     val serverUrl: String = "",
     val username: String = "",
-    val encryptedPassword: String = "", // Base64 encrypted in KV, decrypted in memory
+    val password: String = "", // KvProxy handles the encryption
     val autoSync: Boolean = true,
     val syncInterval: Int = 15, // minutes
     val lastSyncTime: String? = null,

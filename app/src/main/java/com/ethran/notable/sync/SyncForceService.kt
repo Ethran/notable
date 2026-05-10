@@ -25,14 +25,14 @@ class SyncForceService @Inject constructor(
     suspend fun forceUploadAll(): AppResult<Unit, DomainError> {
         logger.i(TAG, "FORCE UPLOAD: Replacing server with local data")
         val settings = kvProxy.getSyncSettings()
-        if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+        if (settings.username.isBlank() || settings.password.isBlank()) {
             return AppResult.Error(DomainError.SyncAuthError)
         }
 
         val webdavClient = webDavClientFactory.create(
             settings.serverUrl,
             settings.username,
-            settings.encryptedPassword
+            settings.password
         )
 
         var persistentError: DomainError? = null
@@ -92,14 +92,14 @@ class SyncForceService @Inject constructor(
     suspend fun forceDownloadAll(): AppResult<Unit, DomainError> {
         logger.i(TAG, "FORCE DOWNLOAD: Replacing local with server data")
         val settings = kvProxy.getSyncSettings()
-        if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+        if (settings.username.isBlank() || settings.password.isBlank()) {
             return AppResult.Error(DomainError.SyncAuthError)
         }
 
         val webdavClient = webDavClientFactory.create(
             settings.serverUrl,
             settings.username,
-            settings.encryptedPassword
+            settings.password
         )
 
         var persistentError: DomainError? = null

@@ -137,19 +137,19 @@ class KvProxy @Inject constructor(
             ?.let { Json.decodeFromString(SyncSettings.serializer(), it.value) }
             ?: return@withContext SyncSettings()
 
-        if (settings.encryptedPassword.isBlank()) return@withContext settings
+        if (settings.password.isBlank()) return@withContext settings
 
-        when (val decrypted = cryptoHelper.decrypt(settings.encryptedPassword)) {
-            is AppResult.Success -> settings.copy(encryptedPassword = decrypted.data)
+        when (val decrypted = cryptoHelper.decrypt(settings.password)) {
+            is AppResult.Success -> settings.copy(password = decrypted.data)
             is AppResult.Error -> {
                 log.w("Failed to decrypt sync password: ${decrypted.error.userMessage}")
-                settings.copy(encryptedPassword = "")
+                settings.copy(password = "")
             }
         }
     }
 
     suspend fun setSyncSettings(value: SyncSettings) {
-        val encryptedPassword = when (val encrypted = cryptoHelper.encrypt(value.encryptedPassword)) {
+        val encryptedPassword = when (val encrypted = cryptoHelper.encrypt(value.password)) {
             is AppResult.Success -> encrypted.data
             is AppResult.Error -> {
                 throw IllegalStateException("Unable to encrypt sync password: ${encrypted.error.userMessage}")
@@ -158,7 +158,7 @@ class KvProxy @Inject constructor(
 
         setKv(
             SYNC_SETTINGS_KEY,
-            value.copy(encryptedPassword = encryptedPassword),
+            value.copy(password = encryptedPassword),
             SyncSettings.serializer()
         )
     }
