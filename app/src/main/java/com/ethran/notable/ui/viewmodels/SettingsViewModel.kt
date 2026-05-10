@@ -30,9 +30,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import javax.inject.Inject
 
 data class GestureRowModel(
@@ -258,8 +255,8 @@ class SettingsViewModel @Inject constructor(
         ) {
             val result = syncOrchestrator.syncAllNotebooks()
             if (result is AppResult.Success) {
-                val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                updateSyncSettings(syncUiState.syncSettings.copy(lastSyncTime = timestamp), saveToDb = true)
+                // Save unix timestamp (ms since epoch). UI layer will format it for display.
+                updateSyncSettings(syncUiState.syncSettings.copy(lastSyncTime = System.currentTimeMillis()), saveToDb = true)
             }
             result
         }

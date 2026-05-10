@@ -278,8 +278,16 @@ private fun SyncActionsSection(
 }
 
 @Composable
-private fun LastSyncInfo(lastSyncTime: String?) {
-    val label = lastSyncTime?.takeIf { it.isNotBlank() } ?: "Never"
+private fun LastSyncInfo(lastSyncTime: Long?) {
+    val label = lastSyncTime?.let {
+        try {
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            fmt.format(java.util.Date(it))
+        } catch (e: Exception) {
+            null
+        }
+    } ?: "Never"
+
     Text(
         text = "Last sync: $label",
         style = MaterialTheme.typography.caption,
@@ -901,7 +909,7 @@ fun SyncSettingsConfiguredPreview() {
                         syncEnabled = true,
                         serverUrl = "https://webdav.example.com/dav/",
                         username = "demo_user",
-                        lastSyncTime = "2024-03-20 14:30:05"
+                        lastSyncTime = java.util.Calendar.getInstance().apply { set(2024, 2, 20, 14, 30, 5); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
                     )
                 ),
                 callbacks = SyncSettingsCallbacks()
@@ -927,7 +935,7 @@ fun SyncSettingsSyncingPreview() {
                         syncEnabled = true,
                         serverUrl = "https://webdav.example.com/dav/",
                         username = "demo_user",
-                        lastSyncTime = "2024-03-20 14:30:05"
+                        lastSyncTime = java.util.Calendar.getInstance().apply { set(2024, 2, 20, 14, 30, 5); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
                     )
                 ),
                 callbacks = SyncSettingsCallbacks()

@@ -12,7 +12,7 @@ data class SyncSettings(
     val password: String = "", // KvProxy handles the encryption
     val autoSync: Boolean = true,
     val syncInterval: Int = 15, // minutes
-    val lastSyncTime: String? = null,
+    val lastSyncTime: Long? = null,
     val syncOnNoteClose: Boolean = true,
     val wifiOnly: Boolean = false,
     val syncedNotebookIds: Set<String> = emptySet()
