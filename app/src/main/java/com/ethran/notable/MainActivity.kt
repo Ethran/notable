@@ -83,6 +83,9 @@ class MainActivity : ComponentActivity() {
     lateinit var pageDataManager: dagger.Lazy<PageDataManager>
 
     @Inject
+    lateinit var syncScheduler: dagger.Lazy<SyncScheduler>
+
+    @Inject
     lateinit var snackDispatcher: SnackDispatcher
 
     @Inject
@@ -151,7 +154,7 @@ class MainActivity : ComponentActivity() {
                 val settings = kvProxy.get().getSyncSettings()
                 if (settings.syncEnabled) {
                     Log.i(TAG, "Triggering one-time sync on app startup via WorkManager")
-                    SyncScheduler.triggerImmediateSync(applicationContext)
+                    syncScheduler.get().triggerImmediateSync()
                 }
             } catch (e: Exception) {
                 Log.i(TAG, "Initial sync setup failed: ${e.message}")
@@ -163,7 +166,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val settings = kvProxy.get().getSyncSettings()
-                SyncScheduler.reconcilePeriodicSync(applicationContext, settings)
+                syncScheduler.get().reconcilePeriodicSync(settings)
             } catch (e: Exception) {
                 Log.i(TAG, "Periodic sync reconcile failed: ${e.message}")
             }
@@ -196,6 +199,7 @@ class MainActivity : ComponentActivity() {
             CanvasEventBus.onFocusChange.emit(hasFocus)
         }
     }
+
     override fun onResume() {
         super.onResume()
         enableFullScreen()

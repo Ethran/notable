@@ -22,6 +22,7 @@ import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.fold
 import com.ethran.notable.utils.isLatestVersion
 import com.ethran.notable.data.events.AppEventBus
+import com.ethran.notable.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +63,7 @@ class LibraryViewModel @Inject constructor(
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     val pageDataManager: PageDataManager,
     private val snackDispatcher: SnackDispatcher,
+    val syncScheduler: SyncScheduler,
     @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
 

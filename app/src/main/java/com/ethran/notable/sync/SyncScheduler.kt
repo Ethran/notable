@@ -9,51 +9,48 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Helper to schedule/unschedule background sync with WorkManager.
  */
-object SyncScheduler {
+@Singleton
+class SyncScheduler @Inject constructor(
+    @ApplicationContext context: Context
+) {
+    private val workManager = WorkManager.getInstance(context)
 
     // WorkManager enforces a minimum interval of 15 minutes for periodic work.
-    private const val MIN_PERIODIC_SYNC_INTERVAL_MINUTES = 15L
+    private val minPeriodicSyncIntervalMinutes = 15L
 
     /**
      * Reconcile periodic sync schedule against persisted sync settings.
      */
-    fun reconcilePeriodicSync(
-        context: Context,
-        settings: SyncSettings
-    ) {
+    fun reconcilePeriodicSync(settings: SyncSettings) {
         if (settings.syncEnabled && settings.autoSync) {
             enablePeriodicSync(
-                context = context,
                 intervalMinutes = settings.syncInterval.toLong(),
                 wifiOnly = settings.wifiOnly
             )
             return
         }
-        disablePeriodicSync(context)
+        disablePeriodicSync()
     }
 
-    /**
-     * Enable periodic background sync.
-     * @param context Android context
-     * @param intervalMinutes Sync interval in minutes
-     * @param wifiOnly If true, only run on unmetered (WiFi) connections
-     */
-    fun enablePeriodicSync(
-        context: Context,
-        intervalMinutes: Long = MIN_PERIODIC_SYNC_INTERVAL_MINUTES,
+    private fun enablePeriodicSync(
+        intervalMinutes: Long = minPeriodicSyncIntervalMinutes,
         wifiOnly: Boolean = false
     ) {
-        val safeIntervalMinutes = intervalMinutes.coerceAtLeast(MIN_PERIODIC_SYNC_INTERVAL_MINUTES)
+        val safeIntervalMinutes = intervalMinutes.coerceAtLeast(minPeriodicSyncIntervalMinutes)
 
         // UNMETERED covers WiFi and ethernet but excludes metered mobile connections.
         // This matches the intent of the "WiFi only" setting (avoid burning mobile data).
         val networkType = if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED
+
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(networkType)
             .build()
@@ -71,56 +68,50 @@ object SyncScheduler {
             .setConstraints(constraints)
             .build()
 
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        workManager.enqueueUniquePeriodicWork(
             SyncWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,  // Update constraints if already scheduled
+            ExistingPeriodicWorkPolicy.UPDATE,
             syncRequest
         )
     }
 
-    /**
-     * Disable periodic background sync.
-     * @param context Android context
-     */
-    fun disablePeriodicSync(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(SyncWorker.WORK_NAME)
+    private fun disablePeriodicSync() {
+        workManager.cancelUniqueWork(SyncWorker.WORK_NAME)
     }
 
-    /**
-     * Trigger an immediate sync (one-time work).
-     * @param context Android context
-     * @param syncType The specific sync action ("syncAll", "forceUpload", "forceDownload", etc.)
-     * @param data Optional extra data (like notebookId)
-     */
     fun triggerImmediateSync(
-        context: Context,
         syncType: String = "syncAll",
         data: Map<String, String> = emptyMap()
     ): UUID {
         val builder = Data.Builder()
             .putString(INPUT_KEY_SYNC_TYPE, syncType)
             .putString(INPUT_KEY_SYNC_TRIGGER, SYNC_TRIGGER_IMMEDIATE)
-        for ((k, v) in data) {
-            builder.putString(k, v)
-        }
+
+        data.forEach { (k, v) -> builder.putString(k, v) }
+
         val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(builder.build())
             .build()
+
         val workSuffix = data.entries
             .sortedBy { it.key }
             .joinToString(separator = "-") { "${it.key}:${it.value}" }
             .ifEmpty { "default" }
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            /* uniqueWorkName = */ "${SyncWorker.WORK_NAME}-immediate-$syncType-$workSuffix",
-            /* existingWorkPolicy = */ ExistingWorkPolicy.REPLACE,
-            /* work = */ syncRequest
+
+        workManager.enqueueUniqueWork(
+            "${SyncWorker.WORK_NAME}-immediate-$syncType-$workSuffix",
+            ExistingWorkPolicy.REPLACE,
+            syncRequest
         )
+
         return syncRequest.id
     }
 
-    private const val INPUT_KEY_SYNC_TYPE = "sync_type"
-    private const val INPUT_KEY_SYNC_TRIGGER = "sync_trigger"
-    private const val DEFAULT_SYNC_TYPE = "syncAll"
-    private const val SYNC_TRIGGER_PERIODIC = "periodic"
-    private const val SYNC_TRIGGER_IMMEDIATE = "immediate"
+    companion object {
+        private const val INPUT_KEY_SYNC_TYPE = "sync_type"
+        private const val INPUT_KEY_SYNC_TRIGGER = "sync_trigger"
+        private const val DEFAULT_SYNC_TYPE = "syncAll"
+        private const val SYNC_TRIGGER_PERIODIC = "periodic"
+        private const val SYNC_TRIGGER_IMMEDIATE = "immediate"
+    }
 }

@@ -26,7 +26,6 @@ import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.isLatestVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,10 +63,10 @@ data class SyncSettingsUiState(
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    @param:ApplicationContext private val appContext: Context,
     private val kvProxy: KvProxy,
     private val syncOrchestrator: SyncOrchestrator,
     private val syncProgressReporter: SyncProgressReporter,
+    private val syncScheduler: SyncScheduler,
     private val snackDispatcher: SnackDispatcher,
     private val appEventBus: AppEventBus,
     @param:ApplicationScope private val appScope: CoroutineScope
@@ -158,7 +157,7 @@ class SettingsViewModel @Inject constructor(
                             oldSettings.wifiOnly != newSettings.wifiOnly
 
                     if (scheduleChanged) {
-                        SyncScheduler.reconcilePeriodicSync(appContext, newSettings)
+                        syncScheduler.reconcilePeriodicSync( newSettings)
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
