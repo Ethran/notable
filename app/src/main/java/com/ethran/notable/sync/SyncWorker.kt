@@ -10,7 +10,6 @@ import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
-import kotlinx.coroutines.flow.first
 
 /**
  * Background worker for periodic WebDAV synchronization.
@@ -34,8 +33,8 @@ class SyncWorker(
             applicationContext, SyncOrchestratorEntryPoint::class.java
         )
 
-        val credentialManager = entryPoint.credentialManager()
-        val syncSettings = credentialManager.settings.first()
+        val kvProxy = entryPoint.kvProxy()
+        val syncSettings = kvProxy.getSyncSettings()
 
         // Check if sync is enabled
         if (!syncSettings.syncEnabled) {
@@ -50,7 +49,7 @@ class SyncWorker(
         }
 
         // Check if we have credentials
-        if (!credentialManager.hasCredentials()) {
+        if (syncSettings.username.isBlank() || syncSettings.encryptedPassword.isBlank()) {
             Log.w(TAG, "No credentials stored, skipping sync")
             return Result.success()
         }

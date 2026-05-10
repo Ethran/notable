@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -14,7 +13,6 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.sync.ConnectionTestResult
-import com.ethran.notable.sync.CredentialManager
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.sync.SyncProgressReporter
@@ -69,7 +67,6 @@ data class SyncSettingsUiState(
 class SettingsViewModel @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
     private val kvProxy: KvProxy,
-    private val credentialManager: CredentialManager,
     private val syncOrchestrator: SyncOrchestrator,
     private val syncProgressReporter: SyncProgressReporter,
     private val snackDispatcher: SnackDispatcher,
@@ -102,24 +99,17 @@ class SettingsViewModel @Inject constructor(
             }
         }
 
-        // Observe credential manager settings (single source of truth)
-        viewModelScope.launch {
-            credentialManager.settings.collect { settings ->
-                syncUiState = syncUiState.copy(
-                    syncSettings = settings,
-                    serverUrl = settings.serverUrl,
-                    username = settings.username,
-                    savedUsername = settings.username
-                )
-            }
-        }
-
-        // Load initial password state (don't load actual password into memory)
+        // Load persisted sync settings from KvProxy.
         viewModelScope.launch(Dispatchers.IO) {
-            val hasPassword = credentialManager.getPassword() != null
+            val settings = kvProxy.getSyncSettings()
             withContext(Dispatchers.Main) {
                 syncUiState = syncUiState.copy(
-                    isPasswordSaved = hasPassword, password = "", savedPassword = ""
+                    syncSettings = settings.copy(encryptedPassword = ""),
+                    serverUrl = settings.serverUrl,
+                    username = settings.username,
+                    savedUsername = settings.username,
+                    savedPassword = settings.encryptedPassword,
+                    isPasswordSaved = settings.encryptedPassword.isNotEmpty()
                 )
             }
         }
@@ -140,7 +130,7 @@ class SettingsViewModel @Inject constructor(
     fun updateSettings(newSettings: AppSettings) {
         GlobalAppSettings.update(newSettings)
         viewModelScope.launch(Dispatchers.IO) {
-            kvProxy.setKv(APP_SETTINGS_KEY, newSettings, AppSettings.serializer())
+            kvProxy.setAppSettings(newSettings)
         }
     }
 
@@ -148,9 +138,27 @@ class SettingsViewModel @Inject constructor(
     // Sync Settings
     // ----------------- //
 
+    private suspend fun persistSyncSettings(update: (SyncSettings) -> SyncSettings) {
+        val currentSettings = syncUiState.syncSettings.copy(encryptedPassword = syncUiState.savedPassword)
+        val updatedSettings = update(currentSettings)
+
+        kvProxy.setSyncSettings(updatedSettings)
+
+        withContext(Dispatchers.Main) {
+            syncUiState = syncUiState.copy(
+                syncSettings = updatedSettings.copy(encryptedPassword = ""),
+                serverUrl = updatedSettings.serverUrl,
+                username = updatedSettings.username,
+                savedUsername = updatedSettings.username,
+                savedPassword = updatedSettings.encryptedPassword,
+                isPasswordSaved = updatedSettings.encryptedPassword.isNotEmpty()
+            )
+        }
+    }
+
     fun onServerUrlChanged(serverUrl: String) {
-        viewModelScope.launch {
-            credentialManager.updateSettings { it.copy(serverUrl = serverUrl) }
+        viewModelScope.launch(Dispatchers.IO) {
+            persistSyncSettings { it.copy(serverUrl = serverUrl) }
         }
     }
 
@@ -169,15 +177,20 @@ class SettingsViewModel @Inject constructor(
     fun onSaveCredentials() {
         val username = syncUiState.username
         val password = syncUiState.password
+        val passwordToPersist = when {
+            password.isNotEmpty() -> password
+            syncUiState.isPasswordSaved -> syncUiState.savedPassword
+            else -> return
+        }
 
         // If password is empty but saved, we only update username if it changed
         if (password.isEmpty() && syncUiState.isPasswordSaved) {
             if (username != syncUiState.savedUsername) {
                 viewModelScope.launch(Dispatchers.IO) {
-                    val currentPassword = credentialManager.getPassword() ?: ""
-                    credentialManager.saveCredentials(username, currentPassword)
+                    persistSyncSettings {
+                        it.copy(username = username, encryptedPassword = passwordToPersist)
+                    }
                     withContext(Dispatchers.Main) {
-                        syncUiState = syncUiState.copy(savedUsername = username)
                         SyncLogger.i("Settings", "Username updated to: $username")
                         snackDispatcher.showOrUpdateSnack(
                             SnackConf(text = "Credentials updated", duration = 3000)
@@ -188,23 +201,18 @@ class SettingsViewModel @Inject constructor(
             return
         }
 
-        if (username.isBlank() || password.isBlank()) return
+        if (username.isBlank() || passwordToPersist.isBlank()) return
 
         viewModelScope.launch(Dispatchers.IO) {
-            credentialManager.saveCredentials(username, password)
+            persistSyncSettings {
+                it.copy(username = username, encryptedPassword = passwordToPersist)
+            }
             withContext(Dispatchers.Main) {
-                syncUiState = syncUiState.copy(
-                    savedUsername = username,
-                    savedPassword = password,
-                    isPasswordSaved = true,
-                    password = "" // Clear after saving for security
-                )
+                syncUiState = syncUiState.copy(password = "") // Clear after saving for security
 
                 SyncLogger.i("Settings", "Credentials saved for user: $username")
                 snackDispatcher.showOrUpdateSnack(
-                    SnackConf(
-                        text = "Credentials saved", duration = 3000
-                    )
+                    SnackConf(text = "Credentials saved", duration = 3000)
                 )
             }
         }
@@ -220,7 +228,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             // If password field is empty, use the saved one
             val passwordToUse = password.ifEmpty {
-                credentialManager.getPassword() ?: ""
+                syncUiState.savedPassword
             }
 
             val client = WebDAVClient(serverUrl, username, passwordToUse)
@@ -235,22 +243,22 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onSyncEnabledChanged(isChecked: Boolean) {
-        viewModelScope.launch {
-            credentialManager.updateSettings { it.copy(syncEnabled = isChecked) }
+        viewModelScope.launch(Dispatchers.IO) {
+            persistSyncSettings { it.copy(syncEnabled = isChecked) }
             updatePeriodicSyncSchedule()
         }
     }
 
     fun onAutoSyncChanged(isChecked: Boolean) {
-        viewModelScope.launch {
-            credentialManager.updateSettings { it.copy(autoSync = isChecked) }
+        viewModelScope.launch(Dispatchers.IO) {
+            persistSyncSettings { it.copy(autoSync = isChecked) }
             updatePeriodicSyncSchedule()
         }
     }
 
     fun onSyncIntervalChanged(minutes: Int) {
-        viewModelScope.launch {
-            credentialManager.updateSettings {
+        viewModelScope.launch(Dispatchers.IO) {
+            persistSyncSettings {
                 it.copy(syncInterval = minutes.coerceAtLeast(15))
             }
             updatePeriodicSyncSchedule()
@@ -258,14 +266,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onSyncOnNoteCloseChanged(isChecked: Boolean) {
-        viewModelScope.launch {
-            credentialManager.updateSettings { it.copy(syncOnNoteClose = isChecked) }
+        viewModelScope.launch(Dispatchers.IO) {
+            persistSyncSettings { it.copy(syncOnNoteClose = isChecked) }
         }
     }
 
     fun onWifiOnlyChanged(isChecked: Boolean) {
-        viewModelScope.launch {
-            credentialManager.updateSettings { it.copy(wifiOnly = isChecked) }
+        viewModelScope.launch(Dispatchers.IO) {
+            persistSyncSettings { it.copy(wifiOnly = isChecked) }
             updatePeriodicSyncSchedule()
         }
     }
@@ -276,9 +284,10 @@ class SettingsViewModel @Inject constructor(
         ) {
             val result = syncOrchestrator.syncAllNotebooks()
             if (result is AppResult.Success) {
+                // TODO: this seems a little bit out of place
                 val timestamp =
                     SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                credentialManager.updateSettings { it.copy(lastSyncTime = timestamp) }
+                persistSyncSettings { it.copy(lastSyncTime = timestamp) }
             }
             result
         }

@@ -34,7 +34,6 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportEngine
-import com.ethran.notable.sync.CredentialManager
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.AppEventUiBridge
 import com.ethran.notable.ui.LocalSnackContext
@@ -48,7 +47,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -83,9 +81,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var pageDataManager: dagger.Lazy<PageDataManager>
-
-    @Inject
-    lateinit var credentialManager: dagger.Lazy<CredentialManager>
 
     @Inject
     lateinit var snackDispatcher: SnackDispatcher
@@ -153,7 +148,7 @@ class MainActivity : ComponentActivity() {
     private fun triggerInitialSync() {
         lifecycleScope.launch {
             try {
-                val settings = credentialManager.get().settings.first()
+                val settings = kvProxy.get().getSyncSettings()
                 if (settings.syncEnabled) {
                     Log.i(TAG, "Triggering one-time sync on app startup via WorkManager")
                     SyncScheduler.triggerImmediateSync(applicationContext)
@@ -167,7 +162,7 @@ class MainActivity : ComponentActivity() {
     private fun restorePeriodicSyncSchedule() {
         lifecycleScope.launch {
             try {
-                val settings = credentialManager.get().settings.first()
+                val settings = kvProxy.get().getSyncSettings()
                 SyncScheduler.reconcilePeriodicSync(applicationContext, settings)
             } catch (e: Exception) {
                 Log.i(TAG, "Periodic sync reconcile failed: ${e.message}")

@@ -1,20 +1,20 @@
 package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.sync.serializers.FolderSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onSuccess
 import com.ethran.notable.utils.plus
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class SyncForceService @Inject constructor(
     private val appRepository: AppRepository,
-    private val credentialManager: CredentialManager,
+    private val kvProxy: KvProxy,
     private val syncPreflightService: SyncPreflightService,
     private val notebookSyncService: NotebookSyncService,
     private val webDavClientFactory: WebDavClientFactoryPort
@@ -24,14 +24,15 @@ class SyncForceService @Inject constructor(
 
     suspend fun forceUploadAll(): AppResult<Unit, DomainError> {
         logger.i(TAG, "FORCE UPLOAD: Replacing server with local data")
-        val settings = credentialManager.settings.first()
-        val credentials = credentialManager.getCredentials()
-            ?: return AppResult.Error(DomainError.SyncAuthError)
+        val settings = kvProxy.getSyncSettings()
+        if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+            return AppResult.Error(DomainError.SyncAuthError)
+        }
 
         val webdavClient = webDavClientFactory.create(
             settings.serverUrl,
-            credentials.first,
-            credentials.second
+            settings.username,
+            settings.encryptedPassword
         )
 
         var persistentError: DomainError? = null
@@ -90,14 +91,15 @@ class SyncForceService @Inject constructor(
 
     suspend fun forceDownloadAll(): AppResult<Unit, DomainError> {
         logger.i(TAG, "FORCE DOWNLOAD: Replacing local with server data")
-        val settings = credentialManager.settings.first()
-        val credentials = credentialManager.getCredentials()
-            ?: return AppResult.Error(DomainError.SyncAuthError)
+        val settings = kvProxy.getSyncSettings()
+        if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+            return AppResult.Error(DomainError.SyncAuthError)
+        }
 
         val webdavClient = webDavClientFactory.create(
             settings.serverUrl,
-            credentials.first,
-            credentials.second
+            settings.username,
+            settings.encryptedPassword
         )
 
         var persistentError: DomainError? = null

@@ -14,7 +14,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -23,7 +22,7 @@ import javax.inject.Singleton
 @Singleton
 class SyncOrchestrator @Inject constructor(
     private val appRepository: AppRepository,
-    private val credentialManager: CredentialManager,
+    private val kvProxy: KvProxy,
     private val syncPreflightService: SyncPreflightService,
     private val folderSyncService: FolderSyncService,
     private val notebookSyncService: NotebookSyncService,
@@ -50,8 +49,7 @@ class SyncOrchestrator @Inject constructor(
             logger.i(TAG, "Starting full sync...")
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
 
-            val settings = credentialManager.settings.first()
-            val credentials = credentialManager.getCredentials()
+            val settings = kvProxy.getSyncSettings()
 
             if (!settings.syncEnabled) {
                 val error = DomainError.SyncConfigError
@@ -59,7 +57,7 @@ class SyncOrchestrator @Inject constructor(
                 return@withContext AppResult.Error(error)
             }
 
-            if (credentials == null) {
+            if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
                 val error = DomainError.SyncAuthError
                 reporter.finishError(error, false)
                 return@withContext AppResult.Error(error)
@@ -73,8 +71,8 @@ class SyncOrchestrator @Inject constructor(
 
             val client = webDavClientFactory.create(
                 settings.serverUrl,
-                credentials.first,
-                credentials.second
+                settings.username,
+                settings.encryptedPassword
             )
 
             syncPreflightService.checkClockSkew(client).onFailure { error ->
@@ -175,18 +173,17 @@ class SyncOrchestrator @Inject constructor(
     suspend fun syncNotebook(notebookId: String): AppResult<Unit, DomainError> =
         withContext(ioDispatcher) {
             if (syncMutex.isLocked) return@withContext AppResult.Success(Unit)
-            val settings = credentialManager.settings.first()
+            val settings = kvProxy.getSyncSettings()
             if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
 
             syncPreflightService.checkWifiConstraint().onSuccess {
-                val credentials =
-                    credentialManager.getCredentials() ?: return@withContext AppResult.Error(
-                        DomainError.SyncAuthError
-                    )
+                if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+                    return@withContext AppResult.Error(DomainError.SyncAuthError)
+                }
                 val client = webDavClientFactory.create(
                     settings.serverUrl,
-                    credentials.first,
-                    credentials.second
+                    settings.username,
+                    settings.encryptedPassword
                 )
                 return@withContext notebookReconciliationService.syncNotebook(notebookId, client)
             }
@@ -194,7 +191,7 @@ class SyncOrchestrator @Inject constructor(
         }
 
     suspend fun syncFromPageId(pageId: String) {
-        val settings = credentialManager.settings.first()
+        val settings = kvProxy.getSyncSettings()
         if (!settings.syncEnabled || !settings.syncOnNoteClose) return
         try {
             val page = appRepository.pageRepository.getById(pageId) ?: return
@@ -206,15 +203,19 @@ class SyncOrchestrator @Inject constructor(
 
     suspend fun uploadDeletion(notebookId: String): AppResult<Unit, DomainError> =
         withContext(ioDispatcher) {
-            val settings = credentialManager.settings.first()
+            val settings = kvProxy.getSyncSettings()
             if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
 
             return@withContext syncPreflightService.checkWifiConstraint().flatMap {
-                val creds = credentialManager.getCredentials() ?: return@flatMap AppResult.Error(
-                    DomainError.SyncAuthError
-                )
+                if (settings.username.isBlank() || settings.encryptedPassword.isBlank()) {
+                    return@flatMap AppResult.Error(DomainError.SyncAuthError)
+                }
                 val client =
-                    webDavClientFactory.create(settings.serverUrl, creds.first, creds.second)
+                    webDavClientFactory.create(
+                        settings.serverUrl,
+                        settings.username,
+                        settings.encryptedPassword
+                    )
 
                 val path = SyncPaths.notebookDir(notebookId)
                 if (client.exists(path)) {
@@ -222,9 +223,15 @@ class SyncOrchestrator @Inject constructor(
                         logger.w(TAG, "Failed to delete remote notebook $notebookId: ${it.userMessage}")
                     }
                 }
-                client.putFile(SyncPaths.tombstone(notebookId), ByteArray(0)).flatMap {
-                    credentialManager.updateSettings { it.copy(syncedNotebookIds = it.syncedNotebookIds - notebookId) }
-                    AppResult.Success(Unit)
+                when (val tombstoneResult = client.putFile(SyncPaths.tombstone(notebookId), ByteArray(0))) {
+                    is AppResult.Success -> {
+                        kvProxy.setSyncSettings(
+                            settings.copy(syncedNotebookIds = settings.syncedNotebookIds - notebookId)
+                        )
+                        AppResult.Success(Unit)
+                    }
+
+                    is AppResult.Error -> tombstoneResult
                 }
             }
         }
@@ -249,7 +256,7 @@ class SyncOrchestrator @Inject constructor(
 
     private suspend fun updateSyncedNotebookIds() {
         val currentIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
-        credentialManager.updateSettings { it.copy(syncedNotebookIds = currentIds) }
+        kvProxy.setSyncSettings(kvProxy.getSyncSettings().copy(syncedNotebookIds = currentIds))
     }
 
     companion object {
@@ -272,7 +279,6 @@ class SyncOrchestrator @Inject constructor(
 interface SyncOrchestratorEntryPoint {
     fun syncOrchestrator(): SyncOrchestrator
     fun kvProxy(): KvProxy
-    fun credentialManager(): CredentialManager
     fun snackDispatcher(): com.ethran.notable.ui.SnackDispatcher
 }
 

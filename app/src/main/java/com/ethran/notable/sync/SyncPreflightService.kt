@@ -1,11 +1,11 @@
 package com.ethran.notable.sync
 
 import android.content.Context
+import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.onError
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -13,10 +13,10 @@ import kotlin.math.abs
 @Singleton
 class SyncPreflightService @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val credentialManager: CredentialManager
+    private val kvProxy: KvProxy
 ) {
     suspend fun checkWifiConstraint(): AppResult<Unit, DomainError> {
-        val settings = credentialManager.settings.first()
+        val settings = kvProxy.getSyncSettings()
         if (!settings.wifiOnly) return AppResult.Success(Unit)
 
         return if (ConnectivityChecker(context).isUnmeteredConnected()) {
