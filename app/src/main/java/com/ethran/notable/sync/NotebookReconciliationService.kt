@@ -2,14 +2,18 @@ package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.sync.serializers.NotebookSerializer
-import java.io.IOException
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.flatMap
+import com.ethran.notable.utils.map
+import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.plus
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class NotebookReconciliationService @Inject constructor(
     private val appRepository: AppRepository,
-    private val credentialManager: CredentialManager,
     private val syncPreflightService: SyncPreflightService,
     private val notebookSyncService: NotebookSyncService,
     private val reporter: SyncProgressReporter
@@ -17,47 +21,45 @@ class NotebookReconciliationService @Inject constructor(
     private val notebookSerializer = NotebookSerializer()
     private val logger = SyncLogger
 
-    suspend fun syncExistingNotebooks(webdavClient: WebDAVClient): Set<String> {
+    suspend fun syncExistingNotebooks(webdavClient: WebDAVClient): AppResult<Set<String>, DomainError> {
         val localNotebooks = appRepository.bookRepository.getAll()
         val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
         val total = localNotebooks.size
+        var persistentError: DomainError? = null
 
         localNotebooks.forEachIndexed { i, notebook ->
             reporter.beginItem(index = i + 1, total = total, name = notebook.title)
-            try {
-                syncNotebook(notebook.id, webdavClient)
-            } catch (e: Exception) {
-                logger.e(TAG, "Failed to sync ${notebook.title}: ${e.message}")
+            // Individual notebook sync failures are non-fatal for the whole process
+            syncNotebook(notebook.id, webdavClient).onError { error ->
+                persistentError = persistentError?.let { it + error } ?: error
             }
         }
         reporter.endItem()
 
-        return preDownloadNotebookIds
+        return if (persistentError != null) AppResult.Error(persistentError)
+        else AppResult.Success(preDownloadNotebookIds)
     }
 
-    suspend fun syncNotebook(notebookId: String, webdavClient: WebDAVClient): SyncResult {
-        return try {
-            logger.i(TAG, "Syncing notebook: $notebookId")
-            val settings = credentialManager.settings.value
+    suspend fun syncNotebook(
+        notebookId: String,
+        webdavClient: WebDAVClient
+    ): AppResult<Unit, DomainError> {
+        logger.i(TAG, "Syncing notebook: $notebookId")
 
-            if (!settings.syncEnabled) return SyncResult.Success
-            if (!syncPreflightService.checkWifiConstraint()) return SyncResult.Success
+        syncPreflightService.checkWifiConstraint().onError { return AppResult.Error(it) }
+        syncPreflightService.checkClockSkew(webdavClient).onError { return AppResult.Error(it) }
 
-            val skewMs = syncPreflightService.checkClockSkew(webdavClient)
-            if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
-                return SyncResult.Failure(SyncError.CLOCK_SKEW)
-            }
+        val localNotebook = appRepository.bookRepository.getById(notebookId)
+            ?: return AppResult.Error(DomainError.NotFound("Notebook $notebookId"))
 
-            val localNotebook = appRepository.bookRepository.getById(notebookId)
-                ?: return SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+        val remotePath = SyncPaths.manifestFile(notebookId)
+        val remoteExists = webdavClient.exists(remotePath)
 
-            val remotePath = SyncPaths.manifestFile(notebookId)
-            val remoteExists = webdavClient.exists(remotePath)
-
-            if (remoteExists) {
-                val remoteManifest = webdavClient.getFileWithMetadata(remotePath)
+        return if (remoteExists) {
+            webdavClient.getFileWithMetadata(remotePath).flatMap { remoteManifest ->
                 val remoteEtag = remoteManifest.etag
-                    ?: throw IOException("Missing ETag for $remotePath")
+                    ?: return@flatMap AppResult.Error(DomainError.SyncError("Missing ETag for $remotePath"))
+
                 val remoteManifestJson = remoteManifest.content.decodeToString()
                 val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
                 val diffMs = remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time }
@@ -81,32 +83,22 @@ class NotebookReconciliationService @Inject constructor(
                         manifestIfMatch = remoteEtag
                     )
 
-                    else -> logger.i(
-                        TAG,
-                        "= No changes (within tolerance), skipping ${localNotebook.title}"
-                    )
+                    else -> {
+                        logger.i(
+                            TAG,
+                            "= No changes (within tolerance), skipping ${localNotebook.title}"
+                        )
+                        AppResult.Success(Unit)
+                    }
                 }
-            } else {
-                notebookSyncService.uploadNotebook(localNotebook, webdavClient)
             }
-
-            SyncResult.Success
-        } catch (e: PreconditionFailedException) {
-            logger.w(TAG, "Conflict syncing notebook $notebookId: ${e.message}")
-            SyncResult.Failure(SyncError.CONFLICT)
-        } catch (e: IOException) {
-            logger.e(TAG, "Network error syncing notebook $notebookId: ${e.message}")
-            SyncResult.Failure(SyncError.NETWORK_ERROR)
-        } catch (e: Exception) {
-            logger.e(TAG, "Error syncing notebook $notebookId: ${e.message}")
-            SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+        } else {
+            notebookSyncService.uploadNotebook(localNotebook, webdavClient)
         }
     }
 
     companion object {
         private const val TAG = "NotebookReconciliationService"
         private const val TIMESTAMP_TOLERANCE_MS = 1000L
-        private const val CLOCK_SKEW_THRESHOLD_MS = 30_000L
     }
 }
-

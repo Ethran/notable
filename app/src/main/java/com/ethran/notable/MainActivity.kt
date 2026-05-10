@@ -48,6 +48,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -150,23 +151,27 @@ class MainActivity : ComponentActivity() {
 
 
     private fun triggerInitialSync() {
-        try {
-            val settings = credentialManager.get().settings.value
-            if (settings.syncEnabled) {
-                Log.i(TAG, "Triggering one-time sync on app startup via WorkManager")
-                SyncScheduler.triggerImmediateSync(applicationContext)
+        lifecycleScope.launch {
+            try {
+                val settings = credentialManager.get().settings.first()
+                if (settings.syncEnabled) {
+                    Log.i(TAG, "Triggering one-time sync on app startup via WorkManager")
+                    SyncScheduler.triggerImmediateSync(applicationContext)
+                }
+            } catch (e: Exception) {
+                Log.i(TAG, "Initial sync setup failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.i(TAG, "Initial sync setup failed: ${e.message}")
         }
     }
 
     private fun restorePeriodicSyncSchedule() {
-        try {
-            val settings = credentialManager.get().settings.value
-            SyncScheduler.reconcilePeriodicSync(applicationContext, settings)
-        } catch (e: Exception) {
-            Log.i(TAG, "Periodic sync reconcile failed: ${e.message}")
+        lifecycleScope.launch {
+            try {
+                val settings = credentialManager.get().settings.first()
+                SyncScheduler.reconcilePeriodicSync(applicationContext, settings)
+            } catch (e: Exception) {
+                Log.i(TAG, "Periodic sync reconcile failed: ${e.message}")
+            }
         }
     }
 

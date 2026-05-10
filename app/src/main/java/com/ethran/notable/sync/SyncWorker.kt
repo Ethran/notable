@@ -6,9 +6,11 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.ethran.notable.R
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.SnackDispatcher
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
+import kotlinx.coroutines.flow.first
 
 /**
  * Background worker for periodic WebDAV synchronization.
@@ -33,7 +35,7 @@ class SyncWorker(
         )
 
         val credentialManager = entryPoint.credentialManager()
-        val syncSettings = credentialManager.settings.value
+        val syncSettings = credentialManager.settings.first()
 
         // Check if sync is enabled
         if (!syncSettings.syncEnabled) {
@@ -80,70 +82,52 @@ class SyncWorker(
                 "syncFromPageId" -> {
                     val pageId = inputData.getString("pageId") ?: return Result.failure()
                     entryPoint.syncOrchestrator().syncFromPageId(pageId)
-                    SyncResult.Success // syncFromPageId doesn't return a result, so we wrap it
+                    AppResult.Success(Unit)
                 }
 
-                else -> SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+                else -> AppResult.Error(DomainError.SyncError("Unknown sync type: $syncType"))
             }
+
             when (result) {
-                is SyncResult.Success -> {
+                is AppResult.Success -> {
                     Log.i(TAG, "Sync $syncType completed successfully")
                     Result.success(workDataOf("success" to true))
                 }
 
-                is SyncResult.Failure -> {
-                    val errorStr = result.error.name
-                    when (result.error) {
-                        SyncError.SYNC_IN_PROGRESS -> {
+                is AppResult.Error -> {
+                    val error = result.error
+                    val errorStr = error.javaClass.simpleName
+
+                    when (error) {
+                        is DomainError.SyncInProgress -> {
                             Log.i(TAG, "Sync already in progress, skipping this run")
-                            // Don't retry - another sync is already running
-                            Result.success(
-                                workDataOf(
-                                    "success" to false,
-                                    "error" to errorStr
-                                )
-                            )
+                            Result.success(workDataOf("success" to false, "error" to errorStr))
                         }
 
-                        SyncError.NETWORK_ERROR -> {
-                            Log.e(TAG, "Network error during sync")
+                        is DomainError.NetworkError -> {
+                            Log.e(TAG, "Network error during sync: ${error.userMessage}")
                             if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
                                 Result.retry()
                             } else {
-                                Result.failure(
-                                    workDataOf(
-                                        "success" to false,
-                                        "error" to errorStr
-                                    )
-                                )
+                                Result.failure(workDataOf("success" to false, "error" to errorStr))
                             }
                         }
 
-                        SyncError.AUTH_ERROR,
-                        SyncError.CONFIG_ERROR,
-                        SyncError.CLOCK_SKEW,
-                        SyncError.WIFI_REQUIRED,
-                        SyncError.CONFLICT -> {
-                            Log.w(TAG, "Sync skipped (non-retryable): ${result.error}")
-                            Result.success(
-                                workDataOf(
-                                    "success" to false,
-                                    "error" to errorStr
-                                )
-                            )
+                        is DomainError.SyncAuthError,
+                        is DomainError.SyncConfigError,
+                        is DomainError.SyncClockSkew,
+                        is DomainError.SyncWifiRequired,
+                        is DomainError.SyncConflict -> {
+                            Log.w(TAG, "Sync skipped (non-retryable): ${error.userMessage}")
+                            Result.success(workDataOf("success" to false, "error" to errorStr))
                         }
 
                         else -> {
-                            Log.e(TAG, "Sync failed: ${result.error}")
-                            if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
+                            Log.e(TAG, "Sync failed: ${error.userMessage}")
+                            if (runAttemptCount < MAX_RETRY_ATTEMPTS && error.recoverable) {
                                 Result.retry()
                             } else {
-                                Result.failure(
-                                    workDataOf(
-                                        "success" to false,
-                                        "error" to errorStr
-                                    )
-                                )
+                                Result.failure(workDataOf("success" to false, "error" to errorStr))
                             }
                         }
                     }
@@ -164,7 +148,7 @@ class SyncWorker(
         } finally {
             if (isPeriodicSync)
                 showSyncSnack(R.string.sync_scheduled_completed)
-             else
+            else
                 showSyncSnack(R.string.sync_completed_successfully)
         }
     }

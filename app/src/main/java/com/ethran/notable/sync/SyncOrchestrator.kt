@@ -3,14 +3,20 @@ package com.ethran.notable.sync
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.flatMap
+import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.onFailure
+import com.ethran.notable.utils.onSuccess
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,186 +33,223 @@ class SyncOrchestrator @Inject constructor(
     private val reporter: SyncProgressReporter,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
-    private val sLog = SyncLogger
-    suspend fun syncAllNotebooks(): SyncResult = withContext(ioDispatcher) {
+    private val logger = SyncLogger
+
+    /**
+     * Performs a full synchronization of all folders and notebooks.
+     */
+    suspend fun syncAllNotebooks(): AppResult<Unit, DomainError> = withContext(ioDispatcher) {
         if (!syncMutex.tryLock()) {
-            sLog.w(TAG, "Sync already in progress, skipping")
-            return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)
+            logger.w(TAG, "Sync already in progress, skipping")
+            return@withContext AppResult.Error(DomainError.SyncInProgress)
         }
+
         val startTime = System.currentTimeMillis()
-        return@withContext try {
-            sLog.i(TAG, "Starting full sync...")
+
+        try {
+            logger.i(TAG, "Starting full sync...")
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
-            val settings = credentialManager.settings.value
+
+            val settings = credentialManager.settings.first()
             val credentials = credentialManager.getCredentials()
+
             if (!settings.syncEnabled) {
-                reporter.finishError(SyncError.CONFIG_ERROR, canRetry = false)
-                return@withContext SyncResult.Failure(SyncError.CONFIG_ERROR)
+                val error = DomainError.SyncConfigError
+                reporter.finishError(error, false)
+                return@withContext AppResult.Error(error)
             }
+
             if (credentials == null) {
-                reporter.finishError(SyncError.AUTH_ERROR, canRetry = false)
-                return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
+                val error = DomainError.SyncAuthError
+                reporter.finishError(error, false)
+                return@withContext AppResult.Error(error)
             }
-            if (!syncPreflightService.checkWifiConstraint()) {
-                reporter.finishError(SyncError.WIFI_REQUIRED, canRetry = false)
-                return@withContext SyncResult.Failure(SyncError.WIFI_REQUIRED)
+
+
+            syncPreflightService.checkWifiConstraint().onFailure { error ->
+                reporter.finishError(error, false)
+                return@withContext AppResult.Error(error)
             }
-            val webdavClient =
-                webDavClientFactory.create(
-                    settings.serverUrl,
-                    credentials.first,
-                    credentials.second
-                )
-            val skewMs = syncPreflightService.checkClockSkew(webdavClient)
-            if (skewMs != null && kotlin.math.abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
-                reporter.finishError(SyncError.CLOCK_SKEW, canRetry = false)
-                return@withContext SyncResult.Failure(SyncError.CLOCK_SKEW)
+
+            val client = webDavClientFactory.create(
+                settings.serverUrl,
+                credentials.first,
+                credentials.second
+            )
+
+            syncPreflightService.checkClockSkew(client).onFailure { error ->
+                reporter.finishError(error, false)
+                return@withContext AppResult.Error(error)
             }
-            syncPreflightService.ensureServerDirectories(webdavClient)
-            reporter.beginStep(SyncStep.SYNCING_FOLDERS, PROGRESS_SYNCING_FOLDERS, "Syncing folders...")
-            folderSyncService.syncFolders(webdavClient)
-            reporter.beginStep(SyncStep.APPLYING_DELETIONS, PROGRESS_APPLYING_DELETIONS, "Applying remote deletions...")
+
+            syncPreflightService.ensureServerDirectories(client).onFailure { error ->
+                return@withContext AppResult.Error(error)
+            }
+
+            reporter.beginStep(
+                SyncStep.SYNCING_FOLDERS,
+                PROGRESS_SYNCING_FOLDERS,
+                "Syncing folders..."
+            )
+            folderSyncService.syncFolders(client).onFailure { error ->
+                return@withContext AppResult.Error(error)
+            }
+
+            reporter.beginStep(
+                SyncStep.APPLYING_DELETIONS,
+                PROGRESS_APPLYING_DELETIONS,
+                "Applying remote deletions..."
+            )
             val tombstonedIds =
-                notebookSyncService.applyRemoteDeletions(webdavClient, TOMBSTONE_MAX_AGE_DAYS)
-            reporter.beginStep(SyncStep.SYNCING_NOTEBOOKS, PROGRESS_SYNCING_NOTEBOOKS, "Syncing local notebooks...")
-            val preDownloadNotebookIds =
-                notebookReconciliationService.syncExistingNotebooks(webdavClient)
-            val notebooksSynced = preDownloadNotebookIds.size
-            reporter.beginStep(SyncStep.DOWNLOADING_NEW, PROGRESS_DOWNLOADING_NEW, "Downloading new notebooks...")
-            val notebooksDownloaded = notebookSyncService.downloadNewNotebooks(
-                webdavClient,
+                notebookSyncService.applyRemoteDeletions(client, TOMBSTONE_MAX_AGE_DAYS)
+                    .onFailure { error ->
+                        return@withContext AppResult.Error(error)
+                    }
+
+            reporter.beginStep(
+                SyncStep.SYNCING_NOTEBOOKS,
+                PROGRESS_SYNCING_NOTEBOOKS,
+                "Syncing local notebooks..."
+            )
+            val preDownloadIds = notebookReconciliationService.syncExistingNotebooks(client)
+                .onFailure { error ->
+                    return@withContext AppResult.Error(error)
+                }
+
+            reporter.beginStep(
+                SyncStep.DOWNLOADING_NEW,
+                PROGRESS_DOWNLOADING_NEW,
+                "Downloading new notebooks..."
+            )
+            val downloadedCount = notebookSyncService.downloadNewNotebooks(
+                client,
                 tombstonedIds,
                 settings,
-                preDownloadNotebookIds
+                preDownloadIds
+            ).onFailure { error ->
+                return@withContext AppResult.Error(error)
+            }
+
+            reporter.beginStep(
+                SyncStep.UPLOADING_DELETIONS,
+                PROGRESS_UPLOADING_DELETIONS,
+                "Uploading deletions..."
             )
-            reporter.beginStep(SyncStep.UPLOADING_DELETIONS, PROGRESS_UPLOADING_DELETIONS, "Uploading deletions...")
-            val notebooksDeleted = notebookSyncService.detectAndUploadLocalDeletions(
-                webdavClient,
-                settings,
-                preDownloadNotebookIds
-            )
+            val deletedCount =
+                notebookSyncService.detectAndUploadLocalDeletions(client, settings, preDownloadIds)
+                    .onFailure { error ->
+                        return@withContext AppResult.Error(error)
+                    }
+
+
             reporter.beginStep(SyncStep.FINALIZING, PROGRESS_FINALIZING, "Finalizing...")
             updateSyncedNotebookIds()
-            val duration = System.currentTimeMillis() - startTime
-            val summary =
-                SyncSummary(notebooksSynced, notebooksDownloaded, notebooksDeleted, duration)
-            sLog.i(TAG, "Full sync completed in ${duration}ms")
+
+            val summary = SyncSummary(
+                preDownloadIds.size,
+                downloadedCount,
+                deletedCount,
+                System.currentTimeMillis() - startTime
+            )
             reporter.finishSuccess(summary)
-            SyncResult.Success
-        } catch (e: PreconditionFailedException) {
-            sLog.w(TAG, "Conflict during sync: ${e.message}")
-            reporter.finishError(SyncError.CONFLICT, canRetry = true)
-            SyncResult.Failure(SyncError.CONFLICT)
-        } catch (e: IOException) {
-            sLog.e(TAG, "Network error during sync: ${e.message}")
-            reporter.finishError(SyncError.NETWORK_ERROR, canRetry = true)
-            SyncResult.Failure(SyncError.NETWORK_ERROR)
+
+            AppResult.Success(Unit)
+
         } catch (e: Exception) {
-            sLog.e(TAG, "Unexpected error during sync: ${e.message}\n${e.stackTraceToString()}")
-            reporter.finishError(SyncError.UNKNOWN_ERROR, canRetry = false)
-            SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+            val error = DomainError.SyncError(
+                e.message ?: "Unexpected error during sync",
+                recoverable = false
+            )
+            reporter.finishError(error, false)
+            AppResult.Error(error)
         } finally {
             syncMutex.unlock()
         }
     }.also {
-        if (it is SyncResult.Success) {
+        if (it is AppResult.Success) {
             delay(SUCCESS_STATE_AUTO_RESET_MS)
             if (reporter.state.value is SyncState.Success) reporter.reset()
         }
     }
 
-    suspend fun syncNotebook(notebookId: String): SyncResult = withContext(ioDispatcher) {
-        if (syncMutex.isLocked) {
-            sLog.i(TAG, "Full sync in progress, skipping per-notebook sync for $notebookId")
-            return@withContext SyncResult.Success
-        }
-        val settings = credentialManager.settings.value
-        if (!settings.syncEnabled) return@withContext SyncResult.Success
-        if (!syncPreflightService.checkWifiConstraint()) {
-            sLog.i(TAG, "WiFi-only sync enabled but not on WiFi, skipping notebook sync")
-            return@withContext SyncResult.Success
-        }
-        val credentials = credentialManager.getCredentials()
-            ?: return@withContext SyncResult.Failure(SyncError.AUTH_ERROR)
-        val webdavClient =
-            webDavClientFactory.create(settings.serverUrl, credentials.first, credentials.second)
-        return@withContext notebookReconciliationService.syncNotebook(notebookId, webdavClient)
-    }
+    suspend fun syncNotebook(notebookId: String): AppResult<Unit, DomainError> =
+        withContext(ioDispatcher) {
+            if (syncMutex.isLocked) return@withContext AppResult.Success(Unit)
+            val settings = credentialManager.settings.first()
+            if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
 
-    suspend fun syncFromPageId(pageId: String) {
-        val settings = credentialManager.settings.value
-        if (!settings.syncEnabled || !settings.syncOnNoteClose) return
-        try {
-            val pageEntity = appRepository.pageRepository.getById(pageId) ?: return
-            pageEntity.notebookId?.let { notebookId ->
-                sLog.i("EditorSync", "Auto-syncing notebook $notebookId on page close")
-                syncNotebook(notebookId)
-            }
-        } catch (e: Exception) {
-            sLog.e("EditorSync", "Auto-sync failed: ${e.message}")
-        }
-    }
-
-    suspend fun uploadDeletion(notebookId: String): SyncResult = withContext(ioDispatcher) {
-        return@withContext try {
-            val settings = credentialManager.settings.value
-            if (!settings.syncEnabled) return@withContext SyncResult.Success
-            if (!syncPreflightService.checkWifiConstraint()) return@withContext SyncResult.Success
-            val credentials =
-                credentialManager.getCredentials() ?: return@withContext SyncResult.Failure(
-                    SyncError.AUTH_ERROR
-                )
-            val webdavClient =
-                webDavClientFactory.create(
+            syncPreflightService.checkWifiConstraint().onSuccess {
+                val credentials =
+                    credentialManager.getCredentials() ?: return@withContext AppResult.Error(
+                        DomainError.SyncAuthError
+                    )
+                val client = webDavClientFactory.create(
                     settings.serverUrl,
                     credentials.first,
                     credentials.second
                 )
-            val notebookPath = SyncPaths.notebookDir(notebookId)
-            if (webdavClient.exists(notebookPath)) {
-                webdavClient.delete(notebookPath)
+                return@withContext notebookReconciliationService.syncNotebook(notebookId, client)
             }
-            webdavClient.putFile(
-                SyncPaths.tombstone(notebookId),
-                ByteArray(0),
-                "application/octet-stream"
-            )
-            val updatedSyncedIds = settings.syncedNotebookIds - notebookId
-            credentialManager.updateSettings { it.copy(syncedNotebookIds = updatedSyncedIds) }
-            SyncResult.Success
+            AppResult.Success(Unit)
+        }
+
+    suspend fun syncFromPageId(pageId: String) {
+        val settings = credentialManager.settings.first()
+        if (!settings.syncEnabled || !settings.syncOnNoteClose) return
+        try {
+            val page = appRepository.pageRepository.getById(pageId) ?: return
+            page.notebookId?.let { syncNotebook(it) }
         } catch (e: Exception) {
-            sLog.e(TAG, "Failed to upload deletion: ${e.message}")
-            SyncResult.Failure(SyncError.UNKNOWN_ERROR)
+            logger.e(TAG, "Auto-sync failed: ${e.message}")
         }
     }
 
-    suspend fun forceUploadAll(): SyncResult = withContext(ioDispatcher) {
-        if (!syncMutex.tryLock()) {
-            sLog.w(TAG, "Sync already in progress, skipping force upload")
-            return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)
+    suspend fun uploadDeletion(notebookId: String): AppResult<Unit, DomainError> =
+        withContext(ioDispatcher) {
+            val settings = credentialManager.settings.first()
+            if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
+
+            return@withContext syncPreflightService.checkWifiConstraint().flatMap {
+                val creds = credentialManager.getCredentials() ?: return@flatMap AppResult.Error(
+                    DomainError.SyncAuthError
+                )
+                val client =
+                    webDavClientFactory.create(settings.serverUrl, creds.first, creds.second)
+
+                val path = SyncPaths.notebookDir(notebookId)
+                if (client.exists(path)) {
+                    client.delete(path).onError {
+                        logger.w(TAG, "Failed to delete remote notebook $notebookId: ${it.userMessage}")
+                    }
+                }
+                client.putFile(SyncPaths.tombstone(notebookId), ByteArray(0)).flatMap {
+                    credentialManager.updateSettings { it.copy(syncedNotebookIds = it.syncedNotebookIds - notebookId) }
+                    AppResult.Success(Unit)
+                }
+            }
         }
-        return@withContext try {
+
+    suspend fun forceUploadAll(): AppResult<Unit, DomainError> = withContext(ioDispatcher) {
+        if (!syncMutex.tryLock()) return@withContext AppResult.Error(DomainError.SyncInProgress)
+        try {
             syncForceService.forceUploadAll()
         } finally {
             syncMutex.unlock()
         }
     }
 
-    suspend fun forceDownloadAll(): SyncResult = withContext(ioDispatcher) {
-        if (!syncMutex.tryLock()) {
-            sLog.w(TAG, "Sync already in progress, skipping force download")
-            return@withContext SyncResult.Failure(SyncError.SYNC_IN_PROGRESS)
-        }
-        return@withContext try {
+    suspend fun forceDownloadAll(): AppResult<Unit, DomainError> = withContext(ioDispatcher) {
+        if (!syncMutex.tryLock()) return@withContext AppResult.Error(DomainError.SyncInProgress)
+        try {
             syncForceService.forceDownloadAll()
         } finally {
             syncMutex.unlock()
         }
     }
 
-    private fun updateSyncedNotebookIds() {
-        val currentNotebookIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
-        credentialManager.updateSettings { it.copy(syncedNotebookIds = currentNotebookIds) }
+    private suspend fun updateSyncedNotebookIds() {
+        val currentIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
+        credentialManager.updateSettings { it.copy(syncedNotebookIds = currentIds) }
     }
 
     companion object {
@@ -219,10 +262,7 @@ class SyncOrchestrator @Inject constructor(
         private const val PROGRESS_UPLOADING_DELETIONS = 0.8f
         private const val PROGRESS_FINALIZING = 0.9f
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
-        private const val CLOCK_SKEW_THRESHOLD_MS = 30_000L
         private const val TOMBSTONE_MAX_AGE_DAYS = 90L
-
-        // Shared across all call sites (UI, worker, editor) to prevent parallel sync jobs.
         private val syncMutex = Mutex()
     }
 }
@@ -236,12 +276,6 @@ interface SyncOrchestratorEntryPoint {
     fun snackDispatcher(): com.ethran.notable.ui.SnackDispatcher
 }
 
-sealed class SyncResult {
-    data object Success : SyncResult()
-    data class Failure(val error: SyncError) : SyncResult()
-}
-
-enum class SyncError { NETWORK_ERROR, AUTH_ERROR, CONFIG_ERROR, CLOCK_SKEW, WIFI_REQUIRED, SYNC_IN_PROGRESS, CONFLICT, UNKNOWN_ERROR }
 sealed class SyncState {
     data object Idle : SyncState()
     data class Syncing(
@@ -252,15 +286,11 @@ sealed class SyncState {
     ) : SyncState()
 
     data class Success(val summary: SyncSummary) : SyncState()
-    data class Error(val error: SyncError, val step: SyncStep, val canRetry: Boolean) : SyncState()
+    data class Error(val error: DomainError, val step: SyncStep, val canRetry: Boolean) :
+        SyncState()
 }
 
-data class ItemProgress(
-    val index: Int,
-    val total: Int,
-    val name: String
-)
-
+data class ItemProgress(val index: Int, val total: Int, val name: String)
 enum class SyncStep { INITIALIZING, SYNCING_FOLDERS, APPLYING_DELETIONS, SYNCING_NOTEBOOKS, DOWNLOADING_NEW, UPLOADING_DELETIONS, FINALIZING }
 data class SyncSummary(
     val notebooksSynced: Int,

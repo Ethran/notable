@@ -1,6 +1,11 @@
 package com.ethran.notable.sync
 
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.logCallStack
+import com.ethran.notable.utils.map
+import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.onSuccess
 import io.shipbook.shipbooksdk.Log
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,8 +30,7 @@ import java.util.concurrent.TimeUnit
 data class RemoteEntry(val name: String, val lastModified: Date?)
 
 data class DownloadedFile(
-    val content: ByteArray,
-    val etag: String?
+    val content: ByteArray, val etag: String?
 ) {
     override fun equals(other: Any?): Boolean {
         logCallStack("equals called")
@@ -49,46 +53,48 @@ data class DownloadedFile(
     }
 }
 
-class PreconditionFailedException(message: String) : IOException(message)
-
+/**
+ * Result of a connection test, including optional clock skew information.
+ */
+data class ConnectionTestResult(val clockSkewMs: Long? = null)
 
 /**
  * WebDAV client built on OkHttp for Notable sync operations.
- * Supports basic authentication and common WebDAV methods.
  */
 class WebDAVClient(
-    private val serverUrl: String,
-    username: String,
-    password: String
+    private val serverUrl: String, username: String, password: String
 ) {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+    private val client =
+        OkHttpClient.Builder().connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
 
     private val credentials = Credentials.basic(username, password)
 
     /**
      * Test connection to WebDAV server.
-     * @return true if connection successful, false otherwise
+     * Checks server connectivity and detects clock skew.
+     * @return AppResult.Success with ConnectionTestResult (includes clock skew info if available),
+     *         or AppResult.Error with details.
      */
-    fun testConnection(): Boolean {
+    fun testConnection(): AppResult<ConnectionTestResult, DomainError> {
         return try {
-            Log.i(TAG, "Testing connection to: $serverUrl")
-            val request = Request.Builder()
-                .url(serverUrl)
-                .head()
-                .header("Authorization", credentials)
-                .build()
+            val request =
+                Request.Builder().url(serverUrl).head().header("Authorization", credentials).build()
 
             client.newCall(request).execute().use { response ->
-                Log.i(TAG, "Response code: ${response.code}")
-                response.isSuccessful
+                when {
+                    response.isSuccessful -> {
+                        val clockSkewMs = getServerTime()?.let { System.currentTimeMillis() - it }
+                        AppResult.Success(ConnectionTestResult(clockSkewMs = clockSkewMs))
+                    }
+
+                    response.code == 401 -> AppResult.Error(DomainError.SyncAuthError)
+                    else -> AppResult.Error(DomainError.SyncError("Server rejected connection: ${response.code}"))
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Connection test failed: ${e.message}", e)
-            false
+            AppResult.Error(DomainError.NetworkError(e.message ?: "Connection test failed"))
         }
     }
 
@@ -99,11 +105,8 @@ class WebDAVClient(
      */
     fun getServerTime(): Long? {
         return try {
-            val request = Request.Builder()
-                .url(serverUrl)
-                .head()
-                .header("Authorization", credentials)
-                .build()
+            val request =
+                Request.Builder().url(serverUrl).head().header("Authorization", credentials).build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
@@ -124,11 +127,8 @@ class WebDAVClient(
     fun exists(path: String): Boolean {
         return try {
             val url = buildUrl(path)
-            val request = Request.Builder()
-                .url(url)
-                .head()
-                .header("Authorization", credentials)
-                .build()
+            val request =
+                Request.Builder().url(url).head().header("Authorization", credentials).build()
 
             client.newCall(request).execute().use { response ->
                 response.code == HttpURLConnection.HTTP_OK
@@ -144,19 +144,21 @@ class WebDAVClient(
      * @param path Collection path relative to server URL
      * @throws IOException if creation fails
      */
-    fun createCollection(path: String) {
-        val url = buildUrl(path)
-        val request = Request.Builder()
-            .url(url)
-            .method("MKCOL", null)
-            .header("Authorization", credentials)
-            .build()
+    fun createCollection(path: String): AppResult<Unit, DomainError> {
+        return try {
+            val url = buildUrl(path)
+            val request = Request.Builder().url(url).method("MKCOL", null)
+                .header("Authorization", credentials).build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 405) {
-                // 405 Method Not Allowed means collection already exists, which is fine
-                throw IOException("Failed to create collection: ${response.code} ${response.message}")
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful || response.code == 405) {
+                    AppResult.Success(Unit)
+                } else {
+                    AppResult.Error(DomainError.SyncError("MKCOL failed: ${response.code}"))
+                }
             }
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.NetworkError(e.message ?: "MKCOL failed"))
         }
     }
 
@@ -172,29 +174,27 @@ class WebDAVClient(
         content: ByteArray,
         contentType: String = "application/octet-stream",
         ifMatch: String? = null
-    ) {
-        val url = buildUrl(path)
-        val mediaType = contentType.toMediaType()
-        val requestBody = content.toRequestBody(mediaType)
+    ): AppResult<Unit, DomainError> {
+        return try {
+            val url = buildUrl(path)
+            val requestBody = content.toRequestBody(contentType.toMediaType())
+            val requestBuilder =
+                Request.Builder().url(url).put(requestBody).header("Authorization", credentials)
 
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .put(requestBody)
-            .header("Authorization", credentials)
+            ifMatch?.let { requestBuilder.header("If-Match", it) }
 
-        ifMatch?.let { requestBuilder.header("If-Match", it) }
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                when {
+                    response.code == HttpURLConnection.HTTP_PRECON_FAILED -> AppResult.Error(
+                        DomainError.SyncConflict
+                    )
 
-        val request = requestBuilder.build()
-
-        client.newCall(request).execute().use { response ->
-            if (response.code == HttpURLConnection.HTTP_PRECON_FAILED) {
-                throw PreconditionFailedException(
-                    "Precondition failed for $path: ${response.code} ${response.message}"
-                )
+                    response.isSuccessful -> AppResult.Success(Unit)
+                    else -> AppResult.Error(DomainError.SyncError("PUT failed: ${response.code}"))
+                }
             }
-            if (!response.isSuccessful) {
-                throw IOException("Failed to upload file: ${response.code} ${response.message}")
-            }
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.NetworkError(e.message ?: "PUT failed"))
         }
     }
 
@@ -210,71 +210,64 @@ class WebDAVClient(
         localFile: File,
         contentType: String = "application/octet-stream",
         ifMatch: String? = null
-    ) {
-        if (!localFile.exists()) {
-            throw IOException("Local file does not exist: ${localFile.absolutePath}")
-        }
-        putFile(path, localFile.readBytes(), contentType, ifMatch)
+    ): AppResult<Unit, DomainError> {
+        if (!localFile.exists()) return AppResult.Error(DomainError.SyncError("Local file missing"))
+        return putFile(path, localFile.readBytes(), contentType, ifMatch)
     }
 
-    /**
-     * Download a file from the WebDAV server.
-     * @param path Remote path relative to server URL
-     * @return File content as ByteArray
-     * @throws IOException if download fails
-     */
-    fun getFile(path: String): ByteArray {
-        return getFileWithMetadata(path).content
+    fun getFile(path: String): AppResult<ByteArray, DomainError> {
+        return getFileWithMetadata(path).map { it.content }
     }
 
-    fun getFileWithMetadata(path: String): DownloadedFile {
-        val url = buildUrl(path)
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .header("Authorization", credentials)
-            .build()
+    fun getFileWithMetadata(path: String): AppResult<DownloadedFile, DomainError> {
+        return try {
+            val url = buildUrl(path)
+            val request =
+                Request.Builder().url(url).get().header("Authorization", credentials).build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("Failed to download file: ${response.code} ${response.message}")
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    AppResult.Success(
+                        DownloadedFile(
+                            response.body.bytes(), response.header("ETag")
+                        )
+                    )
+                } else {
+                    AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
+                }
             }
-            val content = response.body.bytes()
-            return DownloadedFile(content = content, etag = response.header("ETag"))
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.NetworkError(e.message ?: "GET failed"))
         }
     }
 
-    /**
-     * Download a file and save it to local filesystem.
-     * @param path Remote path relative to server URL
-     * @param localFile Local file to save to
-     * @throws IOException if download or save fails
-     */
-    fun getFile(path: String, localFile: File) {
-        val content = getFile(path)
-        localFile.parentFile?.mkdirs()
-        localFile.writeBytes(content)
+    fun getFile(path: String, localFile: File): AppResult<Unit, DomainError> {
+        return getFile(path).onSuccess { content ->
+            localFile.parentFile?.mkdirs()
+            localFile.writeBytes(content)
+        }.map { }
     }
-//
 
     /**
      * Delete a resource from the WebDAV server.
      * @param path Resource path relative to server URL
      * @throws IOException if deletion fails
      */
-    fun delete(path: String) {
-        val url = buildUrl(path)
-        val request = Request.Builder()
-            .url(url)
-            .delete()
-            .header("Authorization", credentials)
-            .build()
+    fun delete(path: String): AppResult<Unit, DomainError> {
+        return try {
+            val url = buildUrl(path)
+            val request =
+                Request.Builder().url(url).delete().header("Authorization", credentials).build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != HttpURLConnection.HTTP_NOT_FOUND) {
-                // 404 means already deleted, which is fine
-                throw IOException("Failed to delete resource: ${response.code} ${response.message}")
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful || response.code == HttpURLConnection.HTTP_NOT_FOUND) {
+                    AppResult.Success(Unit)
+                } else {
+                    AppResult.Error(DomainError.SyncError("DELETE failed: ${response.code}"))
+                }
             }
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.NetworkError(e.message ?: "DELETE failed"))
         }
     }
 
@@ -285,39 +278,31 @@ class WebDAVClient(
      * @return List of resource names in the collection
      * @throws IOException if PROPFIND fails
      */
-    fun listCollection(path: String): List<String> {
-        val url = buildUrl(path)
-
-        // WebDAV PROPFIND request body for directory listing
-        val propfindXml = """
+    fun listCollection(path: String): AppResult<List<String>, DomainError> {
+        return try {
+            val url = buildUrl(path)
+            // WebDAV PROPFIND request body for directory listing
+            val propfindXml = """
             <?xml version="1.0" encoding="utf-8"?>
             <D:propfind xmlns:D="DAV:">
                 <D:allprop/>
             </D:propfind>
         """.trimIndent()
+            val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
+            val request = Request.Builder().url(url).method("PROPFIND", requestBody)
+                .header("Authorization", credentials).header("Depth", "1").build()
 
-        val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
-
-        val request = Request.Builder()
-            .url(url)
-            .method("PROPFIND", requestBody)
-            .header("Authorization", credentials)
-            .header("Depth", "1")
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("Failed to list collection: ${response.code} ${response.message}")
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val hrefs = parseHrefsFromXml(response.body.string())
+                    AppResult.Success(hrefs.filter { it != path && !it.endsWith("/$path") }
+                        .map { it.trimEnd('/').substringAfterLast('/') }.filter { isValidUuid(it) })
+                } else {
+                    AppResult.Error(DomainError.SyncError("PROPFIND failed: ${response.code}"))
+                }
             }
-
-            val responseBody = response.body.string()
-            val allHrefs = parseHrefsFromXml(responseBody)
-
-            return allHrefs
-                .filter { it != path && !it.endsWith("/$path") }
-                .map { href -> href.trimEnd('/').substringAfterLast('/') }
-                .filter { isValidUuid(it) }
-                .toList()
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.NetworkError(e.message ?: "PROPFIND failed"))
         }
     }
 
@@ -329,10 +314,11 @@ class WebDAVClient(
      * @return List of RemoteEntry objects; empty if collection doesn't exist
      * @throws IOException if PROPFIND fails for a reason other than 404
      */
-    fun listCollectionWithMetadata(path: String): List<RemoteEntry> {
-        val url = buildUrl(path)
+    fun listCollectionWithMetadata(path: String): AppResult<List<RemoteEntry>, DomainError> {
+        return try {
+            val url = buildUrl(path)
 
-        val propfindXml = """
+            val propfindXml = """
             <?xml version="1.0" encoding="utf-8"?>
             <D:propfind xmlns:D="DAV:">
                 <D:prop>
@@ -340,29 +326,27 @@ class WebDAVClient(
                 </D:prop>
             </D:propfind>
         """.trimIndent()
+            val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
+            val request = Request.Builder().url(url).method("PROPFIND", requestBody)
+                .header("Authorization", credentials).header("Depth", "1").build()
 
-        val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
-
-        val request = Request.Builder()
-            .url(url)
-            .method("PROPFIND", requestBody)
-            .header("Authorization", credentials)
-            .header("Depth", "1")
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (response.code == HttpURLConnection.HTTP_NOT_FOUND) return emptyList()
-            if (!response.isSuccessful) {
-                throw IOException("Failed to list collection: ${response.code} ${response.message}")
-            }
-
-            val responseBody = response.body.string()
-            return parseEntriesFromXml(responseBody)
-                .filter { (href, _) -> href != path && !href.endsWith("/$path") }
-                .mapNotNull { (href, lastModified) ->
-                    val name = href.trimEnd('/').substringAfterLast('/')
-                    if (isValidUuid(name)) RemoteEntry(name, lastModified) else null
+            client.newCall(request).execute().use { response ->
+                if (response.code == HttpURLConnection.HTTP_NOT_FOUND) return@use AppResult.Success(
+                    emptyList()
+                )
+                if (response.isSuccessful) {
+                    val entries = parseEntriesFromXml(response.body.string())
+                    AppResult.Success(entries.filter { (href, _) -> href != path && !href.endsWith("/$path") }
+                        .mapNotNull { (href, lastModified) ->
+                            val name = href.trimEnd('/').substringAfterLast('/')
+                            if (isValidUuid(name)) RemoteEntry(name, lastModified) else null
+                        })
+                } else {
+                    AppResult.Error(DomainError.SyncError("PROPFIND failed: ${response.code}"))
                 }
+            }
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.NetworkError(e.message ?: "PROPFIND failed"))
         }
     }
 
@@ -371,17 +355,18 @@ class WebDAVClient(
      * @param path File path (will create parent directories)
      * @throws IOException if directory creation fails
      */
-    fun ensureParentDirectories(path: String) {
+    fun ensureParentDirectories(path: String): AppResult<Unit, DomainError> {
         val segments = path.trimStart('/').split('/')
-        if (segments.size <= 1) return // No parent directories
+        if (segments.size <= 1) return AppResult.Success(Unit)
 
         var currentPath = ""
         for (i in 0 until segments.size - 1) {
             currentPath += "/" + segments[i]
             if (!exists(currentPath)) {
-                createCollection(currentPath)
+                createCollection(currentPath).onError { return AppResult.Error(it) }
             }
         }
+        return AppResult.Success(Unit)
     }
 
     /**
@@ -411,15 +396,8 @@ class WebDAVClient(
             val hrefs = mutableListOf<String>()
             var eventType = parser.eventType
             while (eventType != XmlPullParser.END_DOCUMENT) {
-                if (eventType == XmlPullParser.START_TAG) {
-                    // Check for href tag (case-insensitive, namespace-aware)
-                    val localName = parser.name.lowercase()
-                    if (localName == "href") {
-                        // Get text content, handling CDATA properly
-                        if (parser.next() == XmlPullParser.TEXT) {
-                            hrefs.add(parser.text.trim())
-                        }
-                    }
+                if (eventType == XmlPullParser.START_TAG && parser.name.lowercase() == "href") {
+                    if (parser.next() == XmlPullParser.TEXT) hrefs.add(parser.text.trim())
                 }
                 eventType = parser.next()
             }
@@ -451,14 +429,11 @@ class WebDAVClient(
                 when (eventType) {
                     XmlPullParser.START_TAG -> when (parser.name.lowercase()) {
                         "response" -> {
-                            inResponse = true
-                            currentHref = null
-                            currentLastModified = null
+                            inResponse = true; currentHref = null; currentLastModified = null
                         }
 
-                        "href" -> if (inResponse && parser.next() == XmlPullParser.TEXT) {
-                            currentHref = parser.text.trim()
-                        }
+                        "href" -> if (inResponse && parser.next() == XmlPullParser.TEXT) currentHref =
+                            parser.text.trim()
 
                         "getlastmodified" -> if (inResponse && parser.next() == XmlPullParser.TEXT) {
                             currentLastModified =
@@ -481,11 +456,7 @@ class WebDAVClient(
     }
 
     private fun isValidUuid(name: String): Boolean =
-        name.length == UUID_LENGTH &&
-                name[UUID_DASH_POS_1] == '-' &&
-                name[UUID_DASH_POS_2] == '-' &&
-                name[UUID_DASH_POS_3] == '-' &&
-                name[UUID_DASH_POS_4] == '-'
+        name.length == 36 && name[8] == '-' && name[13] == '-' && name[18] == '-' && name[23] == '-'
 
     companion object {
         private const val TAG = "WebDAVClient"
@@ -494,13 +465,6 @@ class WebDAVClient(
         private const val CONNECT_TIMEOUT_SECONDS = 30L
         private const val READ_TIMEOUT_SECONDS = 60L
         private const val WRITE_TIMEOUT_SECONDS = 60L
-
-        // UUID validation constants
-        private const val UUID_LENGTH = 36
-        private const val UUID_DASH_POS_1 = 8
-        private const val UUID_DASH_POS_2 = 13
-        private const val UUID_DASH_POS_3 = 18
-        private const val UUID_DASH_POS_4 = 23
 
         // RFC 1123 date format used in HTTP Date headers
         private const val HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
@@ -519,195 +483,5 @@ class WebDAVClient(
                 null
             }
         }
-
-        /**
-         * Factory method to test connection and detect clock skew.
-         * @return Pair of (connectionSuccessful, clockSkewMs) where clockSkewMs is
-         *         the difference (deviceTime - serverTime) in milliseconds, or null
-         *         if the server did not return a Date header.
-         */
-        fun testConnection(
-            serverUrl: String,
-            username: String,
-            password: String
-        ): Pair<Boolean, Long?> {
-            return try {
-                val client = WebDAVClient(serverUrl, username, password)
-                val connected = client.testConnection()
-                val clockSkewMs = if (connected) {
-                    client.getServerTime()?.let { serverTime ->
-                        System.currentTimeMillis() - serverTime
-                    }
-                } else {
-                    null
-                }
-                Pair(connected, clockSkewMs)
-            } catch (e: Exception) {
-                Log.e(TAG, "Connection test failed: ${e.message}", e)
-                Pair(false, null)
-            }
-        }
-    // TODO: why there ware needed?
-
-//        /**
-//         * Factory method to get server time without full initialization.
-//         * @return Server time as epoch millis, or null if unavailable
-//         */
-//        fun getServerTime(serverUrl: String, username: String, password: String): Long? {
-//            return try {
-//                WebDAVClient(serverUrl, username, password).getServerTime()
-//            } catch (e: Exception) {
-//                null
-//            }
-//        }
     }
-
-//    /**
-//     * Parse last modified timestamp from WebDAV XML response.
-//     * Properly handles namespaces, CDATA, and whitespace.
-//     * @param xml XML response from PROPFIND
-//     * @return Last modified timestamp, or null if not found
-//     */
-//    private fun parseLastModifiedFromXml(xml: String): String? {
-//        return try {
-//            val factory = XmlPullParserFactory.newInstance()
-//            factory.isNamespaceAware = true
-//            val parser = factory.newPullParser()
-//            parser.setInput(StringReader(xml))
-//
-//            var eventType = parser.eventType
-//            while (eventType != XmlPullParser.END_DOCUMENT) {
-//                if (eventType == XmlPullParser.START_TAG) {
-//                    // Check for getlastmodified tag (case-insensitive, namespace-aware)
-//                    val localName = parser.name.lowercase()
-//                    if (localName == "getlastmodified") {
-//                        // Get text content, handling CDATA properly
-//                        if (parser.next() == XmlPullParser.TEXT) {
-//                            return parser.text.trim()
-//                        }
-//                    }
-//                }
-//                eventType = parser.next()
-//            }
-//            null
-//        } catch (e: Exception) {
-//            Log.e(TAG, "Failed to parse XML for last modified: ${e.message}")
-//            null
-//        }
-//    }
-
-
-//    /**
-//     * Get last modified timestamp of a resource using PROPFIND.
-//     * @param path Resource path relative to server URL
-//     * @return Last modified timestamp in ISO 8601 format, or null if not available
-//     * @throws IOException if PROPFIND fails
-//     */
-//    fun getLastModified(path: String): String? {
-//        val url = buildUrl(path)
-//
-//        // WebDAV PROPFIND request body for last-modified
-//        val propfindXml = """
-//            <?xml version="1.0" encoding="utf-8"?>
-//            <D:propfind xmlns:D="DAV:">
-//                <D:prop>
-//                    <D:getlastmodified/>
-//                </D:prop>
-//            </D:propfind>
-//        """.trimIndent()
-//
-//        val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
-//
-//        val request = Request.Builder()
-//            .url(url)
-//            .method("PROPFIND", requestBody)
-//            .header("Authorization", credentials)
-//            .header("Depth", "0")
-//            .build()
-//
-//        client.newCall(request).execute().use { response ->
-//            if (!response.isSuccessful) {
-//                return null
-//            }
-//
-//            val responseBody = response.body?.string() ?: return null
-//
-//            // Parse XML response using XmlPullParser to properly handle namespaces and CDATA
-//            return parseLastModifiedFromXml(responseBody)
-//        }
-//    }
-
-
-//    /**
-//     * Get file as InputStream for streaming large files.
-//     * Returns a StreamResponse that wraps both the InputStream and underlying HTTP Response.
-//     * IMPORTANT: Caller MUST close the StreamResponse (use .use {} block) to prevent resource leaks.
-//     *
-//     * Example usage:
-//     * ```
-//     * webdavClient.getFileStream(path).use { streamResponse ->
-//     *     streamResponse.inputStream.copyTo(outputStream)
-//     * }
-//     * ```
-//     *
-//     * @param path Remote path relative to server URL
-//     * @return StreamResponse containing InputStream and managing underlying HTTP connection
-//     * @throws IOException if download fails
-//     */
-//    fun getFileStream(path: String): StreamResponse {
-//        val url = buildUrl(path)
-//        val request = Request.Builder()
-//            .url(url)
-//            .get()
-//            .header("Authorization", credentials)
-//            .build()
-//
-//        val response = client.newCall(request).execute()
-//        if (!response.isSuccessful) {
-//            response.close()
-//            throw IOException("Failed to download file: ${response.code} ${response.message}")
-//        }
-//
-//        val inputStream = response.body?.byteStream()
-//            ?: run {
-//                response.close()
-//                throw IOException("Empty response body")
-//            }
-//
-//        return StreamResponse(response, inputStream)
-//    }
 }
-
-
-
-
-//
-///**
-// * Wrapper for streaming file downloads that properly manages the underlying HTTP response.
-// * This class ensures that both the InputStream and the HTTP Response are properly closed.
-// *
-// * Usage:
-// * ```
-// * webdavClient.getFileStream(path).use { streamResponse ->
-// *     streamResponse.inputStream.copyTo(outputStream)
-// * }
-// * ```
-// */
-//class StreamResponse(
-//    private val response: Response,
-//    val inputStream: InputStream
-//) : Closeable {
-//    override fun close() {
-//        try {
-//            inputStream.close()
-//        } catch (e: Exception) {
-//            // Ignore input stream close errors
-//        }
-//        try {
-//            response.close()
-//        } catch (e: Exception) {
-//            // Ignore response close errors
-//        }
-//    }
-//}
-

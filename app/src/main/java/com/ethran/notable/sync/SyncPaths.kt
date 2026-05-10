@@ -30,13 +30,8 @@ object SyncPaths {
     /**
      * Zero-byte tombstone file for a deleted notebook.
      * Presence of this file on the server means the notebook was deleted.
-     * This replaces the old deletions.json aggregation file, eliminating the
-     * race condition where two devices could overwrite each other's writes to
-     * that shared file. The server's own lastModified on the tombstone provides
-     * the deletion timestamp needed for conflict resolution.
-     *
-     * TODO: When ETag support is added, tombstones can be deprecated in favour
-     * of detecting deletions via known-ETag + missing remote file (RFC 2518 §9.4).
+     * The server's own lastModified on the tombstone provides the deletion
+     * timestamp needed for conflict resolution.
      */
     fun tombstone(notebookId: String) = "/$ROOT/deletions/$notebookId"
 }

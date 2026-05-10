@@ -1,6 +1,7 @@
 package com.ethran.notable.sync.serializers
 
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.utils.logCallStack
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
@@ -76,6 +77,7 @@ object FolderSerializer {
             val foldersJson = json.decodeFromString<FoldersJson>(jsonString)
             parseIso8601(foldersJson.serverTimestamp)
         } catch (e: Exception) {
+            logCallStack(reason = "Failed to parse server timestamp from folders.json: ${e.message}")
             null
         }
     }
@@ -87,6 +89,7 @@ object FolderSerializer {
         return try {
             iso8601Format.parse(dateString) ?: Date()
         } catch (e: Exception) {
+            logCallStack(reason = "Failed to parse ISO 8601 date: ${e.message}")
             Date()
         }
     }

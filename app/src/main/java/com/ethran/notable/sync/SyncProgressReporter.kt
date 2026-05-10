@@ -1,6 +1,7 @@
 package com.ethran.notable.sync
 
 import com.ethran.notable.di.ApplicationScope
+import com.ethran.notable.utils.DomainError
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.EntryPoint
@@ -21,7 +22,7 @@ interface SyncProgressReporter {
     fun beginItem(index: Int, total: Int, name: String)
     fun endItem()
     fun finishSuccess(summary: SyncSummary)
-    fun finishError(error: SyncError, canRetry: Boolean)
+    fun finishError(error: DomainError, canRetry: Boolean)
     fun reset()
 }
 
@@ -64,7 +65,7 @@ class SyncProgressReporterImpl @Inject constructor(
         _state.value = SyncState.Success(summary)
     }
 
-    override fun finishError(error: SyncError, canRetry: Boolean) {
+    override fun finishError(error: DomainError, canRetry: Boolean) {
         val step = (_state.value as? SyncState.Syncing)?.currentStep ?: SyncStep.INITIALIZING
         _state.value = SyncState.Error(error, step, canRetry)
     }

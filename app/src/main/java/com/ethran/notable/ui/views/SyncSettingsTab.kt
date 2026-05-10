@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -56,6 +57,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ethran.notable.R
+import com.ethran.notable.sync.ConnectionTestResult
 import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
@@ -63,8 +65,9 @@ import com.ethran.notable.sync.SyncStep
 import com.ethran.notable.ui.components.SettingToggleRow
 import com.ethran.notable.ui.components.SettingsDivider
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.ui.viewmodels.SyncConnectionStatus
 import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 
 data class SyncCredentialsCallbacks(
     val onServerUrlChange: (String) -> Unit = {},
@@ -368,21 +371,30 @@ fun EInkSection(
 }
 
 @Composable
-fun ConnectionStatusText(status: SyncConnectionStatus) {
+fun ConnectionStatusText(result: AppResult<ConnectionTestResult, DomainError>) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (status == SyncConnectionStatus.Success) {
-            Icon(
-                Icons.Default.CheckCircle, 
-                contentDescription = null, 
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colors.onSurface
-            )
-            Spacer(modifier = Modifier.width(4.dp))
+        val icon = when (result) {
+            is AppResult.Success -> Icons.Default.CheckCircle
+            is AppResult.Error -> Icons.Default.Warning
         }
-        val text = when (status) {
-            SyncConnectionStatus.Success -> "Connected successfully"
-            SyncConnectionStatus.Failed -> "Connection failed"
-            is SyncConnectionStatus.ClockSkew -> "Clock skew detected (${status.seconds}s)"
+        Icon(
+            icon, 
+            contentDescription = null, 
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colors.onSurface
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        
+        val text = when (result) {
+            is AppResult.Success -> {
+                val skewMs = result.data.clockSkewMs
+                if (skewMs != null && kotlin.math.abs(skewMs) > 1000) {
+                    "Connected (skew: ${skewMs / 1000}s)"
+                } else {
+                    "Connected successfully"
+                }
+            }
+            is AppResult.Error -> result.error.userMessage
         }
         Text(
             text, 
@@ -975,4 +987,3 @@ fun SyncSettingsSyncingPreview() {
         }
     }
 }
-

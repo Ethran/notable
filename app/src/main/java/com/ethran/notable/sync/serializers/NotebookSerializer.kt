@@ -8,6 +8,7 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.data.db.encodeStrokePoints
 import com.ethran.notable.editor.utils.Pen
+import com.ethran.notable.utils.logCallStack
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -221,6 +222,7 @@ class NotebookSerializer() {
         return try {
             iso8601Format.parse(dateString) ?: Date()
         } catch (e: Exception) {
+            logCallStack(reason = "Failed to parse ISO 8601 date: ${e.message}")
             Date()
         }
     }
@@ -233,21 +235,11 @@ class NotebookSerializer() {
             val manifestDto = json.decodeFromString<NotebookManifestDto>(jsonString)
             parseIso8601(manifestDto.updatedAt)
         } catch (e: Exception) {
+            logCallStack(reason = "Failed to parse updated timestamp from manifest.json: ${e.message}")
             null
         }
     }
 
-    /**
-     * Get updated timestamp from page JSON.
-     */
-    fun getPageUpdatedAt(jsonString: String): Date? {
-        return try {
-            val pageDto = json.decodeFromString<PageDto>(jsonString)
-            parseIso8601(pageDto.updatedAt)
-        } catch (e: Exception) {
-            null
-        }
-    }
 
     // ===== Data Transfer Objects =====
 
