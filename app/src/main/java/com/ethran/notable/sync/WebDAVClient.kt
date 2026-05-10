@@ -1,18 +1,16 @@
 package com.ethran.notable.sync
 
+import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.Log
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
-import java.io.Closeable
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
 import java.io.StringReader
 import java.net.HttpURLConnection
 import java.text.SimpleDateFormat
@@ -29,38 +27,30 @@ data class RemoteEntry(val name: String, val lastModified: Date?)
 data class DownloadedFile(
     val content: ByteArray,
     val etag: String?
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        logCallStack("equals called")
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as DownloadedFile
+
+        if (!content.contentEquals(other.content)) return false
+        if (etag != other.etag) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        logCallStack("hashCode called")
+        var result = content.contentHashCode()
+        result = 31 * result + (etag?.hashCode() ?: 0)
+        return result
+    }
+}
 
 class PreconditionFailedException(message: String) : IOException(message)
 
-/**
- * Wrapper for streaming file downloads that properly manages the underlying HTTP response.
- * This class ensures that both the InputStream and the HTTP Response are properly closed.
- *
- * Usage:
- * ```
- * webdavClient.getFileStream(path).use { streamResponse ->
- *     streamResponse.inputStream.copyTo(outputStream)
- * }
- * ```
- */
-class StreamResponse(
-    private val response: Response,
-    val inputStream: InputStream
-) : Closeable {
-    override fun close() {
-        try {
-            inputStream.close()
-        } catch (e: Exception) {
-            // Ignore input stream close errors
-        }
-        try {
-            response.close()
-        } catch (e: Exception) {
-            // Ignore response close errors
-        }
-    }
-}
 
 /**
  * WebDAV client built on OkHttp for Notable sync operations.
@@ -68,8 +58,8 @@ class StreamResponse(
  */
 class WebDAVClient(
     private val serverUrl: String,
-    private val username: String,
-    private val password: String
+    username: String,
+    password: String
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -249,7 +239,7 @@ class WebDAVClient(
             if (!response.isSuccessful) {
                 throw IOException("Failed to download file: ${response.code} ${response.message}")
             }
-            val content = response.body?.bytes() ?: throw IOException("Empty response body")
+            val content = response.body.bytes()
             return DownloadedFile(content = content, etag = response.header("ETag"))
         }
     }
@@ -265,45 +255,7 @@ class WebDAVClient(
         localFile.parentFile?.mkdirs()
         localFile.writeBytes(content)
     }
-
-    /**
-     * Get file as InputStream for streaming large files.
-     * Returns a StreamResponse that wraps both the InputStream and underlying HTTP Response.
-     * IMPORTANT: Caller MUST close the StreamResponse (use .use {} block) to prevent resource leaks.
-     *
-     * Example usage:
-     * ```
-     * webdavClient.getFileStream(path).use { streamResponse ->
-     *     streamResponse.inputStream.copyTo(outputStream)
-     * }
-     * ```
-     *
-     * @param path Remote path relative to server URL
-     * @return StreamResponse containing InputStream and managing underlying HTTP connection
-     * @throws IOException if download fails
-     */
-    fun getFileStream(path: String): StreamResponse {
-        val url = buildUrl(path)
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .header("Authorization", credentials)
-            .build()
-
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) {
-            response.close()
-            throw IOException("Failed to download file: ${response.code} ${response.message}")
-        }
-
-        val inputStream = response.body?.byteStream()
-            ?: run {
-                response.close()
-                throw IOException("Empty response body")
-            }
-
-        return StreamResponse(response, inputStream)
-    }
+//
 
     /**
      * Delete a resource from the WebDAV server.
@@ -326,45 +278,6 @@ class WebDAVClient(
         }
     }
 
-    /**
-     * Get last modified timestamp of a resource using PROPFIND.
-     * @param path Resource path relative to server URL
-     * @return Last modified timestamp in ISO 8601 format, or null if not available
-     * @throws IOException if PROPFIND fails
-     */
-    fun getLastModified(path: String): String? {
-        val url = buildUrl(path)
-
-        // WebDAV PROPFIND request body for last-modified
-        val propfindXml = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <D:propfind xmlns:D="DAV:">
-                <D:prop>
-                    <D:getlastmodified/>
-                </D:prop>
-            </D:propfind>
-        """.trimIndent()
-
-        val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
-
-        val request = Request.Builder()
-            .url(url)
-            .method("PROPFIND", requestBody)
-            .header("Authorization", credentials)
-            .header("Depth", "0")
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                return null
-            }
-
-            val responseBody = response.body?.string() ?: return null
-
-            // Parse XML response using XmlPullParser to properly handle namespaces and CDATA
-            return parseLastModifiedFromXml(responseBody)
-        }
-    }
 
     /**
      * List resources in a collection using PROPFIND.
@@ -397,7 +310,7 @@ class WebDAVClient(
                 throw IOException("Failed to list collection: ${response.code} ${response.message}")
             }
 
-            val responseBody = response.body?.string() ?: return emptyList()
+            val responseBody = response.body.string()
             val allHrefs = parseHrefsFromXml(responseBody)
 
             return allHrefs
@@ -443,7 +356,7 @@ class WebDAVClient(
                 throw IOException("Failed to list collection: ${response.code} ${response.message}")
             }
 
-            val responseBody = response.body?.string() ?: return emptyList()
+            val responseBody = response.body.string()
             return parseEntriesFromXml(responseBody)
                 .filter { (href, _) -> href != path && !href.endsWith("/$path") }
                 .mapNotNull { (href, lastModified) ->
@@ -480,40 +393,6 @@ class WebDAVClient(
         val normalizedServer = serverUrl.trimEnd('/')
         val normalizedPath = if (path.startsWith('/')) path else "/$path"
         return normalizedServer + normalizedPath
-    }
-
-    /**
-     * Parse last modified timestamp from WebDAV XML response.
-     * Properly handles namespaces, CDATA, and whitespace.
-     * @param xml XML response from PROPFIND
-     * @return Last modified timestamp, or null if not found
-     */
-    private fun parseLastModifiedFromXml(xml: String): String? {
-        return try {
-            val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = true
-            val parser = factory.newPullParser()
-            parser.setInput(StringReader(xml))
-
-            var eventType = parser.eventType
-            while (eventType != XmlPullParser.END_DOCUMENT) {
-                if (eventType == XmlPullParser.START_TAG) {
-                    // Check for getlastmodified tag (case-insensitive, namespace-aware)
-                    val localName = parser.name.lowercase()
-                    if (localName == "getlastmodified") {
-                        // Get text content, handling CDATA properly
-                        if (parser.next() == XmlPullParser.TEXT) {
-                            return parser.text.trim()
-                        }
-                    }
-                }
-                eventType = parser.next()
-            }
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse XML for last modified: ${e.message}")
-            null
-        }
     }
 
     /**
@@ -596,7 +475,7 @@ class WebDAVClient(
             }
             entries
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse XML entries: ${e.message}")
+            Log.e(TAG, "Failed to parse XML for entries", e)
             emptyList()
         }
     }
@@ -636,6 +515,7 @@ class WebDAVClient(
                 sdf.timeZone = TimeZone.getTimeZone("GMT")
                 sdf.parse(dateHeader)?.time
             } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse HTTP date: ${e.message}", e)
                 null
             }
         }
@@ -667,17 +547,167 @@ class WebDAVClient(
                 Pair(false, null)
             }
         }
+    // TODO: why there ware needed?
 
-        /**
-         * Factory method to get server time without full initialization.
-         * @return Server time as epoch millis, or null if unavailable
-         */
-        fun getServerTime(serverUrl: String, username: String, password: String): Long? {
-            return try {
-                WebDAVClient(serverUrl, username, password).getServerTime()
-            } catch (e: Exception) {
-                null
-            }
-        }
+//        /**
+//         * Factory method to get server time without full initialization.
+//         * @return Server time as epoch millis, or null if unavailable
+//         */
+//        fun getServerTime(serverUrl: String, username: String, password: String): Long? {
+//            return try {
+//                WebDAVClient(serverUrl, username, password).getServerTime()
+//            } catch (e: Exception) {
+//                null
+//            }
+//        }
     }
+
+//    /**
+//     * Parse last modified timestamp from WebDAV XML response.
+//     * Properly handles namespaces, CDATA, and whitespace.
+//     * @param xml XML response from PROPFIND
+//     * @return Last modified timestamp, or null if not found
+//     */
+//    private fun parseLastModifiedFromXml(xml: String): String? {
+//        return try {
+//            val factory = XmlPullParserFactory.newInstance()
+//            factory.isNamespaceAware = true
+//            val parser = factory.newPullParser()
+//            parser.setInput(StringReader(xml))
+//
+//            var eventType = parser.eventType
+//            while (eventType != XmlPullParser.END_DOCUMENT) {
+//                if (eventType == XmlPullParser.START_TAG) {
+//                    // Check for getlastmodified tag (case-insensitive, namespace-aware)
+//                    val localName = parser.name.lowercase()
+//                    if (localName == "getlastmodified") {
+//                        // Get text content, handling CDATA properly
+//                        if (parser.next() == XmlPullParser.TEXT) {
+//                            return parser.text.trim()
+//                        }
+//                    }
+//                }
+//                eventType = parser.next()
+//            }
+//            null
+//        } catch (e: Exception) {
+//            Log.e(TAG, "Failed to parse XML for last modified: ${e.message}")
+//            null
+//        }
+//    }
+
+
+//    /**
+//     * Get last modified timestamp of a resource using PROPFIND.
+//     * @param path Resource path relative to server URL
+//     * @return Last modified timestamp in ISO 8601 format, or null if not available
+//     * @throws IOException if PROPFIND fails
+//     */
+//    fun getLastModified(path: String): String? {
+//        val url = buildUrl(path)
+//
+//        // WebDAV PROPFIND request body for last-modified
+//        val propfindXml = """
+//            <?xml version="1.0" encoding="utf-8"?>
+//            <D:propfind xmlns:D="DAV:">
+//                <D:prop>
+//                    <D:getlastmodified/>
+//                </D:prop>
+//            </D:propfind>
+//        """.trimIndent()
+//
+//        val requestBody = propfindXml.toRequestBody("application/xml".toMediaType())
+//
+//        val request = Request.Builder()
+//            .url(url)
+//            .method("PROPFIND", requestBody)
+//            .header("Authorization", credentials)
+//            .header("Depth", "0")
+//            .build()
+//
+//        client.newCall(request).execute().use { response ->
+//            if (!response.isSuccessful) {
+//                return null
+//            }
+//
+//            val responseBody = response.body?.string() ?: return null
+//
+//            // Parse XML response using XmlPullParser to properly handle namespaces and CDATA
+//            return parseLastModifiedFromXml(responseBody)
+//        }
+//    }
+
+
+//    /**
+//     * Get file as InputStream for streaming large files.
+//     * Returns a StreamResponse that wraps both the InputStream and underlying HTTP Response.
+//     * IMPORTANT: Caller MUST close the StreamResponse (use .use {} block) to prevent resource leaks.
+//     *
+//     * Example usage:
+//     * ```
+//     * webdavClient.getFileStream(path).use { streamResponse ->
+//     *     streamResponse.inputStream.copyTo(outputStream)
+//     * }
+//     * ```
+//     *
+//     * @param path Remote path relative to server URL
+//     * @return StreamResponse containing InputStream and managing underlying HTTP connection
+//     * @throws IOException if download fails
+//     */
+//    fun getFileStream(path: String): StreamResponse {
+//        val url = buildUrl(path)
+//        val request = Request.Builder()
+//            .url(url)
+//            .get()
+//            .header("Authorization", credentials)
+//            .build()
+//
+//        val response = client.newCall(request).execute()
+//        if (!response.isSuccessful) {
+//            response.close()
+//            throw IOException("Failed to download file: ${response.code} ${response.message}")
+//        }
+//
+//        val inputStream = response.body?.byteStream()
+//            ?: run {
+//                response.close()
+//                throw IOException("Empty response body")
+//            }
+//
+//        return StreamResponse(response, inputStream)
+//    }
 }
+
+
+
+
+//
+///**
+// * Wrapper for streaming file downloads that properly manages the underlying HTTP response.
+// * This class ensures that both the InputStream and the HTTP Response are properly closed.
+// *
+// * Usage:
+// * ```
+// * webdavClient.getFileStream(path).use { streamResponse ->
+// *     streamResponse.inputStream.copyTo(outputStream)
+// * }
+// * ```
+// */
+//class StreamResponse(
+//    private val response: Response,
+//    val inputStream: InputStream
+//) : Closeable {
+//    override fun close() {
+//        try {
+//            inputStream.close()
+//        } catch (e: Exception) {
+//            // Ignore input stream close errors
+//        }
+//        try {
+//            response.close()
+//        } catch (e: Exception) {
+//            // Ignore response close errors
+//        }
+//    }
+//}
+
