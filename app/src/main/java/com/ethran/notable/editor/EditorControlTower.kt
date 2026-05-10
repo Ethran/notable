@@ -14,7 +14,6 @@ import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
-import com.ethran.notable.sync.SyncLogger
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,18 +91,6 @@ class EditorControlTower(
         return Offset.Zero // All handled
     }
 
-
-    /**
-     * Trigger sync for a specific page's notebook.
-     */
-    private suspend fun triggerSyncForPage(pageId: String?) {
-        if (pageId == null) return
-        try {
-            viewModel.syncFromPageId(pageId)
-        } catch (e: Exception) {
-            SyncLogger.e("EditorControlTower", "Sync failed: ${e.message}")
-        }
-    }
 
     fun setIsDrawing(value: Boolean) {
         if (viewModel.toolbarState.value.isDrawing == value) {

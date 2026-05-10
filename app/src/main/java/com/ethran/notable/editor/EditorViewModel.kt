@@ -603,7 +603,9 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
+            val oldPage = currentPageId
             _toolbarState.update { it.copy(pageId = newPageId) }
+            syncFromPageId(oldPage)
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
