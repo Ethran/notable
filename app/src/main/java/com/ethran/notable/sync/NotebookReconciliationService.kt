@@ -5,7 +5,6 @@ import com.ethran.notable.sync.serializers.NotebookSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
-import com.ethran.notable.utils.map
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.plus
 import javax.inject.Inject
@@ -18,7 +17,6 @@ class NotebookReconciliationService @Inject constructor(
     private val notebookSyncService: NotebookSyncService,
     private val reporter: SyncProgressReporter
 ) {
-    private val notebookSerializer = NotebookSerializer()
     private val logger = SyncLogger
 
     suspend fun syncExistingNotebooks(webdavClient: WebDAVClient): AppResult<Set<String>, DomainError> {
@@ -61,7 +59,7 @@ class NotebookReconciliationService @Inject constructor(
                     ?: return@flatMap AppResult.Error(DomainError.SyncError("Missing ETag for $remotePath"))
 
                 val remoteManifestJson = remoteManifest.content.decodeToString()
-                val remoteUpdatedAt = notebookSerializer.getManifestUpdatedAt(remoteManifestJson)
+                val remoteUpdatedAt = NotebookSerializer.getManifestUpdatedAt(remoteManifestJson)
                 val diffMs = remoteUpdatedAt?.let { localNotebook.updatedAt.time - it.time }
                     ?: Long.MAX_VALUE
 

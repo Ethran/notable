@@ -8,27 +8,26 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.data.db.encodeStrokePoints
 import com.ethran.notable.editor.utils.Pen
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.logCallStack
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import java.io.File
-import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.format.DateTimeParseException
 import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * Serializer for notebooks, pages, strokes, and images to/from JSON format for WebDAV sync.
+ * Utilizing java.time.Instant for modern, thread-safe ISO 8601 parsing.
  */
-class NotebookSerializer() {
+object NotebookSerializer {
 
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
-    }
-
-    private val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
     }
 
     /**
@@ -47,48 +46,56 @@ class NotebookSerializer() {
             defaultBackground = notebook.defaultBackground,
             defaultBackgroundType = notebook.defaultBackgroundType,
             linkedExternalUri = notebook.linkedExternalUri,
-            createdAt = iso8601Format.format(notebook.createdAt),
-            updatedAt = iso8601Format.format(notebook.updatedAt),
-            serverTimestamp = iso8601Format.format(Date())
+            createdAt = notebook.createdAt.toInstant().toString(),
+            updatedAt = notebook.updatedAt.toInstant().toString(),
+            serverTimestamp = Instant.now().toString()
         )
 
         return json.encodeToString(manifestDto)
     }
 
     /**
-     * Deserialize manifest.json to Notebook entity.
+     * Deserialize manifest.json to Notebook entity safely.
      * @param jsonString JSON string in manifest.json format
-     * @return Notebook entity
+     * @return AppResult containing Notebook entity or DomainError
      */
-    fun deserializeManifest(jsonString: String): Notebook {
-        val manifestDto = json.decodeFromString<NotebookManifestDto>(jsonString)
+    fun deserializeManifest(jsonString: String): AppResult<Notebook, DomainError> {
+        return try {
+            val manifestDto = json.decodeFromString<NotebookManifestDto>(jsonString)
+            val createdAt = parseIso8601(manifestDto.createdAt)
+            val updatedAt = parseIso8601(manifestDto.updatedAt)
 
-        return Notebook(
-            id = manifestDto.notebookId,
-            title = manifestDto.title,
-            openPageId = manifestDto.openPageId,
-            pageIds = manifestDto.pageIds,
-            parentFolderId = manifestDto.parentFolderId,
-            defaultBackground = manifestDto.defaultBackground,
-            defaultBackgroundType = manifestDto.defaultBackgroundType,
-            linkedExternalUri = manifestDto.linkedExternalUri,
-            createdAt = parseIso8601(manifestDto.createdAt),
-            updatedAt = parseIso8601(manifestDto.updatedAt)
-        )
+            if (createdAt == null || updatedAt == null) {
+                return AppResult.Error(DomainError.UnexpectedState("Manifest contains corrupted timestamps"))
+            }
+
+            AppResult.Success(
+                Notebook(
+                    id = manifestDto.notebookId,
+                    title = manifestDto.title,
+                    openPageId = manifestDto.openPageId,
+                    pageIds = manifestDto.pageIds,
+                    parentFolderId = manifestDto.parentFolderId,
+                    defaultBackground = manifestDto.defaultBackground,
+                    defaultBackgroundType = manifestDto.defaultBackgroundType,
+                    linkedExternalUri = manifestDto.linkedExternalUri,
+                    createdAt = createdAt,
+                    updatedAt = updatedAt
+                )
+            )
+        } catch (e: SerializationException) {
+            AppResult.Error(DomainError.UnexpectedState("Failed to decode manifest JSON: ${e.message}"))
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.UnexpectedState("Unexpected error during manifest deserialization: ${e.message}"))
+        }
     }
 
     /**
      * Serialize a page with its strokes and images to JSON format.
      * Stroke points are embedded as base64-encoded SB1 binary format.
-     * @param page Page entity
-     * @param strokes List of Stroke entities for this page
-     * @param images List of Image entities for this page
-     * @return JSON string for {page-id}.json
      */
     fun serializePage(page: Page, strokes: List<Stroke>, images: List<Image>): String {
-        // Serialize strokes with embedded base64-encoded SB1 binary points
         val strokeDtos = strokes.map { stroke ->
-            // Encode stroke points using SB1 binary format, then base64 encode
             val binaryData = encodeStrokePoints(stroke.points)
             val base64Data = Base64.encodeToString(binaryData, Base64.NO_WRAP)
 
@@ -103,8 +110,8 @@ class NotebookSerializer() {
                 left = stroke.left,
                 right = stroke.right,
                 pointsData = base64Data,
-                createdAt = iso8601Format.format(stroke.createdAt),
-                updatedAt = iso8601Format.format(stroke.updatedAt)
+                createdAt = stroke.createdAt.toInstant().toString(),
+                updatedAt = stroke.updatedAt.toInstant().toString()
             )
         }
 
@@ -115,9 +122,9 @@ class NotebookSerializer() {
                 y = image.y,
                 width = image.width,
                 height = image.height,
-                uri = convertToRelativeUri(image.uri),  // Convert to relative path
-                createdAt = iso8601Format.format(image.createdAt),
-                updatedAt = iso8601Format.format(image.updatedAt)
+                uri = convertToRelativeUri(image.uri),
+                createdAt = image.createdAt.toInstant().toString(),
+                updatedAt = image.updatedAt.toInstant().toString()
             )
         }
 
@@ -129,8 +136,8 @@ class NotebookSerializer() {
             backgroundType = page.backgroundType,
             parentFolderId = page.parentFolderId,
             scroll = page.scroll,
-            createdAt = iso8601Format.format(page.createdAt),
-            updatedAt = iso8601Format.format(page.updatedAt),
+            createdAt = page.createdAt.toInstant().toString(),
+            updatedAt = page.updatedAt.toInstant().toString(),
             strokes = strokeDtos,
             images = imageDtos
         )
@@ -139,61 +146,96 @@ class NotebookSerializer() {
     }
 
     /**
-     * Deserialize page JSON with embedded base64-encoded SB1 binary stroke data.
-     * @param jsonString JSON string in page format
-     * @return Triple of (Page, List<Stroke>, List<Image>)
+     * Deserialize page JSON with embedded base64-encoded SB1 binary stroke data safely.
+     * Corrupted individual strokes or images are skipped to save the rest of the page.
      */
-    fun deserializePage(jsonString: String): Triple<Page, List<Stroke>, List<Image>> {
-        val pageDto = json.decodeFromString<PageDto>(jsonString)
+    fun deserializePage(jsonString: String): AppResult<Triple<Page, List<Stroke>, List<Image>>, DomainError> {
+        return try {
+            val pageDto = json.decodeFromString<PageDto>(jsonString)
+            val pageCreated = parseIso8601(pageDto.createdAt)
+            val pageUpdated = parseIso8601(pageDto.updatedAt)
 
-        val page = Page(
-            id = pageDto.id,
-            notebookId = pageDto.notebookId,
-            background = pageDto.background,
-            backgroundType = pageDto.backgroundType,
-            parentFolderId = pageDto.parentFolderId,
-            scroll = pageDto.scroll,
-            createdAt = parseIso8601(pageDto.createdAt),
-            updatedAt = parseIso8601(pageDto.updatedAt)
-        )
+            if (pageCreated == null || pageUpdated == null) {
+                return AppResult.Error(DomainError.UnexpectedState("Page contains corrupted timestamps"))
+            }
 
-        val strokes = pageDto.strokes.map { strokeDto ->
-            // Decode base64 to binary, then decode SB1 binary format to stroke points
-            val binaryData = Base64.decode(strokeDto.pointsData, Base64.NO_WRAP)
-            val points = decodeStrokePoints(binaryData)
-
-            Stroke(
-                id = strokeDto.id,
-                size = strokeDto.size,
-                pen = Pen.valueOf(strokeDto.pen),
-                color = strokeDto.color,
-                maxPressure = strokeDto.maxPressure,
-                top = strokeDto.top,
-                bottom = strokeDto.bottom,
-                left = strokeDto.left,
-                right = strokeDto.right,
-                points = points,
-                pageId = pageDto.id,
-                createdAt = parseIso8601(strokeDto.createdAt),
-                updatedAt = parseIso8601(strokeDto.updatedAt)
+            val page = Page(
+                id = pageDto.id,
+                notebookId = pageDto.notebookId,
+                background = pageDto.background,
+                backgroundType = pageDto.backgroundType,
+                parentFolderId = pageDto.parentFolderId,
+                scroll = pageDto.scroll,
+                createdAt = pageCreated,
+                updatedAt = pageUpdated
             )
-        }
 
-        val images = pageDto.images.map { imageDto ->
-            Image(
-                id = imageDto.id,
-                x = imageDto.x,
-                y = imageDto.y,
-                width = imageDto.width,
-                height = imageDto.height,
-                uri = imageDto.uri,  // Will be converted to absolute path when restored
-                pageId = pageDto.id,
-                createdAt = parseIso8601(imageDto.createdAt),
-                updatedAt = parseIso8601(imageDto.updatedAt)
-            )
-        }
+            val strokes = pageDto.strokes.mapNotNull { strokeDto ->
+                try {
+                    val created = parseIso8601(strokeDto.createdAt)
+                    val updated = parseIso8601(strokeDto.updatedAt)
+                    if (created == null || updated == null) {
+                        logCallStack(reason = "Skipping stroke ${strokeDto.id} due to corrupted timestamps.")
+                        return@mapNotNull null
+                    }
 
-        return Triple(page, strokes, images)
+                    val binaryData = Base64.decode(strokeDto.pointsData, Base64.NO_WRAP)
+                    val points = decodeStrokePoints(binaryData)
+                    val penEnum = Pen.valueOf(strokeDto.pen)
+
+                    Stroke(
+                        id = strokeDto.id,
+                        size = strokeDto.size,
+                        pen = penEnum,
+                        color = strokeDto.color,
+                        maxPressure = strokeDto.maxPressure,
+                        top = strokeDto.top,
+                        bottom = strokeDto.bottom,
+                        left = strokeDto.left,
+                        right = strokeDto.right,
+                        points = points,
+                        pageId = pageDto.id,
+                        createdAt = created,
+                        updatedAt = updated
+                    )
+                } catch (e: Exception) {
+                    logCallStack(reason = "Skipping corrupted stroke ${strokeDto.id}: ${e.message}")
+                    null
+                }
+            }
+
+            val images = pageDto.images.mapNotNull { imageDto ->
+                try {
+                    val created = parseIso8601(imageDto.createdAt)
+                    val updated = parseIso8601(imageDto.updatedAt)
+                    if (created == null || updated == null) {
+                        logCallStack(reason = "Skipping image ${imageDto.id} due to corrupted timestamps.")
+                        return@mapNotNull null
+                    }
+
+                    Image(
+                        id = imageDto.id,
+                        x = imageDto.x,
+                        y = imageDto.y,
+                        width = imageDto.width,
+                        height = imageDto.height,
+                        uri = imageDto.uri,
+                        pageId = pageDto.id,
+                        createdAt = created,
+                        updatedAt = updated
+                    )
+                } catch (e: Exception) {
+                    logCallStack(reason = "Skipping corrupted image ${imageDto.id}: ${e.message}")
+                    null
+                }
+            }
+
+            AppResult.Success(Triple(page, strokes, images))
+        } catch (e: SerializationException) {
+            AppResult.Error(DomainError.UnexpectedState("Failed to decode page JSON: ${e.message}"))
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.UnexpectedState("Unexpected error during page deserialization: ${e.message}"))
+        }
     }
 
     /**
@@ -202,28 +244,23 @@ class NotebookSerializer() {
      */
     private fun convertToRelativeUri(absoluteUri: String?): String? {
         if (absoluteUri == null) return null
-
-        // Extract just the filename and parent directory
         val file = File(absoluteUri)
         val parentDir = file.parentFile?.name ?: ""
         val filename = file.name
-
-        return if (parentDir.isNotEmpty()) {
-            "$parentDir/$filename"
-        } else {
-            filename
-        }
+        return if (parentDir.isNotEmpty()) "$parentDir/$filename" else filename
     }
 
     /**
-     * Parse ISO 8601 date string to Date object.
+     * Parse ISO 8601 date string safely using modern java.time API.
+     * Converts back to java.util.Date for Room DB compatibility.
+     * Returns null on failure instead of a fake date.
      */
-    private fun parseIso8601(dateString: String): Date {
+    private fun parseIso8601(dateString: String): Date? {
         return try {
-            iso8601Format.parse(dateString) ?: Date()
-        } catch (e: Exception) {
-            logCallStack(reason = "Failed to parse ISO 8601 date: ${e.message}")
-            Date()
+            Date.from(Instant.parse(dateString))
+        } catch (e: DateTimeParseException) {
+            logCallStack(reason = "Failed to parse ISO 8601 date '$dateString': ${e.message}")
+            null
         }
     }
 
@@ -239,7 +276,6 @@ class NotebookSerializer() {
             null
         }
     }
-
 
     // ===== Data Transfer Objects =====
 
@@ -285,7 +321,7 @@ class NotebookSerializer() {
         val bottom: Float,
         val left: Float,
         val right: Float,
-        val pointsData: String,  // Base64-encoded SB1 binary format
+        val pointsData: String,
         val createdAt: String,
         val updatedAt: String
     )
@@ -297,7 +333,7 @@ class NotebookSerializer() {
         val y: Int,
         val width: Int,
         val height: Int,
-        val uri: String?,  // Nullable — images can be uploaded before they have a local URI
+        val uri: String?,
         val createdAt: String,
         val updatedAt: String
     )

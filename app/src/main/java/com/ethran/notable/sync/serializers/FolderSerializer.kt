@@ -4,23 +4,19 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.utils.logCallStack
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.format.DateTimeParseException
 import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * Serializer for folder hierarchy to/from JSON format for WebDAV sync.
+ * Utilizing java.time.Instant for modern, thread-safe ISO 8601 parsing.
  */
 object FolderSerializer {
 
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
-    }
-
-    private val iso8601Format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
     }
 
     /**
@@ -34,15 +30,16 @@ object FolderSerializer {
                 id = folder.id,
                 title = folder.title,
                 parentFolderId = folder.parentFolderId,
-                createdAt = iso8601Format.format(folder.createdAt),
-                updatedAt = iso8601Format.format(folder.updatedAt)
+                // .toInstant().toString() natively outputs strict ISO 8601 UTC
+                createdAt = folder.createdAt.toInstant().toString(),
+                updatedAt = folder.updatedAt.toInstant().toString()
             )
         }
 
         val foldersJson = FoldersJson(
             version = 1,
             folders = folderDtos,
-            serverTimestamp = iso8601Format.format(Date())
+            serverTimestamp = Instant.now().toString()
         )
 
         return json.encodeToString(foldersJson)
@@ -50,19 +47,28 @@ object FolderSerializer {
 
     /**
      * Deserialize JSON string to list of Folder entities.
+     * Skips folders with corrupted dates.
      * @param jsonString JSON string in folders.json format
      * @return List of Folder entities
      */
     fun deserializeFolders(jsonString: String): List<Folder> {
         val foldersJson = json.decodeFromString<FoldersJson>(jsonString)
 
-        return foldersJson.folders.map { dto ->
+        return foldersJson.folders.mapNotNull { dto ->
+            val created = parseIso8601(dto.createdAt)
+            val updated = parseIso8601(dto.updatedAt)
+
+            if (created == null || updated == null) {
+                logCallStack(reason = "Skipping folder ${dto.id} due to corrupted timestamps.")
+                return@mapNotNull null
+            }
+
             Folder(
                 id = dto.id,
                 title = dto.title,
                 parentFolderId = dto.parentFolderId,
-                createdAt = parseIso8601(dto.createdAt),
-                updatedAt = parseIso8601(dto.updatedAt)
+                createdAt = created,
+                updatedAt = updated
             )
         }
     }
@@ -83,14 +89,15 @@ object FolderSerializer {
     }
 
     /**
-     * Parse ISO 8601 date string to Date object.
+     * Parse ISO 8601 date string safely using modern java.time API.
+     * Converts back to java.util.Date for Room DB compatibility.
      */
-    private fun parseIso8601(dateString: String): Date {
+    private fun parseIso8601(dateString: String): Date? {
         return try {
-            iso8601Format.parse(dateString) ?: Date()
-        } catch (e: Exception) {
-            logCallStack(reason = "Failed to parse ISO 8601 date: ${e.message}")
-            Date()
+            Date.from(Instant.parse(dateString))
+        } catch (e: DateTimeParseException) {
+            logCallStack(reason = "Failed to parse ISO 8601 date '$dateString': ${e.message}")
+            null
         }
     }
 
