@@ -36,11 +36,12 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
-          target: google_apis
-          # 3. Updated to ARM architecture to match macos-latest runners
+          # 1. Switch to the Automated Test Device image (highly recommended for CI)
+          target: aosp_atd 
           arch: arm64-v8a
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # 2. Removed the incompatible '-gpu swiftshader_indirect' flag
+          emulator-options: -no-window -no-snapshot-save -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: ./gradlew connectedDebugAndroidTest
           
