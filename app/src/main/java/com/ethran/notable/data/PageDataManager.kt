@@ -36,7 +36,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
@@ -104,8 +103,7 @@ class PageDataManager @Inject constructor(
     // On change, we need to adjust stroke size.
     private var pageZoom = LinkedHashMap<String, Float>()
 
-    @Volatile
-    private var currentPage = ""
+    private val currentPage =  pageFromDb?.id.orEmpty()
 
     @Volatile
     private var currentPageNumber = -1
@@ -188,8 +186,6 @@ class PageDataManager @Inject constructor(
      */
     suspend fun requestCurrentPageLoadJoin(
     ) {
-        // TODO: It is possible to trigger this assert, it need to be handled more gracefully.
-        assert(currentPage == pageFromDb?.id)
         val bookId = pageFromDb?.notebookId
         log.d("requestCurrentPageLoadJoin($currentPage)")
         getOrStartLoadingJob(currentPage, bookId).join()
@@ -212,10 +208,6 @@ class PageDataManager @Inject constructor(
     }
 
     suspend fun cacheNeighbors() {
-        if (currentPage != pageFromDb?.id) {
-            log.e("Skipping neighbors cache for invalid current page: current=$currentPage db=${pageFromDb?.id}")
-            return
-        }
         val bookId = pageFromDb?.notebookId ?: return
 
         log.d("cacheNeighbors($currentPage)")
@@ -440,7 +432,6 @@ class PageDataManager @Inject constructor(
         pageFromDb?.notebookId?.let { notebookId ->
             currentPageNumber = appRepository.getPageNumber(notebookId, pageId)
         }
-        currentPage = pageId
     }
 
     suspend fun refreshPageFromDb() {
