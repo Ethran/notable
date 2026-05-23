@@ -60,14 +60,16 @@ class NotebookSyncService @Inject constructor(
                         appRepository.bookRepository.delete(notebookId)
                     } catch (e: Exception) {
                         sLog.e(TAG, "Failed to delete ${localNotebook.title}: ${e.message}")
-                        val error = DomainError.DatabaseError("Failed to delete ${localNotebook.title}")
+                        val error =
+                            DomainError.DatabaseError("Failed to delete ${localNotebook.title}")
                         persistentError = persistentError?.plus(error) ?: error
                     }
                 }
             }
 
             val cutoff = java.util.Date(System.currentTimeMillis() - maxAgeDays * 86_400_000L)
-            val stale = tombstones.filter { it.lastModified != null && it.lastModified.before(cutoff) }
+            val stale =
+                tombstones.filter { it.lastModified != null && it.lastModified.before(cutoff) }
             if (stale.isNotEmpty()) {
                 sLog.i(TAG, "Pruning ${stale.size} stale tombstone(s) older than $maxAgeDays days")
                 for (entry in stale) {
@@ -200,7 +202,10 @@ class NotebookSyncService @Inject constructor(
         notebookId: String,
         webdavClient: WebDAVClient
     ): AppResult<Unit, DomainError> {
-        val pageWithData = appRepository.pageRepository.getWithDataById(page.id)
+        val pageWithData =
+            appRepository.pageRepository.getWithDataById(page.id) ?: return AppResult.Error(
+                DomainError.DatabaseError("Page data not found for page ID: ${page.id}")
+            )
         val pageJson = NotebookSerializer.serializePage(
             page, pageWithData.strokes, pageWithData.images
         )
@@ -214,11 +219,12 @@ class NotebookSyncService @Inject constructor(
                     if (localFile.exists()) {
                         val remotePath = SyncPaths.imageFile(notebookId, localFile.name)
                         if (!webdavClient.exists(remotePath)) {
-                            webdavClient.putFile(remotePath, localFile, detectMimeType(localFile)).onSuccess {
-                                sLog.i(TAG, "Uploaded image: ${localFile.name}")
-                            }.onError { error ->
-                                persistentError = persistentError?.plus(error) ?: error
-                            }
+                            webdavClient.putFile(remotePath, localFile, detectMimeType(localFile))
+                                .onSuccess {
+                                    sLog.i(TAG, "Uploaded image: ${localFile.name}")
+                                }.onError { error ->
+                                    persistentError = persistentError?.plus(error) ?: error
+                                }
                         }
                     } else {
                         sLog.w(TAG, "Image file not found: ${image.uri}")
@@ -316,12 +322,13 @@ class NotebookSyncService @Inject constructor(
                         localFile
                     ).onSuccess {
                         sLog.i(TAG, "Downloaded image: $filename")
-                    }.onError { error -> // Replaced onFailure with onError to fix Return type mismatch
-                        sLog.e(TAG, "Failed to download image $filename: ${error.userMessage}")
-                        // Image download error doesn't interrupt the whole page sync,
-                        // but is aggregated to notify the UI.
-                        persistentError = persistentError?.plus(error) ?: error
                     }
+                        .onError { error -> // Replaced onFailure with onError to fix Return type mismatch
+                            sLog.e(TAG, "Failed to download image $filename: ${error.userMessage}")
+                            // Image download error doesn't interrupt the whole page sync,
+                            // but is aggregated to notify the UI.
+                            persistentError = persistentError?.plus(error) ?: error
+                        }
                 }
                 image.copy(uri = localFile.absolutePath)
             } else {
@@ -351,7 +358,10 @@ class NotebookSyncService @Inject constructor(
         try {
             val existingPage = appRepository.pageRepository.getById(page.id)
             if (existingPage != null) {
-                val pageWithData = appRepository.pageRepository.getWithDataById(page.id)
+                val pageWithData =
+                    appRepository.pageRepository.getWithDataById(page.id) ?: return AppResult.Error(
+                        DomainError.DatabaseError("Failed to fetch existing page data for page ID: ${page.id}")
+                    )
                 appRepository.strokeRepository.deleteAll(pageWithData.strokes.map { it.id })
                 appRepository.imageRepository.deleteAll(pageWithData.images.map { it.id })
                 appRepository.pageRepository.update(page)

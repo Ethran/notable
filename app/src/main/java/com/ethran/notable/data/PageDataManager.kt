@@ -298,6 +298,11 @@ class PageDataManager @Inject constructor(
 
 
             val pageWithData = appRepository.pageRepository.getWithDataById(pageId)
+            if (pageWithData == null) {
+                log.w("Missing page Data.")
+                appEventBus.tryEmit(AppEvent.ActionHint("Missing Page Data", 2000))
+                return
+            }
             // What will happened if page isn't in repository?
             cacheStrokes(pageId, pageWithData.strokes)
             cacheImages(pageId, pageWithData.images)
@@ -429,6 +434,12 @@ class PageDataManager @Inject constructor(
      */
     suspend fun setPage(pageId: String) {
         pageFromDb = appRepository.pageRepository.getById(pageId)
+        if (pageFromDb == null) {
+            log.w("Page($pageId) not found;")
+            appEventBus.tryEmit(AppEvent.ActionHint("Page not found", 2000))
+            currentPageNumber = -1
+            return
+        }
         pageFromDb?.notebookId?.let { notebookId ->
             currentPageNumber = appRepository.getPageNumber(notebookId, pageId)
         }

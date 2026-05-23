@@ -13,6 +13,7 @@ import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
 import com.ethran.notable.data.model.BackgroundType
+import io.shipbook.shipbooksdk.Log
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -65,7 +66,7 @@ interface PageDao {
 
     @Transaction
     @Query("SELECT * FROM page WHERE id =:pageId")
-    suspend fun getPageWithDataById(pageId: String): PageWithData
+    suspend fun getPageWithDataById(pageId: String): PageWithData?
 
     @Query("UPDATE page SET scroll=:scroll WHERE id =:pageId")
     suspend fun updateScroll(pageId: String, scroll: Int)
@@ -101,8 +102,12 @@ class PageRepository @Inject constructor(
     suspend fun getByIds(ids: List<String>): List<Page> {
         return db.getByIds(ids)
     }
-    suspend fun getWithDataById(pageId: String): PageWithData {
-        return db.getPageWithDataById(pageId)
+    suspend fun getWithDataById(pageId: String): PageWithData? {
+        val data = db.getPageWithDataById(pageId)
+        if (data == null) {
+            Log.w("PageRepository", "Page not found: $pageId")
+        }
+        return data
     }
 
 

@@ -10,6 +10,7 @@ import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
+import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.ShipBook
 import java.util.Date
@@ -68,6 +69,10 @@ class AppRepository @Inject constructor(
 
     suspend fun duplicatePage(pageId: String) {
         val pageWithData = pageRepository.getWithDataById(pageId)
+        if (pageWithData == null) {
+            log.w("duplicatePage: Missing page Data.")
+            return
+        }
         val duplicatedPage = pageWithData.page.copy(
             id = UUID.randomUUID().toString(),
             scroll = 0,
