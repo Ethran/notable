@@ -1,17 +1,23 @@
 package com.ethran.notable.sync
 
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SyncOrchestratorTest {
 
-    private fun networkFailure(): SyncResult = SyncResult.Failure(SyncError.NETWORK_ERROR)
+    private fun networkFailure(): AppResult<Unit, DomainError> = 
+        AppResult.Error(DomainError.NetworkError("Network error"))
 
     @Test
     fun syncResult_failure_keeps_error_value() {
         when (val result = networkFailure()) {
-            is SyncResult.Failure -> assertEquals(SyncError.NETWORK_ERROR, result.error)
-            SyncResult.Success -> error("Expected failure")
+            is AppResult.Error -> {
+                val error = result.error as DomainError.NetworkError
+                assertEquals("Network error", error.message)
+            }
+            is AppResult.Success -> error("Expected failure")
         }
     }
 

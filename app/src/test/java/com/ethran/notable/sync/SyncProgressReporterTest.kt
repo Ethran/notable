@@ -1,5 +1,6 @@
 package com.ethran.notable.sync
 
+import com.ethran.notable.utils.DomainError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -108,10 +109,11 @@ class SyncProgressReporterTest {
         val reporter = newReporter()
         reporter.beginStep(SyncStep.SYNCING_NOTEBOOKS, 0.3f, "...")
 
-        reporter.finishError(SyncError.NETWORK_ERROR, canRetry = true)
+        val error = DomainError.NetworkError("Network error")
+        reporter.finishError(error, canRetry = true)
 
         val s = reporter.state.value as SyncState.Error
-        assertEquals(SyncError.NETWORK_ERROR, s.error)
+        assertEquals(error, s.error)
         assertEquals(SyncStep.SYNCING_NOTEBOOKS, s.step)
         assertTrue(s.canRetry)
     }
@@ -120,10 +122,11 @@ class SyncProgressReporterTest {
     fun finishError_when_not_syncing_uses_initializing_step() {
         val reporter = newReporter()
 
-        reporter.finishError(SyncError.AUTH_ERROR, canRetry = false)
+        val error = DomainError.SyncAuthError
+        reporter.finishError(error, canRetry = false)
 
         val s = reporter.state.value as SyncState.Error
-        assertEquals(SyncError.AUTH_ERROR, s.error)
+        assertEquals(error, s.error)
         assertEquals(SyncStep.INITIALIZING, s.step)
     }
 
