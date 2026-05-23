@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
@@ -42,6 +43,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,6 +97,10 @@ fun SyncSettings(
     state: SyncSettingsUiState,
     callbacks: SyncSettingsCallbacks,
 ) {
+    // 1. State to track if the dialog should be shown.
+    // Defaults to true when the screen is first opened.
+    var showWarningDialog by rememberSaveable { mutableStateOf(true) }
+
     val isConfigured by remember(state.isPasswordSaved, state.syncSettings.serverUrl) {
         derivedStateOf { state.isPasswordSaved && state.syncSettings.serverUrl.isNotEmpty() }
     }
@@ -104,6 +110,33 @@ fun SyncSettings(
         stringResource(R.string.sync_connection_setup)
     }
     var showServerConfig by remember { mutableStateOf(!isConfigured) }
+
+    // 2. The Blocking Dialog
+    if (showWarningDialog) {
+        AlertDialog(
+            // Passing an empty lambda prevents dismissing by clicking outside the dialog
+            onDismissRequest = { },
+            title = {
+                Text(
+                    text = "Experimental Feature", // Replace with stringResource
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colors.error // Makes it red/alerting
+                )
+            },
+            text = {
+                Text(
+                    "The synchronization feature is currently in testing. It is not guaranteed to be stable and may result in the loss or duplication of data.\n\nPlease ensure you have local backups of your notes before proceeding."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showWarningDialog = false }
+                ) {
+                    Text("I Understand & Accept the Risk")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
