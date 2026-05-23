@@ -20,7 +20,6 @@ object GlobalAppSettings {
     }
 }
 
-
 @Serializable
 data class AppSettings(
     // General
@@ -47,7 +46,7 @@ data class AppSettings(
     val twoFingerSwipeRightAction: GestureAction? = defaultTwoFingerSwipeRightAction,
     val holdAction: GestureAction? = defaultHoldAction,
     val enableQuickNav: Boolean = true,
-
+    val renameOnCreate: Boolean = true,
 
     // Debug
     val showWelcome: Boolean = true,

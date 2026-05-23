@@ -393,7 +393,7 @@ class ExportEngine @Inject constructor(
 
     private suspend fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int) {
         ensureNotMainThread("ExportPdf")
-        val data = pageContentRenderer.loadPageContent(pageId)
+        val data = pageContentRenderer.loadPageContent(pageId) ?: return
         val (_, contentHeightPx) = pageContentRenderer.computeContentDimensions(data)
 
         val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH.toFloat()

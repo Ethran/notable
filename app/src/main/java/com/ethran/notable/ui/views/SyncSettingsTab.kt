@@ -1,0 +1,994 @@
+package com.ethran.notable.ui.views
+
+import android.content.res.Configuration
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AlertDialog
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.ethran.notable.R
+import com.ethran.notable.sync.ConnectionTestResult
+import com.ethran.notable.sync.SyncLogger
+import com.ethran.notable.sync.SyncSettings
+import com.ethran.notable.sync.SyncState
+import com.ethran.notable.sync.SyncStep
+import com.ethran.notable.ui.components.SettingToggleRow
+import com.ethran.notable.ui.components.SettingsDivider
+import com.ethran.notable.ui.theme.InkaTheme
+import com.ethran.notable.ui.viewmodels.SyncSettingsUiState
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
+
+data class SyncDangerCallbacks(
+    val onForceUploadRequested: (Boolean) -> Unit = {},
+    val onForceDownloadRequested: (Boolean) -> Unit = {},
+    val onConfirmForceUpload: () -> Unit = {},
+    val onConfirmForceDownload: () -> Unit = {},
+)
+
+data class SyncSettingsCallbacks(
+    val onUpdateSyncSettings: (SyncSettings, Boolean) -> Unit = { _, _ -> },
+    val onTogglePasswordVisibility: () -> Unit = {},
+    val onSaveCredentials: () -> Unit = {},
+    val onTestConnection: () -> Unit = {},
+    val onManualSync: () -> Unit = {},
+    val onClearSyncLogs: () -> Unit = {},
+    val danger: SyncDangerCallbacks = SyncDangerCallbacks(),
+)
+
+private val EInkFieldShape = RoundedCornerShape(4.dp)
+private val EInkButtonShape = RoundedCornerShape(8.dp)
+private val EInkFieldBorderWidth = 1.dp
+
+@Composable
+fun SyncSettings(
+    state: SyncSettingsUiState,
+    callbacks: SyncSettingsCallbacks,
+) {
+    // 1. State to track if the dialog should be shown.
+    // Defaults to true when the screen is first opened.
+    var showWarningDialog by rememberSaveable { mutableStateOf(true) }
+
+    val isConfigured by remember(state.isPasswordSaved, state.syncSettings.serverUrl) {
+        derivedStateOf { state.isPasswordSaved && state.syncSettings.serverUrl.isNotEmpty() }
+    }
+    val serverSectionTitle = if (isConfigured) {
+        stringResource(R.string.sync_server_configured, state.syncSettings.serverUrl.take(25))
+    } else {
+        stringResource(R.string.sync_connection_setup)
+    }
+    var showServerConfig by remember { mutableStateOf(!isConfigured) }
+
+    // 2. The Blocking Dialog
+    if (showWarningDialog) {
+        AlertDialog(
+            // Passing an empty lambda prevents dismissing by clicking outside the dialog
+            onDismissRequest = { },
+            title = {
+                Text(
+                    text = "Experimental Feature", // Replace with stringResource
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colors.error // Makes it red/alerting
+                )
+            },
+            text = {
+                Text(
+                    "The synchronization feature is currently in testing. It is not guaranteed to be stable and may result in the loss or duplication of data.\n\nPlease ensure you have local backups of your notes before proceeding."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showWarningDialog = false }
+                ) {
+                    Text("I Understand & Accept the Risk")
+                }
+            }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.sync_title),
+            style = MaterialTheme.typography.h6,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        ConnectionSection(
+            state = state,
+            callbacks = callbacks,
+            sectionTitle = serverSectionTitle,
+            isConfigured = isConfigured,
+            showServerConfig = showServerConfig,
+            onToggleSection = { showServerConfig = !showServerConfig }
+        )
+
+        if (isConfigured) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SyncBehaviorSection(state = state, onUpdate = callbacks.onUpdateSyncSettings)
+
+            if (state.syncSettings.syncEnabled) {
+                Spacer(modifier = Modifier.height(24.dp))
+
+                SyncActionsSection(state = state, callbacks = callbacks)
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                var logsExpanded by remember { mutableStateOf(false) }
+                SyncLogsSection(
+                    state = state,
+                    callbacks = callbacks,
+                    isExpanded = logsExpanded,
+                    onToggleExpanded = { logsExpanded = !logsExpanded }
+                )
+            }
+        } else {
+            Spacer(modifier = Modifier.height(24.dp))
+            MissingConfigurationHint()
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun ConnectionSection(
+    state: SyncSettingsUiState,
+    callbacks: SyncSettingsCallbacks,
+    sectionTitle: String,
+    isConfigured: Boolean,
+    showServerConfig: Boolean,
+    onToggleSection: () -> Unit,
+) {
+    EInkSection(
+        title = sectionTitle,
+        icon = Icons.Default.Cloud,
+        isExpandable = isConfigured,
+        isExpanded = showServerConfig,
+        onHeaderClick = { if (isConfigured) onToggleSection() }
+    ) {
+        SyncCredentialFields(
+            settings = state.syncSettings,
+            isPasswordSaved = state.isPasswordSaved,
+            passwordVisible = state.passwordVisible,
+            onUpdate = callbacks.onUpdateSyncSettings,
+            onTogglePasswordVisibility = callbacks.onTogglePasswordVisibility
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            EInkActionButton(
+                text = stringResource(R.string.sync_save_credentials),
+                onClick = callbacks.onSaveCredentials,
+                enabled = state.credentialsDirty && state.syncSettings.username.isNotEmpty(),
+                modifier = Modifier.weight(1f),
+                isBold = true
+            )
+            EInkActionButton(
+                text = if (state.testingConnection) stringResource(R.string.sync_testing_connection) else stringResource(R.string.sync_test_connection),
+                onClick = callbacks.onTestConnection,
+                enabled = !state.testingConnection && state.syncSettings.serverUrl.isNotEmpty(),
+                modifier = Modifier.weight(1f),
+                isSecondary = true
+            )
+        }
+
+        state.connectionStatus?.let {
+            Spacer(modifier = Modifier.height(8.dp))
+            ConnectionStatusText(it)
+        }
+    }
+}
+
+@Composable
+private fun SyncBehaviorSection(
+    state: SyncSettingsUiState,
+    onUpdate: (SyncSettings, Boolean) -> Unit,
+) {
+    EInkSection(title = stringResource(R.string.sync_behavior_title), icon = Icons.Default.Settings) {
+        SettingToggleRow(
+            label = stringResource(R.string.sync_enable_label),
+            value = state.syncSettings.syncEnabled,
+            onToggle = { onUpdate(state.syncSettings.copy(syncEnabled = it), true) }
+        )
+
+        if (state.syncSettings.syncEnabled) {
+            SettingToggleRow(
+                label = stringResource(R.string.sync_auto_sync_label, state.syncSettings.syncInterval),
+                value = state.syncSettings.autoSync,
+                onToggle = { onUpdate(state.syncSettings.copy(autoSync = it), true) }
+            )
+            SyncIntervalSelector(
+                intervalMinutes = state.syncSettings.syncInterval,
+                onIntervalChanged = { onUpdate(state.syncSettings.copy(syncInterval = it), true) }
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.sync_on_note_close_label),
+                value = state.syncSettings.syncOnNoteClose,
+                onToggle = { onUpdate(state.syncSettings.copy(syncOnNoteClose = it), true) }
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.sync_wifi_only_label),
+                value = state.syncSettings.wifiOnly,
+                onToggle = { onUpdate(state.syncSettings.copy(wifiOnly = it), true) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SyncActionsSection(
+    state: SyncSettingsUiState,
+    callbacks: SyncSettingsCallbacks,
+) {
+    EInkSection(title = stringResource(R.string.sync_manual_actions_title), icon = Icons.Default.Sync) {
+        ManualSyncButton(
+            syncSettings = state.syncSettings,
+            syncState = state.syncState,
+            onManualSync = callbacks.onManualSync
+        )
+
+        LastSyncInfo(lastSyncTime = state.syncSettings.lastSyncTime)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = stringResource(R.string.sync_force_operations_title),
+            style = MaterialTheme.typography.overline,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colors.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        ForceOperationsSection(
+            syncSettings = state.syncSettings,
+            onForceUploadRequested = callbacks.danger.onForceUploadRequested,
+            onForceDownloadRequested = callbacks.danger.onForceDownloadRequested,
+            onConfirmForceUpload = callbacks.danger.onConfirmForceUpload,
+            onConfirmForceDownload = callbacks.danger.onConfirmForceDownload,
+            showForceUploadConfirm = state.showForceUploadConfirm,
+            showForceDownloadConfirm = state.showForceDownloadConfirm
+        )
+    }
+}
+
+@Composable
+private fun LastSyncInfo(lastSyncTime: Long?) {
+    val label = lastSyncTime?.let {
+        try {
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            fmt.format(java.util.Date(it))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    val text = if (label != null) {
+        stringResource(R.string.sync_last_synced, label)
+    } else {
+        stringResource(R.string.sync_last_synced_never)
+    }
+
+    Text(
+        text = text,
+        style = MaterialTheme.typography.caption,
+        color = MaterialTheme.colors.onSurface,
+        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+    )
+}
+
+@Composable
+private fun SyncLogsSection(
+    state: SyncSettingsUiState,
+    callbacks: SyncSettingsCallbacks,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
+) {
+    EInkSection(
+        title = stringResource(R.string.sync_log_title),
+        icon = Icons.Default.History,
+        isExpandable = true,
+        isExpanded = isExpanded,
+        onHeaderClick = onToggleExpanded
+    ) {
+        SyncLogViewer(syncLogs = state.syncLogs, onClearLog = callbacks.onClearSyncLogs)
+    }
+}
+
+@Composable
+private fun MissingConfigurationHint() {
+    Text(
+        text = stringResource(R.string.sync_missing_config_hint),
+        style = MaterialTheme.typography.body2,
+        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+        modifier = Modifier.padding(horizontal = 4.dp)
+    )
+}
+
+
+@Composable
+fun EInkSection(
+    title: String,
+    icon: ImageVector,
+    isExpandable: Boolean = false,
+    isExpanded: Boolean = true,
+    onHeaderClick: () -> Unit = {},
+    content: @Composable () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = isExpandable) { onHeaderClick() }
+                .padding(vertical = 8.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon, 
+                contentDescription = null, 
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colors.onSurface
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                title, 
+                style = MaterialTheme.typography.subtitle2,
+                fontWeight = FontWeight.Bold, 
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colors.onSurface
+            )
+            if (isExpandable) {
+                Icon(
+                    if (isExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colors.onSurface
+                )
+            }
+        }
+        
+        AnimatedVisibility(visible = isExpanded) {
+            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
+                content()
+            }
+        }
+        SettingsDivider()
+    }
+}
+
+@Composable
+fun ConnectionStatusText(result: AppResult<ConnectionTestResult, DomainError>) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val icon = when (result) {
+            is AppResult.Success -> Icons.Default.CheckCircle
+            is AppResult.Error -> Icons.Default.Warning
+        }
+        Icon(
+            icon, 
+            contentDescription = null, 
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colors.onSurface
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        
+        val text = when (result) {
+            is AppResult.Success -> {
+                val skewMs = result.data.clockSkewMs
+                if (skewMs != null && kotlin.math.abs(skewMs) > 1000) {
+                    stringResource(R.string.sync_clock_skew_short, skewMs / 1000)
+                } else {
+                    stringResource(R.string.sync_connected_successfully)
+                }
+            }
+            is AppResult.Error -> result.error.userMessage
+        }
+        Text(
+            text, 
+            style = MaterialTheme.typography.caption, 
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface
+        )
+    }
+}
+
+@Composable
+fun SyncCredentialFields(
+    settings: SyncSettings,
+    isPasswordSaved: Boolean,
+    passwordVisible: Boolean,
+    onUpdate: (SyncSettings, Boolean) -> Unit,
+    onTogglePasswordVisibility: () -> Unit
+) {
+    EInkTextField(
+        label = stringResource(R.string.sync_server_url_label),
+        value = settings.serverUrl,
+        onValueChange = { onUpdate(settings.copy(serverUrl = it), false) },
+        placeholder = stringResource(R.string.sync_server_url_placeholder)
+    )
+    
+    if (settings.serverUrl.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.sync_server_url_note),
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+            modifier = Modifier.padding(top = 2.dp, start = 4.dp)
+        )
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    EInkTextField(
+        label = stringResource(R.string.sync_username_label),
+        value = settings.username,
+        onValueChange = { onUpdate(settings.copy(username = it), false) }
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Text(
+        text = stringResource(R.string.sync_password_label), 
+        style = MaterialTheme.typography.caption, 
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colors.onSurface
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colors.surface, EInkFieldShape)
+            .border(EInkFieldBorderWidth, MaterialTheme.colors.onSurface, EInkFieldShape)
+            .padding(start = 12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (settings.password.isEmpty() && isPasswordSaved) {
+                    Text(
+                        text = stringResource(R.string.sync_password_unchanged), 
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f), 
+                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                    )
+                }
+                BasicTextField(
+                    value = settings.password,
+                    onValueChange = { onUpdate(settings.copy(password = it), false) },
+                    textStyle = TextStyle(
+                        fontFamily = FontFamily.Monospace, 
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colors.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colors.onSurface),
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp)
+                )
+            }
+            IconButton(onClick = onTogglePasswordVisibility) {
+                Icon(
+                    if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EInkTextField(label: String, value: String, onValueChange: (String) -> Unit, placeholder: String = "") {
+    Column {
+        Text(
+            label, 
+            style = MaterialTheme.typography.caption, 
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colors.surface, EInkFieldShape)
+                .border(EInkFieldBorderWidth, MaterialTheme.colors.onSurface, EInkFieldShape)
+                .padding(12.dp)
+        ) {
+            if (value.isEmpty() && placeholder.isNotEmpty()) {
+                Text(
+                    placeholder, 
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.3f), 
+                    style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                textStyle = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colors.onSurface
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colors.onSurface),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+fun eInkButtonColors(isSecondary: Boolean = false) = ButtonDefaults.buttonColors(
+    backgroundColor = if (isSecondary) MaterialTheme.colors.onSurface.copy(alpha = 0.1f) else MaterialTheme.colors.onSurface,
+    contentColor = if (isSecondary) MaterialTheme.colors.onSurface else MaterialTheme.colors.surface,
+    disabledBackgroundColor = MaterialTheme.colors.onSurface.copy(alpha = 0.05f),
+    disabledContentColor = MaterialTheme.colors.onSurface.copy(alpha = 0.3f)
+)
+
+@Composable
+private fun SyncIntervalSelector(
+    intervalMinutes: Int,
+    onIntervalChanged: (Int) -> Unit,
+) {
+    val minInterval = 15
+    val maxInterval = 240
+    val stepMinutes = 5
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.sync_interval_label),
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+
+        EInkActionButton(
+            text = "-",
+            onClick = { onIntervalChanged((intervalMinutes - stepMinutes).coerceAtLeast(minInterval)) },
+            enabled = intervalMinutes > minInterval,
+            isSecondary = true
+        )
+
+        Text(
+            text = stringResource(R.string.sync_interval_value, intervalMinutes),
+            style = MaterialTheme.typography.body2,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colors.onSurface
+        )
+
+        EInkActionButton(
+            text = "+",
+            onClick = { onIntervalChanged((intervalMinutes + stepMinutes).coerceAtMost(maxInterval)) },
+            enabled = intervalMinutes < maxInterval,
+            isSecondary = true
+        )
+    }
+}
+@Composable
+fun ManualSyncButton(
+    syncSettings: SyncSettings,
+    syncState: SyncState,
+    onManualSync: () -> Unit
+) {
+    val label = when (syncState) {
+        is SyncState.Syncing -> stringResource(R.string.sync_status_syncing)
+        is SyncState.Success -> stringResource(R.string.sync_synced)
+        is SyncState.Error -> stringResource(R.string.sync_failed)
+        else -> stringResource(R.string.sync_now)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (syncState is SyncState.Syncing) {
+            SyncProgressPanel(syncState)
+        }
+
+        if (syncState is SyncState.Error) {
+            Text(
+                text = syncState.error.userMessage,
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface
+            )
+        }
+
+        Button(
+            onClick = onManualSync,
+            enabled = syncState is SyncState.Idle &&
+                syncSettings.syncEnabled &&
+                syncSettings.serverUrl.isNotEmpty(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            colors = eInkButtonColors(),
+            shape = EInkButtonShape
+        ) {
+            Text(label, fontWeight = FontWeight.Bold)
+        }
+
+        if (syncState is SyncState.Error && syncState.canRetry) {
+            Button(
+                onClick = onManualSync,
+                enabled = syncSettings.syncEnabled && syncSettings.serverUrl.isNotEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                colors = eInkButtonColors(isSecondary = true),
+                shape = EInkButtonShape
+            ) {
+                Text(stringResource(R.string.sync_retry_button), fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun SyncProgressPanel(syncing: SyncState.Syncing) {
+    val stepProgress = syncing.item?.let { it.index.toFloat() / it.total.coerceAtLeast(1) } ?: 0f
+    val stepIndex = syncing.currentStep.ordinal + 1
+    val totalSteps = SyncStep.entries.size
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colors.onSurface)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = stringResource(R.string.sync_progress_step, stepIndex, totalSteps, syncing.currentStep.displayName()),
+                style = MaterialTheme.typography.body2,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colors.onSurface
+            )
+            Text(
+                text = "${(stepProgress * 100).toInt()}%",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onSurface
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .border(1.dp, MaterialTheme.colors.onSurface)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(stepProgress.coerceIn(0f, 1f))
+                    .height(6.dp)
+                    .background(MaterialTheme.colors.onSurface)
+            )
+        }
+        syncing.item?.let { item ->
+            Text(
+                text = stringResource(R.string.sync_progress_item, item.index, item.total, item.name),
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun SyncStep.displayName(): String = when (this) {
+    SyncStep.INITIALIZING -> stringResource(R.string.sync_step_initializing)
+    SyncStep.SYNCING_FOLDERS -> stringResource(R.string.sync_step_syncing_folders)
+    SyncStep.APPLYING_DELETIONS -> stringResource(R.string.sync_step_applying_deletions)
+    SyncStep.SYNCING_NOTEBOOKS -> stringResource(R.string.sync_step_syncing_notebooks)
+    SyncStep.DOWNLOADING_NEW -> stringResource(R.string.sync_step_downloading_new)
+    SyncStep.UPLOADING_DELETIONS -> stringResource(R.string.sync_step_uploading_deletions)
+    SyncStep.FINALIZING -> stringResource(R.string.sync_step_finalizing)
+}
+
+@Composable
+fun ForceOperationsSection(
+    syncSettings: SyncSettings,
+    showForceUploadConfirm: Boolean,
+    showForceDownloadConfirm: Boolean,
+    onForceUploadRequested: (Boolean) -> Unit,
+    onForceDownloadRequested: (Boolean) -> Unit,
+    onConfirmForceUpload: () -> Unit,
+    onConfirmForceDownload: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        EInkActionButton(
+            text = stringResource(R.string.sync_force_upload_button),
+            onClick = { onForceUploadRequested(true) },
+            enabled = syncSettings.syncEnabled,
+            modifier = Modifier.weight(1f),
+            fontSize = 12.sp
+        )
+        EInkActionButton(
+            text = stringResource(R.string.sync_force_download_button),
+            onClick = { onForceDownloadRequested(true) },
+            enabled = syncSettings.syncEnabled,
+            modifier = Modifier.weight(1f),
+            fontSize = 12.sp
+        )
+    }
+
+    if (showForceUploadConfirm) {
+        ConfirmationDialog(
+            title = stringResource(R.string.sync_confirm_force_upload_title),
+            message = stringResource(R.string.sync_confirm_force_upload_message),
+            onConfirm = onConfirmForceUpload,
+            onDismiss = { onForceUploadRequested(false) }
+        )
+    }
+    if (showForceDownloadConfirm) {
+        ConfirmationDialog(
+            title = stringResource(R.string.sync_confirm_force_download_title),
+            message = stringResource(R.string.sync_confirm_force_download_message),
+            onConfirm = onConfirmForceDownload,
+            onDismiss = { onForceDownloadRequested(false) }
+        )
+    }
+}
+
+@Composable
+fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
+    val recentLogs = remember(syncLogs) { syncLogs.takeLast(30) }
+
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+        ) {
+            val scrollState = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .verticalScroll(scrollState)
+                    .padding(8.dp)
+            ) {
+                if (recentLogs.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.sync_log_empty), 
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f)
+                    )
+                } else {
+                    recentLogs.forEach { log ->
+                        Text(
+                            text = "[${log.timestamp}] ${log.message}",
+                            style = TextStyle(
+                                fontFamily = FontFamily.Monospace, 
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colors.onSurface
+                            ),
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        EInkActionButton(
+            text = stringResource(R.string.sync_clear_log),
+            onClick = onClearLog,
+            modifier = Modifier.align(Alignment.End),
+            isSecondary = true,
+            fontSize = 10.sp
+        )
+    }
+}
+
+@Composable
+fun ConfirmationDialog(
+    title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            color = MaterialTheme.colors.surface,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    title, 
+                    fontWeight = FontWeight.Bold, 
+                    style = MaterialTheme.typography.h6,
+                    color = MaterialTheme.colors.onSurface
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    message, 
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.onSurface
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = onDismiss, 
+                        modifier = Modifier.weight(1f), 
+                        shape = EInkButtonShape,
+                        colors = eInkButtonColors(isSecondary = true)
+                    ) {
+                        Text(stringResource(R.string.sync_dialog_cancel))
+                    }
+                    Button(
+                        onClick = onConfirm, 
+                        modifier = Modifier.weight(1f), 
+                        shape = EInkButtonShape,
+                        colors = eInkButtonColors()
+                    ) {
+                        Text(stringResource(R.string.sync_dialog_confirm))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EInkActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    isSecondary: Boolean = false,
+    isBold: Boolean = false,
+    fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        shape = EInkButtonShape,
+        colors = eInkButtonColors(isSecondary = isSecondary)
+    ) {
+        Text(
+            text = text,
+            fontWeight = if (isBold) FontWeight.Bold else null,
+            fontSize = fontSize
+        )
+    }
+}
+
+
+// ----------------------------------- //
+// --------      Previews      ------- //
+// ----------------------------------- //
+
+
+@Preview(
+    showBackground = true,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+    name = "Dark Mode",
+)
+@Preview(
+    showBackground = true,
+    uiMode = Configuration.UI_MODE_NIGHT_NO,
+    name = "Light Mode",
+)
+@Composable
+fun SyncSettingsContentPreview() {
+    InkaTheme {
+        Surface(color = MaterialTheme.colors.background) {
+            Box(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                SyncSettings(
+                    state = SyncSettingsUiState(
+                        syncSettings = SyncSettings(
+                            syncEnabled = true,
+                            serverUrl = "https://webdav.example.com",
+                            username = "demo",
+                            password = "secret"
+                        )
+                    ), callbacks = SyncSettingsCallbacks()
+                )
+            }
+        }
+    }
+}
+
+
+@Preview(name = "Configured - Collapsed", showBackground = true)
+@Composable
+fun SyncSettingsConfiguredPreview() {
+    InkaTheme {
+        Surface(color = MaterialTheme.colors.background) {
+            SyncSettings(
+                state = SyncSettingsUiState(
+                    isPasswordSaved = true,
+                    syncSettings = SyncSettings(
+                        syncEnabled = true,
+                        serverUrl = "https://webdav.example.com/dav/",
+                        username = "demo_user",
+                        lastSyncTime = java.util.Calendar.getInstance().apply { set(2024, 2, 20, 14, 30, 5); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+                    )
+                ),
+                callbacks = SyncSettingsCallbacks()
+            )
+        }
+    }
+}
+
+@Preview(name = "Configured - Syncing", showBackground = true)
+@Composable
+fun SyncSettingsSyncingPreview() {
+    InkaTheme {
+        Surface(color = MaterialTheme.colors.background) {
+            SyncSettings(
+                state = SyncSettingsUiState(
+                    isPasswordSaved = true,
+                    syncState = SyncState.Syncing(
+                        SyncStep.SYNCING_NOTEBOOKS,
+                        0.45f,
+                        "Syncing notebooks..."
+                    ),
+                    syncSettings = SyncSettings(
+                        syncEnabled = true,
+                        serverUrl = "https://webdav.example.com/dav/",
+                        username = "demo_user",
+                        lastSyncTime = java.util.Calendar.getInstance().apply { set(2024, 2, 20, 14, 30, 5); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+                    )
+                ),
+                callbacks = SyncSettingsCallbacks()
+            )
+        }
+    }
+}

@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.editor.EditorDestination
@@ -56,6 +57,7 @@ import com.ethran.notable.editor.ui.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
@@ -97,14 +99,31 @@ fun Library(
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val newlyCreatedBookId by viewModel.newlyCreatedBookId.collectAsStateWithLifecycle()
 
     LaunchedEffect(folderId) {
         viewModel.loadFolder(folderId)
     }
 
+    // Show config dialog for newly created notebooks so user can rename immediately
+    if (newlyCreatedBookId != null) {
+        if (GlobalAppSettings.current.renameOnCreate && uiState.books.any { it.id == newlyCreatedBookId }) {
+            NotebookConfigDialog(
+                appRepository = viewModel.appRepository,
+                exportEngine = viewModel.exportEngine,
+                syncScheduler = viewModel.syncScheduler,
+                bookId = newlyCreatedBookId!!,
+                onClose = { viewModel.clearNewlyCreatedBookId() }
+            )
+        } else {
+            viewModel.clearNewlyCreatedBookId()
+        }
+    }
+
     LibraryContent(
         appRepository = viewModel.appRepository,
         exportEngine = viewModel.exportEngine,
+        syncScheduler = viewModel.syncScheduler,
         uiState = uiState,
         onNavigateToFolder = { id -> navController.navigate(LibraryDestination.createRoute(id)) },
         onNavigateToSettings = { navController.navigate("settings") },
@@ -129,6 +148,7 @@ fun Library(
 fun LibraryContent(
     appRepository: AppRepository,
     exportEngine: ExportEngine,
+    syncScheduler: SyncScheduler,
     uiState: LibraryUiState,
     onNavigateToFolder: (String?) -> Unit,
     onNavigateToSettings: () -> Unit,
@@ -195,6 +215,7 @@ fun LibraryContent(
             NotebookGrid(
                 appRepository = appRepository,
                 exportEngine = exportEngine,
+                syncScheduler = syncScheduler,
                 books = uiState.books,
                 isImporting = uiState.isImporting,
                 onNavigateToEditor = onNavigateToEditor,
@@ -273,6 +294,7 @@ fun FolderList(
 fun NotebookGrid(
     appRepository: AppRepository,
     exportEngine: ExportEngine,
+    syncScheduler: SyncScheduler,
     books: List<Notebook>,
     isImporting: Boolean,
     onNavigateToEditor: (String, String) -> Unit,
@@ -324,6 +346,7 @@ fun NotebookGrid(
                     NotebookConfigDialog(
                         appRepository,
                         exportEngine = exportEngine,
+                        syncScheduler = syncScheduler,
                         bookId = book.id, onClose = { isSettingsOpen = false })
                 }
             }

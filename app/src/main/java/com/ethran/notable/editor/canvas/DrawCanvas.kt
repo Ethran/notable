@@ -106,8 +106,11 @@ class DrawCanvas(
                 log.i("surface created $holder")
                 // set up the drawing surface
                 inputHandler.updateActiveSurface()
-                // Restore the correct stroke size and style, now its done in initFromPersistedSettings
-//                inputHandler.updatePenAndStroke()
+                // The surface is only drawable once this callback fires; any
+                // refreshUi attempts before this silently no-op (lockCanvas
+                // returns null). Paint now so the newly-created surface
+                // isn't left blank.
+                this@DrawCanvas.post { refreshManager.refreshUi(null) }
             }
 
             override fun surfaceChanged(

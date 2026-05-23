@@ -44,7 +44,7 @@ class PageContentRenderer @Inject constructor(
 
     suspend fun renderPageBitmap(pageId: String, target: RenderTarget): Bitmap {
         ensureNotMainThread("PageContentRenderer")
-        val data = loadPageContent(pageId)
+        val data = loadPageContent(pageId) ?: throw IllegalArgumentException("Page with id $pageId not found")
 
         return withContext(Dispatchers.Default) {
             val (contentWidth, contentHeight) = computeContentDimensions(data)
@@ -68,7 +68,7 @@ class PageContentRenderer @Inject constructor(
         val scale: Float
     )
 
-    suspend fun loadPageContent(pageId: String): PageWithData = withContext(Dispatchers.IO) {
+    suspend fun loadPageContent(pageId: String): PageWithData? = withContext(Dispatchers.IO) {
         pageRepo.getWithDataById(pageId)
     }
 

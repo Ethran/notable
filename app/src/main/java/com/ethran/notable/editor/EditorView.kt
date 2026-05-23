@@ -121,6 +121,8 @@ fun EditorView(
             viewModel.updateDrawingState()
         }
 
+//         val editorControlTower = remember {
+//             EditorControlTower(scope, page, history, editorState, context, appRepository).apply { registerObservers() }
         DisposableEffect(editorControlTower) {
             editorControlTower.registerObservers()
             onDispose {
@@ -198,9 +200,7 @@ fun EditorView(
 
         // Observe pageId changes from ViewModel state for navigation
         LaunchedEffect(viewModel) {
-            snapshotFlow { toolbarState.pageId }
-                .filterNotNull()
-                .distinctUntilChanged()
+            snapshotFlow { toolbarState.pageId }.filterNotNull().distinctUntilChanged()
                 .drop(1) // Skip initial emission from loadBookData
                 .collect { newPageId ->
                     log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")
@@ -216,8 +216,7 @@ fun EditorView(
         val zoomLevel by page.zoomLevel.collectAsStateWithLifecycle()
         val selectionActive = viewModel.selectionState.isNonEmpty()
         LaunchedEffect(
-            zoomLevel,
-            selectionActive
+            zoomLevel, selectionActive
         ) {
             log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
             viewModel.setShowResetView(zoomLevel != 1.0f)

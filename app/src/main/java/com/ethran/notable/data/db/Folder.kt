@@ -49,6 +49,8 @@ interface FolderDao {
     @Query("SELECT * FROM folder WHERE id IS :folderId")
     fun getLive(folderId: String): LiveData<Folder?>
 
+    @Query("SELECT * FROM folder")
+    fun getAll(): List<Folder>
 
     @Insert
     suspend fun create(folder: Folder): Long
@@ -72,6 +74,10 @@ class FolderRepository @Inject constructor(
 
     suspend fun update(folder: Folder) {
         db.update(folder)
+    }
+
+    fun getAll(): List<Folder> {
+        return db.getAll()
     }
 
     fun getAllInFolder(folderId: String? = null): LiveData<List<Folder>> {

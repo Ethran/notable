@@ -29,6 +29,8 @@ import com.ethran.notable.io.fileObserverEventNames
 import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.io.waitForFileAvailable
 import com.ethran.notable.utils.chunked
+import com.ethran.notable.utils.logCallStack
+import com.onyx.android.sdk.data.reader.PageId
 import com.onyx.android.sdk.extension.isNotNull
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
@@ -36,7 +38,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
@@ -104,8 +105,8 @@ class PageDataManager @Inject constructor(
     // On change, we need to adjust stroke size.
     private var pageZoom = LinkedHashMap<String, Float>()
 
-    @Volatile
-    private var currentPage = ""
+    private val currentPage: String
+        get() = pageFromDb?.id.orEmpty()
 
     @Volatile
     private var currentPageNumber = -1
@@ -147,7 +148,13 @@ class PageDataManager @Inject constructor(
      */
     private suspend fun getOrStartLoadingJob(
         pageId: String, bookId: String?
-    ): Job {
+    ): Job? {
+        if(pageId.isEmpty()) {
+            log.e("Page id is empty")
+            logCallStack("PageRepository.getById")
+            return null
+        }
+
         log.d("getOrStartLoadingJob($pageId)")
         //             PageDataManager.ensureMemoryAvailable(15)
         val job = jobLock.withLock {
@@ -188,11 +195,9 @@ class PageDataManager @Inject constructor(
      */
     suspend fun requestCurrentPageLoadJoin(
     ) {
-        // TODO: It is possible to trigger this assert, it need to be handled more gracefully.
-        assert(currentPage == pageFromDb?.id)
         val bookId = pageFromDb?.notebookId
         log.d("requestCurrentPageLoadJoin($currentPage)")
-        getOrStartLoadingJob(currentPage, bookId).join()
+        getOrStartLoadingJob(currentPage, bookId)?.join()
     }
 
     private suspend fun cancelUnnecessaryLoading(
@@ -212,7 +217,6 @@ class PageDataManager @Inject constructor(
     }
 
     suspend fun cacheNeighbors() {
-        assert(currentPage == pageFromDb?.id)
         val bookId = pageFromDb?.notebookId ?: return
 
         log.d("cacheNeighbors($currentPage)")
@@ -303,6 +307,11 @@ class PageDataManager @Inject constructor(
 
 
             val pageWithData = appRepository.pageRepository.getWithDataById(pageId)
+            if (pageWithData == null) {
+                log.w("Missing page Data.")
+                appEventBus.tryEmit(AppEvent.ActionHint("Missing Page Data", 2000))
+                return
+            }
             // What will happened if page isn't in repository?
             cacheStrokes(pageId, pageWithData.strokes)
             cacheImages(pageId, pageWithData.images)
@@ -434,14 +443,19 @@ class PageDataManager @Inject constructor(
      */
     suspend fun setPage(pageId: String) {
         pageFromDb = appRepository.pageRepository.getById(pageId)
+        if (pageFromDb == null) {
+            log.e("Page($pageId) not found;")
+            appEventBus.tryEmit(AppEvent.ActionHint("Page not found", 2000))
+            currentPageNumber = -1
+            return
+        }
         pageFromDb?.notebookId?.let { notebookId ->
             currentPageNumber = appRepository.getPageNumber(notebookId, pageId)
         }
-        currentPage = pageId
     }
 
-    suspend fun refreshPageFromDb() {
-        pageFromDb = appRepository.pageRepository.getById(currentPage)
+    suspend fun refreshPageFromDb(pageId: String) {
+        pageFromDb = appRepository.pageRepository.getById(pageId)
         log.i("Refresh current page, background: ${pageFromDb?.background}")
     }
 
@@ -578,6 +592,7 @@ class PageDataManager @Inject constructor(
     fun updateStrokesInDb(strokes: List<Stroke>) {
         dataScope.launch {
             appRepository.strokeRepository.update(strokes)
+            updateParentNotebookTimestamp()
         }
     }
 
@@ -596,25 +611,35 @@ class PageDataManager @Inject constructor(
                 )
                 appRepository.strokeRepository.update(strokes)
             }
+            updateParentNotebookTimestamp()
         }
     }
 
     fun saveImagesToDb(images: List<Image>) {
         dataScope.launch {
             appRepository.imageRepository.create(images)
+            updateParentNotebookTimestamp()
         }
     }
 
     fun removeStrokesFromDb(strokes: List<String>) {
         dataScope.launch {
             appRepository.strokeRepository.deleteAll(strokes)
+            updateParentNotebookTimestamp()
         }
     }
 
     fun removeImagesFromDb(images: List<String>) {
         dataScope.launch {
             appRepository.imageRepository.deleteAll(images)
+            updateParentNotebookTimestamp()
         }
+    }
+
+    private suspend fun updateParentNotebookTimestamp() {
+        val notebookId = pageFromDb?.notebookId ?: return
+        val notebook = appRepository.bookRepository.getById(notebookId) ?: return
+        appRepository.bookRepository.update(notebook)
     }
 
     fun setScrollInDb() {

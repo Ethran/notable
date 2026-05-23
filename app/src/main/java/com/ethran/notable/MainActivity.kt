@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.AppSettings
@@ -34,10 +36,13 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.AppEventUiBridge
 import com.ethran.notable.ui.LocalSnackContext
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SyncWorkUiBridge
 import com.ethran.notable.ui.components.NotableApp
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.utils.hasFilePermission
@@ -82,10 +87,16 @@ class MainActivity : ComponentActivity() {
     lateinit var pageDataManager: dagger.Lazy<PageDataManager>
 
     @Inject
+    lateinit var syncScheduler: dagger.Lazy<SyncScheduler>
+
+    @Inject
     lateinit var snackDispatcher: SnackDispatcher
 
     @Inject
     lateinit var appEventUiBridge: AppEventUiBridge
+
+    @Inject
+    lateinit var syncWorkUiBridge: SyncWorkUiBridge
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,6 +110,18 @@ class MainActivity : ComponentActivity() {
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
 
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                syncWorkUiBridge.syncUiEvents.collect { event ->
+                    val message = event.errorArg?.let { arg ->
+                        getString(event.messageResId, arg)
+                    } ?: getString(event.messageResId)
+                    snackDispatcher.showOrUpdateSnack(
+                        SnackConf(text = message, duration = 3000)
+                    )
+                }
+            }
+        }
 
         val snackState = SnackState()
 
@@ -119,6 +142,9 @@ class MainActivity : ComponentActivity() {
                             .registerComponentCallbacks(this@MainActivity.applicationContext)
                         editorSettingCacheManager.get().init()
                     }
+                    restorePeriodicSyncSchedule()
+                    // Trigger initial sync on app startup (fails silently if offline)
+                    triggerInitialSync()
                 }
                 isInitialized = true
             }
@@ -137,6 +163,32 @@ class MainActivity : ComponentActivity() {
                         ShowInitMessage()
                     }
                 }
+            }
+        }
+    }
+
+
+    private fun triggerInitialSync() {
+        lifecycleScope.launch {
+            try {
+                val settings = kvProxy.get().getSyncSettings()
+                if (settings.syncEnabled) {
+                    Log.i(TAG, "Triggering one-time sync on app startup via WorkManager")
+                    syncScheduler.get().triggerImmediateSync()
+                }
+            } catch (e: Exception) {
+                Log.i(TAG, "Initial sync setup failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun restorePeriodicSyncSchedule() {
+        lifecycleScope.launch {
+            try {
+                val settings = kvProxy.get().getSyncSettings()
+                syncScheduler.get().reconcilePeriodicSync(settings)
+            } catch (e: Exception) {
+                Log.i(TAG, "Periodic sync reconcile failed: ${e.message}")
             }
         }
     }
@@ -167,6 +219,7 @@ class MainActivity : ComponentActivity() {
             CanvasEventBus.onFocusChange.emit(hasFocus)
         }
     }
+
     override fun onResume() {
         super.onResume()
         enableFullScreen()

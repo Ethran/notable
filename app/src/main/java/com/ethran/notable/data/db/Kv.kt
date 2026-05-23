@@ -12,6 +12,9 @@ import androidx.room.Query
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.sync.SYNC_SETTINGS_KEY
+import com.ethran.notable.sync.SyncSettings
+import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.hasFilePermission
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
@@ -94,15 +97,18 @@ class KvRepository @Inject constructor(
  */
 @Singleton
 class KvProxy @Inject constructor(
-    private val kvRepository: KvRepository
+    private val kvRepository: KvRepository,
+    private val cryptoHelper: CryptoHelper
 ) {
     private val log = ShipBook.getLogger("KvProxy")
+    private val json = Json //{ ignoreUnknownKeys = true }
+
 
     fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
         return kvRepository.getLive(key).map {
             if (it == null) return@map default
             val jsonValue = it.value
-            Json.decodeFromString(serializer, jsonValue)
+            json.decodeFromString(serializer, jsonValue)
         }
     }
 
@@ -110,12 +116,12 @@ class KvProxy @Inject constructor(
         val kv = kvRepository.get(key)
             ?: return@withContext null //returns null when there is no database
         val jsonValue = kv.value
-        Json.decodeFromString(serializer, jsonValue)
+        json.decodeFromString(serializer, jsonValue)
     }
 
 
     suspend fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
-        val jsonValue = Json.encodeToString(serializer, value)
+        val jsonValue = json.encodeToString(serializer, value)
         log.i("Setting $key to $value")
         kvRepository.set(Kv(key, jsonValue))
     }
@@ -123,6 +129,40 @@ class KvProxy @Inject constructor(
     suspend fun setAppSettings(value: AppSettings) {
         setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
         GlobalAppSettings.update(value)
+    }
+
+
+    // Helper functions that handle sync settings, as it needs to be decrypted and encrypted
+
+    suspend fun getSyncSettings(): SyncSettings = withContext(Dispatchers.IO) {
+        val settings = kvRepository.get(SYNC_SETTINGS_KEY)
+            ?.let { json.decodeFromString(SyncSettings.serializer(), it.value) }
+            ?: return@withContext SyncSettings()
+
+        if (settings.password.isBlank()) return@withContext settings
+
+        when (val decrypted = cryptoHelper.decrypt(settings.password)) {
+            is AppResult.Success -> settings.copy(password = decrypted.data)
+            is AppResult.Error -> {
+                log.w("Failed to decrypt sync password: ${decrypted.error.userMessage}")
+                settings.copy(password = "")
+            }
+        }
+    }
+
+    suspend fun setSyncSettings(value: SyncSettings) {
+        val encryptedPassword = when (val encrypted = cryptoHelper.encrypt(value.password)) {
+            is AppResult.Success -> encrypted.data
+            is AppResult.Error -> {
+                throw IllegalStateException("Unable to encrypt sync password: ${encrypted.error.userMessage}")
+            }
+        }
+
+        setKv(
+            SYNC_SETTINGS_KEY,
+            value.copy(password = encryptedPassword),
+            SyncSettings.serializer()
+        )
     }
 
 }

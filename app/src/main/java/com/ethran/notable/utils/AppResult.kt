@@ -43,6 +43,21 @@ sealed class DomainError(
 
     data class DrawingError(val message: String) : DomainError(message)
 
+    // Sync Errors
+    data object SyncAuthError : DomainError("Authentication failed. Please check your credentials.")
+    data object SyncConfigError : DomainError("Sync is not configured correctly.")
+    data class SyncClockSkew(val seconds: Long) :
+        DomainError("Clock skew detected: ${seconds}s. Please check your device time.")
+
+    data object SyncWifiRequired : DomainError("WiFi connection required for sync.")
+    data object SyncInProgress : DomainError("Sync already in progress.")
+    data object SyncConflict : DomainError("Conflict detected during sync.")
+
+    data class SyncError(
+        val message: String,
+        override val recoverable: Boolean = true
+    ) : DomainError(message, recoverable)
+
 
     data class MultipleErrors(val errors: List<DomainError>) : DomainError(
         userMessage = errors.joinToString(separator = "\n") { "• ${it.userMessage}" }
@@ -111,3 +126,13 @@ fun <D, E : DomainError> AppResult<D, E>.getOrNull(): D? = when (this) {
     is AppResult.Error -> null
 }
 
+
+/**
+ * Returns data [D] on success, or executes [action] and interrupts the flow (Nothing) on error.
+ */
+inline fun <D, E : DomainError> AppResult<D, E>.onFailure(action: (E) -> Nothing): D {
+    return when (this) {
+        is AppResult.Success -> data
+        is AppResult.Error -> action(error)
+    }
+}
