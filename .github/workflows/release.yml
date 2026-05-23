@@ -2,6 +2,9 @@ name: Build and Release Version
 
 on:
   workflow_dispatch:
+  
+permissions:
+  contents: write
 
 env:
   MAVEN_OPTS: >-
