@@ -38,7 +38,6 @@ jobs:
             -noaudio
             -no-boot-anim
             -camera-back none
-            -delay-adb
           disable-animations: true
           boot-timeout: 600  
           script: ./gradlew connectedDebugAndroidTest
