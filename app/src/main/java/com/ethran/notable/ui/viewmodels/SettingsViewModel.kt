@@ -109,6 +109,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+
     /**
      * Checks if the app is the latest version.
      */
@@ -144,17 +145,25 @@ class SettingsViewModel @Inject constructor(
 
         if (saveToDb) {
             viewModelScope.launch(Dispatchers.IO) {
+                // Retrieve password
+                val password =
+                    newSettings.password.ifBlank {
+                        kvProxy.getSyncSettings().password
+                    }
+                val settingWithPassword = newSettings.copy(password = password)
+
                 try {
-                    kvProxy.setSyncSettings(newSettings)
+                    kvProxy.setSyncSettings(settingWithPassword)
 
                     // Reconcile schedule only if relevant parameters changed
-                    val scheduleChanged = oldSettings.syncEnabled != newSettings.syncEnabled ||
-                            oldSettings.autoSync != newSettings.autoSync ||
-                            oldSettings.syncInterval != newSettings.syncInterval ||
-                            oldSettings.wifiOnly != newSettings.wifiOnly
+                    val scheduleChanged =
+                        oldSettings.syncEnabled != settingWithPassword.syncEnabled ||
+                                oldSettings.autoSync != settingWithPassword.autoSync ||
+                                oldSettings.syncInterval != settingWithPassword.syncInterval ||
+                                oldSettings.wifiOnly != settingWithPassword.wifiOnly
 
                     if (scheduleChanged) {
-                        syncScheduler.reconcilePeriodicSync( newSettings)
+                        syncScheduler.reconcilePeriodicSync(settingWithPassword)
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
@@ -175,7 +184,12 @@ class SettingsViewModel @Inject constructor(
         )
 
         appScope.launch {
-            snackDispatcher.showOrUpdateSnack(SnackConf(text = "Credentials saved", duration = 3000))
+            snackDispatcher.showOrUpdateSnack(
+                SnackConf(
+                    text = "Credentials saved",
+                    duration = 3000
+                )
+            )
         }
     }
 
@@ -189,7 +203,12 @@ class SettingsViewModel @Inject constructor(
 
         syncUiState = syncUiState.copy(testingConnection = true, connectionStatus = null)
         viewModelScope.launch(Dispatchers.IO) {
-            val client = WebDAVClient(settings.serverUrl, settings.username, settings.password)
+            val password =
+                settings.password.ifBlank {
+                    kvProxy.getSyncSettings().password
+                }
+
+            val client = WebDAVClient(settings.serverUrl, settings.username, password)
             val result = client.testConnection()
 
             withContext(Dispatchers.Main) {
@@ -256,7 +275,10 @@ class SettingsViewModel @Inject constructor(
             val result = syncOrchestrator.syncAllNotebooks()
             if (result is AppResult.Success) {
                 // Save unix timestamp (ms since epoch). UI layer will format it for display.
-                updateSyncSettings(syncUiState.syncSettings.copy(lastSyncTime = System.currentTimeMillis()), saveToDb = true)
+                updateSyncSettings(
+                    syncUiState.syncSettings.copy(lastSyncTime = System.currentTimeMillis()),
+                    saveToDb = true
+                )
             }
             result
         }
