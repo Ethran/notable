@@ -4,16 +4,14 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.ethran.notable.R
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import dagger.hilt.android.EntryPointAccessors
 import io.shipbook.shipbooksdk.Log
 
 /**
- * Background worker for periodic WebDAV synchronization.
- * Runs via WorkManager on a periodic schedule (minimum 15 minutes per WorkManager constraints).
+ * Background worker for WebDAV synchronization.
+ * Runs via WorkManager. Emits success/error data via WorkManager Results.
  */
 class SyncWorker(
     context: Context, params: WorkerParameters
@@ -22,7 +20,7 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         Log.i(TAG, "SyncWorker started")
 
-        // Check connectivity first
+        // 1. Dynamic Checks
         val connectivityChecker = ConnectivityChecker(applicationContext)
         if (!connectivityChecker.isNetworkAvailable()) {
             Log.i(TAG, "No network available, will retry later")
@@ -36,35 +34,30 @@ class SyncWorker(
         val kvProxy = entryPoint.kvProxy()
         val syncSettings = kvProxy.getSyncSettings()
 
-        // Check if sync is enabled
         if (!syncSettings.syncEnabled) {
             Log.i(TAG, "Sync disabled in settings, skipping")
-            return Result.success()
+            return Result.success(workDataOf(OUTPUT_KEY_SKIPPED to true))
         }
 
-        // Check WiFi-only constraint
         if (syncSettings.wifiOnly && !connectivityChecker.isUnmeteredConnected()) {
             Log.i(TAG, "WiFi-only sync enabled but not on unmetered network, skipping")
-            return Result.success()
+            return Result.success(workDataOf(OUTPUT_KEY_SKIPPED to true))
         }
 
-        // Check if we have credentials
         if (syncSettings.username.isBlank() || syncSettings.password.isBlank()) {
             Log.w(TAG, "No credentials stored, skipping sync")
-            return Result.success()
+            return Result.success(workDataOf(OUTPUT_KEY_SKIPPED to true))
         }
 
+        // 2. Parse Input
         val syncRequest = SyncRequest.fromData(inputData)
-            ?: return Result.failure(workDataOf("success" to false, "error" to "INVALID_INPUT"))
-        val syncTrigger = inputData.getString(KEY_SYNC_TRIGGER)
+            ?: return Result.failure(workDataOf(OUTPUT_KEY_SUCCESS to false, OUTPUT_KEY_ERROR to "INVALID_INPUT"))
+
+        val syncTrigger = inputData.getString(KEY_SYNC_TRIGGER) ?: SYNC_TRIGGER_PERIODIC
         val isPeriodicSync = syncTrigger == SYNC_TRIGGER_PERIODIC
 
-        // Perform sync based on type
+        // 3. Execute Sync
         return try {
-            if (isPeriodicSync) {
-                showSyncSnack(R.string.sync_scheduled_started)
-            }
-
             val result = when (syncRequest) {
                 SyncRequest.SyncAll -> entryPoint.syncOrchestrator().syncAllNotebooks()
                 SyncRequest.ForceUpload -> entryPoint.syncOrchestrator().forceUploadAll()
@@ -77,28 +70,36 @@ class SyncWorker(
                 }
             }
 
+            // 4. Handle Results
             when (result) {
                 is AppResult.Success -> {
                     Log.i(TAG, "Sync $syncRequest completed successfully")
-                    Result.success(workDataOf("success" to true))
+                    Result.success(
+                        workDataOf(
+                            OUTPUT_KEY_SUCCESS to true,
+                            OUTPUT_KEY_IS_PERIODIC to isPeriodicSync
+                        )
+                    )
                 }
 
                 is AppResult.Error -> {
                     val error = result.error
                     val errorStr = error.javaClass.simpleName
+                    val failureMessage = error.userMessage
 
                     when (error) {
                         is DomainError.SyncInProgress -> {
                             Log.i(TAG, "Sync already in progress, skipping this run")
-                            Result.success(workDataOf("success" to false, "error" to errorStr))
+                            // Returning success so it doesn't log as a strict failure, but marking success as false
+                            Result.success(workDataOf(OUTPUT_KEY_SUCCESS to false, OUTPUT_KEY_ERROR to errorStr))
                         }
 
                         is DomainError.NetworkError -> {
-                            Log.e(TAG, "Network error during sync: ${error.userMessage}")
+                            Log.e(TAG, "Network error during sync: $failureMessage")
                             if (runAttemptCount < MAX_RETRY_ATTEMPTS) {
                                 Result.retry()
                             } else {
-                                Result.failure(workDataOf("success" to false, "error" to errorStr))
+                                Result.failure(workDataOf(OUTPUT_KEY_SUCCESS to false, OUTPUT_KEY_ERROR to failureMessage))
                             }
                         }
 
@@ -107,16 +108,17 @@ class SyncWorker(
                         is DomainError.SyncClockSkew,
                         is DomainError.SyncWifiRequired,
                         is DomainError.SyncConflict -> {
-                            Log.w(TAG, "Sync skipped (non-retryable): ${error.userMessage}")
-                            Result.success(workDataOf("success" to false, "error" to errorStr))
+                            Log.w(TAG, "Sync failed (non-retryable): $failureMessage")
+                            // These are hard failures, mark them as such
+                            Result.failure(workDataOf(OUTPUT_KEY_SUCCESS to false, OUTPUT_KEY_ERROR to failureMessage))
                         }
 
                         else -> {
-                            Log.e(TAG, "Sync failed: ${error.userMessage}")
+                            Log.e(TAG, "Sync failed: $failureMessage")
                             if (runAttemptCount < MAX_RETRY_ATTEMPTS && error.recoverable) {
                                 Result.retry()
                             } else {
-                                Result.failure(workDataOf("success" to false, "error" to errorStr))
+                                Result.failure(workDataOf(OUTPUT_KEY_SUCCESS to false, OUTPUT_KEY_ERROR to failureMessage))
                             }
                         }
                     }
@@ -129,36 +131,29 @@ class SyncWorker(
             } else {
                 Result.failure(
                     workDataOf(
-                        "success" to false,
-                        "error" to "UNKNOWN_EXCEPTION"
+                        OUTPUT_KEY_SUCCESS to false,
+                        OUTPUT_KEY_ERROR to (e.localizedMessage ?: "UNKNOWN_EXCEPTION")
                     )
                 )
             }
-        } finally {
-            if (isPeriodicSync)
-                showSyncSnack(R.string.sync_scheduled_completed)
-            else
-                showSyncSnack(R.string.sync_completed_successfully)
         }
-    }
-
-    private fun showSyncSnack(textResId: Int) {
-        val entryPoint = EntryPointAccessors.fromApplication(
-            applicationContext, SyncOrchestratorEntryPoint::class.java
-        )
-        entryPoint.snackDispatcher().showOrUpdateSnack(
-            SnackConf(
-                text = applicationContext.getString(textResId),
-                duration = 3000
-            )
-        )
     }
 
     companion object {
         private const val TAG = "SyncWorker"
         private const val MAX_RETRY_ATTEMPTS = 3
-        private const val SYNC_TRIGGER_PERIODIC = "periodic"
-        private const val KEY_SYNC_TRIGGER = "sync_trigger"
+
+        const val KEY_SYNC_TRIGGER = "sync_trigger"
+        const val SYNC_TRIGGER_PERIODIC = "periodic"
+        const val SYNC_TRIGGER_IMMEDIATE = "immediate"
+
+        // Output keys for the UI to observe
+        const val OUTPUT_KEY_SUCCESS = "success"
+        const val OUTPUT_KEY_ERROR = "error"
+        const val OUTPUT_KEY_IS_PERIODIC = "is_periodic"
+        const val OUTPUT_KEY_SKIPPED = "skipped"
+
+        const val SYNC_WORK_TAG = "sync-work"
 
         /**
          * Unique work name for periodic sync.

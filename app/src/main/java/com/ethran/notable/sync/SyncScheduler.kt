@@ -60,10 +60,11 @@ class SyncScheduler @Inject constructor(
         )
             .setInputData(
                 SyncRequest.SyncAll.toDataBuilder()
-                    .putString(INPUT_KEY_SYNC_TRIGGER, SYNC_TRIGGER_PERIODIC)
+                    .putString(SyncWorker.KEY_SYNC_TRIGGER, SyncWorker.SYNC_TRIGGER_PERIODIC)
                     .build()
             )
             .setConstraints(constraints)
+            .addTag(SyncWorker.SYNC_WORK_TAG)
             .build()
 
         workManager.enqueueUniquePeriodicWork(
@@ -81,10 +82,11 @@ class SyncScheduler @Inject constructor(
         request: SyncRequest = SyncRequest.SyncAll
     ): UUID {
         val builder = request.toDataBuilder()
-            .putString(INPUT_KEY_SYNC_TRIGGER, SYNC_TRIGGER_IMMEDIATE)
+            .putString(SyncWorker.KEY_SYNC_TRIGGER, SyncWorker.SYNC_TRIGGER_IMMEDIATE)
 
         val syncWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(builder.build())
+            .addTag(SyncWorker.SYNC_WORK_TAG)
             .build()
 
         val uniqueName = "${SyncWorker.WORK_NAME}-immediate-${request.typeKey}-${request.identifier}"
@@ -96,11 +98,5 @@ class SyncScheduler @Inject constructor(
         )
 
         return syncWorkRequest.id
-    }
-
-    companion object {
-        private const val INPUT_KEY_SYNC_TRIGGER = "sync_trigger"
-        private const val SYNC_TRIGGER_PERIODIC = "periodic"
-        private const val SYNC_TRIGGER_IMMEDIATE = "immediate"
     }
 }

@@ -3,6 +3,7 @@ package com.ethran.notable.sync
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
@@ -220,10 +221,14 @@ class SyncOrchestrator @Inject constructor(
                 val path = SyncPaths.notebookDir(notebookId)
                 if (client.exists(path)) {
                     client.delete(path).onError {
-                        logger.w(TAG, "Failed to delete remote notebook $notebookId: ${it.userMessage}")
+                        logger.w(
+                            TAG,
+                            "Failed to delete remote notebook $notebookId: ${it.userMessage}"
+                        )
                     }
                 }
-                when (val tombstoneResult = client.putFile(SyncPaths.tombstone(notebookId), ByteArray(0))) {
+                when (val tombstoneResult =
+                    client.putFile(SyncPaths.tombstone(notebookId), ByteArray(0))) {
                     is AppResult.Success -> {
                         kvProxy.setSyncSettings(
                             settings.copy(syncedNotebookIds = settings.syncedNotebookIds - notebookId)
@@ -279,7 +284,7 @@ class SyncOrchestrator @Inject constructor(
 interface SyncOrchestratorEntryPoint {
     fun syncOrchestrator(): SyncOrchestrator
     fun kvProxy(): KvProxy
-    fun snackDispatcher(): com.ethran.notable.ui.SnackDispatcher
+    fun snackDispatcher(): SnackDispatcher
 }
 
 sealed class SyncState {

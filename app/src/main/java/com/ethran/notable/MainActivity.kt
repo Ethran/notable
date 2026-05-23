@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.AppSettings
@@ -37,8 +39,10 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.AppEventUiBridge
 import com.ethran.notable.ui.LocalSnackContext
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.SyncWorkUiBridge
 import com.ethran.notable.ui.components.NotableApp
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.utils.hasFilePermission
@@ -91,6 +95,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appEventUiBridge: AppEventUiBridge
 
+    @Inject
+    lateinit var syncWorkUiBridge: SyncWorkUiBridge
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableFullScreen()
@@ -102,6 +109,19 @@ class MainActivity : ComponentActivity() {
 
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                syncWorkUiBridge.syncUiEvents.collect { event ->
+                    val message = event.errorArg?.let { arg ->
+                        getString(event.messageResId, arg)
+                    } ?: getString(event.messageResId)
+                    snackDispatcher.showOrUpdateSnack(
+                        SnackConf(text = message, duration = 3000)
+                    )
+                }
+            }
+        }
 
         val snackState = SnackState()
 
