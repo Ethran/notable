@@ -520,7 +520,7 @@ fun EInkTextField(label: String, value: String, onValueChange: (String) -> Unit,
                 value = value,
                 onValueChange = onValueChange,
                 textStyle = TextStyle(
-                    fontFamily = FontFamily.Monospace, 
+                    fontFamily = FontFamily.Monospace,
                     fontSize = 14.sp,
                     color = MaterialTheme.colors.onSurface
                 ),
@@ -585,15 +585,16 @@ private fun SyncIntervalSelector(
         )
     }
 }
-
 @Composable
 fun ManualSyncButton(
-    syncSettings: SyncSettings, syncState: SyncState, onManualSync: () -> Unit
+    syncSettings: SyncSettings,
+    syncState: SyncState,
+    onManualSync: () -> Unit
 ) {
     val label by remember(syncState) {
         derivedStateOf {
             when (syncState) {
-                is SyncState.Syncing -> "Syncing\u2026"
+                is SyncState.Syncing -> "Syncing…"
                 is SyncState.Success -> "Successfully Synced"
                 is SyncState.Error -> "Sync Failed"
                 else -> "Sync Now"
@@ -605,9 +606,20 @@ fun ManualSyncButton(
         if (syncState is SyncState.Syncing) {
             SyncProgressPanel(syncState)
         }
+
+        if (syncState is SyncState.Error) {
+            Text(
+                text = syncState.error.userMessage,
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface
+            )
+        }
+
         Button(
             onClick = onManualSync,
-            enabled = syncState is SyncState.Idle && syncSettings.syncEnabled && syncSettings.serverUrl.isNotEmpty(),
+            enabled = syncState is SyncState.Idle &&
+                syncSettings.syncEnabled &&
+                syncSettings.serverUrl.isNotEmpty(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
@@ -616,12 +628,30 @@ fun ManualSyncButton(
         ) {
             Text(label, fontWeight = FontWeight.Bold)
         }
+
+        if (syncState is SyncState.Error && syncState.canRetry) {
+            Button(
+                onClick = onManualSync,
+                enabled = syncSettings.syncEnabled && syncSettings.serverUrl.isNotEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                colors = eInkButtonColors(isSecondary = true),
+                shape = EInkButtonShape
+            ) {
+                Text("Retry", fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
+
 @Composable
 private fun SyncProgressPanel(syncing: SyncState.Syncing) {
-    val overall = overallProgressOf(syncing).coerceIn(0f, 1f)
+    val stepProgress = syncing.item?.let { it.index.toFloat() / it.total.coerceAtLeast(1) } ?: 0f
+    val stepIndex = syncing.currentStep.ordinal + 1
+    val totalSteps = SyncStep.entries.size
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -634,13 +664,13 @@ private fun SyncProgressPanel(syncing: SyncState.Syncing) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = syncing.currentStep.displayName(),
+                text = "Step $stepIndex of $totalSteps: ${syncing.currentStep.displayName()}",
                 style = MaterialTheme.typography.body2,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colors.onSurface
             )
             Text(
-                text = "${(overall * 100).toInt()}%",
+                text = "${(stepProgress * 100).toInt()}%",
                 style = MaterialTheme.typography.body2,
                 color = MaterialTheme.colors.onSurface
             )
@@ -653,7 +683,7 @@ private fun SyncProgressPanel(syncing: SyncState.Syncing) {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(overall)
+                    .fillMaxWidth(stepProgress.coerceIn(0f, 1f))
                     .height(6.dp)
                     .background(MaterialTheme.colors.onSurface)
             )
@@ -676,23 +706,6 @@ private fun SyncStep.displayName(): String = when (this) {
     SyncStep.DOWNLOADING_NEW -> "Downloading new notebooks"
     SyncStep.UPLOADING_DELETIONS -> "Uploading deletions"
     SyncStep.FINALIZING -> "Finalizing"
-}
-
-private fun overallProgressOf(s: SyncState.Syncing): Float {
-    val start = s.stepProgress
-    val end = stepBandEnd(s.currentStep)
-    val frac = s.item?.let { it.index.toFloat() / it.total.coerceAtLeast(1) } ?: 0f
-    return start + (end - start) * frac
-}
-
-private fun stepBandEnd(step: SyncStep): Float = when (step) {
-    SyncStep.INITIALIZING -> 0.1f
-    SyncStep.SYNCING_FOLDERS -> 0.2f
-    SyncStep.APPLYING_DELETIONS -> 0.3f
-    SyncStep.SYNCING_NOTEBOOKS -> 0.6f
-    SyncStep.DOWNLOADING_NEW -> 0.8f
-    SyncStep.UPLOADING_DELETIONS -> 0.9f
-    SyncStep.FINALIZING -> 1.0f
 }
 
 @Composable
