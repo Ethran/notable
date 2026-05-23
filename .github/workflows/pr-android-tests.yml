@@ -1,4 +1,7 @@
 name: PR Android Tests
+permissions:
+  contents: read
+  issues: write
 on:
   pull_request:
     # Only trigger this workflow when a label is added to the PR
