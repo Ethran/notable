@@ -29,6 +29,8 @@ import com.ethran.notable.io.fileObserverEventNames
 import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.io.waitForFileAvailable
 import com.ethran.notable.utils.chunked
+import com.ethran.notable.utils.logCallStack
+import com.onyx.android.sdk.data.reader.PageId
 import com.onyx.android.sdk.extension.isNotNull
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
@@ -103,7 +105,8 @@ class PageDataManager @Inject constructor(
     // On change, we need to adjust stroke size.
     private var pageZoom = LinkedHashMap<String, Float>()
 
-    private val currentPage =  pageFromDb?.id.orEmpty()
+    private val currentPage: String
+        get() = pageFromDb?.id.orEmpty()
 
     @Volatile
     private var currentPageNumber = -1
@@ -145,7 +148,13 @@ class PageDataManager @Inject constructor(
      */
     private suspend fun getOrStartLoadingJob(
         pageId: String, bookId: String?
-    ): Job {
+    ): Job? {
+        if(pageId.isEmpty()) {
+            log.e("Page id is empty")
+            logCallStack("PageRepository.getById")
+            return null
+        }
+
         log.d("getOrStartLoadingJob($pageId)")
         //             PageDataManager.ensureMemoryAvailable(15)
         val job = jobLock.withLock {
@@ -188,7 +197,7 @@ class PageDataManager @Inject constructor(
     ) {
         val bookId = pageFromDb?.notebookId
         log.d("requestCurrentPageLoadJoin($currentPage)")
-        getOrStartLoadingJob(currentPage, bookId).join()
+        getOrStartLoadingJob(currentPage, bookId)?.join()
     }
 
     private suspend fun cancelUnnecessaryLoading(
@@ -435,7 +444,7 @@ class PageDataManager @Inject constructor(
     suspend fun setPage(pageId: String) {
         pageFromDb = appRepository.pageRepository.getById(pageId)
         if (pageFromDb == null) {
-            log.w("Page($pageId) not found;")
+            log.e("Page($pageId) not found;")
             appEventBus.tryEmit(AppEvent.ActionHint("Page not found", 2000))
             currentPageNumber = -1
             return
@@ -445,8 +454,8 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    suspend fun refreshPageFromDb() {
-        pageFromDb = appRepository.pageRepository.getById(currentPage)
+    suspend fun refreshPageFromDb(pageId: String) {
+        pageFromDb = appRepository.pageRepository.getById(pageId)
         log.i("Refresh current page, background: ${pageFromDb?.background}")
     }
 

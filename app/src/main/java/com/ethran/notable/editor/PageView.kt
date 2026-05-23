@@ -169,7 +169,9 @@ class PageView(
         coroutineScope.launch(Dispatchers.IO) {
             // set page, and retrieve page data from db
             pageDataManager.setPage(initialPageId)
-            log.i("PageView init")
+            log.i("PageView init with initial pageId: $initialPageId" )
+            if(currentPageId.isEmpty())
+                log.e("Current page id is empty")
 
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
             pageDataManager.getCachedBitmap(currentPageId)?.let { cached ->
@@ -806,7 +808,9 @@ class PageView(
     // updates page setting in db, (for instance type of background)
     // and redraws page to view.
     suspend fun refreshCurrentPage() {
-        pageDataManager.refreshPageFromDb()
+        val pageId = currentPageId
+        log.d("Refresh page: $pageId")
+        pageDataManager.refreshPageFromDb(pageId)
         withContext(Dispatchers.Main) {
             drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
 //            persistBitmapDebounced()

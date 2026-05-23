@@ -13,6 +13,7 @@ import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.Log
 import java.util.Date
 import java.util.UUID
@@ -96,7 +97,17 @@ class PageRepository @Inject constructor(
     }
 
     suspend fun getById(pageId: String): Page? {
-        return db.getById(pageId)
+        if (pageId.isEmpty())
+        {
+            Log.e("PageRepository", "PageId is empty!!")
+            logCallStack("PageRepository.getById")
+            return null
+        }
+        val page = db.getById(pageId)
+        if (page == null) {
+            Log.w("PageRepository", "Page not found: $pageId")
+        }
+        return page
     }
 
     suspend fun getByIds(ids: List<String>): List<Page> {
