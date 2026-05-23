@@ -98,10 +98,10 @@ fun SyncSettings(
     val isConfigured by remember(state.isPasswordSaved, state.syncSettings.serverUrl) {
         derivedStateOf { state.isPasswordSaved && state.syncSettings.serverUrl.isNotEmpty() }
     }
-    val serverSectionTitle by remember(isConfigured, state.syncSettings.serverUrl) {
-        derivedStateOf {
-            if (isConfigured) "Server: ${state.syncSettings.serverUrl.take(25)}..." else "Connection Setup"
-        }
+    val serverSectionTitle = if (isConfigured) {
+        stringResource(R.string.sync_server_configured, state.syncSettings.serverUrl.take(25))
+    } else {
+        stringResource(R.string.sync_connection_setup)
     }
     var showServerConfig by remember { mutableStateOf(!isConfigured) }
 
@@ -184,14 +184,14 @@ private fun ConnectionSection(
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             EInkActionButton(
-                text = "Save Credentials",
+                text = stringResource(R.string.sync_save_credentials),
                 onClick = callbacks.onSaveCredentials,
                 enabled = state.credentialsDirty && state.syncSettings.username.isNotEmpty(),
                 modifier = Modifier.weight(1f),
                 isBold = true
             )
             EInkActionButton(
-                text = if (state.testingConnection) "Testing..." else "Test Connection",
+                text = if (state.testingConnection) stringResource(R.string.sync_testing_connection) else stringResource(R.string.sync_test_connection),
                 onClick = callbacks.onTestConnection,
                 enabled = !state.testingConnection && state.syncSettings.serverUrl.isNotEmpty(),
                 modifier = Modifier.weight(1f),
@@ -211,16 +211,16 @@ private fun SyncBehaviorSection(
     state: SyncSettingsUiState,
     onUpdate: (SyncSettings, Boolean) -> Unit,
 ) {
-    EInkSection(title = "Sync Behavior", icon = Icons.Default.Settings) {
+    EInkSection(title = stringResource(R.string.sync_behavior_title), icon = Icons.Default.Settings) {
         SettingToggleRow(
-            label = "Enable WebDAV Sync",
+            label = stringResource(R.string.sync_enable_label),
             value = state.syncSettings.syncEnabled,
             onToggle = { onUpdate(state.syncSettings.copy(syncEnabled = it), true) }
         )
 
         if (state.syncSettings.syncEnabled) {
             SettingToggleRow(
-                label = "Auto-sync (every ${state.syncSettings.syncInterval}m)",
+                label = stringResource(R.string.sync_auto_sync_label, state.syncSettings.syncInterval),
                 value = state.syncSettings.autoSync,
                 onToggle = { onUpdate(state.syncSettings.copy(autoSync = it), true) }
             )
@@ -229,12 +229,12 @@ private fun SyncBehaviorSection(
                 onIntervalChanged = { onUpdate(state.syncSettings.copy(syncInterval = it), true) }
             )
             SettingToggleRow(
-                label = "Sync when closing notes",
+                label = stringResource(R.string.sync_on_note_close_label),
                 value = state.syncSettings.syncOnNoteClose,
                 onToggle = { onUpdate(state.syncSettings.copy(syncOnNoteClose = it), true) }
             )
             SettingToggleRow(
-                label = "Use WiFi only",
+                label = stringResource(R.string.sync_wifi_only_label),
                 value = state.syncSettings.wifiOnly,
                 onToggle = { onUpdate(state.syncSettings.copy(wifiOnly = it), true) }
             )
@@ -247,7 +247,7 @@ private fun SyncActionsSection(
     state: SyncSettingsUiState,
     callbacks: SyncSettingsCallbacks,
 ) {
-    EInkSection(title = "Manual Actions", icon = Icons.Default.Sync) {
+    EInkSection(title = stringResource(R.string.sync_manual_actions_title), icon = Icons.Default.Sync) {
         ManualSyncButton(
             syncSettings = state.syncSettings,
             syncState = state.syncState,
@@ -259,7 +259,7 @@ private fun SyncActionsSection(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            "DANGER ZONE",
+            text = stringResource(R.string.sync_force_operations_title),
             style = MaterialTheme.typography.overline,
             fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colors.onSurface
@@ -283,13 +283,19 @@ private fun LastSyncInfo(lastSyncTime: Long?) {
         try {
             val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
             fmt.format(java.util.Date(it))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
-    } ?: "Never"
+    }
+
+    val text = if (label != null) {
+        stringResource(R.string.sync_last_synced, label)
+    } else {
+        stringResource(R.string.sync_last_synced_never)
+    }
 
     Text(
-        text = "Last sync: $label",
+        text = text,
         style = MaterialTheme.typography.caption,
         color = MaterialTheme.colors.onSurface,
         modifier = Modifier.padding(top = 8.dp, start = 4.dp)
@@ -304,7 +310,7 @@ private fun SyncLogsSection(
     onToggleExpanded: () -> Unit,
 ) {
     EInkSection(
-        title = "Activity Log",
+        title = stringResource(R.string.sync_log_title),
         icon = Icons.Default.History,
         isExpandable = true,
         isExpanded = isExpanded,
@@ -317,7 +323,7 @@ private fun SyncLogsSection(
 @Composable
 private fun MissingConfigurationHint() {
     Text(
-        "Complete the connection setup above to enable sync features.",
+        text = stringResource(R.string.sync_missing_config_hint),
         style = MaterialTheme.typography.body2,
         color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
         modifier = Modifier.padding(horizontal = 4.dp)
@@ -393,9 +399,9 @@ fun ConnectionStatusText(result: AppResult<ConnectionTestResult, DomainError>) {
             is AppResult.Success -> {
                 val skewMs = result.data.clockSkewMs
                 if (skewMs != null && kotlin.math.abs(skewMs) > 1000) {
-                    "Connected (skew: ${skewMs / 1000}s)"
+                    stringResource(R.string.sync_clock_skew_short, skewMs / 1000)
                 } else {
-                    "Connected successfully"
+                    stringResource(R.string.sync_connected_successfully)
                 }
             }
             is AppResult.Error -> result.error.userMessage
@@ -418,15 +424,15 @@ fun SyncCredentialFields(
     onTogglePasswordVisibility: () -> Unit
 ) {
     EInkTextField(
-        label = "Server URL",
+        label = stringResource(R.string.sync_server_url_label),
         value = settings.serverUrl,
         onValueChange = { onUpdate(settings.copy(serverUrl = it), false) },
-        placeholder = "https://example.com/dav/"
+        placeholder = stringResource(R.string.sync_server_url_placeholder)
     )
     
     if (settings.serverUrl.isNotEmpty()) {
         Text(
-            "Path: ${settings.serverUrl.trimEnd('/')}/notable/",
+            text = stringResource(R.string.sync_server_url_note),
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
             modifier = Modifier.padding(top = 2.dp, start = 4.dp)
@@ -436,7 +442,7 @@ fun SyncCredentialFields(
     Spacer(modifier = Modifier.height(16.dp))
 
     EInkTextField(
-        label = "Username",
+        label = stringResource(R.string.sync_username_label),
         value = settings.username,
         onValueChange = { onUpdate(settings.copy(username = it), false) }
     )
@@ -444,7 +450,7 @@ fun SyncCredentialFields(
     Spacer(modifier = Modifier.height(16.dp))
 
     Text(
-        "Password", 
+        text = stringResource(R.string.sync_password_label), 
         style = MaterialTheme.typography.caption, 
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colors.onSurface
@@ -460,7 +466,7 @@ fun SyncCredentialFields(
             Box(modifier = Modifier.weight(1f)) {
                 if (settings.password.isEmpty() && isPasswordSaved) {
                     Text(
-                        "(unchanged)", 
+                        text = stringResource(R.string.sync_password_unchanged), 
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f), 
                         style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                     )
@@ -557,7 +563,7 @@ private fun SyncIntervalSelector(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Sync interval",
+            text = stringResource(R.string.sync_interval_label),
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onSurface,
             modifier = Modifier.weight(1f)
@@ -571,7 +577,7 @@ private fun SyncIntervalSelector(
         )
 
         Text(
-            text = "${intervalMinutes}m",
+            text = stringResource(R.string.sync_interval_value, intervalMinutes),
             style = MaterialTheme.typography.body2,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colors.onSurface
@@ -591,15 +597,11 @@ fun ManualSyncButton(
     syncState: SyncState,
     onManualSync: () -> Unit
 ) {
-    val label by remember(syncState) {
-        derivedStateOf {
-            when (syncState) {
-                is SyncState.Syncing -> "Syncing…"
-                is SyncState.Success -> "Successfully Synced"
-                is SyncState.Error -> "Sync Failed"
-                else -> "Sync Now"
-            }
-        }
+    val label = when (syncState) {
+        is SyncState.Syncing -> stringResource(R.string.sync_status_syncing)
+        is SyncState.Success -> stringResource(R.string.sync_synced)
+        is SyncState.Error -> stringResource(R.string.sync_failed)
+        else -> stringResource(R.string.sync_now)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -639,7 +641,7 @@ fun ManualSyncButton(
                 colors = eInkButtonColors(isSecondary = true),
                 shape = EInkButtonShape
             ) {
-                Text("Retry", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.sync_retry_button), fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -664,7 +666,7 @@ private fun SyncProgressPanel(syncing: SyncState.Syncing) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Step $stepIndex of $totalSteps: ${syncing.currentStep.displayName()}",
+                text = stringResource(R.string.sync_progress_step, stepIndex, totalSteps, syncing.currentStep.displayName()),
                 style = MaterialTheme.typography.body2,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colors.onSurface
@@ -690,7 +692,7 @@ private fun SyncProgressPanel(syncing: SyncState.Syncing) {
         }
         syncing.item?.let { item ->
             Text(
-                text = "Notebook ${item.index} of ${item.total} \u00b7 ${item.name}",
+                text = stringResource(R.string.sync_progress_item, item.index, item.total, item.name),
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onSurface
             )
@@ -698,14 +700,15 @@ private fun SyncProgressPanel(syncing: SyncState.Syncing) {
     }
 }
 
+@Composable
 private fun SyncStep.displayName(): String = when (this) {
-    SyncStep.INITIALIZING -> "Preparing"
-    SyncStep.SYNCING_FOLDERS -> "Syncing folders"
-    SyncStep.APPLYING_DELETIONS -> "Applying deletions"
-    SyncStep.SYNCING_NOTEBOOKS -> "Syncing notebooks"
-    SyncStep.DOWNLOADING_NEW -> "Downloading new notebooks"
-    SyncStep.UPLOADING_DELETIONS -> "Uploading deletions"
-    SyncStep.FINALIZING -> "Finalizing"
+    SyncStep.INITIALIZING -> stringResource(R.string.sync_step_initializing)
+    SyncStep.SYNCING_FOLDERS -> stringResource(R.string.sync_step_syncing_folders)
+    SyncStep.APPLYING_DELETIONS -> stringResource(R.string.sync_step_applying_deletions)
+    SyncStep.SYNCING_NOTEBOOKS -> stringResource(R.string.sync_step_syncing_notebooks)
+    SyncStep.DOWNLOADING_NEW -> stringResource(R.string.sync_step_downloading_new)
+    SyncStep.UPLOADING_DELETIONS -> stringResource(R.string.sync_step_uploading_deletions)
+    SyncStep.FINALIZING -> stringResource(R.string.sync_step_finalizing)
 }
 
 @Composable
@@ -720,14 +723,14 @@ fun ForceOperationsSection(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         EInkActionButton(
-            text = "Upload All",
+            text = stringResource(R.string.sync_force_upload_button),
             onClick = { onForceUploadRequested(true) },
             enabled = syncSettings.syncEnabled,
             modifier = Modifier.weight(1f),
             fontSize = 12.sp
         )
         EInkActionButton(
-            text = "Download All",
+            text = stringResource(R.string.sync_force_download_button),
             onClick = { onForceDownloadRequested(true) },
             enabled = syncSettings.syncEnabled,
             modifier = Modifier.weight(1f),
@@ -737,16 +740,16 @@ fun ForceOperationsSection(
 
     if (showForceUploadConfirm) {
         ConfirmationDialog(
-            title = "Replace Server Data?",
-            message = "This will DELETE all notebooks on the server and replace them with your local data. This cannot be undone.",
+            title = stringResource(R.string.sync_confirm_force_upload_title),
+            message = stringResource(R.string.sync_confirm_force_upload_message),
             onConfirm = onConfirmForceUpload,
             onDismiss = { onForceUploadRequested(false) }
         )
     }
     if (showForceDownloadConfirm) {
         ConfirmationDialog(
-            title = "Replace Local Data?",
-            message = "This will DELETE all local notebooks and replace them with data from the server. This cannot be undone.",
+            title = stringResource(R.string.sync_confirm_force_download_title),
+            message = stringResource(R.string.sync_confirm_force_download_message),
             onConfirm = onConfirmForceDownload,
             onDismiss = { onForceDownloadRequested(false) }
         )
@@ -771,7 +774,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
             ) {
                 if (recentLogs.isEmpty()) {
                     Text(
-                        "No recent activity.", 
+                        text = stringResource(R.string.sync_log_empty), 
                         style = MaterialTheme.typography.caption,
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f)
                     )
@@ -792,7 +795,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(8.dp))
         EInkActionButton(
-            text = "Clear Log",
+            text = stringResource(R.string.sync_clear_log),
             onClick = onClearLog,
             modifier = Modifier.align(Alignment.End),
             isSecondary = true,
@@ -832,7 +835,7 @@ fun ConfirmationDialog(
                         shape = EInkButtonShape,
                         colors = eInkButtonColors(isSecondary = true)
                     ) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.sync_dialog_cancel))
                     }
                     Button(
                         onClick = onConfirm, 
@@ -840,7 +843,7 @@ fun ConfirmationDialog(
                         shape = EInkButtonShape,
                         colors = eInkButtonColors()
                     ) {
-                        Text("Confirm")
+                        Text(stringResource(R.string.sync_dialog_confirm))
                     }
                 }
             }

@@ -82,6 +82,7 @@ class SyncOrchestrator @Inject constructor(
             }
 
             syncPreflightService.ensureServerDirectories(client).onFailure { error ->
+                reporter.finishError(error, false)
                 return@withContext AppResult.Error(error)
             }
 
@@ -91,6 +92,7 @@ class SyncOrchestrator @Inject constructor(
                 "Syncing folders..."
             )
             folderSyncService.syncFolders(client).onFailure { error ->
+                reporter.finishError(error, false)
                 return@withContext AppResult.Error(error)
             }
 

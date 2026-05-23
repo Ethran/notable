@@ -108,6 +108,8 @@
     <!-- Sync Settings Tab -->
     <string name="settings_tab_sync_name">Sync</string>
     <string name="sync_title">WebDAV Synchronization</string>
+    <string name="sync_behavior_title">Sync Behavior</string>
+    <string name="sync_manual_actions_title">Manual Actions</string>
 
     <!-- Sync Field Labels -->
     <string name="sync_server_url_note">Note: \"/notable\" will be appended to your path to keep files organized.</string>
@@ -115,12 +117,15 @@
     <string name="sync_username_label">Username</string>
     <string name="sync_password_label">Password</string>
     <string name="sync_server_url_placeholder">https://nextcloud.example.com/remote.php/dav/files/username/</string>
+    <string name="sync_password_unchanged">(unchanged)</string>
 
     <!-- Sync Toggle Labels -->
     <string name="sync_enable_label">Enable WebDAV Sync</string>
     <string name="sync_auto_sync_label">Automatic sync every %1$d minutes</string>
     <string name="sync_on_note_close_label">Sync when closing notes</string>
     <string name="sync_wifi_only_label">Sync on WiFi only (no mobile data)</string>
+    <string name="sync_interval_label">Sync interval</string>
+    <string name="sync_interval_value">%1$dm</string>
 
     <!-- Sync Button Labels -->
     <string name="sync_save_credentials">Save Credentials</string>
@@ -129,7 +134,9 @@
     <string name="sync_now">Sync Now</string>
     <string name="sync_synced">Synced</string>
     <string name="sync_failed">Failed</string>
-    <string name="sync_clear_log">Clear</string>
+    <string name="sync_clear_log">Clear Log</string>
+    <string name="sync_retry_button">Retry</string>
+    <string name="sync_status_syncing">Syncing…</string>
 
     <!-- Sync Status Messages -->
     <string name="sync_credentials_saved">Credentials saved</string>
@@ -140,9 +147,14 @@
     <string name="sync_skipped">Sync skipped</string>
     <string name="sync_cancelled">Sync cancelled</string>
     <string name="sync_finished">Sync finished</string>
-    <string name="sync_last_synced">Last synced: %1$s</string>
-    <string name="sync_scheduled_started">Starting scheduled sync...</string>
+    <string name="sync_last_synced">Last sync: %1$s</string>
+    <string name="sync_last_synced_never">Never</string>
+    <string name="sync_scheduled_started">Starting scheduled sync…</string>
     <string name="sync_scheduled_completed">Scheduled sync completed</string>
+    <string name="sync_connection_setup">Connection Setup</string>
+    <string name="sync_server_configured">Server: %1$s…</string>
+    <string name="sync_missing_config_hint">Complete the connection setup above to enable sync features.</string>
+    <string name="sync_clock_skew_short">Connected (skew: %1$ds)</string>
 
     <!-- Sync Summary Messages -->
     <string name="sync_summary">Synced: %1$d, Downloaded: %2$d, Deleted: %3$d (%4$dms)</string>
@@ -151,12 +163,23 @@
 
     <!-- Sync Progress -->
     <string name="sync_progress_details">%1$s (%2$d%%)</string>
+    <string name="sync_progress_step">Step %1$d of %2$d: %3$s</string>
+    <string name="sync_progress_item">Notebook %1$d of %2$d · %3$s</string>
+
+    <!-- Sync Step Names -->
+    <string name="sync_step_initializing">Preparing</string>
+    <string name="sync_step_syncing_folders">Syncing folders</string>
+    <string name="sync_step_applying_deletions">Applying deletions</string>
+    <string name="sync_step_syncing_notebooks">Syncing notebooks</string>
+    <string name="sync_step_downloading_new">Downloading new notebooks</string>
+    <string name="sync_step_uploading_deletions">Uploading deletions</string>
+    <string name="sync_step_finalizing">Finalizing</string>
 
     <!-- Sync Force Operations -->
-    <string name="sync_force_operations_title">CAUTION: Replacement Operations</string>
+    <string name="sync_force_operations_title">DANGER ZONE</string>
     <string name="sync_force_operations_warning">Use these only when setting up a new device or resetting sync. These operations will delete data!</string>
-    <string name="sync_force_upload_button">⚠ Replace Server with Local Data</string>
-    <string name="sync_force_download_button">⚠ Replace Local with Server Data</string>
+    <string name="sync_force_upload_button">Upload All</string>
+    <string name="sync_force_download_button">Download All</string>
     <string name="sync_force_upload_success">Server replaced with local data</string>
     <string name="sync_force_upload_failed">Force upload failed</string>
     <string name="sync_force_download_success">Local data replaced with server data</string>
@@ -164,9 +187,9 @@
 
     <!-- Sync Confirmation Dialogs -->
     <string name="sync_confirm_force_upload_title">Replace Server Data?</string>
-    <string name="sync_confirm_force_upload_message">This will DELETE all data on the server and replace it with local data from this device. This cannot be undone!\n\nAre you sure?</string>
+    <string name="sync_confirm_force_upload_message">This will DELETE all notebooks on the server and replace them with your local data. This cannot be undone.</string>
     <string name="sync_confirm_force_download_title">Replace Local Data?</string>
-    <string name="sync_confirm_force_download_message">This will DELETE all local notebooks and replace them with data from the server. This cannot be undone!\n\nAre you sure?</string>
+    <string name="sync_confirm_force_download_message">This will DELETE all local notebooks and replace them with data from the server. This cannot be undone.</string>
     <string name="sync_dialog_cancel">Cancel</string>
     <string name="sync_dialog_confirm">Confirm</string>
 
@@ -177,7 +200,7 @@
     <string name="sync_wifi_required_message">Not syncing: WiFi-only sync is enabled and you\'re on mobile data. Connect to WiFi or disable the WiFi-only setting.</string>
 
     <!-- Sync Log -->
-    <string name="sync_log_title">Sync Log</string>
-    <string name="sync_log_empty">No sync activity yet</string>
+    <string name="sync_log_title">Activity Log</string>
+    <string name="sync_log_empty">No recent activity.</string>
 
 </resources>

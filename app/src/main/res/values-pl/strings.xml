@@ -21,6 +21,7 @@
     <string name="continuous_zoom">Włącz płynne przybliżanie</string>
     <string name="continuous_stroke_slider">Płynny regulator grubości kreski</string>
     <string name="monochrome_mode">Tryb czarno-biały</string>
+    <string name="rename_on_create">Otwórz ustawienia notatknika przy tworzeniu nowego</string>
     <string name="paginate_pdf">Podziel strony przy eksporcie</string>
     <string name="preview_pdf_pagination">Podgląd podziału stron</string>
 
@@ -122,9 +123,10 @@
     <string name="toolbar_position">Pozycja paska narzędzi</string>
 
     <!-- Sync Settings Tab -->
-    <!-- TODO: Native Polish speaker needed for proper translations -->
     <string name="settings_tab_sync_name">Synchronizacja</string>
     <string name="sync_title">Synchronizacja WebDAV</string>
+    <string name="sync_behavior_title">Ustawienia synchronizacji</string>
+    <string name="sync_manual_actions_title">Akcje ręczne</string>
 
     <!-- Sync Field Labels -->
     <string name="sync_server_url_note">Uwaga: \"/notable\" zostanie dodane do ścieżki, aby uporządkować pliki.</string>
@@ -132,11 +134,15 @@
     <string name="sync_username_label">Nazwa użytkownika</string>
     <string name="sync_password_label">Hasło</string>
     <string name="sync_server_url_placeholder">https://nextcloud.example.com/remote.php/dav/files/username/</string>
+    <string name="sync_password_unchanged">(bez zmian)</string>
 
     <!-- Sync Toggle Labels -->
     <string name="sync_enable_label">Włącz synchronizację WebDAV</string>
     <string name="sync_auto_sync_label">Automatyczna synchronizacja co %1$d minut</string>
     <string name="sync_on_note_close_label">Synchronizuj przy zamykaniu notatek</string>
+    <string name="sync_wifi_only_label">Synchronizuj tylko przez WiFi (bez danych mobilnych)</string>
+    <string name="sync_interval_label">Interwał synchronizacji</string>
+    <string name="sync_interval_value">%1$dm</string>
 
     <!-- Sync Button Labels -->
     <string name="sync_save_credentials">Zapisz dane logowania</string>
@@ -145,7 +151,9 @@
     <string name="sync_now">Synchronizuj teraz</string>
     <string name="sync_synced">Zsynchronizowano</string>
     <string name="sync_failed">Niepowodzenie</string>
-    <string name="sync_clear_log">Wyczyść</string>
+    <string name="sync_clear_log">Wyczyść dziennik</string>
+    <string name="sync_retry_button">Spróbuj ponownie</string>
+    <string name="sync_status_syncing">Synchronizowanie…</string>
 
     <!-- Sync Status Messages -->
     <string name="sync_credentials_saved">Dane logowania zapisane</string>
@@ -153,9 +161,17 @@
     <string name="sync_connection_failed">Połączenie nieudane</string>
     <string name="sync_completed_successfully">Synchronizacja zakończona pomyślnie</string>
     <string name="sync_failed_message">Synchronizacja nie powiodła się: %1$s</string>
+    <string name="sync_skipped">Synchronizacja pominięta</string>
+    <string name="sync_cancelled">Synchronizacja anulowana</string>
+    <string name="sync_finished">Synchronizacja zakończona</string>
     <string name="sync_last_synced">Ostatnia synchronizacja: %1$s</string>
-    <string name="sync_scheduled_started">Rozpoczynam zaplanowaną synchronizację...</string>
+    <string name="sync_last_synced_never">Nigdy</string>
+    <string name="sync_scheduled_started">Rozpoczynam zaplanowaną synchronizację…</string>
     <string name="sync_scheduled_completed">Zaplanowana synchronizacja zakończona</string>
+    <string name="sync_connection_setup">Konfiguracja połączenia</string>
+    <string name="sync_server_configured">Serwer: %1$s…</string>
+    <string name="sync_missing_config_hint">Dokończ konfigurację połączenia powyżej, aby włączyć funkcje synchronizacji.</string>
+    <string name="sync_clock_skew_short">Połączono (różnica czasu: %1$ds)</string>
 
     <!-- Sync Summary Messages -->
     <string name="sync_summary">Zsynchronizowano: %1$d, Pobrano: %2$d, Usunięto: %3$d (%4$dms)</string>
@@ -164,12 +180,23 @@
 
     <!-- Sync Progress -->
     <string name="sync_progress_details">%1$s (%2$d%%)</string>
+    <string name="sync_progress_step">Krok %1$d z %2$d: %3$s</string>
+    <string name="sync_progress_item">Zeszyt %1$d z %2$d · %3$s</string>
+
+    <!-- Sync Step Names -->
+    <string name="sync_step_initializing">Przygotowywanie</string>
+    <string name="sync_step_syncing_folders">Synchronizacja folderów</string>
+    <string name="sync_step_applying_deletions">Usuwanie plików</string>
+    <string name="sync_step_syncing_notebooks">Synchronizacja zeszytów</string>
+    <string name="sync_step_downloading_new">Pobieranie nowych zeszytów</string>
+    <string name="sync_step_uploading_deletions">Wysyłanie informacji o usunięciu</string>
+    <string name="sync_step_finalizing">Finalizowanie</string>
 
     <!-- Sync Force Operations -->
-    <string name="sync_force_operations_title">UWAGA: Operacje zastępowania</string>
+    <string name="sync_force_operations_title">STREFA ZAGROŻENIA</string>
     <string name="sync_force_operations_warning">Używaj tylko podczas konfiguracji nowego urządzenia lub resetowania synchronizacji. Te operacje usuwają dane!</string>
-    <string name="sync_force_upload_button">⚠ Zastąp serwer danymi lokalnymi</string>
-    <string name="sync_force_download_button">⚠ Zastąp dane lokalne danymi z serwera</string>
+    <string name="sync_force_upload_button">Zastąp serwer danymi lokalnymi</string>
+    <string name="sync_force_download_button">Zastąp dane lokalne danymi z serwera</string>
     <string name="sync_force_upload_success">Serwer zastąpiony danymi lokalnymi</string>
     <string name="sync_force_upload_failed">Wymuszony upload nie powiódł się</string>
     <string name="sync_force_download_success">Dane lokalne zastąpione danymi z serwera</string>
@@ -177,14 +204,20 @@
 
     <!-- Sync Confirmation Dialogs -->
     <string name="sync_confirm_force_upload_title">Zastąpić dane serwera?</string>
-    <string name="sync_confirm_force_upload_message">To USUNIE wszystkie dane na serwerze i zastąpi je danymi lokalnymi z tego urządzenia. Nie można tego cofnąć!\n\nCzy jesteś pewny?</string>
+    <string name="sync_confirm_force_upload_message">To USUNIE wszystkie zeszyty na serwerze i zastąpi je danymi lokalnymi. Nie można tego cofnąć.</string>
     <string name="sync_confirm_force_download_title">Zastąpić dane lokalne?</string>
-    <string name="sync_confirm_force_download_message">To USUNIE wszystkie lokalne zeszyty i zastąpi je danymi z serwera. Nie można tego cofnąć!\n\nCzy jesteś pewny?</string>
+    <string name="sync_confirm_force_download_message">To USUNIE wszystkie lokalne zeszyty i zastąpi je danymi z serwera. Nie można tego cofnąć.</string>
     <string name="sync_dialog_cancel">Anuluj</string>
     <string name="sync_dialog_confirm">Potwierdź</string>
 
+    <!-- Sync Clock Skew -->
+    <string name="sync_clock_skew_warning">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekund. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</string>
+
+    <!-- Sync WiFi-only -->
+    <string name="sync_wifi_required_message">Synchronizacja wstrzymana: włączono synchronizację tylko przez WiFi, a obecnie korzystasz z danych mobilnych. Połącz się z WiFi lub wyłącz to ustawienie.</string>
+
     <!-- Sync Log -->
-    <string name="sync_log_title">Dziennik synchronizacji</string>
-    <string name="sync_log_empty">Brak aktywności synchronizacji</string>
+    <string name="sync_log_title">Dziennik aktywności</string>
+    <string name="sync_log_empty">Brak ostatniej aktywności.</string>
 
 </resources>
