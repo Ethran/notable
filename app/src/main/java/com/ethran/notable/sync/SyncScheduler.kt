@@ -2,7 +2,6 @@ package com.ethran.notable.sync
 
 import android.content.Context
 import androidx.work.Constraints
-import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
@@ -60,8 +59,7 @@ class SyncScheduler @Inject constructor(
             repeatIntervalTimeUnit = TimeUnit.MINUTES
         )
             .setInputData(
-                Data.Builder()
-                    .putString(INPUT_KEY_SYNC_TYPE, DEFAULT_SYNC_TYPE)
+                SyncRequest.SyncAll.toDataBuilder()
                     .putString(INPUT_KEY_SYNC_TRIGGER, SYNC_TRIGGER_PERIODIC)
                     .build()
             )
@@ -80,37 +78,28 @@ class SyncScheduler @Inject constructor(
     }
 
     fun triggerImmediateSync(
-        syncType: String = "syncAll",
-        data: Map<String, String> = emptyMap()
+        request: SyncRequest = SyncRequest.SyncAll
     ): UUID {
-        val builder = Data.Builder()
-            .putString(INPUT_KEY_SYNC_TYPE, syncType)
+        val builder = request.toDataBuilder()
             .putString(INPUT_KEY_SYNC_TRIGGER, SYNC_TRIGGER_IMMEDIATE)
 
-        data.forEach { (k, v) -> builder.putString(k, v) }
-
-        val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+        val syncWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(builder.build())
             .build()
 
-        val workSuffix = data.entries
-            .sortedBy { it.key }
-            .joinToString(separator = "-") { "${it.key}:${it.value}" }
-            .ifEmpty { "default" }
+        val uniqueName = "${SyncWorker.WORK_NAME}-immediate-${request.typeKey}-${request.identifier}"
 
         workManager.enqueueUniqueWork(
-            "${SyncWorker.WORK_NAME}-immediate-$syncType-$workSuffix",
+            uniqueName,
             ExistingWorkPolicy.REPLACE,
-            syncRequest
+            syncWorkRequest
         )
 
-        return syncRequest.id
+        return syncWorkRequest.id
     }
 
     companion object {
-        private const val INPUT_KEY_SYNC_TYPE = "sync_type"
         private const val INPUT_KEY_SYNC_TRIGGER = "sync_trigger"
-        private const val DEFAULT_SYNC_TYPE = "syncAll"
         private const val SYNC_TRIGGER_PERIODIC = "periodic"
         private const val SYNC_TRIGGER_IMMEDIATE = "immediate"
     }

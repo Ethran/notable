@@ -54,8 +54,9 @@ class SyncWorker(
             return Result.success()
         }
 
-        val syncType = inputData.getString("sync_type") ?: "syncAll"
-        val syncTrigger = inputData.getString("sync_trigger")
+        val syncRequest = SyncRequest.fromData(inputData)
+            ?: return Result.failure(workDataOf("success" to false, "error" to "INVALID_INPUT"))
+        val syncTrigger = inputData.getString(KEY_SYNC_TRIGGER)
         val isPeriodicSync = syncTrigger == SYNC_TRIGGER_PERIODIC
 
         // Perform sync based on type
@@ -64,32 +65,21 @@ class SyncWorker(
                 showSyncSnack(R.string.sync_scheduled_started)
             }
 
-            val result = when (syncType) {
-                "syncAll" -> entryPoint.syncOrchestrator().syncAllNotebooks()
-                "forceUpload" -> entryPoint.syncOrchestrator().forceUploadAll()
-                "forceDownload" -> entryPoint.syncOrchestrator().forceDownloadAll()
-                "uploadDeletion" -> {
-                    val notebookId = inputData.getString("notebookId") ?: return Result.failure()
-                    entryPoint.syncOrchestrator().uploadDeletion(notebookId)
-                }
-
-                "syncNotebook" -> {
-                    val notebookId = inputData.getString("notebookId") ?: return Result.failure()
-                    entryPoint.syncOrchestrator().syncNotebook(notebookId)
-                }
-
-                "syncFromPageId" -> {
-                    val pageId = inputData.getString("pageId") ?: return Result.failure()
-                    entryPoint.syncOrchestrator().syncFromPageId(pageId)
+            val result = when (syncRequest) {
+                SyncRequest.SyncAll -> entryPoint.syncOrchestrator().syncAllNotebooks()
+                SyncRequest.ForceUpload -> entryPoint.syncOrchestrator().forceUploadAll()
+                SyncRequest.ForceDownload -> entryPoint.syncOrchestrator().forceDownloadAll()
+                is SyncRequest.UploadDeletion -> entryPoint.syncOrchestrator().uploadDeletion(syncRequest.notebookId)
+                is SyncRequest.SyncNotebook -> entryPoint.syncOrchestrator().syncNotebook(syncRequest.notebookId)
+                is SyncRequest.SyncFromPageId -> {
+                    entryPoint.syncOrchestrator().syncFromPageId(syncRequest.pageId)
                     AppResult.Success(Unit)
                 }
-
-                else -> AppResult.Error(DomainError.SyncError("Unknown sync type: $syncType"))
             }
 
             when (result) {
                 is AppResult.Success -> {
-                    Log.i(TAG, "Sync $syncType completed successfully")
+                    Log.i(TAG, "Sync $syncRequest completed successfully")
                     Result.success(workDataOf("success" to true))
                 }
 
@@ -168,6 +158,7 @@ class SyncWorker(
         private const val TAG = "SyncWorker"
         private const val MAX_RETRY_ATTEMPTS = 3
         private const val SYNC_TRIGGER_PERIODIC = "periodic"
+        private const val KEY_SYNC_TRIGGER = "sync_trigger"
 
         /**
          * Unique work name for periodic sync.
