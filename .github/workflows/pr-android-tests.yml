@@ -1,20 +1,23 @@
 name: PR Android Tests
+
+# 1. Global permissions: Strictly read-only
 permissions:
   contents: read
-  issues: write
+
 on:
   pull_request:
-    # Only trigger this workflow when a label is added to the PR
     types: [labeled]
 
 jobs:
   android-tests:
-    # IMPORTANT: Only run if the label added is exactly 'run-android-tests'
     if: github.event.label.name == 'run-android-tests'
-    
-    # macOS runners usually have hardware acceleration (HAXM) enabled by default, 
-    # which makes Android emulators run significantly faster than on Ubuntu.
     runs-on: macos-latest 
+
+    # 2. Job-level permissions: Elevated just for this specific job
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
 
     steps:
       - name: Checkout code
@@ -30,21 +33,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run Android Instrumentation Tests
-        # Using a standard community action to handle emulator creation and caching
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
           target: google_apis
-          arch: x86_64
+          # 3. Updated to ARM architecture to match macos-latest runners
+          arch: arm64-v8a
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          # Replace with your specific instrumentation test task
           script: ./gradlew connectedDebugAndroidTest
           
-      - name: Remove Label (Optional)
-        # Automatically removes the label after running so you can trigger it again later by re-adding it
-        if: always() 
+      - name: Remove Label
+        # Fork protection and continue-on-error are correctly configured
+        if: always() && github.event.pull_request.head.repo.fork == false
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
