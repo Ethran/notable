@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -118,21 +119,19 @@ fun SyncSettings(
             onDismissRequest = { },
             title = {
                 Text(
-                    text = "Experimental Feature", // Replace with stringResource
+                    text = stringResource(R.string.sync_experimental_title),
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colors.error // Makes it red/alerting
                 )
             },
             text = {
-                Text(
-                    "The synchronization feature is currently in testing. It is not guaranteed to be stable and may result in the loss or duplication of data.\n\nPlease ensure you have local backups of your notes before proceeding."
-                )
+                Text(stringResource(R.string.sync_experimental_warning))
             },
             confirmButton = {
                 Button(
                     onClick = { showWarningDialog = false }
                 ) {
-                    Text("I Understand & Accept the Risk")
+                    Text(stringResource(R.string.sync_experimental_confirm))
                 }
             }
         )
@@ -224,7 +223,9 @@ private fun ConnectionSection(
                 isBold = true
             )
             EInkActionButton(
-                text = if (state.testingConnection) stringResource(R.string.sync_testing_connection) else stringResource(R.string.sync_test_connection),
+                text = if (state.testingConnection) stringResource(R.string.sync_testing_connection) else stringResource(
+                    R.string.sync_test_connection
+                ),
                 onClick = callbacks.onTestConnection,
                 enabled = !state.testingConnection && state.syncSettings.serverUrl.isNotEmpty(),
                 modifier = Modifier.weight(1f),
@@ -244,7 +245,10 @@ private fun SyncBehaviorSection(
     state: SyncSettingsUiState,
     onUpdate: (SyncSettings, Boolean) -> Unit,
 ) {
-    EInkSection(title = stringResource(R.string.sync_behavior_title), icon = Icons.Default.Settings) {
+    EInkSection(
+        title = stringResource(R.string.sync_behavior_title),
+        icon = Icons.Default.Settings
+    ) {
         SettingToggleRow(
             label = stringResource(R.string.sync_enable_label),
             value = state.syncSettings.syncEnabled,
@@ -253,7 +257,10 @@ private fun SyncBehaviorSection(
 
         if (state.syncSettings.syncEnabled) {
             SettingToggleRow(
-                label = stringResource(R.string.sync_auto_sync_label, state.syncSettings.syncInterval),
+                label = stringResource(
+                    R.string.sync_auto_sync_label,
+                    state.syncSettings.syncInterval
+                ),
                 value = state.syncSettings.autoSync,
                 onToggle = { onUpdate(state.syncSettings.copy(autoSync = it), true) }
             )
@@ -271,6 +278,11 @@ private fun SyncBehaviorSection(
                 value = state.syncSettings.wifiOnly,
                 onToggle = { onUpdate(state.syncSettings.copy(wifiOnly = it), true) }
             )
+            SettingToggleRow(
+                label = stringResource(R.string.sync_upload_only_label),
+                value = state.syncSettings.uploadOnly,
+                onToggle = { onUpdate(state.syncSettings.copy(uploadOnly = it), true) }
+            )
         }
     }
 }
@@ -280,7 +292,10 @@ private fun SyncActionsSection(
     state: SyncSettingsUiState,
     callbacks: SyncSettingsCallbacks,
 ) {
-    EInkSection(title = stringResource(R.string.sync_manual_actions_title), icon = Icons.Default.Sync) {
+    EInkSection(
+        title = stringResource(R.string.sync_manual_actions_title),
+        icon = Icons.Default.Sync
+    ) {
         ManualSyncButton(
             syncSettings = state.syncSettings,
             syncState = state.syncState,
@@ -313,12 +328,10 @@ private fun SyncActionsSection(
 @Composable
 private fun LastSyncInfo(lastSyncTime: Long?) {
     val label = lastSyncTime?.let {
-        try {
-            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-            fmt.format(java.util.Date(it))
-        } catch (_: Exception) {
-            null
-        }
+        val locale = LocalConfiguration.current.locales[0]
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", locale)
+        fmt.format(java.util.Date(it))
+
     }
 
     val text = if (label != null) {
@@ -382,16 +395,16 @@ fun EInkSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                icon, 
-                contentDescription = null, 
+                icon,
+                contentDescription = null,
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colors.onSurface
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                title, 
+                title,
                 style = MaterialTheme.typography.subtitle2,
-                fontWeight = FontWeight.Bold, 
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
                 color = MaterialTheme.colors.onSurface
             )
@@ -403,7 +416,7 @@ fun EInkSection(
                 )
             }
         }
-        
+
         AnimatedVisibility(visible = isExpanded) {
             Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
                 content()
@@ -421,13 +434,13 @@ fun ConnectionStatusText(result: AppResult<ConnectionTestResult, DomainError>) {
             is AppResult.Error -> Icons.Default.Warning
         }
         Icon(
-            icon, 
-            contentDescription = null, 
+            icon,
+            contentDescription = null,
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colors.onSurface
         )
         Spacer(modifier = Modifier.width(4.dp))
-        
+
         val text = when (result) {
             is AppResult.Success -> {
                 val skewMs = result.data.clockSkewMs
@@ -437,11 +450,12 @@ fun ConnectionStatusText(result: AppResult<ConnectionTestResult, DomainError>) {
                     stringResource(R.string.sync_connected_successfully)
                 }
             }
+
             is AppResult.Error -> result.error.userMessage
         }
         Text(
-            text, 
-            style = MaterialTheme.typography.caption, 
+            text,
+            style = MaterialTheme.typography.caption,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colors.onSurface
         )
@@ -462,7 +476,7 @@ fun SyncCredentialFields(
         onValueChange = { onUpdate(settings.copy(serverUrl = it), false) },
         placeholder = stringResource(R.string.sync_server_url_placeholder)
     )
-    
+
     if (settings.serverUrl.isNotEmpty()) {
         Text(
             text = stringResource(R.string.sync_server_url_note),
@@ -483,8 +497,8 @@ fun SyncCredentialFields(
     Spacer(modifier = Modifier.height(16.dp))
 
     Text(
-        text = stringResource(R.string.sync_password_label), 
-        style = MaterialTheme.typography.caption, 
+        text = stringResource(R.string.sync_password_label),
+        style = MaterialTheme.typography.caption,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colors.onSurface
     )
@@ -499,8 +513,8 @@ fun SyncCredentialFields(
             Box(modifier = Modifier.weight(1f)) {
                 if (settings.password.isEmpty() && isPasswordSaved) {
                     Text(
-                        text = stringResource(R.string.sync_password_unchanged), 
-                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f), 
+                        text = stringResource(R.string.sync_password_unchanged),
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
                         style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                     )
                 }
@@ -508,7 +522,7 @@ fun SyncCredentialFields(
                     value = settings.password,
                     onValueChange = { onUpdate(settings.copy(password = it), false) },
                     textStyle = TextStyle(
-                        fontFamily = FontFamily.Monospace, 
+                        fontFamily = FontFamily.Monospace,
                         fontSize = 14.sp,
                         color = MaterialTheme.colors.onSurface
                     ),
@@ -533,11 +547,16 @@ fun SyncCredentialFields(
 }
 
 @Composable
-fun EInkTextField(label: String, value: String, onValueChange: (String) -> Unit, placeholder: String = "") {
+fun EInkTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String = ""
+) {
     Column {
         Text(
-            label, 
-            style = MaterialTheme.typography.caption, 
+            label,
+            style = MaterialTheme.typography.caption,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colors.onSurface
         )
@@ -550,8 +569,8 @@ fun EInkTextField(label: String, value: String, onValueChange: (String) -> Unit,
         ) {
             if (value.isEmpty() && placeholder.isNotEmpty()) {
                 Text(
-                    placeholder, 
-                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.3f), 
+                    placeholder,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
                     style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                 )
             }
@@ -624,6 +643,7 @@ private fun SyncIntervalSelector(
         )
     }
 }
+
 @Composable
 fun ManualSyncButton(
     syncSettings: SyncSettings,
@@ -653,8 +673,8 @@ fun ManualSyncButton(
         Button(
             onClick = onManualSync,
             enabled = syncState is SyncState.Idle &&
-                syncSettings.syncEnabled &&
-                syncSettings.serverUrl.isNotEmpty(),
+                    syncSettings.syncEnabled &&
+                    syncSettings.serverUrl.isNotEmpty(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
@@ -699,7 +719,12 @@ private fun SyncProgressPanel(syncing: SyncState.Syncing) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = stringResource(R.string.sync_progress_step, stepIndex, totalSteps, syncing.currentStep.displayName()),
+                text = stringResource(
+                    R.string.sync_progress_step,
+                    stepIndex,
+                    totalSteps,
+                    syncing.currentStep.displayName()
+                ),
                 style = MaterialTheme.typography.body2,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colors.onSurface
@@ -725,7 +750,12 @@ private fun SyncProgressPanel(syncing: SyncState.Syncing) {
         }
         syncing.item?.let { item ->
             Text(
-                text = stringResource(R.string.sync_progress_item, item.index, item.total, item.name),
+                text = stringResource(
+                    R.string.sync_progress_item,
+                    item.index,
+                    item.total,
+                    item.name
+                ),
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onSurface
             )
@@ -807,7 +837,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
             ) {
                 if (recentLogs.isEmpty()) {
                     Text(
-                        text = stringResource(R.string.sync_log_empty), 
+                        text = stringResource(R.string.sync_log_empty),
                         style = MaterialTheme.typography.caption,
                         color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f)
                     )
@@ -816,7 +846,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
                         Text(
                             text = "[${log.timestamp}] ${log.message}",
                             style = TextStyle(
-                                fontFamily = FontFamily.Monospace, 
+                                fontFamily = FontFamily.Monospace,
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colors.onSurface
                             ),
@@ -849,30 +879,30 @@ fun ConfirmationDialog(
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    title, 
-                    fontWeight = FontWeight.Bold, 
+                    title,
+                    fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.h6,
                     color = MaterialTheme.colors.onSurface
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    message, 
+                    message,
                     style = MaterialTheme.typography.body2,
                     color = MaterialTheme.colors.onSurface
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
-                        onClick = onDismiss, 
-                        modifier = Modifier.weight(1f), 
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
                         shape = EInkButtonShape,
                         colors = eInkButtonColors(isSecondary = true)
                     ) {
                         Text(stringResource(R.string.sync_dialog_cancel))
                     }
                     Button(
-                        onClick = onConfirm, 
-                        modifier = Modifier.weight(1f), 
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f),
                         shape = EInkButtonShape,
                         colors = eInkButtonColors()
                     ) {
@@ -958,7 +988,16 @@ fun SyncSettingsConfiguredPreview() {
                         syncEnabled = true,
                         serverUrl = "https://webdav.example.com/dav/",
                         username = "demo_user",
-                        lastSyncTime = java.util.Calendar.getInstance().apply { set(2024, 2, 20, 14, 30, 5); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+                        lastSyncTime = java.util.Calendar.getInstance().apply {
+                            set(
+                                2024,
+                                2,
+                                20,
+                                14,
+                                30,
+                                5
+                            ); set(java.util.Calendar.MILLISECOND, 0)
+                        }.timeInMillis
                     )
                 ),
                 callbacks = SyncSettingsCallbacks()
@@ -984,7 +1023,16 @@ fun SyncSettingsSyncingPreview() {
                         syncEnabled = true,
                         serverUrl = "https://webdav.example.com/dav/",
                         username = "demo_user",
-                        lastSyncTime = java.util.Calendar.getInstance().apply { set(2024, 2, 20, 14, 30, 5); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+                        lastSyncTime = java.util.Calendar.getInstance().apply {
+                            set(
+                                2024,
+                                2,
+                                20,
+                                14,
+                                30,
+                                5
+                            ); set(java.util.Calendar.MILLISECOND, 0)
+                        }.timeInMillis
                     )
                 ),
                 callbacks = SyncSettingsCallbacks()

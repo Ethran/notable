@@ -15,6 +15,6 @@ data class SyncSettings(
     val lastSyncTime: Long? = null,
     val syncOnNoteClose: Boolean = true,
     val wifiOnly: Boolean = false,
+    val uploadOnly: Boolean = false,
     val syncedNotebookIds: Set<String> = emptySet()
 )
-
