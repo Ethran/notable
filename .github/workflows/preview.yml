@@ -5,6 +5,9 @@ on:
     paths:
       - 'app/**'
   workflow_dispatch:
+  
+permissions:
+  contents: write
 
 env:
   MAVEN_OPTS: >-
