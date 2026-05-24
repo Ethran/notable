@@ -119,21 +119,19 @@ fun SyncSettings(
             onDismissRequest = { },
             title = {
                 Text(
-                    text = "Experimental Feature", // Replace with stringResource
+                    text = stringResource(R.string.sync_experimental_title),
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colors.error // Makes it red/alerting
                 )
             },
             text = {
-                Text(
-                    "The synchronization feature is currently in testing. It is not guaranteed to be stable and may result in the loss or duplication of data.\n\nPlease ensure you have local backups of your notes before proceeding."
-                )
+                Text(stringResource(R.string.sync_experimental_warning))
             },
             confirmButton = {
                 Button(
                     onClick = { showWarningDialog = false }
                 ) {
-                    Text("I Understand & Accept the Risk")
+                    Text(stringResource(R.string.sync_experimental_confirm))
                 }
             }
         )
@@ -143,6 +141,7 @@ fun SyncSettings(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
+            .verticalScroll(rememberScrollState())
     ) {
         Text(
             text = stringResource(R.string.sync_title),
@@ -325,7 +324,6 @@ private fun SyncActionsSection(
 @Composable
 private fun LastSyncInfo(lastSyncTime: Long?) {
     val label = lastSyncTime?.let {
-        // Import this: androidx.compose.ui.platform.LocalConfiguration
         val locale = LocalConfiguration.current.locales[0]
         val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", locale)
         fmt.format(java.util.Date(it))
