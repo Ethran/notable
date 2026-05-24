@@ -133,11 +133,13 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
         exclude group: "com.onyx.android.sdk", module: "onyxsdk-geometry"
+        exclude group: 'com.tencent', module: 'mmkv'
     }
 
     implementation('com.onyx.android.sdk:onyxsdk-base:1.8.5') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
+        exclude group: 'com.tencent', module: 'mmkv'
     }
 
     // Temporary (?) fix for https://github.com/gaborauth/toolsboox-android/issues/305
@@ -155,7 +157,7 @@ dependencies {
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_version"
     implementation "androidx.compose.runtime:runtime-livedata:$compose_version"
     implementation "androidx.compose.runtime:runtime:$compose_version"
-    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
 
     implementation "androidx.navigation:navigation-compose:2.9.8"
 
