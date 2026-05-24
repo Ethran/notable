@@ -16,7 +16,10 @@ class FolderSyncService @Inject constructor(
 ) {
     private val folderSerializer = FolderSerializer
 
-    suspend fun syncFolders(webdavClient: WebDAVClient): AppResult<Unit, DomainError> {
+    suspend fun syncFolders(
+        webdavClient: WebDAVClient,
+        uploadOnly: Boolean
+    ): AppResult<Unit, DomainError> {
         SyncLogger.i(TAG, "Syncing folders...")
         val localFolders = appRepository.folderRepository.getAll()
         val remotePath = SyncPaths.foldersFile()
@@ -40,12 +43,15 @@ class FolderSyncService @Inject constructor(
                 }
 
                 val mergedFolders = folderMap.values.toList()
-                for (folder in mergedFolders) {
-                    val existing = appRepository.folderRepository.get(folder.id)
-                    if (existing != null) {
-                        appRepository.folderRepository.update(folder)
-                    } else {
-                        appRepository.folderRepository.create(folder)
+
+                if (!uploadOnly) {
+                    for (folder in mergedFolders) {
+                        val existing = appRepository.folderRepository.get(folder.id)
+                        if (existing != null) {
+                            appRepository.folderRepository.update(folder)
+                        } else {
+                            appRepository.folderRepository.create(folder)
+                        }
                     }
                 }
 

@@ -51,6 +51,8 @@ class SyncOrchestrator @Inject constructor(
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
 
             val settings = kvProxy.getSyncSettings()
+            val uploadOnly = settings.uploadOnly
+            var nonCriticalError: DomainError? = null
 
             if (!settings.syncEnabled) {
                 val error = DomainError.SyncConfigError
@@ -91,7 +93,7 @@ class SyncOrchestrator @Inject constructor(
                 PROGRESS_SYNCING_FOLDERS,
                 "Syncing folders..."
             )
-            folderSyncService.syncFolders(client).onFailure { error ->
+            folderSyncService.syncFolders(client, uploadOnly).onFailure { error ->
                 reporter.finishError(error, false)
                 return@withContext AppResult.Error(error)
             }
@@ -101,34 +103,52 @@ class SyncOrchestrator @Inject constructor(
                 PROGRESS_APPLYING_DELETIONS,
                 "Applying remote deletions..."
             )
-            val tombstonedIds =
+            val tombstonedIds = if (uploadOnly) {
+                emptySet()
+            } else {
                 notebookSyncService.applyRemoteDeletions(client, TOMBSTONE_MAX_AGE_DAYS)
                     .onFailure { error ->
                         return@withContext AppResult.Error(error)
                     }
+            }
 
             reporter.beginStep(
                 SyncStep.SYNCING_NOTEBOOKS,
                 PROGRESS_SYNCING_NOTEBOOKS,
                 "Syncing local notebooks..."
             )
-            val preDownloadIds = notebookReconciliationService.syncExistingNotebooks(client)
-                .onFailure { error ->
-                    return@withContext AppResult.Error(error)
+            val localIdsSnapshot = appRepository.bookRepository.getAll().map { it.id }.toSet()
+            val preDownloadIds = when (
+                val syncResult = notebookReconciliationService.syncExistingNotebooks(client, uploadOnly)
+            ) {
+                is AppResult.Success -> syncResult.data
+                is AppResult.Error -> {
+                    val error = syncResult.error
+                    if (uploadOnly && error.isOnlyUploadSkip()) {
+                        nonCriticalError = error
+                        localIdsSnapshot
+                    } else {
+                        return@withContext AppResult.Error(error)
+                    }
                 }
+            }
 
             reporter.beginStep(
                 SyncStep.DOWNLOADING_NEW,
                 PROGRESS_DOWNLOADING_NEW,
                 "Downloading new notebooks..."
             )
-            val downloadedCount = notebookSyncService.downloadNewNotebooks(
-                client,
-                tombstonedIds,
-                settings,
-                preDownloadIds
-            ).onFailure { error ->
-                return@withContext AppResult.Error(error)
+            val downloadedCount = if (uploadOnly) {
+                0
+            } else {
+                notebookSyncService.downloadNewNotebooks(
+                    client,
+                    tombstonedIds,
+                    settings,
+                    preDownloadIds
+                ).onFailure { error ->
+                    return@withContext AppResult.Error(error)
+                }
             }
 
             reporter.beginStep(
@@ -152,9 +172,7 @@ class SyncOrchestrator @Inject constructor(
                 deletedCount,
                 System.currentTimeMillis() - startTime
             )
-            reporter.finishSuccess(summary)
-
-            AppResult.Success(Unit)
+            finalizeSyncResult(reporter, summary, nonCriticalError)
 
         } catch (e: Exception) {
             val error = DomainError.SyncError(
@@ -188,7 +206,11 @@ class SyncOrchestrator @Inject constructor(
                     settings.username,
                     settings.password
                 )
-                return@withContext notebookReconciliationService.syncNotebook(notebookId, client)
+                return@withContext notebookReconciliationService.syncNotebook(
+                    notebookId,
+                    client,
+                    settings.uploadOnly
+                )
             }
             AppResult.Success(Unit)
         }
@@ -279,6 +301,25 @@ class SyncOrchestrator @Inject constructor(
         private const val TOMBSTONE_MAX_AGE_DAYS = 90L
         private val syncMutex = Mutex()
     }
+}
+
+internal fun finalizeSyncResult(
+    reporter: SyncProgressReporter,
+    summary: SyncSummary,
+    nonCriticalError: DomainError?
+): AppResult<Unit, DomainError> {
+    if (nonCriticalError != null && nonCriticalError.isOnlyUploadSkip()) {
+        reporter.finishSuccess(summary)
+        return AppResult.Success(Unit)
+    }
+
+    if (nonCriticalError != null) {
+        reporter.finishError(nonCriticalError, false)
+        return AppResult.Error(nonCriticalError)
+    }
+
+    reporter.finishSuccess(summary)
+    return AppResult.Success(Unit)
 }
 
 @EntryPoint

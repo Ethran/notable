@@ -141,7 +141,6 @@ fun SyncSettings(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .verticalScroll(rememberScrollState())
     ) {
         Text(
             text = stringResource(R.string.sync_title),
@@ -278,6 +277,11 @@ private fun SyncBehaviorSection(
                 label = stringResource(R.string.sync_wifi_only_label),
                 value = state.syncSettings.wifiOnly,
                 onToggle = { onUpdate(state.syncSettings.copy(wifiOnly = it), true) }
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.sync_upload_only_label),
+                value = state.syncSettings.uploadOnly,
+                onToggle = { onUpdate(state.syncSettings.copy(uploadOnly = it), true) }
             )
         }
     }

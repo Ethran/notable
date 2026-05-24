@@ -142,6 +142,7 @@
     <string name="sync_auto_sync_label">Automatyczna synchronizacja co %1$d minut</string>
     <string name="sync_on_note_close_label">Synchronizuj przy zamykaniu notatek</string>
     <string name="sync_wifi_only_label">Synchronizuj tylko przez WiFi (bez danych mobilnych)</string>
+    <string name="sync_upload_only_label">Tylko wysyłaj (bez zmian z serwera)</string>
     <string name="sync_interval_label">Interwał synchronizacji</string>
     <string name="sync_interval_value">%1$dm</string>
 

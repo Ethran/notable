@@ -121,10 +121,11 @@
     <string name="sync_password_unchanged">(unchanged)</string>
 
     <!-- Sync Toggle Labels -->
-    <string name="sync_enable_label">Enable WebDAV Sync</string>
-    <string name="sync_auto_sync_label">Automatic sync every %1$d minutes</string>
+    <string name="sync_enable_label">Sync WebDAV</string>
+    <string name="sync_auto_sync_label">Auto sync every %1$d minutes</string>
     <string name="sync_on_note_close_label">Sync when closing notes</string>
     <string name="sync_wifi_only_label">Sync on WiFi only (no mobile data)</string>
+    <string name="sync_upload_only_label">Upload only (skip remote changes)</string>
     <string name="sync_interval_label">Sync interval</string>
     <string name="sync_interval_value">%1$dm</string>
 

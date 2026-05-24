@@ -52,6 +52,10 @@ sealed class DomainError(
     data object SyncWifiRequired : DomainError("WiFi connection required for sync.")
     data object SyncInProgress : DomainError("Sync already in progress.")
     data object SyncConflict : DomainError("Conflict detected during sync.")
+    data class SyncUploadOnlySkip(val notebookTitle: String) : DomainError(
+        "Remote changes detected for '$notebookTitle'. Upload-only is enabled.",
+        recoverable = true
+    )
 
     data class SyncError(
         val message: String,
@@ -62,6 +66,15 @@ sealed class DomainError(
     data class MultipleErrors(val errors: List<DomainError>) : DomainError(
         userMessage = errors.joinToString(separator = "\n") { "• ${it.userMessage}" }
     )
+
+    /**
+     * Checks if this error (or all errors in MultipleErrors) are SyncUploadOnlySkip.
+     */
+    fun isOnlyUploadSkip(): Boolean = when (this) {
+        is SyncUploadOnlySkip -> true
+        is MultipleErrors -> errors.all { it is SyncUploadOnlySkip }
+        else -> false
+    }
 }
 
 /**
