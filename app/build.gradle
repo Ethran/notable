@@ -133,11 +133,13 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
         exclude group: "com.onyx.android.sdk", module: "onyxsdk-geometry"
+        exclude group : "com.tencent", module: "mmkv"
     }
 
     implementation('com.onyx.android.sdk:onyxsdk-base:1.8.5') {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
+        exclude group: 'com.tencent', module: 'mmkv'
     }
 
     // Temporary (?) fix for https://github.com/gaborauth/toolsboox-android/issues/305
