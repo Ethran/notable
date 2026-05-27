@@ -114,6 +114,21 @@ android {
         unitTests {
             includeAndroidResources = true
             // Robolectric drives android.* APIs (Base64, Log, ...) in JVM unit tests.
+            // HiddenApiBypass needs deep reflection into java.lang on JDK 17+, which
+            // requires explicit --add-opens flags. Without these, Robolectric tests
+            // fail at class-init with ExceptionInInitializerError / NoSuchMethodException.
+            all {
+                jvmArgs += [
+                    '--add-opens=java.base/java.lang=ALL-UNNAMED',
+                    '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+                    '--add-opens=java.base/java.io=ALL-UNNAMED',
+                    '--add-opens=java.base/java.net=ALL-UNNAMED',
+                    '--add-opens=java.base/java.nio=ALL-UNNAMED',
+                    '--add-opens=java.base/java.util=ALL-UNNAMED',
+                    '--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED',
+                    '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+                ]
+            }
         }
     }
 }
