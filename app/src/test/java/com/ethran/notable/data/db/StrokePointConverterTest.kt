@@ -9,6 +9,17 @@ import org.junit.Assert.fail
 import org.junit.Test
 import kotlin.math.abs
 
+/**
+ * NOTE FOR WHOEVER RUNS THIS SUITE (these tests were authored without a
+ * working Gradle/Android SDK environment, so they have not been executed):
+ *
+ * StrokePointConverter.kt has a file-scope
+ *     private val log = ShipBook.getLogger("StrokePointConverter")
+ * If ShipBook.getLogger() throws when the SDK is uninitialized, every test
+ * in this file (and in NotebookSerializerPageTest) will fail at class load.
+ * If that happens, make `log` lazy or initialize ShipBook in a @BeforeClass
+ * hook on these suites.
+ */
 class StrokePointConverterTest {
 
     private fun assertPointsApproxEqual(expected: List<StrokePoint>, actual: List<StrokePoint>) {
