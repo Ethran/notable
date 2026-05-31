@@ -1,6 +1,7 @@
 package com.ethran.notable.data.datastore
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.serialization.Serializable
 
 
@@ -15,8 +16,17 @@ object GlobalAppSettings {
     val current: AppSettings
         get() = _current.value
 
+    /**
+     * Updates the globally observed settings. This is a Compose snapshot state read all over the UI
+     * during composition, yet [update] is called from background coroutines (e.g. when persisting
+     * settings on Dispatchers.IO). Writing the snapshot state directly from a non-composition thread
+     * can race the recomposer and throw "Unsupported concurrent change during composition", so the
+     * write is committed inside its own global mutable snapshot.
+     */
     fun update(settings: AppSettings) {
-        _current.value = settings
+        Snapshot.withMutableSnapshot {
+            _current.value = settings
+        }
     }
 }
 
