@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.net.Uri
-import android.util.Base64
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.toColorInt
@@ -46,6 +45,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
+import java.util.Base64
 import java.util.UUID
 import javax.inject.Inject
 import javax.xml.parsers.DocumentBuilderFactory
@@ -218,7 +218,7 @@ class XoppFile @Inject constructor(
                         val needed = 3 - tailSize
                         if (bytesRead >= needed) {
                             System.arraycopy(buffer, 0, tail, tailSize, needed)
-                            writer.write(Base64.encodeToString(tail, 0, 3, Base64.NO_WRAP))
+                            writer.write(Base64.getEncoder().encodeToString(tail))
                             hasData = true
                             tailSize = 0
                             offset = needed
@@ -232,11 +232,8 @@ class XoppFile @Inject constructor(
                     val encodableBytes = ((bytesRead - offset) / 3) * 3
                     if (encodableBytes > 0) {
                         writer.write(
-                            Base64.encodeToString(
-                                buffer,
-                                offset,
-                                encodableBytes,
-                                Base64.NO_WRAP
+                            Base64.getEncoder().encodeToString(
+                                buffer.copyOfRange(offset, offset + encodableBytes)
                             )
                         )
                         hasData = true
@@ -251,7 +248,9 @@ class XoppFile @Inject constructor(
                 }
 
                 if (tailSize > 0) {
-                    writer.write(Base64.encodeToString(tail, 0, tailSize, Base64.NO_WRAP))
+                    writer.write(
+                        Base64.getEncoder().encodeToString(tail.copyOfRange(0, tailSize))
+                    )
                     hasData = true
                 }
                 hasData
@@ -473,7 +472,7 @@ class XoppFile @Inject constructor(
     private fun decodeAndSave(base64String: String): Uri? {
         return try {
             // Decode Base64 to ByteArray
-            val decodedBytes = Base64.decode(base64String, Base64.DEFAULT)
+            val decodedBytes = Base64.getMimeDecoder().decode(base64String)
             val bitmap =
                 BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size) ?: return null
 

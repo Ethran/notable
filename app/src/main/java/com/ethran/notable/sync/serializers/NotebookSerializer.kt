@@ -1,6 +1,5 @@
 package com.ethran.notable.sync.serializers
 
-import android.util.Base64
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
@@ -17,6 +16,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.time.Instant
 import java.time.format.DateTimeParseException
+import java.util.Base64
 import java.util.Date
 
 /**
@@ -97,7 +97,7 @@ object NotebookSerializer {
     fun serializePage(page: Page, strokes: List<Stroke>, images: List<Image>): String {
         val strokeDtos = strokes.map { stroke ->
             val binaryData = encodeStrokePoints(stroke.points)
-            val base64Data = Base64.encodeToString(binaryData, Base64.NO_WRAP)
+            val base64Data = Base64.getEncoder().encodeToString(binaryData)
 
             StrokeDto(
                 id = stroke.id,
@@ -179,7 +179,7 @@ object NotebookSerializer {
                         return@mapNotNull null
                     }
 
-                    val binaryData = Base64.decode(strokeDto.pointsData, Base64.NO_WRAP)
+                    val binaryData = Base64.getDecoder().decode(strokeDto.pointsData)
                     val points = decodeStrokePoints(binaryData)
                     val penEnum = Pen.valueOf(strokeDto.pen)
 
