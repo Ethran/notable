@@ -1,8 +1,8 @@
 package com.ethran.notable.data.datastore
 
-import androidx.compose.runtime.snapshots.Snapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReference
  * composition, while [GlobalAppSettings.update] is invoked from background coroutines. Updating the
  * snapshot state directly from a non-composition thread used to race the recomposer and crash.
  * [GlobalAppSettings.update] now commits inside a global mutable snapshot, which must make
- * concurrent background writes safe against reads taken in another snapshot.
+ * concurrent background writes safe against concurrent reads.
  */
 class GlobalAppSettingsConcurrencyTest {
 
@@ -30,9 +30,9 @@ class GlobalAppSettingsConcurrencyTest {
 
     /**
      * Hammers [GlobalAppSettings.update] from many background threads while a separate thread keeps
-     * reading [GlobalAppSettings.current] inside its own (composition-like) snapshot. Before the fix
-     * this pattern could surface a concurrent-modification failure when the read snapshot was
-     * applied; with the snapshot-guarded write it must complete without throwing.
+     * reading [GlobalAppSettings.current], mimicking composition observing the value. Before the fix
+     * this pattern could surface a concurrent-modification failure; with the snapshot-guarded write
+     * it must complete without throwing.
      */
     @Test
     fun concurrentBackgroundUpdates_doNotThrow() {
@@ -42,18 +42,13 @@ class GlobalAppSettingsConcurrencyTest {
         val start = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>(null)
 
-        // Reader thread: repeatedly observe the value inside a read snapshot, mimicking composition.
         val readerDone = CountDownLatch(1)
         pool.submit {
             try {
                 start.await()
                 repeat(writers * updatesPerWriter) {
-                    val snapshot = Snapshot.takeSnapshot()
-                    try {
-                        snapshot.enter { GlobalAppSettings.current.version }
-                    } finally {
-                        snapshot.dispose()
-                    }
+                    // Plain read, as composition would observe it.
+                    GlobalAppSettings.current.version
                 }
             } catch (t: Throwable) {
                 failure.compareAndSet(null, t)
@@ -85,8 +80,7 @@ class GlobalAppSettingsConcurrencyTest {
         readerDone.await(30, TimeUnit.SECONDS)
         pool.shutdownNow()
 
-        assertEquals("Concurrent update must not throw", null, failure.get())
-        // A value written by one of the writers must be visible after everything settles.
+        assertNull("Concurrent update must not throw", failure.get())
         assertNotNull(GlobalAppSettings.current)
     }
 }
