@@ -98,7 +98,7 @@ class SnapshotStateMapConcurrencyTest {
     fun guardedRemovalDuringReads_doesNotThrow() {
         val map = mutableStateMapOf<String, Int>()
         val keys = (0 until 200).map { "page-$it" }
-        Snapshot.withMutableSnapshot { keys.forEach { map[it] = it } }
+        Snapshot.withMutableSnapshot { keys.forEachIndexed { index, key -> map[key] = index } }
 
         val pool = Executors.newFixedThreadPool(2)
         val start = CountDownLatch(1)
