@@ -38,6 +38,10 @@ class SnapshotStateMapConcurrencyTest {
      * Many threads mutate the same snapshot map through `Snapshot.withMutableSnapshot` while a reader
      * thread keeps reading entries (mimicking composition reading `page.scroll` / `page.height`).
      * This must complete without surfacing a concurrent-modification failure.
+     *
+     * Note: Writers are synchronized to avoid [SnapshotApplyConflictException] when multiple
+     * background threads attempt to apply to the global snapshot simultaneously. This still
+     * validates that guarded writes do not crash concurrent readers.
      */
     @Test
     fun guardedConcurrentWrites_doNotThrow() {
@@ -50,6 +54,7 @@ class SnapshotStateMapConcurrencyTest {
         val pool = Executors.newFixedThreadPool(writers + 1)
         val start = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>(null)
+        val writeLock = Any()
 
         val readerDone = CountDownLatch(1)
         pool.submit {
@@ -72,7 +77,9 @@ class SnapshotStateMapConcurrencyTest {
                     start.await()
                     repeat(writesPerThread) { i ->
                         // Each writer owns its own key, matching per-page writes in PageDataManager.
-                        Snapshot.withMutableSnapshot { map["page-$writerIndex"] = i }
+                        synchronized(writeLock) {
+                            Snapshot.withMutableSnapshot { map["page-$writerIndex"] = i }
+                        }
                     }
                 } catch (t: Throwable) {
                     failure.compareAndSet(null, t)

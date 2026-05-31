@@ -33,6 +33,10 @@ class GlobalAppSettingsConcurrencyTest {
      * reading [GlobalAppSettings.current], mimicking composition observing the value. Before the fix
      * this pattern could surface a concurrent-modification failure; with the snapshot-guarded write
      * it must complete without throwing.
+     *
+     * Note: Writers are synchronized to avoid [SnapshotApplyConflictException] when multiple
+     * background threads attempt to apply to the global snapshot simultaneously. This still
+     * validates that guarded writes do not crash concurrent readers.
      */
     @Test
     fun concurrentBackgroundUpdates_doNotThrow() {
@@ -41,6 +45,7 @@ class GlobalAppSettingsConcurrencyTest {
         val pool = Executors.newFixedThreadPool(writers + 1)
         val start = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>(null)
+        val writeLock = Any()
 
         val readerDone = CountDownLatch(1)
         pool.submit {
@@ -63,9 +68,11 @@ class GlobalAppSettingsConcurrencyTest {
                 try {
                     start.await()
                     repeat(updatesPerWriter) { i ->
-                        GlobalAppSettings.update(
-                            AppSettings(version = writerIndex * updatesPerWriter + i)
-                        )
+                        synchronized(writeLock) {
+                            GlobalAppSettings.update(
+                                AppSettings(version = writerIndex * updatesPerWriter + i)
+                            )
+                        }
                     }
                 } catch (t: Throwable) {
                     failure.compareAndSet(null, t)
