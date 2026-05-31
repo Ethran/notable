@@ -9,7 +9,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class EncodingTest {
-    @Test
+    @Test(timeout = 30000)
     fun simpleTest() {
 
         fun assertAlmostEqual(expected: List<Float>, actual: List<Float>, precision: Int) {
