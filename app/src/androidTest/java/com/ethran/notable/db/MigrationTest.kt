@@ -18,7 +18,7 @@ import java.io.IOException
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
 
-    @Test
+    @Test(timeout = 10000)
     fun simpleTest() {
         assertTrue(true)
     }
@@ -33,7 +33,7 @@ class MigrationTest {
         FrameworkSQLiteOpenHelperFactory()
     )
 
-    @Test
+    @Test(timeout = 60000)
     @Throws(IOException::class)
     fun migrate30To31_autoMigration() {
         val dbName = "migration-test"
@@ -100,18 +100,19 @@ class MigrationTest {
 
         db.close()
 
-        // 2. Reopen DB with version 31 to trigger migration
-        val migratedDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .build().openHelper.writableDatabase
+        // 2. Reopen DB with version 31 (latest AppDatabase version) to trigger migration
+        val dbBuilder = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
+        val roomDb = dbBuilder.build()
+        val migratedDb = roomDb.openHelper.writableDatabase
 
         // 3. Verify renamed column exists with expected data
         val cursor = migratedDb.query("SELECT background FROM Page WHERE id = 'page1'")
         cursor.use {
             assertTrue(it.moveToFirst())
-            val background = it.getString(0)
+            val background = it.getString(it.getColumnIndexOrThrow("background"))
             assertEquals("grid", background)
         }
+
+        roomDb.close()
     }
-
-
 }
