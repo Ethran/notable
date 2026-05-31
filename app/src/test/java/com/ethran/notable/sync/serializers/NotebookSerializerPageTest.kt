@@ -11,9 +11,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import java.util.Date
 import kotlin.math.abs
 
@@ -51,8 +48,6 @@ import kotlin.math.abs
  *    Robolectric adds support for newer platform jars.
  * ---------------------------------------------------------------------------
  */
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
 class NotebookSerializerPageTest {
 
     private fun samplePage(

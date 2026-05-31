@@ -2,10 +2,10 @@ package com.ethran.notable.data.db
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.util.Base64
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import java.security.KeyStore
+import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -38,7 +38,7 @@ class CryptoHelper @Inject constructor() {
 
             // Combine IV and CipherText, then encode to Base64
             val combined = iv + cipherText
-            AppResult.Success(Base64.encodeToString(combined, Base64.DEFAULT))
+            AppResult.Success(Base64.getMimeEncoder().encodeToString(combined))
         } catch (e: Exception) {
             AppResult.Error(DomainError.UnexpectedState("Encryption failed: ${e.localizedMessage}"))
         }
@@ -53,7 +53,7 @@ class CryptoHelper @Inject constructor() {
 
         return try {
             ensureKeyExists()
-            val data = Base64.decode(encryptedBase64, Base64.DEFAULT)
+            val data = Base64.getMimeDecoder().decode(encryptedBase64)
             val secret = getSecretKey() ?: return AppResult.Error(
                 DomainError.UnexpectedState("Decryption key is not available in AndroidKeyStore.")
             )
