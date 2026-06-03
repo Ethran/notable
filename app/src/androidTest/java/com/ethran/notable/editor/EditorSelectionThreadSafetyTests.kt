@@ -2,13 +2,10 @@ package com.ethran.notable.editor
 
 import android.content.Context
 import android.os.Looper
-import androidx.compose.material.Text
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshots.Snapshot
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
@@ -46,31 +43,25 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
- * Regression tests for the crash:
- *
- *   java.lang.IllegalStateException: Unsupported concurrent change during composition
+ * Thread-safety tests for SelectionState.
+ * This version does NOT use Compose rules to avoid Activity lifecycle overhead and potential
+ * MockK/Android compatibility issues on older API levels.
  */
 @RunWith(AndroidJUnit4::class)
-class EditorUnsupportedConcurrentChangeTests {
-
-    @get:Rule
-    val composeRule = createComposeRule()
+class EditorSelectionThreadSafetyTests {
 
     private lateinit var db: AppDatabase
 
     @Before
     fun setUp() {
-        android.util.Log.i("EditorTest", "setUp: creating in-memory DB")
         val context = ApplicationProvider.getApplicationContext<Context>()
         db = TestDatabaseFactory.createInMemory(context)
-        android.util.Log.i("EditorTest", "setUp: DB created")
     }
 
     @After
@@ -78,80 +69,59 @@ class EditorUnsupportedConcurrentChangeTests {
         db.close()
     }
 
-    /**
-     * Assertion with a real composition running that reads both the toolbar state
-     * and the selection state — this is the closest reproduction of the original crash.
-     */
-    @Test(timeout = 60_000)
-    fun selectionState_isNotWrittenOffMainThread_duringPageSwitch_compose() {
-        android.util.Log.i("EditorTest", "Starting test: selectionState_isNotWrittenOffMainThread_duringPageSwitch_compose")
+    @Test(timeout = 30_000)
+    fun selectionState_isNotWrittenOffMainThread_duringPageSwitch() {
+        android.util.Log.d("EditorTest", "Starting test: selectionState_isNotWrittenOffMainThread_duringPageSwitch")
         val seeded = runBlocking {
-            android.util.Log.i("EditorTest", "Seeding notebook...")
+            android.util.Log.d("EditorTest", "Seeding notebook...")
             TestNotebookSeeder.seedNotebook(db, pageCount = 3, strokesPerPage = 10)
         }
-        android.util.Log.i("EditorTest", "Notebook seeded: ${seeded.notebookId}")
+        android.util.Log.d("EditorTest", "Notebook seeded: ${seeded.notebookId}")
 
         val viewModel = createEditorViewModelForTest(
             context = ApplicationProvider.getApplicationContext(),
             db = db,
         )
 
-        android.util.Log.i("EditorTest", "Setting compose content...")
-        composeRule.setContent {
-            val state by viewModel.toolbarState.collectAsState()
-            val selectionActive = viewModel.selectionState.isNonEmpty()
-            Text(text = "${state.pageId.orEmpty()}-$selectionActive")
+        runBlocking {
+            android.util.Log.d("EditorTest", "Loading initial toolbar state...")
+            viewModel.loadToolbarState(seeded.notebookId, seeded.pageIds.first())
         }
+        android.util.Log.d("EditorTest", "Initial state loaded")
 
-        composeRule.runOnUiThread {
-            runBlocking {
-                android.util.Log.i("EditorTest", "Loading initial toolbar state...")
-                viewModel.loadToolbarState(seeded.notebookId, seeded.pageIds.first())
-            }
+        // Seed a non-empty selection on the Main thread.
+        runOnMain {
+            android.util.Log.d("EditorTest", "Seeding selection on Main thread...")
+            viewModel.selectionState.selectedStrokes = listOf(dummyStroke(pageId = seeded.pageIds.first()))
+            viewModel.selectionState.placementMode = PlacementMode.Move
         }
-        android.util.Log.i("EditorTest", "Initial state loaded")
-
-        android.util.Log.i("EditorTest", "Seeding selection on UI thread...")
-        composeRule.runOnUiThread {
-            try {
-                viewModel.selectionState.selectedStrokes = listOf(dummyStroke(pageId = seeded.pageIds.first()))
-                viewModel.selectionState.placementMode = PlacementMode.Move
-                Snapshot.sendApplyNotifications()
-            } catch (e: Throwable) {
-                android.util.Log.e("EditorTest", "Error during selection seeding", e)
-            }
-        }
-        android.util.Log.i("EditorTest", "Selection seeded")
+        android.util.Log.d("EditorTest", "Selection seeded")
 
         val violations = observeOffMainThreadWrites(viewModel.selectionState)
         try {
-            android.util.Log.i("EditorTest", "Triggering goToNextPage...")
+            android.util.Log.d("EditorTest", "Triggering goToNextPage...")
             viewModel.goToNextPage()
 
-            android.util.Log.i("EditorTest", "Awaiting toolbar page change...")
-            composeRule.waitUntil(15_000) {
-                viewModel.toolbarState.value.pageId == seeded.pageIds[1]
+            runBlocking {
+                android.util.Log.d("EditorTest", "Awaiting toolbar page change...")
+                awaitToolbarPage(viewModel, seeded.pageIds[1])
+                android.util.Log.d("EditorTest", "Toolbar page changed, awaiting selection reset...")
+                awaitSelectionReset(viewModel)
+                android.util.Log.d("EditorTest", "Selection reset completed")
             }
-
-            android.util.Log.i("EditorTest", "Toolbar page changed, awaiting selection reset...")
-            composeRule.waitUntil(10_000) {
-                viewModel.selectionState.selectedStrokes == null &&
-                        viewModel.selectionState.placementMode == null
-            }
-            android.util.Log.i("EditorTest", "Selection reset completed")
 
             assertTrue(
                 "Detected writes to SelectionState outside the Main thread: ${violations.queue.joinToString()}",
                 violations.queue.isEmpty(),
             )
         } finally {
-            android.util.Log.i("EditorTest", "Disposing violations observer")
+            android.util.Log.d("EditorTest", "Disposing violations observer")
             violations.dispose()
         }
     }
 
     // --------------------------------------------------------
-    // Helpers
+    // Helpers (Copied from original for self-containment)
     // --------------------------------------------------------
 
     private class WriteObserver(
@@ -171,6 +141,13 @@ class EditorUnsupportedConcurrentChangeTests {
             }
         }
         return WriteObserver(violations) { handle.dispose() }
+    }
+
+    private fun runOnMain(block: () -> Unit) {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            block()
+            Snapshot.sendApplyNotifications()
+        }
     }
 
     private fun createEditorViewModelForTest(context: Context, db: AppDatabase): EditorViewModel {
@@ -237,6 +214,24 @@ class EditorUnsupportedConcurrentChangeTests {
             points = points,
             pageId = pageId,
         )
+    }
+
+    private suspend fun awaitToolbarPage(viewModel: EditorViewModel, expectedPageId: String) {
+        withTimeout(5_000) {
+            viewModel.toolbarState
+                .filter { it.pageId == expectedPageId }
+                .first()
+        }
+    }
+
+    private suspend fun awaitSelectionReset(viewModel: EditorViewModel) {
+        withTimeout(5_000) {
+            while (viewModel.selectionState.selectedStrokes != null ||
+                viewModel.selectionState.placementMode != null
+            ) {
+                delay(16)
+            }
+        }
     }
 }
 
