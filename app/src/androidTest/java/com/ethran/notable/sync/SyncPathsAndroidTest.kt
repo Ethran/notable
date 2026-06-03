@@ -9,7 +9,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SyncPathsAndroidTest {
 
-    @Test
+    @Test(timeout = 10000)
     fun app_context_and_sync_paths_are_valid() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("com.ethran.notable", appContext.packageName)

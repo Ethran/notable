@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.FileObserver
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -98,9 +99,24 @@ class PageDataManager @Inject constructor(
     private val fileToPages = mutableMapOf<String, MutableSet<String>>()
     val invalidateFileFlow = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
-    // needs to be observable by UI, for scroll bars
-    private var pageHigh = mutableStateMapOf<String, Int>()
-    private var pageScroll = mutableStateMapOf<String, Offset>()
+    // Needs to be observable by UI, for scroll bars (read during composition in ScrollIndicator).
+    // These are Compose snapshot states, but they are written from background coroutines
+    // (page loading, scroll/zoom, cache eviction). Writing a snapshot state from a non-composition
+    // thread while the recomposer is applying its own snapshot throws
+    // "Unsupported concurrent change during composition". All mutations must therefore go through
+    // [mutateUiState], which commits them inside a global mutable snapshot so they are applied
+    // atomically and coordinate with composition instead of racing it.
+    private val pageHigh = mutableStateMapOf<String, Int>()
+    private val pageScroll = mutableStateMapOf<String, Offset>()
+
+    /**
+     * Applies [block] (which mutates the UI-observable snapshot maps [pageHigh] / [pageScroll])
+     * inside a global mutable snapshot. This is required because those maps are read during
+     * composition while being written from arbitrary background threads; committing the change as
+     * its own snapshot prevents the concurrent-modification crash in the recomposer.
+     */
+    private inline fun <T> mutateUiState(block: () -> T): T =
+        Snapshot.withMutableSnapshot(block)
 
     // On change, we need to adjust stroke size.
     private var pageZoom = LinkedHashMap<String, Float>()
@@ -471,7 +487,7 @@ class PageDataManager @Inject constructor(
 
     fun getPageHeight(pageId: String): Int? = pageHigh[pageId]
     fun setPageHeight(pageId: String, height: Int) {
-        pageHigh[pageId] = height
+        mutateUiState { pageHigh[pageId] = height }
     }
 
     fun recomputeHeight(pageId: String): Int {
@@ -480,8 +496,9 @@ class PageDataManager @Inject constructor(
                 return SCREEN_HEIGHT
             }
             val maxStrokeBottom = strokes[pageId]!!.maxOf { it.bottom }.plus(50)
-            pageHigh[pageId] = max(maxStrokeBottom.toInt(), SCREEN_HEIGHT)
-            return pageHigh[pageId]!!
+            val newHeight = max(maxStrokeBottom.toInt(), SCREEN_HEIGHT)
+            mutateUiState { pageHigh[pageId] = newHeight }
+            return newHeight
         }
     }
 
@@ -495,14 +512,20 @@ class PageDataManager @Inject constructor(
         }
     }
 
+    /**
+     * Returns the stored scroll for [pageId], or the page's persisted default if none is cached yet.
+     *
+     * This is a pure read: it never mutates [pageScroll]. Previously it used `getOrPut`, which wrote
+     * to the snapshot map even when called from composition (ScrollIndicator), racing the background
+     * writers and triggering the concurrent-modification crash. The default is computed on the fly;
+     * the entry is only materialized when [setPageScroll] is called from a controlled write path.
+     */
     fun getPageScroll(pageId: String): Offset {
-        return pageScroll.getOrPut(pageId) {
-            Offset(0f, pageFromDb?.scroll?.toFloat() ?: 0f)
-        }
+        return pageScroll[pageId] ?: Offset(0f, pageFromDb?.scroll?.toFloat() ?: 0f)
     }
 
     fun setPageScroll(pageId: String, scroll: Offset) {
-        pageScroll[pageId] = scroll
+        mutateUiState { pageScroll[pageId] = scroll }
     }
 
     fun getPageZoom(pageId: String): Float = pageZoom.getOrPut(pageId) { 1f }
@@ -900,9 +923,12 @@ class PageDataManager @Inject constructor(
         synchronized(accessLock) {
             strokes.remove(pageId)
             images.remove(pageId)
-            pageHigh.remove(pageId)
+            // pageHigh/pageScroll are UI-observable snapshot state: remove them in a snapshot.
+            mutateUiState {
+                pageHigh.remove(pageId)
+                pageScroll.remove(pageId)
+            }
             pageZoom.remove(pageId)
-            pageScroll.remove(pageId)
             bitmapCache.remove(pageId)
             strokesById.remove(pageId)
             imagesById.remove(pageId)
