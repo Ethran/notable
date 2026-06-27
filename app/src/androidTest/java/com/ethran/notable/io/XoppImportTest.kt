@@ -52,7 +52,7 @@ class XoppImportTest {
         db.close()
     }
 
-    @Test
+    @Test(timeout = 60000)
     fun importNotableXopp_fromAssets_createsNotebookAndStrokes() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val testContext = InstrumentationRegistry.getInstrumentation().context
@@ -98,7 +98,7 @@ class XoppImportTest {
         assertEquals("Notebook ID mismatch in page", book.id, db.pageDao().getById(importedPageIds.first())?.notebookId)
     }
     
-    @Test
+    @Test(timeout = 60000)
     fun importNotableXopp_withExplicitTitle_stripsExtension() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val testContext = InstrumentationRegistry.getInstrumentation().context
@@ -119,7 +119,7 @@ class XoppImportTest {
         assertNotNull("Should find notebook with stripped title", book)
     }
     
-    @Test
+    @Test(timeout = 60000)
     fun importNotableXopp_verifiesDataIntegrity() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val testContext = InstrumentationRegistry.getInstrumentation().context
