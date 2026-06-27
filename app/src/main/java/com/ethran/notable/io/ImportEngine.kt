@@ -96,11 +96,20 @@ class ImportEngine @Inject constructor(
         val bookTitle = sanitizeNotebookName(options.bookTitle ?: getFileName(uri))
         log.d("Starting import for uri: $uri, mimeType: $mimeType, fileName: $bookTitle")
 
+        // strip extension if present in bookTitle (from options or getFileName)
+        val finalTitle = if (bookTitle.endsWith(".xopp", ignoreCase = true)) {
+            bookTitle.removeSuffix(".xopp")
+        } else if (bookTitle.endsWith(".pdf", ignoreCase = true)) {
+            bookTitle.removeSuffix(".pdf")
+        } else {
+            bookTitle
+        }
+
         if (options.saveToBookId != null)
             TODO("Implement logic to save into an existing book (ID: ${options.saveToBookId})")
 
         val optionsWithTitle = options.copy(
-            bookTitle = bookTitle,
+            bookTitle = finalTitle,
         )
 
         return when {
@@ -206,8 +215,14 @@ class ImportEngine @Inject constructor(
      * Extracts the book title from a file URI.
      */
     private fun getFileName(uri: Uri): String {
-        return uri.lastPathSegment?.substringAfterLast("/")?.removeSuffix(".xopp")
-            ?: "Imported Book"
+        val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "Imported Book"
+        return if (fileName.endsWith(".xopp", ignoreCase = true)) {
+            fileName.removeSuffix(".xopp")
+        } else if (fileName.endsWith(".pdf", ignoreCase = true)) {
+            fileName.removeSuffix(".pdf")
+        } else {
+            fileName
+        }
     }
 
 
