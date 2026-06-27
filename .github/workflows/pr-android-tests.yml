@@ -42,6 +42,12 @@ jobs:
           boot-timeout: 600  
           script: ./gradlew connectedDebugAndroidTest
 
+      - name: Report Android Test Results
+        if: always()
+        uses: FlickerSoul/android-test-report-actions@v1.2
+        with:
+          show-skipped: "true"
+
       - name: Remove Label
         if: always() && github.event.pull_request.head.repo.fork == false
         continue-on-error: true

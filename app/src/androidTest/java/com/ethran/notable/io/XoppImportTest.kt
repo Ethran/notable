@@ -104,7 +104,7 @@ class XoppImportTest {
         val testContext = InstrumentationRegistry.getInstrumentation().context
         
         val testFile = File(context.cacheDir, "Notable_Title.xopp")
-        testContext.assets.open("Notable.xopp").use { input ->
+        testContext.assets.open("test_notebook.xopp").use { input ->
             testFile.outputStream().use { output ->
                 input.copyTo(output)
             }

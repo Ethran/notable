@@ -29,3 +29,9 @@ jobs:
       - name: Run Unit Tests
         # Replace with your specific unit test task if different
         run: ./gradlew testDebugUnitTest
+
+      - name: Report Unit Test Results
+        if: always()
+        uses: FlickerSoul/android-test-report-actions@v1.2
+        with:
+          show-skipped: "true"
