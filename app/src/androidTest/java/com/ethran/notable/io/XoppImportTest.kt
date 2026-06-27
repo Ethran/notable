@@ -58,8 +58,8 @@ class XoppImportTest {
         val testContext = InstrumentationRegistry.getInstrumentation().context
         
         // 1. Extract asset to a temporary file to get a Uri
-        val testFile = File(context.cacheDir, "Notable.xopp")
-        testContext.assets.open("Notable.xopp").use { input ->
+        val testFile = File(context.cacheDir, "test_notebook.xopp")
+        testContext.assets.open("test_notebook.xopp").use { input ->
             testFile.outputStream().use { output ->
                 input.copyTo(output)
             }
@@ -67,7 +67,7 @@ class XoppImportTest {
         val uri = Uri.fromFile(testFile)
 
         // 2. Perform import (passing .xopp title helps recognition if mime-type is unknown)
-        val result = importEngine.import(uri, ImportOptions(bookTitle = "Notable.xopp"))
+        val result = importEngine.import(uri, ImportOptions(bookTitle = "test_notebook.xopp"))
 
         // 3. Assertions
         assertTrue("Import failed: $result", result is AppResult.Success)
@@ -125,7 +125,7 @@ class XoppImportTest {
         val testContext = InstrumentationRegistry.getInstrumentation().context
         
         val testFile = File(context.cacheDir, "Notable_Integrity.xopp")
-        testContext.assets.open("Notable.xopp").use { input ->
+        testContext.assets.open("test_notebook.xopp").use { input ->
             testFile.outputStream().use { output ->
                 input.copyTo(output)
             }
