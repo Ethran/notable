@@ -30,7 +30,8 @@ interface DomainErrorInterface {
 
 
 sealed class DomainError(
-    override val userMessage: String, override val recoverable: Boolean = true
+    override val userMessage: String,
+    override val recoverable: Boolean = true,
 ) : DomainErrorInterface {
 
     data class NotFound(val resource: String) : DomainError("$resource was not found.")
@@ -82,8 +83,8 @@ sealed class DomainError(
  * Usage: val combined = error1 + error2
  */
 operator fun DomainError.plus(other: DomainError): DomainError.MultipleErrors {
-    val leftList = if (this is DomainError.MultipleErrors) this.errors else listOf(this)
-    val rightList = if (other is DomainError.MultipleErrors) other.errors else listOf(other)
+    val leftList = (this as? DomainError.MultipleErrors)?.errors ?: listOf(this)
+    val rightList = (other as? DomainError.MultipleErrors)?.errors ?: listOf(other)
     return DomainError.MultipleErrors(leftList + rightList)
 }
 
