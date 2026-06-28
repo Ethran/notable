@@ -139,7 +139,12 @@
 
     <!-- Sync Toggle Labels -->
     <string name="sync_enable_label">Włącz synchronizację WebDAV</string>
-    <string name="sync_auto_sync_label">Automatyczna synchronizacja co %1$d minut</string>
+    <plurals name="sync_auto_sync_label">
+        <item quantity="one">Automatyczna synchronizacja co minutę</item>
+        <item quantity="few">Automatyczna synchronizacja co %1$d minuty</item>
+        <item quantity="many">Automatyczna synchronizacja co %1$d minut</item>
+        <item quantity="other">Automatyczna synchronizacja co %1$d minut</item>
+    </plurals>
     <string name="sync_on_note_close_label">Synchronizuj przy zamykaniu notatek</string>
     <string name="sync_wifi_only_label">Synchronizuj tylko przez WiFi (bez danych mobilnych)</string>
     <string name="sync_upload_only_label">Tylko wysyłaj (bez zmian z serwera)</string>
@@ -213,7 +218,12 @@
     <string name="sync_dialog_confirm">Potwierdź</string>
 
     <!-- Sync Clock Skew -->
-    <string name="sync_clock_skew_warning">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekund. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</string>
+    <plurals name="sync_clock_skew_warning">
+        <item quantity="one">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekundę. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
+        <item quantity="few">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekundy. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
+        <item quantity="many">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekund. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
+        <item quantity="other">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekund. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
+    </plurals>
 
     <!-- Sync WiFi-only -->
     <string name="sync_wifi_required_message">Synchronizacja wstrzymana: włączono synchronizację tylko przez WiFi, a obecnie korzystasz z danych mobilnych. Połącz się z WiFi lub wyłącz to ustawienie.</string>

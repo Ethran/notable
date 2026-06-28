@@ -122,7 +122,10 @@
 
     <!-- Sync Toggle Labels -->
     <string name="sync_enable_label">Sync WebDAV</string>
-    <string name="sync_auto_sync_label">Auto sync every %1$d minutes</string>
+    <plurals name="sync_auto_sync_label">
+        <item quantity="one">Auto sync every minute</item>
+        <item quantity="other">Auto sync every %1$d minutes</item>
+    </plurals>
     <string name="sync_on_note_close_label">Sync when closing notes</string>
     <string name="sync_wifi_only_label">Sync on WiFi only (no mobile data)</string>
     <string name="sync_upload_only_label">Upload only (skip remote changes)</string>
@@ -196,7 +199,10 @@
     <string name="sync_dialog_confirm">Confirm</string>
 
     <!-- Sync Clock Skew -->
-    <string name="sync_clock_skew_warning">Connected successfully, but your device clock differs from the server by %1$d seconds. Sync may produce incorrect results until this is corrected.</string>
+    <plurals name="sync_clock_skew_warning">
+        <item quantity="one">Connected successfully, but your device clock differs from the server by %1$d second. Sync may produce incorrect results until this is corrected.</item>
+        <item quantity="other">Connected successfully, but your device clock differs from the server by %1$d seconds. Sync may produce incorrect results until this is corrected.</item>
+    </plurals>
 
     <!-- Sync WiFi-only -->
     <string name="sync_wifi_required_message">Not syncing: WiFi-only sync is enabled and you\'re on mobile data. Connect to WiFi or disable the WiFi-only setting.</string>

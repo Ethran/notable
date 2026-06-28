@@ -36,7 +36,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -47,6 +46,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Thread-safety tests for SelectionState.
@@ -136,7 +137,7 @@ class EditorSelectionThreadSafetyTests {
         val watchedStates = selectionState.snapshotDelegateStatesForTest()
         val violations = ConcurrentLinkedQueue<String>()
         val handle = Snapshot.registerGlobalWriteObserver { stateObject ->
-            if (stateObject in watchedStates && Thread.currentThread() != mainThread) {
+            if ((stateObject in watchedStates) && (Thread.currentThread() != mainThread)) {
                 violations.add("write on ${Thread.currentThread().name}")
             }
         }
@@ -217,19 +218,18 @@ class EditorSelectionThreadSafetyTests {
     }
 
     private suspend fun awaitToolbarPage(viewModel: EditorViewModel, expectedPageId: String) {
-        withTimeout(5_000) {
+        withTimeout(5.seconds) {
             viewModel.toolbarState
-                .filter { it.pageId == expectedPageId }
-                .first()
+                .first { it.pageId == expectedPageId }
         }
     }
 
     private suspend fun awaitSelectionReset(viewModel: EditorViewModel) {
-        withTimeout(5_000) {
+        withTimeout(5.seconds) {
             while (viewModel.selectionState.selectedStrokes != null ||
                 viewModel.selectionState.placementMode != null
             ) {
-                delay(16)
+                delay(16.milliseconds)
             }
         }
     }
@@ -237,22 +237,22 @@ class EditorSelectionThreadSafetyTests {
 
 private fun SelectionState.snapshotDelegateStatesForTest(): Set<Any> {
     return setOf(
-        delegate("firstPageCut\$delegate"),
-        delegate("secondPageCut\$delegate"),
-        delegate("selectedStrokes\$delegate"),
-        delegate("selectedImages\$delegate"),
-        delegate("selectedBitmap\$delegate"),
-        delegate("selectionStartOffset\$delegate"),
-        delegate("selectionDisplaceOffset\$delegate"),
-        delegate("selectionRect\$delegate"),
-        delegate("placementMode\$delegate"),
-    ).filterNotNull().toSet()
+        delegate($$"firstPageCut$delegate"),
+        delegate($$"secondPageCut$delegate"),
+        delegate($$"selectedStrokes$delegate"),
+        delegate($$"selectedImages$delegate"),
+        delegate($$"selectedBitmap$delegate"),
+        delegate($$"selectionStartOffset$delegate"),
+        delegate($$"selectionDisplaceOffset$delegate"),
+        delegate($$"selectionRect$delegate"),
+        delegate($$"placementMode$delegate"),
+    ).asSequence().filterNotNull().toSet()
 }
 
 private fun SelectionState.delegate(fieldName: String): Any? {
     return try {
         val field = javaClass.getDeclaredField(fieldName).apply { isAccessible = true }
-        field.get(this)
+        field[this]
     } catch (e: Exception) {
         android.util.Log.e("EditorTest", "Could not find delegate field: $fieldName", e)
         null

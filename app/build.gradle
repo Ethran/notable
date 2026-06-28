@@ -18,7 +18,7 @@ android {
 
         versionCode 35
         versionName '0.2.1'
-        if (project.hasProperty('IS_NEXT') && project.IS_NEXT.toBoolean()) {
+        if (project.hasProperty('IS_NEXT') && project.property('IS_NEXT').toBoolean()) {
             def timestamp = new Date().format('dd.MM.YYYY-HH:mm')
             versionName = "${versionName}-next-${timestamp}"
         }
@@ -28,7 +28,7 @@ android {
             useSupportLibrary = true
         }
         ksp {
-            arg('room.schemaLocation', "$projectDir/schemas")
+            arg('room.schemaLocation', "${project.projectDir}/schemas")
         }
     }
 
@@ -95,7 +95,7 @@ android {
         buildConfig = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = rootProject.compose_version
+        kotlinCompilerExtensionVersion = libs.versions.compose.get()
     }
     packaging {
 
@@ -108,7 +108,7 @@ android {
     }
     namespace = 'com.ethran.notable'
     sourceSets {
-        androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
+        androidTest.assets.srcDirs += files("${project.projectDir}/schemas")
     }
     testOptions {
         unitTests {
@@ -117,20 +117,21 @@ android {
             // HiddenApiBypass needs deep reflection into java.lang on JDK 17+, which
             // requires explicit --add-opens flags. Without these, Robolectric tests
             // fail at class-init with ExceptionInInitializerError / NoSuchMethodException.
-            all {
-                jvmArgs += [
-                    '--add-opens=java.base/java.lang=ALL-UNNAMED',
-                    '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
-                    '--add-opens=java.base/java.io=ALL-UNNAMED',
-                    '--add-opens=java.base/java.net=ALL-UNNAMED',
-                    '--add-opens=java.base/java.nio=ALL-UNNAMED',
-                    '--add-opens=java.base/java.util=ALL-UNNAMED',
-                    '--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED',
-                    '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
-                ]
-            }
         }
     }
+}
+
+tasks.withType(Test).configureEach {
+    jvmArgs += [
+            '--add-opens=java.base/java.lang=ALL-UNNAMED',
+            '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+            '--add-opens=java.base/java.io=ALL-UNNAMED',
+            '--add-opens=java.base/java.net=ALL-UNNAMED',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED',
+            '--add-opens=java.base/java.util=ALL-UNNAMED',
+            '--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED',
+            '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+    ]
 }
 
 dependencies {
@@ -144,7 +145,7 @@ dependencies {
     implementation libs.androidx.fragment.ktx
     implementation libs.androidx.graphics.core
     implementation libs.androidx.input.motionprediction
-    implementation libs.androidx.junit.ktx
+    androidTestImplementation libs.androidx.junit.ktx
 
     //implementation fileTree(dir: 'libs', include: ['*.aar'])
     implementation(libs.onyxsdk.device) {
@@ -191,7 +192,7 @@ dependencies {
     ksp libs.androidx.room.compiler
 
     // For testing:
-    implementation libs.androidx.room.testing.android
+    androidTestImplementation libs.androidx.room.testing.android
     testImplementation libs.androidx.room.testing
     testImplementation libs.androidx.core.testing
 

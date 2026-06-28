@@ -49,7 +49,7 @@ import javax.inject.Inject
 private const val PRESSURE_FACTOR = 0.5f
 
 /**
- * How many strokes are handed off to [importBook]'s onStrokeBatch callback before the next
+ * How many strokes are handed off to [XoppFile.importBook]'s onStrokeBatch callback before the next
  * batch starts. Keeping this bounded means peak memory during import is proportional to one
  * batch, not one full page.
  */
@@ -565,7 +565,14 @@ class XoppFile @Inject constructor(
             }
 
             points.add(StrokePoint(x, y, pressure, 0, 0))
-            if (i == 0) boundingBox.set(x, y, x, y) else boundingBox.union(x, y)
+            if (i == 0) {
+                boundingBox.left = x
+                boundingBox.top = y
+                boundingBox.right = x
+                boundingBox.bottom = y
+            } else {
+                boundingBox.union(x, y)
+            }
         }
 
         boundingBox.inset(-strokeSize, -strokeSize)

@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -257,8 +258,9 @@ private fun SyncBehaviorSection(
 
         if (state.syncSettings.syncEnabled) {
             SettingToggleRow(
-                label = stringResource(
-                    R.string.sync_auto_sync_label,
+                label = pluralStringResource(
+                    R.plurals.sync_auto_sync_label,
+                    state.syncSettings.syncInterval,
                     state.syncSettings.syncInterval
                 ),
                 value = state.syncSettings.autoSync,

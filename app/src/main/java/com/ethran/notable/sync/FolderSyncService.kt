@@ -12,7 +12,7 @@ import javax.inject.Singleton
 
 @Singleton
 class FolderSyncService @Inject constructor(
-    private val appRepository: AppRepository
+    private val appRepository: AppRepository,
 ) {
     private val folderSerializer = FolderSerializer
 
@@ -37,7 +37,7 @@ class FolderSyncService @Inject constructor(
 
                 localFolders.forEach { local ->
                     val remote = folderMap[local.id]
-                    if (remote == null || (local.updatedAt.after(remote.updatedAt))) {
+                    if ((remote == null) || (local.updatedAt.after(remote.updatedAt))) {
                         folderMap[local.id] = local
                     }
                 }
