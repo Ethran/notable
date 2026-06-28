@@ -25,7 +25,7 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
-            useSupportLibrary true
+            useSupportLibrary = true
         }
         ksp {
             arg('room.schemaLocation', "$projectDir/schemas")
@@ -91,13 +91,13 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     buildFeatures {
-        compose true
-        buildConfig true
+        compose = true
+        buildConfig = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion compose_version
+        kotlinCompilerExtensionVersion = rootProject.compose_version
     }
-    packagingOptions {
+    packaging {
 
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
@@ -106,7 +106,7 @@ android {
             pickFirsts += ['**/*.so']
         }
     }
-    namespace 'com.ethran.notable'
+    namespace = 'com.ethran.notable'
     sourceSets {
         androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
     }

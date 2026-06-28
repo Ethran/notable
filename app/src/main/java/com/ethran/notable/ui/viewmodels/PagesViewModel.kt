@@ -40,16 +40,14 @@ class PagesViewModel @Inject constructor(
     fun loadBook(bookId: String) {
         viewModelScope.launch {
             appRepository.bookRepository.getByIdLive(bookId).asFlow().collect { book ->
-                if (book != null) {
-                    val folderList = getFolderList(appRepository, book.parentFolderId)
-                    _uiState.update { it.copy(
-                        bookId = bookId,
-                        pageIds = book.pageIds,
-                        openPageId = book.openPageId,
-                        folderList = folderList,
-                        isLoading = false
-                    ) }
-                }
+                val folderList = getFolderList(appRepository, book.parentFolderId)
+                _uiState.update { it.copy(
+                    bookId = bookId,
+                    pageIds = book.pageIds,
+                    openPageId = book.openPageId,
+                    folderList = folderList,
+                    isLoading = false
+                ) }
             }
         }
     }

@@ -1,6 +1,5 @@
 package com.ethran.notable.io
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -45,7 +44,7 @@ fun shareBitmap(context: Context, bitmap: Bitmap) {
     )
 
     // Use ShareCompat for safe sharing
-    val shareIntent = ShareCompat.IntentBuilder.from(context as Activity)
+    val shareIntent = ShareCompat.IntentBuilder(context)
         .setStream(contentUri)
         .setType("image/png")
         .intent

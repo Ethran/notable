@@ -27,6 +27,7 @@ import java.text.Normalizer
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.time.Duration.Companion.milliseconds
 
 private val fileUtilsLog = ShipBook.getLogger("FileUtilsLogger")
 
@@ -84,6 +85,7 @@ fun saveImageFromContentUri(context: Context, fileUri: Uri, outputDir: File): Fi
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     Bitmap.CompressFormat.WEBP_LOSSY
                 } else {
+                    @Suppress("DEPRECATION")
                     Bitmap.CompressFormat.WEBP
                 }
             }
@@ -258,7 +260,7 @@ suspend fun waitForFileAvailable(
         if (file.exists() && file.length() > 0) {
             return true
         }
-        delay(intervalMs)
+        delay(intervalMs.milliseconds)
         intervalMs += count * count // Quadratic growth
         count++
     }
