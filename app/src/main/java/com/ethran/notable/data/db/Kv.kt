@@ -2,7 +2,6 @@ package com.ethran.notable.data.db
 
 import android.content.Context
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.map
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Insert
@@ -39,9 +38,6 @@ interface KvDao {
     @Query("SELECT * FROM kv WHERE `key`=:key")
     suspend fun get(key: String): Kv?
 
-    @Query("SELECT * FROM kv WHERE `key`=:key")
-    fun getLive(key: String): LiveData<Kv?>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun set(kv: Kv)
 
@@ -65,10 +61,6 @@ class KvRepository @Inject constructor(
     suspend fun get(key: String): Kv? = withContext(Dispatchers.IO) {
         checkPermission()
         db.get(key)
-    }
-
-    fun getLive(key: String): LiveData<Kv?> {
-        return db.getLive(key)
     }
 
     suspend fun set(kv: Kv) = withContext(Dispatchers.IO) {
@@ -101,16 +93,8 @@ class KvProxy @Inject constructor(
     private val cryptoHelper: CryptoHelper
 ) {
     private val log = ShipBook.getLogger("KvProxy")
-    private val json = Json //{ ignoreUnknownKeys = true }
+    private val json = Json { ignoreUnknownKeys = true }
 
-
-    fun <T> observeKv(key: String, serializer: KSerializer<T>, default: T): LiveData<T?> {
-        return kvRepository.getLive(key).map {
-            if (it == null) return@map default
-            val jsonValue = it.value
-            json.decodeFromString(serializer, jsonValue)
-        }
-    }
 
     suspend fun <T> get(key: String, serializer: KSerializer<T>): T? = withContext(Dispatchers.IO) {
         val kv = kvRepository.get(key)

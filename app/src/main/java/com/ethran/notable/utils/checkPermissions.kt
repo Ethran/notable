@@ -17,7 +17,7 @@ fun hasFilePermission(context: Context): Boolean {
         Environment.isExternalStorageManager()
     } else {
         ContextCompat.checkSelfPermission(
-            context, Manifest.permission.WRITE_EXTERNAL_STORAGE
+            context, Manifest.permission.WRITE_EXTERNAL_STORAGE,
         ) == PackageManager.PERMISSION_GRANTED
     }
 

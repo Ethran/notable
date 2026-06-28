@@ -59,7 +59,7 @@ class XoppFile @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val pageRepo: PageRepository,
     private val bookRepo: BookRepository,
-    private val appEventBus: AppEventBus
+    private val appEventBus: AppEventBus,
 ) {
     private val log = ShipBook.getLogger("XoppFile")
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
@@ -165,7 +165,7 @@ class XoppFile @Inject constructor(
                 writer.write("\" width=\"")
                 writer.write((stroke.size * scaleFactor).toString())
 
-                if (stroke.pen == Pen.FOUNTAIN || stroke.pen == Pen.BRUSH || stroke.pen == Pen.PENCIL) {
+                if ((stroke.pen == Pen.FOUNTAIN) || (stroke.pen == Pen.BRUSH) || (stroke.pen == Pen.PENCIL)) {
                     stroke.points.forEach { point ->
                         writer.write(" ")
                         writer.write(
@@ -486,10 +486,9 @@ class XoppFile @Inject constructor(
         var isFraction = false
 
         while (i < end) {
-            val c = input[i]
-            when {
-                c == '.' -> isFraction = true
-                c in '0'..'9' -> {
+            when (val c = input[i]) {
+                '.' -> isFraction = true
+                in '0'..'9' -> {
                     val digit = c - '0'
                     if (isFraction) {
                         divisor *= 10.0
@@ -499,7 +498,7 @@ class XoppFile @Inject constructor(
                     }
                 }
                 // Scientific notation is rare; only then pay the allocation cost
-                c == 'e' || c == 'E' -> return input.subSequence(start, end).toString().toFloat()
+                'e', 'E' -> return input.subSequence(start, end).toString().toFloat()
                 else -> return input.subSequence(start, end).toString().toFloat()
             }
             i++

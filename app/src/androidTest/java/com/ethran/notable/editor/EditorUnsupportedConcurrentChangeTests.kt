@@ -6,7 +6,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshots.Snapshot
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.data.AppRepository
@@ -38,11 +38,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -84,7 +80,10 @@ class EditorUnsupportedConcurrentChangeTests {
      */
     @Test(timeout = 60_000)
     fun selectionState_isNotWrittenOffMainThread_duringPageSwitch_compose() {
-        android.util.Log.i("EditorTest", "Starting test: selectionState_isNotWrittenOffMainThread_duringPageSwitch_compose")
+        android.util.Log.i(
+            "EditorTest",
+            "Starting test: selectionState_isNotWrittenOffMainThread_duringPageSwitch_compose"
+        )
         val seeded = runBlocking {
             android.util.Log.i("EditorTest", "Seeding notebook...")
             TestNotebookSeeder.seedNotebook(db, pageCount = 3, strokesPerPage = 10)
@@ -114,7 +113,8 @@ class EditorUnsupportedConcurrentChangeTests {
         android.util.Log.i("EditorTest", "Seeding selection on UI thread...")
         composeRule.runOnUiThread {
             try {
-                viewModel.selectionState.selectedStrokes = listOf(dummyStroke(pageId = seeded.pageIds.first()))
+                viewModel.selectionState.selectedStrokes =
+                    listOf(dummyStroke(pageId = seeded.pageIds.first()))
                 viewModel.selectionState.placementMode = PlacementMode.Move
                 Snapshot.sendApplyNotifications()
             } catch (e: Throwable) {
