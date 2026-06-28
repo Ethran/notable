@@ -32,12 +32,10 @@ import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
-import org.w3c.dom.Document
 import org.w3c.dom.Element
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.BufferedWriter
-import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
@@ -288,16 +286,25 @@ class XoppFile @Inject constructor(
     /**
      * Imports a `.xopp` file, creating a new book and pages in the database.
      *
-     * @param context The application context.
      * @param uri The URI of the `.xopp` file to import.
      */
     suspend fun importBook(uri: Uri, savePageToDatabase: suspend (PageWithData) -> Unit) {
         log.v("Importing book from $uri")
         ensureNotMainThread("xoppImportBook")
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return
-        val xmlContent = extractXmlFromXopp(inputStream) ?: return
 
-        val document = parseXml(xmlContent) ?: return
+        val document = try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                GzipCompressorInputStream(BufferedInputStream(inputStream)).use { gzipIn ->
+                    val factory = DocumentBuilderFactory.newInstance()
+                    factory.isNamespaceAware = true
+                    val builder = factory.newDocumentBuilder()
+                    builder.parse(gzipIn)
+                }
+            }
+        } catch (e: Exception) {
+            log.e("Error importing book from $uri: ${e.message}")
+            null
+        } ?: return
 
         val pages = document.getElementsByTagName("page")
 
@@ -309,34 +316,6 @@ class XoppFile @Inject constructor(
             savePageToDatabase(PageWithData(page, strokes, images))
         }
         log.i("Successfully imported book with ${pages.length} pages.")
-    }
-
-    /**
-     * Extracts XML content from a `.xopp` file.
-     */
-    private fun extractXmlFromXopp(inputStream: InputStream): String? {
-        return try {
-            GzipCompressorInputStream(BufferedInputStream(inputStream)).bufferedReader()
-                .use { it.readText() }
-        } catch (e: IOException) {
-            log.e("Error extracting XML from .xopp file: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * Parses an XML string into a DOM Document.
-     */
-    private fun parseXml(xml: String): Document? {
-        return try {
-            val factory = DocumentBuilderFactory.newInstance()
-            factory.isNamespaceAware = true
-            val builder = factory.newDocumentBuilder()
-            builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
-        } catch (e: Exception) {
-            log.e("Error parsing XML: ${e.message}")
-            null
-        }
     }
 
     /**
