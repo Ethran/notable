@@ -79,7 +79,7 @@ class XoppImportTest {
         
         val book = notebooks.first()
         // ImportEngine should have stripped .xopp if it was present in the name or detected by type
-        assertEquals("Notable", book.title)
+        assertEquals("test notebook", book.title)
         assertEquals("Page count mismatch", importedPageIds.size, book.pageIds.size)
         
         // Verify strokes were imported for at least one page

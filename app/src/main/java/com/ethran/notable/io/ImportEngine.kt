@@ -123,7 +123,10 @@ class ImportEngine @Inject constructor(
         }
     }
 
-    private suspend fun handleImportXopp(uri: Uri, options: ImportOptions): AppResult<List<String>, DomainError> {
+    private suspend fun handleImportXopp(
+        uri: Uri,
+        options: ImportOptions
+    ): AppResult<List<String>, DomainError> {
         log.d("Importing Xopp file...")
         require(options.bookTitle != null) { "bookTitle cannot be null when importing Xopp file" }
         val book = Notebook(
@@ -137,26 +140,50 @@ class ImportEngine @Inject constructor(
         val importedPageIds = mutableListOf<String>()
         var persistentError: DomainError? = null
 
-        xoppFile.importBook(uri) { pageData ->
-            try {
-                // TODO: handle conflict with existing pages, make sure that we won't insert the same strokes that already exist.
-                pageRepo.create(pageData.page.copy(notebookId = book.id))
-                strokeRepo.create(pageData.strokes)
-                imageRepo.create(pageData.images)
-                bookRepo.addPage(book.id, pageData.page.id)
-                importedPageIds.add(pageData.page.id)
-            } catch (e: Exception) {
-                val errMessage = "failed import book  ${e.message}"
-                appEventBus.emit(AppEvent.LogMessage("importBook", errMessage))
-                val error = DomainError.DatabaseError(errMessage)
-                persistentError = persistentError?.let { it + error } ?: error
+        xoppFile.importBook(
+            uri = uri,
+            onPageCreated = { page ->
+                try {
+                    // TODO: Handle conflicts with existing pages.
+                    pageRepo.create(page.copy(notebookId = book.id))
+                    bookRepo.addPage(book.id, page.id)
+                    importedPageIds.add(page.id)
+                } catch (e: Exception) {
+                    val errMessage = "Failed to import page ${page.id}: ${e.message}"
+                    appEventBus.emit(AppEvent.LogMessage("importBook", errMessage))
+                    val error = DomainError.DatabaseError(errMessage)
+                    persistentError = persistentError?.let { it + error } ?: error
+                }
+            },
+            onStrokeBatch = { strokes ->
+                try {
+                    strokeRepo.create(strokes)
+                } catch (e: Exception) {
+                    val errMessage = "Failed to import stroke batch: ${e.message}"
+                    appEventBus.emit(AppEvent.LogMessage("importBook", errMessage))
+                    val error = DomainError.DatabaseError(errMessage)
+                    persistentError = persistentError?.let { it + error } ?: error
+                }
+            },
+            onPageFinalized = { _, images ->
+                try {
+                    imageRepo.create(images)
+                } catch (e: Exception) {
+                    val errMessage = "Failed to import page images: ${e.message}"
+                    appEventBus.emit(AppEvent.LogMessage("importBook", errMessage))
+                    val error = DomainError.DatabaseError(errMessage)
+                    persistentError = persistentError?.let { it + error } ?: error
+                }
             }
-        }
-        
+        )
+
         return persistentError?.let { AppResult.Error(it) } ?: AppResult.Success(importedPageIds)
     }
 
-    private suspend fun handleImportPDF(uri: Uri, options: ImportOptions): AppResult<List<String>, DomainError> {
+    private suspend fun handleImportPDF(
+        uri: Uri,
+        options: ImportOptions
+    ): AppResult<List<String>, DomainError> {
         log.d("Importing Pdf file...")
         require(options.bookTitle != null) { "bookTitle cannot be null when importing Pdf file" }
 
@@ -192,7 +219,7 @@ class ImportEngine @Inject constructor(
                 persistentError = persistentError?.let { it + error } ?: error
             }
         }
-        
+
         return persistentError?.let { AppResult.Error(it) } ?: AppResult.Success(importedPageIds)
     }
 
