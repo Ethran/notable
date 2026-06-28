@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -625,8 +626,10 @@ class EditorViewModel @Inject constructor(
             // Update the UI state
             updateOpenedPage(id)
 
-            // Clean the selection state
-            selectionState.reset()
+            // Clean the selection state on Main to avoid snapshot violations during composition.
+            withContext(Dispatchers.Main.immediate) {
+                selectionState.reset()
+            }
         }
     }
 
