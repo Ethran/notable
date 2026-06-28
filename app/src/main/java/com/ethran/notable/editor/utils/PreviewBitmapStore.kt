@@ -119,10 +119,10 @@ private fun isCacheFresh(file: File, pageUpdatedAtMs: Long?): Boolean {
 private fun buildPreviewFileName(pageID: String, scrollY: Int): String = "${pageID}-sy$scrollY.webp"
 
 val webpLossyFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-    Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+    Bitmap.CompressFormat.WEBP_LOSSY else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
 
 val webpLosslessFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-    Bitmap.CompressFormat.WEBP_LOSSLESS else Bitmap.CompressFormat.WEBP
+    Bitmap.CompressFormat.WEBP_LOSSLESS else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
 
 /**
  *   Remove other variants for this page (legacy + other scrollY encodings)
