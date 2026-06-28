@@ -30,6 +30,7 @@ klaxon = "5.6"
 kotlinxSerializationJson = "1.11.0"
 lifecycleRuntimeKtx = "2.11.0"
 lz4Java = "1.11.0"
+mockk = "1.14.11"
 material = "1.11.3"
 materialIconsExtended = "1.7.8"
 navigationCompose = "2.9.8"
@@ -55,6 +56,7 @@ androidx-graphics-core = { group = "androidx.graphics", name = "graphics-core", 
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-input-motionprediction = { group = "androidx.input", name = "input-motionprediction", version.ref = "inputMotionprediction" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junit" }
+androidx-junit-ktx = { group = "androidx.test.ext", name = "junit-ktx", version.ref = "junit" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-material = { group = "androidx.compose.material", name = "material", version.ref = "material" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
@@ -87,6 +89,7 @@ junit = { group = "junit", name = "junit", version.ref = "junitVersion" }
 klaxon = { group = "com.beust", name = "klaxon", version.ref = "klaxon" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 lz4-java = { group = "at.yawk.lz4", name = "lz4-java", version.ref = "lz4Java" }
+mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 onyxsdk-base = { group = "com.onyx.android.sdk", name = "onyxsdk-base", version.ref = "onyxsdkBase" }
 onyxsdk-device = { group = "com.onyx.android.sdk", name = "onyxsdk-device", version.ref = "onyxsdkDevice" }

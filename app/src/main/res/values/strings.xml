@@ -83,6 +83,7 @@
     <string name="welcome_view_quick_start_tips_details">• Use \'Selection Export\' to quickly share images.\n• Tap the page number to quickly jump between pages.\n• Try enabling \'Scribble to Erase\' in Settings for natural erasing.\n• Double tap to undo, or on a selection to copy it.\n• You can use Notable as a live PDF viewer for LaTeX—see README.\n• You can customize gesture actions in Settings.</string>
 
     <string name="export_page_to">Export page to %1$s</string>
+    <string name="export_page_to_error">Error exporting page to %1$s</string>
     <string name="exporting_the_page_to">Exporting the page to %1$s…</string>
 
     <string name="export_book_to">Export book to %1$s</string>
@@ -120,10 +121,11 @@
     <string name="sync_password_unchanged">(unchanged)</string>
 
     <!-- Sync Toggle Labels -->
-    <string name="sync_enable_label">Enable WebDAV Sync</string>
-    <string name="sync_auto_sync_label">Automatic sync every %1$d minutes</string>
+    <string name="sync_enable_label">Sync WebDAV</string>
+    <string name="sync_auto_sync_label">Auto sync every %1$d minutes</string>
     <string name="sync_on_note_close_label">Sync when closing notes</string>
     <string name="sync_wifi_only_label">Sync on WiFi only (no mobile data)</string>
+    <string name="sync_upload_only_label">Upload only (skip remote changes)</string>
     <string name="sync_interval_label">Sync interval</string>
     <string name="sync_interval_value">%1$dm</string>
 
@@ -202,5 +204,10 @@
     <!-- Sync Log -->
     <string name="sync_log_title">Activity Log</string>
     <string name="sync_log_empty">No recent activity.</string>
+
+    <!-- Experimental Sync warning -->
+    <string name="sync_experimental_title">Experimental Feature</string>
+    <string name="sync_experimental_warning">The synchronization feature is currently in testing. It is not guaranteed to be stable and may result in the loss or duplication of data.\n\nPlease ensure you have local backups of your notes before proceeding.</string>
+    <string name="sync_experimental_confirm">I Understand &amp; Accept the Risk</string>
 
 </resources>

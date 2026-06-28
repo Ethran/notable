@@ -33,7 +33,7 @@ class EmptyIdEdgeCaseTest {
         db.close()
     }
 
-    @Test
+    @Test(timeout = 30000)
     fun insertAndRead_notebookWithEmptyPageIdList() = runBlocking {
         val notebook = Notebook(
             id = "notebook-1",
@@ -48,7 +48,7 @@ class EmptyIdEdgeCaseTest {
         assertEquals("", loaded.pageIds[1])
     }
 
-    @Test
+    @Test(timeout = 30000)
     fun insertAndRead_pageWithEmptyId() = runBlocking {
         val emptyIdPage = Page(
             id = "", // Empty ID

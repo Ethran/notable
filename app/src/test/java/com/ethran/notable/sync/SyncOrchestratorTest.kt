@@ -3,9 +3,27 @@ package com.ethran.notable.sync
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SyncOrchestratorTest {
+
+    private class FakeReporter : SyncProgressReporter {
+        override val state = kotlinx.coroutines.flow.MutableStateFlow<SyncState>(SyncState.Idle)
+
+        override fun beginStep(step: SyncStep, stepProgress: Float, details: String) = Unit
+        override fun beginItem(index: Int, total: Int, name: String) = Unit
+        override fun endItem() = Unit
+        override fun reset() = Unit
+
+        override fun finishSuccess(summary: SyncSummary) {
+            state.value = SyncState.Success(summary)
+        }
+
+        override fun finishError(error: DomainError, canRetry: Boolean) {
+            state.value = SyncState.Error(error, SyncStep.INITIALIZING, canRetry)
+        }
+    }
 
     private fun networkFailure(): AppResult<Unit, DomainError> = 
         AppResult.Error(DomainError.NetworkError("Network error"))
@@ -34,5 +52,26 @@ class SyncOrchestratorTest {
         assertEquals(2, summary.notebooksDownloaded)
         assertEquals(1, summary.notebooksDeleted)
         assertEquals(1500L, summary.duration)
+    }
+
+    @Test
+    fun finalizeSyncResult_uploadOnlySkip_returns_success() {
+        val reporter = FakeReporter()
+        val summary = SyncSummary(
+            notebooksSynced = 2,
+            notebooksDownloaded = 0,
+            notebooksDeleted = 0,
+            duration = 200L
+        )
+
+        val result = finalizeSyncResult(
+            reporter,
+            summary,
+            DomainError.SyncUploadOnlySkip("Notes")
+        )
+
+        assertTrue(result is AppResult.Success)
+        assertTrue(reporter.state.value is SyncState.Success)
+        assertEquals(summary, (reporter.state.value as SyncState.Success).summary)
     }
 }
