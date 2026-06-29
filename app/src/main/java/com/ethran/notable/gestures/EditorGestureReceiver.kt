@@ -39,13 +39,13 @@ fun EditorGestureReceiver(
     controlTower: EditorControlTower,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val appSettings = remember { GlobalAppSettings.current }
+    val appSettings = GlobalAppSettings.current
     var crossPosition by remember { mutableStateOf<IntOffset?>(null) }
     var rectangleBounds by remember { mutableStateOf<Rect?>(null) }
     val view = LocalView.current
     Box(
         modifier = Modifier
-            .pointerInput(Unit) {
+            .pointerInput(appSettings) {
                 awaitEachGesture {
                     try {
                         // Detect initial touch
@@ -285,13 +285,13 @@ fun EditorGestureReceiver(
 private fun resolveGesture(
     settings: AppSettings?,
     default: AppSettings.GestureAction,
-    override: AppSettings.() -> AppSettings.GestureAction?,
+    override: AppSettings.() -> AppSettings.GestureAction,
     scope: CoroutineScope,
     rectangle: Rect = Rect(),
     controlTower: EditorControlTower
 ) {
     when (if (settings != null) override(settings) else default) {
-        null -> log.i("No Action")
+        AppSettings.GestureAction.None -> log.i("No Action")
         AppSettings.GestureAction.PreviousPage -> controlTower.goToPreviousPage()
 
         AppSettings.GestureAction.NextPage -> controlTower.goToNextPage()
