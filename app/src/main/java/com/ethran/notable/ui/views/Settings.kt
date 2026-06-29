@@ -91,7 +91,7 @@ fun SettingsView(
         viewModel.checkUpdate(context, force = false)
     }
 
-    @Suppress("KotlinConstantConditions") val versionString = remember {
+    val versionString = remember {
         "v${BuildConfig.VERSION_NAME}${if (isNext) " [NEXT]" else ""}"
     }
 
