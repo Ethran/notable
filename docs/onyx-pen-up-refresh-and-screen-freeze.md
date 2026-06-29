@@ -91,6 +91,15 @@ Why it's *optional* (a switch): an app may already do its own end-of-stroke refr
 pass would be redundant or even conflict with the app's own refresh timing. So the SDK
 lets you turn it off and take over, or turn it on and let the firmware handle it.
 
+> **[framework] Confirmed in `framework.jar`.** The system note handler
+> (`android.onyx.optimization.screennote.handler.BaseHandler`) implements exactly this: on
+> stylus-up it schedules, after `EACNoteConfig.getRepaintLatency()` ms, a
+> `ViewUpdateHelper.handwritingRepaint(view, l,t,r,b, false)` and sets the pen state to
+> `PEN_PAUSE`. `repaintLatency` **defaults to 500 ms**, matching the SDK's
+> `PenConstant.DEFAULT_PEN_UP_REFRESH_TIME_MS` below. The pen state is a firmware-tracked
+> machine: `PEN_STOP=0, PEN_START=1, PEN_DRAWING=2, PEN_PAUSE=3, PEN_ERASING=4`. See
+> `docs/investigation.md` for the full framework trace.
+
 ### API
 
 On `TouchHelper`:
@@ -287,8 +296,15 @@ DELAY_ENABLE_RAW_DRAWING_MILLS = DeviceInfoUtil.isColorDevice()
 |---|---|---|
 | `COMMON_PEN_RESUME_DELAY_TIME_MS` | **150** | monochrome resume delay |
 | `COLOR_DEVICE_PEN_RESUME_DELAY_TIME_MS` | **500** | Kaleido color resume delay |
+| `ERASE_DELAY_RESUME_PEN_TIME` | **500** | resume delay specific to *erasing* |
+| `DELAY_FLOAT_MOVE_RESUME_PEN_TIME_MS` | 500 | resume delay after a floating-toolbar move |
 | `PAGE_PEN_RESUME_DELAY_TIME` | 600 | page-level (e.g. page turn) resume delay |
 | `COMMON_DEVICE_QUIT_FAST_MODE_DELAY_TIME_MS` | 5000 | delay before leaving fast mode |
+
+Note `ERASE_DELAY_RESUME_PEN_TIME = 500`: the SDK uses a **500 ms** resume delay after an
+erase (vs 150 ms monochrome for normal pen resume), i.e. the firmware is given longer to
+absorb the cleared region before raw drawing is handed back — directly relevant to the
+"erased stroke reappears" bug below.
 
 So the **authoritative** wait between "screen refreshed" and "raw drawing re-enabled" is
 **150 ms on monochrome, 500 ms on color** — applied *after* posting the bitmap and

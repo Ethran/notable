@@ -41,31 +41,31 @@ pipeline cleanly so the flag change takes effect for the next stroke.
 ## 2. How it works inside the SDK [sdk]
 
 `TouchHelper.enableFingerTouch(enable)` fans the flag out to every `TouchRender`, which
-forwards it to the native input reader (`AppTouchInputReader.setEnableFingerTouch`). All
-the interesting logic is one filter method in `AppTouchInputReader` that decides whether
-to **ignore** an incoming `MotionEvent`:
+forwards it to the native input reader (`AppTouchInputReader`). What is **verified** from
+the decompiled `AppTouchInputReader`:
 
-```java
-// decompiled & de-obfuscated; g = enableFingerTouch, h = onlyEnableFingerTouch
-private boolean shouldSkip(MotionEvent event) {
-    if (g) {                                   // finger drawing ENABLED
-        return h && TouchUtils.isPenTouchType(event);
-        //  h == false -> skip nothing  -> BOTH pen and finger draw
-        //  h == true  -> skip the pen  -> ONLY finger draws
-    }
-    return !TouchUtils.isPenTouchType(event);  // finger drawing DISABLED (default):
-                                               // skip everything that isn't the pen
-}
-```
+- It holds two boolean fields: one set by `setEnableFingerTouch(boolean)` (call it
+  `enableFinger`) and one set by `setOnlyEnableFingerTouch(boolean)` (`onlyFinger`). [sdk]
+- A single private filter method, keyed on `TouchUtils.isPenTouchType(event)` (which
+  classifies the `MotionEvent` tool type as stylus/eraser vs finger), decides per event
+  whether to feed it into the raw-drawing pipeline. The down/move/up handlers all gate on
+  it (`if (filter(event)) { dispatch… }`). [sdk]
+- Both `enableFingerTouchPressure(boolean)` and `setFingerTouchPressure(float)` exist for
+  giving the (pressure-less) finger a synthetic pressure. [sdk]
 
-`TouchUtils.isPenTouchType(event)` classifies the event by its `MotionEvent` tool type
-(stylus/eraser vs finger). So the three reachable states are:
+> ⚠️ The exact boolean body of that filter is **not** quoted here: CFR decompiles this
+> particular method into mangled code (stray `void var1_1`, inverted assignments), so the
+> precise skip/keep polarity can't be trusted from the bytecode. The **observable
+> behaviour** below is the reliable contract (it matches Onyx's documented semantics), so
+> this doc states behaviour, not a reconstructed expression.
 
-| State | API call | Filter result | Who can draw |
-|---|---|---|---|
-| **Default** | (none) — `g=false` | skip non-pen | **stylus only** |
-| **Finger enabled** | `enableFingerTouch(true)` → `g=true, h=false` | skip nothing | **stylus + finger** |
-| **Finger only** | `onlyEnableFingerTouch(true)` → `h=true` | skip pen | **finger only** |
+The three reachable states (by behaviour):
+
+| State | API call | Who can draw |
+|---|---|---|
+| **Default** | (none) | **stylus only** |
+| **Finger enabled** | `enableFingerTouch(true)` | **stylus + finger** |
+| **Finger only** | `onlyEnableFingerTouch(true)` | **finger only** |
 
 So "Open finger scribble" = move from row 1 to row 2: the capacitive finger now feeds
 the same raw-drawing path the stylus uses, producing identical `onRawDrawing*` callbacks
@@ -76,7 +76,11 @@ A capacitive finger reports no real pen pressure. The SDK exposes:
 - `enableFingerTouchPressure(boolean)` / `setFingerTouchPressure(float)` [sdk]
 
 to assign a **synthetic constant pressure** to finger strokes, so pressure-sensitive pen
-styles (fountain, brush) still render a sensible width when drawn with a finger.
+styles (fountain, brush) still render a sensible width when drawn with a finger. The SDK's
+default for this is **`PenConstant.DEFAULT_FINGER_TOUCH_PRESSURE = 1500.0f`** [sdk] (on a
+~4096 max-pressure scale, i.e. roughly mid-range) — and `AppTouchInputReader` applies it in
+its `setPressure(this.j)` path only when the finger-pressure flag (`this.i`) is enabled,
+confirming it is an opt-in override of the real (zero) finger pressure. [sdk]
 
 ---
 
@@ -120,6 +124,50 @@ during an active *pen* stroke (`onBeginRawDrawing`), so a palm landing mid-pen-s
 doesn't inject a competing finger stroke; finger input resumes at `onEndRawDrawing`.
 
 ---
+
+## 3c. A THIRD finger layer — the system handwriting handler [framework]
+
+Decompiling the device `framework.jar` reveals a third, system-level finger mechanism that
+sits *above* both of the above (it runs in the framework, not in the app):
+
+`android.onyx.optimization.screennote.handler.BaseHandler` watches every note "draw view".
+On a **finger down** it does:
+
+```java
+private void onFingerDownImpl(View view, EACNoteConfig cfg) {
+    pauseEACScreenNote();            // setScreenHandWritingPenState(PEN_PAUSE = 3)
+    ViewUpdateHelper.repaintEverything();
+}
+```
+
+i.e. the firmware **pauses hardware handwriting and forces a clean full repaint the moment
+a finger lands**, independent of anything the app does. The stylus down path resumes it
+(`PEN_DRAWING = 2`). This is why, on stock Onyx behaviour, touching with a finger cleans up
+the fast-mode ghosting — and why an app that wants finger-*drawing* has to opt in explicitly
+(`enableFingerTouch`), since the default system reflex to a finger is "stop drawing, repaint".
+
+## 3d. The raw input reader (`libonyx_touch_reader`) [framework]
+
+`android.onyx.inputreader.RawInputReader` is the framework JNI bridge under the SDK's
+`TouchHelper` (loads `libonyx_touch_reader.so`). Useful facts:
+
+- The raw callback is `onTouchPointReceived(x, y, pressure, erasing, …, action, time)` with
+  action codes: `PEN_DOWN=0, PEN_MOVE=1, PEN_RELEASE=2, PEN_RELEASE_OUT_LIMIT_REGION=3,
+  PEN_INVALID=4, PEN_ACTIVE=5` (5 = hover). Note **`PEN_RELEASE_OUT_LIMIT_REGION`**: the
+  driver distinguishes a normal pen-up from one that happens outside the limit rect.
+- **The "erasing" flag is decided in hardware/driver**, not the app: `this.erasing = z`
+  comes straight off the touch report. So whether a contact is an erase (eraser tip / side
+  button) is determined below the framework — the app only reacts to it.
+- Points are buffered in a `TouchPointList(600)` (initial capacity 600).
+- `setLimitRect` / `setExcludeRect` each drive **two** layers at once: the native input mask
+  (`nativeSetLimitRegion` / `nativeSetExcludeRegion`) **and** the firmware handwriting region
+  (`ViewUpdateHelper.setScreenHandWritingRegionLimit/Exclude`). So the limit/exclude rects
+  Notable passes in `setupSurface` clip both *input* and *firmware rendering*.
+- Region mode: `nativeSetRegionMode(0)` = multi-region, `(1)` = single-region (each also
+  mirrored to `ViewUpdateHelper.setScreenHandWritingRegionMode`).
+- `nativeSetPenState(4)` (`PEN_INVALID`) is asserted on `pause()` / `resume()` / `quit()`.
+
+See `docs/investigation.md` for the full framework trace.
 
 ## 4. The `create(view, stylus, callback)` overload [sdk]
 

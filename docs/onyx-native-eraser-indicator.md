@@ -129,6 +129,16 @@ as soon as the erase is committed — it only exists as live feedback during the
 > erase "track" is app-drawn (`EraseRenderer.drawEraseCircle`). So this native path is
 > firmware-dependent — hence the try/catch and the preserved OpenGL fallback. [demo]
 
+> **[framework] Root cause confirmed in `framework.jar`.** The system handwriting handler
+> `BaseHandler.applyStrokeParam()` pushes stroke colour/style/width to SurfaceFlinger
+> **only for non-eraser strokes** — it early-returns when
+> `strokeStyle == 5` (`isEarsingStroke`). Style `5` is the eraser (the same value the SDK's
+> `resetPenDefaultRawDrawing()` passes as `setEraserRawDrawingEnabled(false, 5)`). So by
+> default the firmware applies *no paint* while erasing, which is exactly why button-erase
+> drew nothing until the dedicated native eraser channel was enabled. `setStrokeStyle` /
+> `setEraserRawDrawingEnabled` themselves are `ViewUpdateHelper` Binder transactions to
+> SurfaceFlinger (codes 16711688 and 1048833). See `docs/investigation.md`.
+
 ---
 
 ## 3. What was changed in Notable

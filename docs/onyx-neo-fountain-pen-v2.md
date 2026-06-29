@@ -56,6 +56,12 @@ Constants:
 - `NeoFountainPenWrapper.MIN_FOUNTAIN_PEN_WIDTH = 1.0f`
 - `FountainShapes.FOUNTAIN_PEN_V1_COMPENSATION = 3.0f`
 
+> The `pressureSensitivity` (default 0.3) and `width` arguments are exactly the official
+> app's **"Pressure sensitivity" (0–100%)** and **"Line width" (mm)** sliders — Fountain V2
+> is `NEOPEN_PEN_TYPE_FOUNTAIN_V2 = 6`. See
+> `docs/onyx-pressure-sensitivity-and-line-width.md` for the full mapping (incl. mm→px and
+> the firmware-side `EACStrokeStyle`).
+
 ### `NeoFountainPenV2.Companion.create(config)`
 
 ```
@@ -188,10 +194,39 @@ rest of the stroke body. No DB migration is needed: `points` is a binary blob an
 v1 format already defined the DT channel, so old strokes (dt absent) and new strokes (dt
 present) coexist.
 
-**Deferred:** actually *consuming* `dt` in `strokeToTouchPoints` (reconstructing
-`timestamp = stroke.updatedAt.time + dt`) to feed the native smoother. This is the step
-that fixes the faceting on screen, but it is intentionally not wired up yet — the data is
-captured first so it exists for strokes drawn from now on.
+**Deferred:** actually *consuming* `dt` in `strokeToTouchPoints` to feed the native
+smoother. This is intentionally not wired up yet — the data is captured first so it exists
+for strokes drawn from now on.
+
+### Absolute vs delta vs zero-based timestamps — only deltas matter [sdk][framework]
+
+When you do wire it up, you can use a **0-based timeline** (`timestamp = dt`, i.e. the first
+point at 0) — there is **no need** to add `stroke.updatedAt.time` or any wall-clock base.
+Evidence from the decompiled stack:
+
+- **Which pens use the timestamp:** every Neo* pen wrapper packs it into the native point
+  array — `PenUtils.getPointDoubleArray(List)` lays out 7 doubles per point
+  `[x, y, pressure, size, tiltX, tiltY, timestamp]` (and the float variant
+  `[x, y, pressure, size, timestamp]`). It is **stored raw, never delta-converted in Java** —
+  the native pen does the diffing. The pens that actually *consume* it are the
+  velocity-modulated ones (Fountain V1/V2, Brush, Charcoal — anything driven by
+  `NeoPenConfig.velocitySensitivity`, default 0.5). Constant-width pens (ballpoint) and
+  Notable's custom ball-pen renderer ignore it.
+- **It's used only as velocity** (`Δdistance / Δtimestamp`). Nothing compares the timestamp
+  to the wall clock or `SystemClock`, so a constant offset cancels out: a 0-based timeline
+  and an absolute one produce identical velocity → identical ink.
+- **Smaller is actually safer.** The framework's *live* stroke API ships the time as a
+  **`float`** (`ViewUpdateHelper.addStrokePoint(…, float time)`), and the raw source is
+  `MotionEvent.getEventTime()` — absolute uptime in the billions of ms, which a 32-bit float
+  cannot resolve to the millisecond. Onyx getting away with that only works because the
+  native side cares about *differences*; small/zero-based values keep full precision. The
+  NeoPen offline path uses `double` so it's fine either way, but there is no downside to
+  zero-basing and it keeps the numbers small.
+
+So: feed `dt` straight in as the timestamp. Just keep it **monotonically non-decreasing**
+with the right per-point gaps; equal consecutive values (Δ = 0) give a degenerate velocity,
+but the native side guards that (`velocityIgnoreThreshold`) and it's unrelated to the choice
+of time base.
 
 ## The correct approach
 
@@ -210,6 +245,29 @@ Additional requirements:
 
 See `app/src/main/java/com/ethran/notable/editor/drawing/NeoFountainPenV2Wrapper.kt`
 for the implementation.
+
+## Why the live stroke and the offline redraw are two different renderers [framework]
+
+Decompiling the device `framework.jar` makes the architecture explicit, and explains why an
+offline redraw can ever differ from what you saw while writing:
+
+- **Live ink is drawn by the firmware, not by `NeoPen`.** While the pen moves, the SDK
+  streams points straight to SurfaceFlinger via
+  `android.onyx.ViewUpdateHelper.startStroke / addStrokePoint / finishStroke(baseWidth, x, y,
+  pressure, size, time)` (Binder transaction codes 16711697/8/9). Each call *returns the
+  firmware's own updated stroke width* — the firmware owns the live low-latency rendering and
+  its width model.
+- **The offline redraw is drawn by `NeoFountainPenV2`/`NeoPenRender` in-process** onto our
+  surface (this doc). It is a *re-implementation* of the same stroke, not a replay of the
+  firmware's pixels.
+
+So matching is inherently "two renderers agreeing": the only way the redraw lines up with
+the live ink is to feed the in-process pen the exact same config the firmware uses (hence
+`createNeoPenV2`) and the exact same point stream — and, critically, to pick the result type
+that looks like a *finished* stroke (`fastMode = false`, see above) rather than the live dab
+stream the firmware emits. The live `startStroke`/`addStrokePoint` path also carries a
+per-point `time`, which is the firmware analogue of the `dt` we now persist (see the
+timestamp section).
 
 ## Inspecting the SDK yourself
 
