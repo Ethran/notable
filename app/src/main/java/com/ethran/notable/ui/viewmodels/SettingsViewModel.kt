@@ -34,9 +34,8 @@ import javax.inject.Inject
 
 data class GestureRowModel(
     val titleRes: Int,
-    val currentValue: AppSettings.GestureAction?,
-    val defaultValue: AppSettings.GestureAction,
-    val onUpdate: (AppSettings.GestureAction?) -> Unit
+    val currentValue: AppSettings.GestureAction,
+    val onUpdate: (AppSettings.GestureAction) -> Unit
 )
 
 data class SyncSettingsUiState(
@@ -292,38 +291,32 @@ class SettingsViewModel @Inject constructor(
         GestureRowModel(
             R.string.gestures_double_tap_action,
             settings.doubleTapAction,
-            AppSettings.defaultDoubleTapAction
         ) { a -> updateSettings(settings.copy(doubleTapAction = a)) },
         GestureRowModel(
             (R.string.gestures_two_finger_tap_action),
             settings.twoFingerTapAction,
-            AppSettings.defaultTwoFingerTapAction,
         ) { a -> updateSettings(settings.copy(twoFingerTapAction = a)) },
         GestureRowModel(
             (R.string.gestures_swipe_left_action),
             settings.swipeLeftAction,
-            AppSettings.defaultSwipeLeftAction
         ) { a -> updateSettings(settings.copy(swipeLeftAction = a)) },
         GestureRowModel(
             (R.string.gestures_swipe_right_action),
             settings.swipeRightAction,
-            AppSettings.defaultSwipeRightAction
         ) { a -> updateSettings(settings.copy(swipeRightAction = a)) },
         GestureRowModel(
             (R.string.gestures_two_finger_swipe_left_action),
             settings.twoFingerSwipeLeftAction,
-            AppSettings.defaultTwoFingerSwipeLeftAction
         ) { a -> updateSettings(settings.copy(twoFingerSwipeLeftAction = a)) },
         GestureRowModel(
             R.string.gestures_two_finger_swipe_right_action,
             settings.twoFingerSwipeRightAction,
-            AppSettings.defaultTwoFingerSwipeRightAction
         ) { a -> updateSettings(settings.copy(twoFingerSwipeRightAction = a)) },
     )
 
 
     val availableGestures = listOf(
-        null to "None", // null represents no action
+        AppSettings.GestureAction.None to "None",
         AppSettings.GestureAction.Undo to R.string.gesture_action_undo,
         AppSettings.GestureAction.Redo to R.string.gesture_action_redo,
         AppSettings.GestureAction.PreviousPage to R.string.gesture_action_previous_page,

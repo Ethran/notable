@@ -91,7 +91,7 @@ fun SettingsView(
         viewModel.checkUpdate(context, force = false)
     }
 
-    @Suppress("KotlinConstantConditions") val versionString = remember {
+    val versionString = remember {
         "v${BuildConfig.VERSION_NAME}${if (isNext) " [NEXT]" else ""}"
     }
 
@@ -138,7 +138,7 @@ fun SettingsContent(
     onUpdateSettings: (AppSettings) -> Unit,
     selectedTabInitial: Int = 0,
     listOfGestures: List<GestureRowModel> = emptyList(),
-    availableGestures: List<Pair<AppSettings.GestureAction?, Any>> = emptyList(),
+    availableGestures: List<Pair<AppSettings.GestureAction, Any>> = emptyList(),
     syncUiState: SyncSettingsUiState = SyncSettingsUiState(),
     syncCallbacks: SyncSettingsCallbacks = SyncSettingsCallbacks(),
 ) {
@@ -380,11 +380,10 @@ fun SettingsPreviewGeneral() {
 fun SettingsPreviewGestures() {
     val dummyRows = listOf(
         GestureRowModel(
-            R.string.gestures_double_tap_action, null, AppSettings.defaultDoubleTapAction
+            R.string.gestures_double_tap_action, AppSettings.GestureAction.None
         ) { }, GestureRowModel(
             R.string.gestures_two_finger_tap_action,
-            AppSettings.GestureAction.Undo,
-            AppSettings.defaultTwoFingerTapAction
+            AppSettings.GestureAction.Undo
         ) { })
     InkaTheme {
         SettingsContent(

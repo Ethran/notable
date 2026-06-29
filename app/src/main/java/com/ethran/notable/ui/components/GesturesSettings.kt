@@ -16,7 +16,7 @@ fun GesturesSettings(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     listOfGestures: List<GestureRowModel>,
-    availableGestures: List<Pair<AppSettings.GestureAction?, Any>>
+    availableGestures: List<Pair<AppSettings.GestureAction, Any>>
 ) {
     Column(
         modifier = Modifier
@@ -27,7 +27,6 @@ fun GesturesSettings(
             GestureSelectorRow(
                 title = stringResource(config.titleRes),
                 currentAction = config.currentValue,
-                defaultAction = config.defaultValue,
                 onActionSelected = { action -> config.onUpdate(action) },
                 availableGestures = availableGestures
             )
@@ -44,10 +43,9 @@ fun GesturesSettings(
 @Composable
 fun GestureSelectorRow(
     title: String,
-    currentAction: AppSettings.GestureAction?,
-    defaultAction: AppSettings.GestureAction,
-    onActionSelected: (AppSettings.GestureAction?) -> Unit,
-    availableGestures: List<Pair<AppSettings.GestureAction?, Any>>
+    currentAction: AppSettings.GestureAction,
+    onActionSelected: (AppSettings.GestureAction) -> Unit,
+    availableGestures: List<Pair<AppSettings.GestureAction, Any>>
 ) {
     // Map the Pair list to the format expected by SelectorRow
     val options = availableGestures.map { (action, resource) ->
@@ -62,7 +60,7 @@ fun GestureSelectorRow(
     SelectorRow(
         label = title,
         options = options,
-        value = currentAction ?: defaultAction,
+        value = currentAction,
         onValueChange = onActionSelected
     )
 }
