@@ -53,7 +53,14 @@ class DrawCanvas(
             parent?.requestDisallowInterceptTouchEvent(true)
 
 
-            if (!DeviceCompat.isOnyxDevice || inputHandler.isErasing) {
+            // NATIVE ERASER INDICATOR:
+            // On Onyx devices the eraser stroke is now rendered natively by the firmware
+            // (see einkHelper.setupSurface -> setEraserRawDrawingEnabled), so we no longer
+            // route erase touches into the OpenGL front-buffer renderer. Non-Onyx devices
+            // still use OpenGL as their only renderer. The original condition is kept
+            // (commented) as a reference. See docs/onyx-native-eraser-indicator.md.
+            // if (!DeviceCompat.isOnyxDevice || inputHandler.isErasing) {
+            if (!DeviceCompat.isOnyxDevice) {
                 glRenderer.onTouchListener.onTouch(this, event)
             }
 
@@ -96,7 +103,7 @@ class DrawCanvas(
     fun registerObservers() = observers.registerAll()
 
     fun init() {
-        log.i("Initializing Canvas")
+        log.i("the Initializing Canvas")
         glRenderer = OpenGLRenderer(this@DrawCanvas)
         glRenderer.attachSurfaceView(this)
 

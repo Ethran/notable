@@ -6,11 +6,25 @@ import com.ethran.notable.data.model.SimplePointF
 import com.onyx.android.sdk.data.note.TouchPoint
 
 
+// Max delta time (ms) that fits in the uint16 dt channel. 0xFFFF (65535) is reserved as a
+// null sentinel by the SB1 stroke encoder, so the largest storable delta is 65534 ms
+// (~65 s). Strokes longer than that clamp their tail to this value (acceptable: such
+// durations only occur for pathological strokes). Keep in sync with
+// StrokePointConverter.DT_MAX_VALUE_INT.
+private const val DT_MAX_VALUE_MS = 65534L
+
 fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List<StrokePoint> {
-    val points = touchPoints.map {
-        it.toStrokePoint(scroll, scale)
+    if (touchPoints.isEmpty()) return emptyList()
+    // Capture per-point delta time (ms relative to the first point) into StrokePoint.dt so
+    // it can be persisted. The firmware stamps each TouchPoint with an absolute timestamp;
+    // we store only the delta, which is far cheaper (uint16 vs a per-point absolute long)
+    // and is all that velocity-dependent renderers need. See StrokePoint.dt and the SB1
+    // DT channel in StrokePointConverter.
+    val baseTime = touchPoints.first().timestamp
+    return touchPoints.map {
+        val deltaMs = (it.timestamp - baseTime).coerceIn(0L, DT_MAX_VALUE_MS)
+        it.toStrokePoint(scroll, scale).copy(dt = deltaMs.toUShort())
     }
-    return points
 }
 
 

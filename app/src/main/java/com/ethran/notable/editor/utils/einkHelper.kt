@@ -271,8 +271,39 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
         .openRawDrawing()
 
     touchHelper.setRawDrawingEnabled(true)
+
+    // NATIVE ERASER INDICATOR (pen side-button erasing):
+    // Ask the firmware to render the eraser path itself while erasing with the pen
+    // button, the same way a normal stroke is rendered. This replaces the OpenGL
+    // front-buffer "indicator" workaround (see OnyxInputHandler.onBeginRawErasing and
+    // DrawCanvas.dispatchTouchEvent, both kept commented as a non-native reference).
+    // Signature: setEraserRawDrawingEnabled(drawing: Boolean, eraserStyle: Int),
+    // eraserStyle uses TouchHelper.STROKE_STYLE_* (firmware default is (false, 5=DASH)).
+    //
+    // IMPORTANT (verified by decompiling onyxsdk-pen TouchHelper): setRawDrawingEnabled(true)
+    // internally calls resetPenDefaultRawDrawing() which calls
+    // setEraserRawDrawingEnabled(false, 5) -- so this MUST be called AFTER
+    // setRawDrawingEnabled(true), otherwise it is immediately reset to disabled.
+    // It is also re-asserted in OnyxInputHandler.onBeginRawErasing because
+    // updateIsDrawing() calls setRawDrawingEnabled(true) on every resume, which would
+    // otherwise wipe it again. See docs/onyx-native-eraser-indicator.md.
+    enableNativeEraser(touchHelper)
     log.i("Setup editable surface completed")
 
+}
+
+/**
+ * Enables the firmware's native eraser-stroke rendering for pen side-button erasing.
+ * MUST be called after every setRawDrawingEnabled(true) (which resets it to disabled).
+ * Wrapped in try/catch because the Onyx SDK is unstable across devices/firmware.
+ */
+fun enableNativeEraser(touchHelper: TouchHelper?) {
+    if (touchHelper == null) return
+    try {
+        touchHelper.setEraserRawDrawingEnabled(true, TouchHelper.STROKE_STYLE_MARKER)
+    } catch (t: Throwable) {
+        log.w("setEraserRawDrawingEnabled not supported on this device: ${t.message}")
+    }
 }
 
 fun prepareForPartialUpdate(view: View, touchHelper: TouchHelper?) {

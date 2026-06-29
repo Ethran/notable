@@ -17,9 +17,11 @@ match.
 
 ## Relevant SDK artifacts
 
-- `onyxsdk-pen` (1.5.4) — contains `NeoPenRender`, `NeoFountainPenWrapper`.
-- `onyxsdk-penbrush` (1.1.1) — contains `NeoFountainPenV2`, `NeoPenConfig`,
-  `PenPathResult`, `PenResult`, `FountainShapes`, `NeoPen`.
+- `onyxsdk-pen` (1.5.4, Maven) — contains `NeoPenRender`, `NeoFountainPenWrapper`.
+  Note these live in the **pen** jar, not penbrush. The jar resolves to the Gradle
+  transform cache (`~/.gradle/caches/.../onyxsdk-pen-1.5.4/jars/classes.jar`).
+- `onyxsdk-penbrush` (1.1.0.1, local `app/libs/*.aar`) — contains `NeoFountainPenV2`,
+  `NeoPenConfig`, `PenPathResult`, `PenResult`, `FountainShapes`, `NeoPen`.
 
 The official demo (`OnyxAndroidDemo`) renders the fountain V2 pen in
 `app/OnyxPenDemo/.../shape/BrushScribbleShape.java`. That class is the reference
@@ -99,8 +101,9 @@ caused a visible mismatch:
    - `minWidth`, `smoothLevel = 0.6`, `pressureSensitivity = 0.3` → native defaults
      used instead; `smoothLevel` in particular reshapes the path geometry.
    - `tiltEnabled` — fountain V2 uses **false**. Setting it `true` changes the outline.
-   - `fastMode` — demo uses **true**; the default `false` yields a different result
-     type/geometry.
+   - `fastMode` — see the dedicated section below. For an **offline redraw use `false`**
+     (smooth `PenPathResult`); `true` gives discrete `PenPointResult` dabs that look
+     "point by point".
 
 2. **Double pressure normalization.** Pre-dividing points by `maxTouchPressure`
    *and* calling `setMaxTouchPressure(...)` on the config makes the native code
@@ -116,6 +119,79 @@ caused a visible mismatch:
    `.second` of the last result (the trailing prediction ink), so the end of the
    stroke never reaches the final point. It also bypasses the SDK's 1000-point
    batching.
+
+## The "point by point" bug: `fastMode` and result type (most important)
+
+This is the single biggest cause of the offline redraw not matching the firmware, and it is
+**independent** of timestamps/config sizing.
+
+`NeoFountainPenV2.buildPenResult` returns a different `PenResult` subtype depending on
+`config.fastMode`:
+
+| `fastMode` | result type | what `.draw()` paints | use |
+|---|---|---|---|
+| `true`  | `PenPointResult` | discrete point/dab stamps | firmware **live** low-latency drawing |
+| `false` | `PenPathResult`  | continuous smooth filled vector path | **offline redraw** |
+
+The demo's `BrushScribbleShape` passes `fastMode = true` — but that class is for the **brush**
+pen, and the demo has **no fountain-V2 shape** at all. Mirroring it for fountain brought the
+wrong mode along: the redraw rendered as a string of dabs ("drawn point by point", faceted),
+even though the config sizing was correct.
+
+The old hand-rolled wrapper
+(`NeoFountainPenV2.create(NeoPenConfig().apply { setWidth(..); setTiltEnabled(true); setMaxTouchPressure(..) })`)
+looked smooth precisely because a bare `NeoPenConfig` **defaults `fastMode` to `false`**, so it
+got `PenPathResult`. Its only real defect was sizing (no `+3px` compensation, no `minWidth`,
+native default `smoothLevel`/`pressureSensitivity`).
+
+**Fix:** keep `FountainShapes.createNeoPenV2(...)` for correct sizing, but pass
+**`fastMode = false`**. `NeoPenRender` renders either subtype (`renderResult` just calls
+`penResult.draw()`), so the render path is unchanged — you simply get the smooth path.
+
+## The faceted-curve bug: missing per-point timestamps
+
+Even with the wrapper above (config + render path identical to the demo), the offline
+redraw can still look **faceted / segment-by-segment on tight, fast curves** while the
+firmware's live stroke is smooth. The cause is **not** in the render pipeline — it is in
+the input points.
+
+- `NeoFountainPenV2` is a `NeoNativePen`; its smoothing/curve-subdivision happens in
+  native code and uses the **inter-point velocity**, which it derives from each
+  `TouchPoint`'s **timestamp**.
+- The demo feeds the firmware's captured `touchPointList`, whose points carry **real,
+  increasing per-point timestamps**.
+- Notable persists strokes as `StrokePoint`, which has **no timestamp field**. When
+  rebuilding `TouchPoint`s (`strokeToTouchPoints`), every point was stamped with the same
+  `stroke.updatedAt.time`. Identical timestamps ⇒ velocity ≈ 0 everywhere ⇒ the native
+  smoother stops subdividing and connects raw samples with straight segments. This is
+  worst exactly where the user notices it: tight, fast curves (few raw samples, high real
+  velocity).
+
+**Fix (data first):** persist the real per-point timing so the original velocity profile
+is available, instead of synthesizing a fake cadence at render time.
+
+`StrokePoint` already has a `dt: UShort?` field ("delta time in ms, from the first point in
+the stroke") and the SB1 binary format already has a DT channel (uint16) — it was just
+never populated. `copyInput` now fills it from the firmware `TouchPoint.timestamp`:
+
+```kotlin
+val baseTime = touchPoints.first().timestamp
+touchPoints.map {
+    val deltaMs = (it.timestamp - baseTime).coerceIn(0L, 65534L) // 0xFFFF reserved
+    it.toStrokePoint(scroll, scale).copy(dt = deltaMs.toUShort())
+}
+```
+
+Storing only the **delta** (uint16, 2 bytes) rather than an absolute timestamp (long,
+8 bytes) is the cheap, lossless-enough representation; it is then LZ4-compressed with the
+rest of the stroke body. No DB migration is needed: `points` is a binary blob and the SB1
+v1 format already defined the DT channel, so old strokes (dt absent) and new strokes (dt
+present) coexist.
+
+**Deferred:** actually *consuming* `dt` in `strokeToTouchPoints` (reconstructing
+`timestamp = stroke.updatedAt.time + dt`) to feed the native smoother. This is the step
+that fixes the faceting on screen, but it is intentionally not wired up yet — the data is
+captured first so it exists for strokes drawn from now on.
 
 ## The correct approach
 
@@ -140,12 +216,13 @@ for the implementation.
 The SDK ships as `.aar` files (in `app/libs/` and the Gradle cache). To decompile:
 
 ```bash
-# extract classes.jar from the aar
-unzip -o onyxsdk-penbrush-1.1.1.aar -d out
-# decompile with CFR
-java -jar cfr.jar out/classes.jar \
-  --jarfilter 'com.onyx.android.sdk.pen.utils.FountainShapes' \
-  --outputdir decompiled
+# penbrush classes (NeoFountainPenV2, FountainShapes, NeoPenConfig) — local aar:
+unzip -o app/libs/onyxsdk-penbrush-1.1.0.1.aar -d out
+java -jar cfr.jar out/classes.jar --outputdir decompiled
+
+# pen classes (NeoPenRender, NeoFountainPenWrapper) — Maven, in the Gradle cache:
+J=$(find ~/.gradle/caches -path '*onyxsdk-pen-1.5.4/jars/classes.jar' | head -1)
+java -jar cfr.jar "$J" --outputdir decompiled-pen
 # or list signatures
 javap -p com/onyx/android/sdk/pen/NeoPenConfig.class
 ```

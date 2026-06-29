@@ -17,6 +17,7 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
+import com.ethran.notable.editor.utils.enableNativeEraser
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
@@ -95,19 +96,42 @@ class OnyxInputHandler(
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             if (touchHelper == null) return
-            if (GlobalAppSettings.current.openGLRendering) {
-                prepareForPartialUpdate(drawCanvas, touchHelper!!)
-                log.d("Eraser Mode")
-            }
+            // NATIVE ERASER INDICATOR:
+            // The eraser stroke is rendered natively by the firmware, enabled via
+            // touchHelper.setEraserRawDrawingEnabled(true, ...). This is RE-ASSERTED here
+            // because setRawDrawingEnabled(true) (called by updateIsDrawing() on every
+            // resume) internally calls resetPenDefaultRawDrawing() ->
+            // setEraserRawDrawingEnabled(false, 5), which would otherwise leave the native
+            // eraser channel disabled and the indicator blank (verified by decompiling
+            // onyxsdk-pen TouchHelper).
+            // The native eraser channel draws using the helper's current stroke
+            // color/width/style, so we configure a visible indicator that MATCHES the
+            // active eraser type (marker for the pen eraser, dashed line for the lasso /
+            // select eraser). It is restored in onEndRawErasing. The indicator itself is
+            // transient: after pen-up, onRawErasingList() repaints from the bitmap (which
+            // has no indicator), so it disappears once the erase is committed.
+            // See docs/onyx-native-eraser-indicator.md.
+            enableNativeEraser(touchHelper)
+            applyEraserIndicatorStyle()
+
+            // The OpenGL front-buffer workaround below is disabled, but kept (commented)
+            // as a reference for non-native erase rendering.
+            // if (GlobalAppSettings.current.openGLRendering) {
+            //     prepareForPartialUpdate(drawCanvas, touchHelper!!)
+            //     log.d("Eraser Mode")
+            // }
             isErasing = true
         }
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
-            if (GlobalAppSettings.current.openGLRendering) {
-                restoreDefaults(drawCanvas)
-                drawCanvas.glRenderer.clearPointBuffer()
-            }
-            drawCanvas.glRenderer.frontBufferRenderer?.cancel()
+            // NATIVE ERASER INDICATOR: restore the pen's stroke settings after erasing.
+            updatePenAndStroke()
+            // OpenGL workaround disabled (see onBeginRawErasing).
+            // if (GlobalAppSettings.current.openGLRendering) {
+            //     restoreDefaults(drawCanvas)
+            //     drawCanvas.glRenderer.clearPointBuffer()
+            // }
+            // drawCanvas.glRenderer.frontBufferRenderer?.cancel()
         }
 
         override fun onRawErasingTouchPointListReceived(plist: TouchPointList?) =
@@ -136,29 +160,42 @@ class OnyxInputHandler(
                 ?.setStrokeWidth(toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize * page.zoomLevel.value)
                 ?.setStrokeColor(toolbarState.penSettings[toolbarState.pen.penName]!!.color)
 
-            Mode.Erase -> {
-                when (toolbarState.eraser) {
-                    Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
-                        ?.setStrokeWidth(30f)
-                        ?.setStrokeColor(Color.GRAY)
-
-                    Eraser.SELECT -> {
-                        val dashStyleID = penToStroke(Pen.DASHED)
-                        touchHelper!!.setStrokeStyle(dashStyleID)
-                            ?.setStrokeWidth(3f)
-                            ?.setStrokeColor(Color.BLACK)
-                        val params = FloatArray(4)
-                        params[0] = 5f // thickness
-                        params[1] = 9f // no idea
-                        params[2] = 9f // no idea
-                        params[3] = 0f // no idea
-                        Device.currentDevice().setStrokeParameters(dashStyleID, params)
-                    }
-                }
-            }
+            Mode.Erase -> applyEraserIndicatorStyle(penEraserColor = Color.GRAY)
 
             Mode.Select -> touchHelper?.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
                 ?.setStrokeColor(Color.GRAY)
+        }
+    }
+
+    /**
+     * Configures the helper's stroke so the eraser feedback matches the active eraser type:
+     * a marker for the pen eraser, and a dashed line for the lasso / select eraser. Shared
+     * by the hand eraser (Mode.Erase in [updatePenAndStroke]) and the pen side-button
+     * eraser ([onBeginRawErasing], native indicator).
+     *
+     * @param penEraserColor colour for the [Eraser.PEN] marker. Hand-erase uses grey; the
+     * native button-erase indicator uses black (matches the user's preference and is more
+     * visible against ink).
+     */
+    private fun applyEraserIndicatorStyle(penEraserColor: Int = Color.BLACK) {
+        if (touchHelper == null) return
+        when (toolbarState.eraser) {
+            Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
+                ?.setStrokeWidth(30f)
+                ?.setStrokeColor(penEraserColor)
+
+            Eraser.SELECT -> {
+                val dashStyleID = penToStroke(Pen.DASHED)
+                touchHelper!!.setStrokeStyle(dashStyleID)
+                    ?.setStrokeWidth(3f)
+                    ?.setStrokeColor(Color.BLACK)
+                val params = FloatArray(4)
+                params[0] = 5f // thickness
+                params[1] = 9f // no idea
+                params[2] = 9f // no idea
+                params[3] = 0f // no idea
+                Device.currentDevice().setStrokeParameters(dashStyleID, params)
+            }
         }
     }
 

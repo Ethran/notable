@@ -34,6 +34,15 @@ object NeoFountainPenV2Wrapper {
         // FountainShapes.createNeoPenV2 so the config (width compensation, minWidth,
         // smoothLevel, pressureSensitivity, tilt=off, fastMode) matches what the
         // firmware uses while drawing live. Any deviation here makes the redraw differ.
+        // fastMode MUST be false for the offline redraw. With fastMode = true the pen
+        // returns PenPointResult (discrete point/dab stamps) — this is what the firmware
+        // uses for low-latency LIVE drawing, but when we re-draw the finished stroke onto
+        // our surface it renders "point by point" and looks faceted. fastMode = false
+        // returns PenPathResult, a continuous smooth vector path, which is what we want for
+        // a clean redraw (this is what the old hand-rolled wrapper got for free, since a
+        // bare NeoPenConfig defaults fastMode to false). The rest of the config still comes
+        // from createNeoPenV2 so the size/compensation matches the firmware.
+        // See docs/onyx-neo-fountain-pen-v2.md.
         val neoPen = FountainShapes.createNeoPenV2(
             strokeWidth,                                  // width
             NeoFountainPenWrapper.MIN_FOUNTAIN_PEN_WIDTH, // minWidth
@@ -42,7 +51,7 @@ object NeoFountainPenV2Wrapper {
             1.0f,                                         // scalePrecision
             1.0f,                                         // createScale
             null,                                         // pressureSensitivity -> default 0.3
-            true,                                         // fastMode
+            false,                                        // fastMode -> false = smooth PenPathResult
             null,                                         // smoothLevel -> default 0.6
         )
         if (neoPen == null) {
