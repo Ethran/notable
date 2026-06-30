@@ -12,13 +12,15 @@ import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.pointsToPath
+import com.ethran.notable.editor.utils.enableNativeEraser
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.utils.logCallStack
+import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 
 class CanvasRefreshManager(
     private val drawCanvas: DrawCanvas,
@@ -69,32 +71,99 @@ class CanvasRefreshManager(
     }
 
     /**
-     * Serialized erase resume (see docs/onyx-pen-up-refresh-and-screen-freeze.md):
-     * freeze firmware compositing -> post the erased bitmap and WAIT until it is actually on
-     * the surface -> let the EPD settle for the erase-specific delay (500 ms) -> hand the
-     * screen back. Running post + delay + re-enable in order on one coroutine (instead of
-     * racing [drawCanvasToView]'s async post against [resetScreenFreeze] on another thread)
-     * guarantees the firmware re-freezes against the clean, erased image, not stale content.
+     * Atomic erase commit — used by BOTH the eraser (pen button / hand) and scribble-to-erase
+     * paths so a pen lift removes the eraser indicator and the erased strokes in **one** step,
+     * with no window the user can draw into. See docs/onyx-pen-up-refresh-and-screen-freeze.md.
+     *
+     * The surface work runs **synchronously on the calling (raw-input callback) thread**, not
+     * via [drawCanvas] `post{}`. That matters: the firmware runs its own pen-up refresh shortly
+     * after the pen lifts, which would remove the (firmware-drawn) eraser indicator first and
+     * leave the strokes — then our app would remove the strokes a moment later. That is the
+     * "double refresh" the user sees. Doing the swap synchronously and immediately, before
+     * yielding, beats the firmware's pen-up refresh so there is a single transition.
+     *
+     * Must be called after the page bitmap has already been repainted to the erased state
+     * (i.e. after `handleErase` / `handleScribbleToErase`).
      */
-    suspend fun refreshAfterErase(dirtyRect: Rect?) {
-        // 1. stop the firmware compositing its (indicator) layer over our surface
-        touchHelper?.isRawDrawingRenderEnabled = false
-        // 2. post the erased page bitmap and block until it has reached the surface
-        awaitDrawCanvasToView(dirtyRect)
-        // 3. give the EPD time to absorb the cleared region before re-arming the pen
-        DeviceCompat.delayBeforeResumingDrawing(isErasing = true)
-        // 4. hand the screen back to the firmware (only if we're still drawing)
-        if (viewModel.toolbarState.value.isDrawing) {
-            touchHelper?.isRawDrawingRenderEnabled = true
-        } else {
-            log.w("refreshAfterErase: not in drawing mode, leaving render disabled")
+    fun commitErase(dirtyRect: Rect?, areaErase: Boolean = false) {
+        val dirty = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+        // Mechanism copied from the official Onyx note app (com.onyx.kreader
+        // PenEventHandler.onEraseRefreshResultEvent): commit an erase by FULLY toggling
+        // setRawDrawingEnabled(false) -> (true), NOT the light isRawDrawingRenderEnabled
+        // toggle Notable used before. Fully disabling raw drawing hands the screen back to the
+        // SurfaceView — which we have already painted with the erased bitmap below — so the
+        // firmware eraser track AND the erased strokes update in ONE atomic transition: no
+        // stale snapshot, no gap to start drawing into. (The light render toggle only stops
+        // the firmware compositing its layer and reveals its last internal snapshot, which is
+        // exactly the "erased info didn't reach the screen controller" bug.)
+        // The official app re-arms after WaitForUpdateFinishedAction = max(minWait, 150)ms,
+        // i.e. 150ms for stroke/scribble erase and 500ms for an area (lasso) erase.
+        //
+        // ORDER IS CRITICAL — push the clean page to the PANEL first, THEN drop the firmware
+        // layer. kreader's scratch gesture (scribble-to-erase) removes the scribble strokes AND
+        // the overlapped strokes in ONE model mutation, re-renders the clean page to screen
+        // (RenderRequest.renderToScreen, forced out via enablePost while raw drawing is still ON),
+        // and only AFTER that runs setRawDrawingEnabled(false) (PenEventHandler
+        // .onShapeRefreshForHWREvent -> A(false) -> B(true,0)). That order is what makes the
+        // scribble and the strokes vanish in the SAME frame: the panel already shows the clean
+        // page before the firmware layer is removed, so there is no stale flash.
+        // The REVERSE order (disable first, then post) clears the big firmware scribble ink
+        // first and briefly reveals the not-yet-erased surface underneath — the flash the user
+        // sees, worst on scribble-to-erase.
+        // 1. Block input immediately so no stroke can start during the swap/settle.
+        touchHelper?.setRawInputReaderEnable(false)
+        drawCanvas.coroutineScope.launch {
+            // 2. Push the erased page bitmap to the EPD *while still frozen* (drawBitmapToSurfaceSync
+            //    forces it through with enablePost(0)+enablePost(1), like kreader's renderToScreen).
+            drawBitmapToSurfaceSync(dirty)
+            // 3. Now drop the firmware raw layer (eraser indicator / scribble ink). The panel
+            //    already shows the clean page, so this is a no-flash transition.
+            touchHelper?.setRawDrawingEnabled(false)
+            // 4. Settle before re-arming (150ms stroke / 500ms area), mirroring the official app.
+            DeviceCompat.delayBeforeResumingDrawing(isErasing = true, areaErase = areaErase)
+            // 5. Re-arm raw drawing. The heavy toggle resets the eraser channel and stroke
+            //    style, so re-assert both (matches the official C(true) path).
+            if (viewModel.toolbarState.value.isDrawing) {
+                touchHelper?.setRawDrawingEnabled(true)
+                enableNativeEraser(touchHelper)
+                drawCanvas.inputHandler.updatePenAndStroke()
+                touchHelper?.setRawInputReaderEnable(true)
+            } else {
+                log.w("commitErase: not in drawing mode, leaving raw drawing disabled")
+            }
         }
     }
 
-    private suspend fun awaitDrawCanvasToView(dirtyRect: Rect?) {
-        val done = CompletableDeferred<Unit>()
-        drawCanvasToView(dirtyRect) { done.complete(Unit) }
-        done.await()
+    /** Synchronous variant of [drawCanvasToView] (no `post{}` hop). Locks, draws the page
+     *  bitmap for [dirtyRect], and posts — on the calling thread. */
+    private fun drawBitmapToSurfaceSync(dirtyRect: Rect?) {
+        val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+        var canvas: Canvas? = null
+        try {
+            canvas = drawCanvas.holder.lockCanvas(zoneToRedraw)
+            if (canvas == null) {
+                log.e("commitErase: failed to lock canvas (surface invalid/destroyed)")
+                return
+            }
+            // Force the post through to the EPD even though raw-drawing render is still ON
+            // (the screen is frozen). Mirrors kreader's RxBaseReaderRequest.unlockCanvas:
+            // enablePost(0)+enablePost(1) bracketing the post, resetViewUpdateMode afterward.
+            // A single enablePost — or a bare unlockCanvasAndPost — is swallowed while frozen,
+            // so the erased page would never reach the panel before we drop the firmware layer.
+            EpdController.enablePost(0)
+            EpdController.enablePost(1)
+            canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
+        } catch (e: IllegalStateException) {
+            log.w("Surface released during erase draw", e)
+        } finally {
+            try {
+                if (canvas != null) drawCanvas.holder.unlockCanvasAndPost(canvas)
+                // kreader's afterUnlockCanvas equivalent — let the EPD apply the pushed region.
+                EpdController.resetViewUpdateMode(drawCanvas)
+            } catch (e: IllegalStateException) {
+                log.w("Surface released during unlock", e)
+            }
+        }
     }
 
     fun drawCanvasToView(dirtyRect: Rect?, onPosted: (() -> Unit)? = null) {

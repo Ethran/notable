@@ -488,17 +488,21 @@ object DeviceCompat {
             false
         }
     }
-    suspend fun delayBeforeResumingDrawing(isErasing: Boolean = false) {
+    suspend fun delayBeforeResumingDrawing(isErasing: Boolean = false, areaErase: Boolean = false) {
         if (!isOnyxDevice) return
-        // Resume delays mirror the Onyx SDK (NoteConstant):
-        //  - erasing: 500ms regardless of device (NoteConstant.ERASE_DELAY_RESUME_PEN_TIME).
-        //    The EPD needs longer to absorb a cleared region before the firmware re-freezes
-        //    the screen; resuming too early lets a stroke drawn right after an erase
-        //    composite against stale content ("erased stroke reappears").
+        // Resume delays mirror the official Onyx note app (com.onyx.kreader
+        // WaitForUpdateFinishedAction, driven from PenEventHandler.onEraseRefreshResultEvent):
+        //  - erasing: the official app waits max(minWait, 150)ms before re-arming, where
+        //    minWait = 500 for an AREA (lasso/select) erase and 0 for stroke/move erase.
+        //    So: 150ms for a normal stroke/scribble erase, 500ms for an area erase. This is
+        //    safe at 150ms ONLY because the commit uses the heavy setRawDrawingEnabled(false)
+        //    toggle (see CanvasRefreshManager.commitErase), which hands the screen back to the
+        //    erased SurfaceView atomically — the light isRawDrawingRenderEnabled toggle needed
+        //    a longer, more conservative delay to hide its stale snapshot.
         //  - normal pen: 500ms for Kaleido color, 300ms for monochrome.
         // See docs/onyx-pen-up-refresh-and-screen-freeze.md.
         val delay = when {
-            isErasing -> 500.milliseconds
+            isErasing -> if (areaErase) 500.milliseconds else 150.milliseconds
             isColorDevice() -> 500.milliseconds
             else -> 300.milliseconds
         }

@@ -24,7 +24,6 @@ import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
-import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.penToStroke
 import com.ethran.notable.editor.utils.prepareForPartialUpdate
 import com.ethran.notable.editor.utils.restoreDefaults
@@ -342,13 +341,33 @@ class OnyxInputHandler(
                             )
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
-                            drawCanvas.refreshManager.drawCanvasToView(erasedByScribbleDirtyRect)
-                            partialRefreshRegionOnce(
-                                drawCanvas,
-                                erasedByScribbleDirtyRect,
-                                touchHelper!!
+                            // Union the scribble TRACK (what the firmware drew live, in screen
+                            // coords from the raw points) with the erased strokes' bounds, exactly
+                            // like the eraser path (onRawErasingList). commitErase pushes this
+                            // union to the panel WHILE STILL FROZEN, so the post overwrites BOTH
+                            // the firmware scribble ink and the erased writing in one step; only
+                            // then does it drop the firmware layer — which now reveals an already
+                            // clean page, so scribble and writing vanish together with no gap.
+                            // (Previously only the erased-strokes bounds were pushed, leaving the
+                            // rest of the scribble ink on screen until the firmware layer dropped
+                            // a moment later — the visible gap.) The scribble is NOT drawn into
+                            // the page bitmap (unlike kreader, which keeps it as a Shape); we only
+                            // need the pushed region to cover the firmware's track. See
+                            // docs/onyx-scribble-to-erase.md.
+                            val padding = 10
+                            val trackBox =
+                                calculateBoundingBox(plist.points) { Pair(it.x, it.y) }.toRect()
+                            val dirty = Rect(
+                                trackBox.left - padding,
+                                trackBox.top - padding,
+                                trackBox.right + padding,
+                                trackBox.bottom + padding
                             )
-
+                            erasedByScribbleDirtyRect.let { dirty.union(it) }
+                            // Longer (area) settle: a scribble is a large-area gesture, far heavier
+                            // on the EPD than a thin stroke erase — 150ms was too short and let the
+                            // next stroke composite against not-yet-settled content.
+                            drawCanvas.refreshManager.commitErase(dirty, areaErase = true)
                         }
 
                     }
@@ -376,12 +395,6 @@ class OnyxInputHandler(
             boundingBox.right + padding,
             boundingBox.bottom + padding
         )
-        // Quickly clear the native eraser indicator track (plain post, no freeze toggle).
-        // The single freeze -> post -> settle -> resume sequence is done, serialized, in
-        // refreshAfterErase below, so we don't race two screen-freeze toggles on different
-        // threads. See docs/onyx-pen-up-refresh-and-screen-freeze.md.
-        drawCanvas.refreshManager.drawCanvasToView(strokeArea)
-
         val zoneEffected = handleErase(
             drawCanvas.page,
             history,
@@ -389,11 +402,17 @@ class OnyxInputHandler(
             eraser = toolbarState.eraser
         )
 
-        // Repaint the whole touched region (indicator track ∪ erased strokes' bounds) and
-        // resume the pen with the erase-specific delay, serialized on one coroutine.
+        // Single atomic commit of the whole touched region: the native eraser indicator
+        // track spans strokeArea, the erased strokes' bounds are zoneEffected, so repainting
+        // their union both wipes the indicator and shows the erased result in one pass.
+        // commitErase blocks input, draws synchronously, then drops the firmware overlay so
+        // indicator + strokes disappear together (no double refresh, no gap to draw into).
+        // See docs/onyx-pen-up-refresh-and-screen-freeze.md.
         val dirty = Rect(strokeArea)
         if (zoneEffected != null) dirty.union(zoneEffected)
-        coroutineScope.launch { drawCanvas.refreshManager.refreshAfterErase(dirty) }
+        // Area (lasso/select) erase needs the longer 500ms settle the official app uses; the
+        // pen/marker erase uses the 150ms stroke settle.
+        drawCanvas.refreshManager.commitErase(dirty, areaErase = toolbarState.eraser == Eraser.SELECT)
     }
 
 }
