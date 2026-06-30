@@ -376,7 +376,11 @@ class OnyxInputHandler(
             boundingBox.right + padding,
             boundingBox.bottom + padding
         )
-        drawCanvas.refreshManager.refreshUi(strokeArea)
+        // Quickly clear the native eraser indicator track (plain post, no freeze toggle).
+        // The single freeze -> post -> settle -> resume sequence is done, serialized, in
+        // refreshAfterErase below, so we don't race two screen-freeze toggles on different
+        // threads. See docs/onyx-pen-up-refresh-and-screen-freeze.md.
+        drawCanvas.refreshManager.drawCanvasToView(strokeArea)
 
         val zoneEffected = handleErase(
             drawCanvas.page,
@@ -384,8 +388,12 @@ class OnyxInputHandler(
             points,
             eraser = toolbarState.eraser
         )
-        if (zoneEffected != null)
-            drawCanvas.refreshManager.refreshUi(zoneEffected)
+
+        // Repaint the whole touched region (indicator track ∪ erased strokes' bounds) and
+        // resume the pen with the erase-specific delay, serialized on one coroutine.
+        val dirty = Rect(strokeArea)
+        if (zoneEffected != null) dirty.union(zoneEffected)
+        coroutineScope.launch { drawCanvas.refreshManager.refreshAfterErase(dirty) }
     }
 
 }

@@ -315,6 +315,65 @@ So the **authoritative** wait between "screen refreshed" and "raw drawing re-ena
 > but the **300 ms monochrome value is guess-work and is double the official 150 ms**
 > (`COMMON_PEN_RESUME_DELAY_TIME_MS`). Consider aligning to the SDK constants.
 
+### The full erase→draw cycle and its two timing windows — [demo] `PenDemoActivity`
+
+`ScribbleMoveEraserDemoActivity` (above) is the *minimal* erase demo and **omits the
+timing**. The full `PenDemoActivity` shows the real, timed pipeline. Tracing one
+draw → erase → draw cycle answers the exact questions:
+
+**Phase 1 — drawing (screen frozen):** raw drawing enabled; the firmware owns the screen
+and draws live. App mirrors each finished stroke into its bitmap.
+
+**Phase 2 — erasing with the pen button (still frozen, until lifted):**
+- `onBeginRawErasing` / `onRawErasingPointMove` → `StrokeErasingRequest`, which is created
+  with **`setPauseRawDraw(false)`** — i.e. **raw drawing is *not* paused during the erase**.
+  Erasing runs live while the pen is down: hit-test & mark shapes transparent, render to the
+  bitmap (and optionally show an erase-circle track). The screen stays frozen the whole time.
+- **Q: is there a wait to "finish the stroke" before the screen refreshes?** **No.** Nothing
+  sleeps while erasing or at pen-lift-before-refresh. On pen up
+  (`onRawErasingTouchPointListReceived`) it goes straight to `StrokesEraseFinishedRequest`:
+  `BaseRequest.beforeExecute` calls `setRawDrawingEnabled(false)` (pause render **and**
+  input), the bitmap is re-rendered (white + surviving shapes, erased ones gone), and
+  `afterExecute` blits it to screen **immediately**. So: erase commit → screen shows result,
+  with no timed delay in that step.
+
+**Phase 3 — between "erased result shown" and the next scribble:**
+- After the bitmap is on screen, `RefreshScreenAction` posts
+  `PenEvent.resumeRawDrawing(DELAY_ENABLE_RAW_DRAWING_MILLS)` → `ResumeRawDrawingRequest`,
+  whose `execute()` is:
+
+  ```java
+  ThreadUtils.mySleep(delayResumePenTimeMs);   // <-- THE wait, before re-enabling
+  updatePenParam();                            // restore strokeStyle/width/color/penUpRefresh
+  updateDrawExcludeRect();
+  setRawDrawingRenderEnabled(true);            // hand screen back to firmware
+  setRawInputReaderEnable(true);               // accept input again
+  ```
+
+- **Q: is there a wait before the next scribble can start?** **Yes — this is the one that
+  matters.** Raw-drawing render *and input* stay disabled for
+  `DELAY_ENABLE_RAW_DRAWING_MILLS` = **150 ms (monochrome) / 500 ms (color)**
+  (`PenEvent.DELAY_ENABLE_RAW_DRAWING_MILLS = isColorDevice() ? COLOR_DEVICE_PEN_RESUME_DELAY_TIME_MS : COMMON_PEN_RESUME_DELAY_TIME_MS`).
+  Until that elapses the firmware is not re-armed, so a new stroke genuinely cannot begin —
+  giving the EPD time to absorb the refreshed (erased) image before it re-freezes for the
+  next stroke.
+
+**What the simple `ScribbleMoveEraserDemoActivity` left out (verified in the full demo + SDK):**
+1. **The post-refresh resume delay** (`mySleep(150/500 ms)`) before re-enabling raw drawing —
+   the minimal demo just flips `setRawDrawingRenderEnabled(true)` in `onEndRawErasing` with no
+   wait. This is the missing piece behind "draw immediately after erase → stale content".
+2. **`updatePenParam()` on resume** — re-applies stroke style/width/color/pen-up-refresh,
+   because re-enabling raw drawing runs `resetPenDefaultRawDrawing()` and wipes them
+   (see `docs/onyx-native-eraser-indicator.md` for the same reset gotcha).
+3. **Pausing raw *input* too** during the finish/resume window (`setRawInputReaderEnable`),
+   not just render — so stray points during the refresh can't be injected.
+4. A dedicated SDK constant the demos don't even use: **`NoteConstant.ERASE_DELAY_RESUME_PEN_TIME = 500`** — an erase-specific resume delay (the generic path uses 150/500; the production note app appears to use the 500 ms erase value regardless of mono/color). [sdk]
+5. **[framework]** Underneath, `BaseHandler` also runs its own post-stroke cleanup: erasing
+   sets pen state `PEN_ERASING (4)`, and on stylus-up it schedules
+   `ViewUpdateHelper.handwritingRepaint(...)` after `EACNoteConfig.repaintLatency` (**500 ms**
+   default). So there are effectively *two* settle timers — the app's resume delay and the
+   firmware's repaint latency.
+
 ### The actual fix for the "erased stroke reappears" bug
 
 Mirror the demo's *ordering and mechanism*, not a bigger delay:
@@ -335,6 +394,15 @@ window is open. The demo avoids this by doing the bitmap post **synchronously** 
 gating resume behind the single-threaded Rx queue. Serializing erase-commit → post →
 delay → re-enable (e.g. under `CanvasEventBus.drawingInProgress`/`waitForDrawing()`, on
 one thread) is what closes the bug — increasing the delay only masks it.
+
+> **Status [notable].** The erase path now does this: `OnyxInputHandler.onRawErasingList`
+> posts the indicator-clear, then runs `CanvasRefreshManager.refreshAfterErase(...)`, which
+> on a **single coroutine** does `isRawDrawingRenderEnabled=false` → post the erased bitmap
+> and **await** it landing on the surface → `delayBeforeResumingDrawing(isErasing=true)`
+> (**500 ms**, `ERASE_DELAY_RESUME_PEN_TIME`) → `isRawDrawingRenderEnabled=true`. This
+> replaces the old racing pair (`refreshUi`'s async `drawCanvasToView` post on the main
+> thread vs `resetScreenFreeze` on `Dispatchers.Default`) and the 300 ms mono erase delay.
+> Still outstanding: collapsing the double refresh and pausing raw *input* during the window.
 
 > Notable's own comments already smell this race: in
 > `einkHelper.partialRefreshRegionOnce` ("onyx library has its own buffer that needs to

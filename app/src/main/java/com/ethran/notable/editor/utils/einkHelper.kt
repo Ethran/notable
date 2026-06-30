@@ -34,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 private val log = ShipBook.getLogger("einkHelper")
 
@@ -487,12 +488,22 @@ object DeviceCompat {
             false
         }
     }
-    suspend fun delayBeforeResumingDrawing() {
+    suspend fun delayBeforeResumingDrawing(isErasing: Boolean = false) {
         if (!isOnyxDevice) return
-        // 500ms for Kaleido Color e-ink, 300ms for monochrome
-        val delayMs = if (isColorDevice()) 500L else 300L
-        log.d("delayBeforeResumingDrawing: Delaying raw drawing resume for ${delayMs}ms to allow Android UI to settle")
-        delay(delayMs)
+        // Resume delays mirror the Onyx SDK (NoteConstant):
+        //  - erasing: 500ms regardless of device (NoteConstant.ERASE_DELAY_RESUME_PEN_TIME).
+        //    The EPD needs longer to absorb a cleared region before the firmware re-freezes
+        //    the screen; resuming too early lets a stroke drawn right after an erase
+        //    composite against stale content ("erased stroke reappears").
+        //  - normal pen: 500ms for Kaleido color, 300ms for monochrome.
+        // See docs/onyx-pen-up-refresh-and-screen-freeze.md.
+        val delay = when {
+            isErasing -> 500.milliseconds
+            isColorDevice() -> 500.milliseconds
+            else -> 300.milliseconds
+        }
+        log.d("delayBeforeResumingDrawing(isErasing=$isErasing): Delaying raw drawing resume for ${delay}ms")
+        delay(delay)
         log.d("delayBeforeResumingDrawing: Resuming raw drawing")
     }
 }

@@ -10,6 +10,7 @@ import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.pointsToPath
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
@@ -17,6 +18,7 @@ import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CompletableDeferred
 
 class CanvasRefreshManager(
     private val drawCanvas: DrawCanvas,
@@ -66,7 +68,36 @@ class CanvasRefreshManager(
         resetScreenFreeze(touchHelper)
     }
 
-    fun drawCanvasToView(dirtyRect: Rect?) {
+    /**
+     * Serialized erase resume (see docs/onyx-pen-up-refresh-and-screen-freeze.md):
+     * freeze firmware compositing -> post the erased bitmap and WAIT until it is actually on
+     * the surface -> let the EPD settle for the erase-specific delay (500 ms) -> hand the
+     * screen back. Running post + delay + re-enable in order on one coroutine (instead of
+     * racing [drawCanvasToView]'s async post against [resetScreenFreeze] on another thread)
+     * guarantees the firmware re-freezes against the clean, erased image, not stale content.
+     */
+    suspend fun refreshAfterErase(dirtyRect: Rect?) {
+        // 1. stop the firmware compositing its (indicator) layer over our surface
+        touchHelper?.isRawDrawingRenderEnabled = false
+        // 2. post the erased page bitmap and block until it has reached the surface
+        awaitDrawCanvasToView(dirtyRect)
+        // 3. give the EPD time to absorb the cleared region before re-arming the pen
+        DeviceCompat.delayBeforeResumingDrawing(isErasing = true)
+        // 4. hand the screen back to the firmware (only if we're still drawing)
+        if (viewModel.toolbarState.value.isDrawing) {
+            touchHelper?.isRawDrawingRenderEnabled = true
+        } else {
+            log.w("refreshAfterErase: not in drawing mode, leaving render disabled")
+        }
+    }
+
+    private suspend fun awaitDrawCanvasToView(dirtyRect: Rect?) {
+        val done = CompletableDeferred<Unit>()
+        drawCanvasToView(dirtyRect) { done.complete(Unit) }
+        done.await()
+    }
+
+    fun drawCanvasToView(dirtyRect: Rect?, onPosted: (() -> Unit)? = null) {
         drawCanvas.post {
             val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
             var canvas: Canvas? = null
@@ -104,6 +135,8 @@ class CanvasRefreshManager(
                     log.v("Canvas refreshed")
                 } catch (e: IllegalStateException) {
                     log.w("Surface released during unlock", e)
+                } finally {
+                    onPosted?.invoke()
                 }
             }
         }
