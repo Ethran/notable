@@ -19,10 +19,19 @@ fun getDbDir(): File {
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
     val dbDir = File(documentsDir, "notabledb")
     if (!dbDir.exists()) {
-        dbDir.mkdirs()
+        val created = dbDir.mkdirs()
+        if (!created && !dbDir.exists()) {
+            throw IllegalStateException(
+                "Database directory could not be created at ${dbDir.absolutePath}. " +
+                "Grant 'All files access' to Notable in system settings and restart the app."
+            )
+        }
     }
     if (!dbDir.canWrite()) {
-        throw IllegalStateException("Database directory is not writable")
+        throw IllegalStateException(
+            "Database directory is not writable: ${dbDir.absolutePath}. " +
+            "Grant 'All files access' to Notable in system settings and restart the app."
+        )
     }
     return dbDir
 }

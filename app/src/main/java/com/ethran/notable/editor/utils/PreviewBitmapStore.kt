@@ -133,9 +133,12 @@ private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
             try {
                 if (f.delete()) {
                     log.d("saveHQPagePreview: removed old preview ${f.name}")
+                } else {
+                    // File may have already been deleted by a concurrent save for the same page.
+                    log.d("saveHQPagePreview: could not delete old preview ${f.name} (already gone or in use)")
                 }
-            } catch (_: Throwable) {
-                log.e("saveHQPagePreview: failed to delete old preview ${f.name}")
+            } catch (e: Throwable) {
+                log.w("saveHQPagePreview: exception deleting old preview ${f.name}", e)
             }
         }
     }

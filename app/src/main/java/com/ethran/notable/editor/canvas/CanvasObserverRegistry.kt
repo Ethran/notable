@@ -1,9 +1,11 @@
 package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
+import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.History
+import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
@@ -14,7 +16,10 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -34,7 +39,32 @@ class CanvasObserverRegistry(
     private val log = ShipBook.getLogger("CanvasObservers")
     private val pageDataManager = page.pageDataManager
 
+    private var registered = false
+
+    // All observers launch on this scope (a child of the supplied Compose scope) instead of
+    // directly on coroutineScope, so they can be cancelled as a group. The supplied Compose
+    // scope is long-lived and shared, so observers launched on it directly would outlive a
+    // recreated DrawCanvas and keep collecting — duplicating every refresh.
+    private val observerJob = SupervisorJob(coroutineScope.coroutineContext[Job])
+    private val observerScope = CoroutineScope(coroutineScope.coroutineContext + observerJob)
+
+    companion object {
+        // The observer job of the currently active registry. A newly registering registry
+        // cancels the previous one, guaranteeing exactly one live observer set even if an old
+        // DrawCanvas instance leaked.
+        private var activeObserverJob: Job? = null
+    }
+
     fun registerAll() {
+        // Guard against double registration on the same instance.
+        if (registered) {
+            log.w("registerAll called twice — observers already registered, skipping")
+            return
+        }
+        registered = true
+        // Cancel observers from any prior (possibly leaked) registry so refreshes aren't doubled.
+        activeObserverJob?.cancel()
+        activeObserverJob = observerJob
         // NOTE: Be careful with the dispatchers, choose them wisely.
 
         ImageHandler(drawCanvas.context, page, viewModel, coroutineScope).observeImageUri()
@@ -59,9 +89,29 @@ class CanvasObserverRegistry(
         observeRestoreCanvas()
     }
 
+    // Last (scroll, zoom) actually pushed by an immediate refresh. Used to drop redundant
+    // refreshes — see observeRefreshUiImmediately.
+    private var lastImmediateScroll: Offset? = null
+    private var lastImmediateZoom: Float = Float.NaN
+
     private fun observeRefreshUiImmediately() {
-        coroutineScope.launch(Dispatchers.Main) {
-            CanvasEventBus.refreshUiImmediately.collect {
+        observerScope.launch(Dispatchers.Main) {
+            // conflate() collapses any backlog that builds while a refresh is mid-flight.
+            CanvasEventBus.refreshUiImmediately.conflate().collect {
+                // Dedup by content: the collector drains in bursts on Main, so several scroll
+                // steps that settled to the same scroll get drained back-to-back. Pushing the
+                // identical bitmap to the EPD (and freezing the screen) again is wasted work, so
+                // skip when scroll+zoom are unchanged. Select mode is exempt: page-cut drag
+                // changes content without moving scroll.
+                val scroll = page.scroll
+                val zoom = page.zoomLevel.value
+                val inSelect = viewModel.toolbarState.value.mode == Mode.Select
+                if (!inSelect && scroll == lastImmediateScroll && zoom == lastImmediateZoom) {
+                    log.v("Refreshing UI! skipped — unchanged (scroll=$scroll, zoom=$zoom)")
+                    return@collect
+                }
+                lastImmediateScroll = scroll
+                lastImmediateZoom = zoom
                 log.v("Refreshing UI!")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 refreshManager.refreshUi(zoneToRedraw)
@@ -73,7 +123,7 @@ class CanvasObserverRegistry(
         // observe forceUpdate, takes rect in screen coordinates
         // given null it will redraw whole page
         // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
-        coroutineScope.launch(Dispatchers.Main) {
+        observerScope.launch(Dispatchers.Main) {
             CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
                 log.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
@@ -90,7 +140,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeRefreshUi() {
-        coroutineScope.launch(Dispatchers.Default) {
+        observerScope.launch(Dispatchers.Default) {
             CanvasEventBus.refreshUi.collect {
                 log.v("Refreshing UI!")
                 refreshManager.refreshUiSuspend()
@@ -99,7 +149,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeFocusChange() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.onFocusChange.collect { hasFocus ->
                 log.v("App has focus: $hasFocus")
                 if (hasFocus) {
@@ -114,7 +164,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeZoomLevel() {
-        coroutineScope.launch {
+        observerScope.launch {
             page.zoomLevel.drop(1).collect {
                 log.v("zoom level change: ${page.zoomLevel.value}")
                 pageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
@@ -124,7 +174,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeDrawingState() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.isDrawing.collect {
                 log.v("drawing state changed to $it!")
                 viewModel.setDrawingStateFromCanvas(it)
@@ -133,7 +183,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeSelectionGesture() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.rectangleToSelectByGesture.drop(1).collect {
                 if (it != null) {
                     log.v("Area to Select (screen): $it")
@@ -144,7 +194,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeClearPage() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.clearPageSignal.collect {
                 log.v("Clear page signal!")
                 cleanAllStrokes(page, history)
@@ -154,7 +204,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeRestartAfterConfChange() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.reinitSignal.collect {
                 log.v("Configuration changed!")
                 drawCanvas.init()
@@ -164,7 +214,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeReloadFromDb() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.reloadFromDb.collect {
                 page.refreshCurrentPage()
                 refreshManager.refreshUiSuspend()
@@ -173,7 +223,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observePenChanges() {
-        coroutineScope.launch(Dispatchers.Default) {
+        observerScope.launch(Dispatchers.Default) {
             viewModel.toolbarState
                 .map { it.pen }
                 .distinctUntilChanged()
@@ -184,7 +234,7 @@ class CanvasObserverRegistry(
 //                refreshManager.refreshUiSuspend()
                 }
         }
-        coroutineScope.launch {
+        observerScope.launch {
             viewModel.toolbarState
                 .map { it.penSettings }
                 .distinctUntilChanged()
@@ -195,7 +245,7 @@ class CanvasObserverRegistry(
                     refreshManager.refreshUiSuspend()
                 }
         }
-        coroutineScope.launch {
+        observerScope.launch {
             viewModel.toolbarState
                 .map { it.eraser }
                 .distinctUntilChanged()
@@ -209,7 +259,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeIsDrawingSnapshot() {
-        coroutineScope.launch {
+        observerScope.launch {
             viewModel.toolbarState
                 .map { it.isDrawing }
                 .distinctUntilChanged()
@@ -227,7 +277,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeToolbar() {
-        coroutineScope.launch {
+        observerScope.launch {
             viewModel.toolbarState
                 .map { it.isToolbarOpen }
                 .distinctUntilChanged()
@@ -242,7 +292,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeMode() {
-        coroutineScope.launch {
+        observerScope.launch {
             viewModel.toolbarState
                 .map { it.mode }
                 .distinctUntilChanged()
@@ -257,14 +307,14 @@ class CanvasObserverRegistry(
 
     @OptIn(FlowPreview::class)
     private fun observeHistory() {
-        coroutineScope.launch {
+        observerScope.launch {
             // After 500ms add to history strokes
             CanvasEventBus.commitHistorySignal.debounce(500).collect {
                 log.v("Commiting to history")
                 drawCanvas.commitToHistory()
             }
         }
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.commitHistorySignalImmediately.collect {
                 drawCanvas.commitToHistory()
                 CanvasEventBus.commitCompletion.complete(Unit)
@@ -274,7 +324,7 @@ class CanvasObserverRegistry(
 
 
     private fun observeSaveCurrent() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.saveCurrent.collect {
                 // Push current bitmap to persist layer so preview has something to load
                 pageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
@@ -285,7 +335,7 @@ class CanvasObserverRegistry(
 
     @OptIn(FlowPreview::class)
     private fun observeQuickNav() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
                 if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — scrub already ended
                 val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
@@ -317,7 +367,7 @@ class CanvasObserverRegistry(
     }
 
     private fun observeRestoreCanvas() {
-        coroutineScope.launch {
+        observerScope.launch {
             CanvasEventBus.restoreCanvas.collect {
                 log.d("Restoring canvas")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)

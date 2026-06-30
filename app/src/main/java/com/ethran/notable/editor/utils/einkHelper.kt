@@ -241,12 +241,21 @@ fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelp
     resetScreenFreeze(touchHelper)
 }
 
+// Single coroutine scope + job for the raw-drawing resume so overlapping calls coalesce.
+// Without this, a continuous scroll fires resetScreenFreeze on every frame, each arming a
+// fresh 500 ms resume timer — the timers stack and "Resuming raw drawing" floods at the end.
+private val screenFreezeScope = CoroutineScope(Dispatchers.Default)
+private var screenFreezeResetJob: Job? = null
+
 fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
     if(touchHelper == null) {
         log.w("touchHelper is null")
         return
     }
-    CoroutineScope(Dispatchers.Default).launch {
+    // Cancel any pending resume and re-arm. While calls keep arriving (e.g. during a scroll)
+    // raw drawing stays disabled; only the last call's delay completes and re-enables it once.
+    screenFreezeResetJob?.cancel()
+    screenFreezeResetJob = screenFreezeScope.launch {
         touchHelper.isRawDrawingRenderEnabled = false
         DeviceCompat.delayBeforeResumingDrawing()
         touchHelper.isRawDrawingRenderEnabled = true

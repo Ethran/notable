@@ -67,7 +67,6 @@ fun EditorGestureReceiver(
                         if (!view.hasWindowFocus()) return@awaitEachGesture
 
                         val gestureState = GestureState(scope = coroutineScope)
-                        var overdueScroll = Offset.Zero
 
                         // Ignore non-touch input
                         if (down.type != PointerType.Touch) {
@@ -132,9 +131,7 @@ fun EditorGestureReceiver(
                             }
                             if (gestureState.gestureMode == GestureMode.Scroll) {
                                 val delta = gestureState.getVerticalDragDelta()
-                                overdueScroll = controlTower.processScroll(
-                                    delta = Offset(overdueScroll.x, overdueScroll.y + delta)
-                                )
+                                controlTower.requestScroll(Offset(0f, delta.toFloat()))
                             }
                             if (gestureState.gestureMode == GestureMode.Zoom) {
                                 val delta = gestureState.getPinchDelta()
@@ -143,8 +140,7 @@ fun EditorGestureReceiver(
 
                             if (gestureState.gestureMode == GestureMode.Drag) {
                                 val delta = gestureState.getTotalDragDelta()
-                                overdueScroll =
-                                    controlTower.processScroll(delta = overdueScroll + delta)
+                                controlTower.requestScroll(delta)
                             }
 
                         } while (true)
@@ -266,7 +262,7 @@ fun EditorGestureReceiver(
                             && abs(verticalDrag) > SWIPE_THRESHOLD
                         ) {
                             log.d("Discrete scrolling, verticalDrag: $verticalDrag")
-                            controlTower.processScroll(Offset(0f, verticalDrag))
+                            controlTower.requestScroll(Offset(0f, verticalDrag))
                         }
                     } catch (e: CancellationException) {
                         log.w("Gesture coroutine canceled", e)

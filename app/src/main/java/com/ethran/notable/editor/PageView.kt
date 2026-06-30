@@ -94,6 +94,11 @@ class PageView(
     var windowedCanvas = Canvas(windowedBitmap)
         private set
 
+    // Spare screen-sized buffer reused by updateScroll to avoid allocating a new
+    // bitmap on every scroll event. Ping-ponged with windowedBitmap; recreated only
+    // when the canvas size/config changes (zoom, dimension change, page switch).
+    private var scrollBackBuffer: Bitmap? = null
+
     //    var strokes = listOf<Stroke>()
     var strokes: List<Stroke>
         get() = pageDataManager.getStrokes(currentPageId)
@@ -573,13 +578,17 @@ class PageView(
 
         val width = windowedBitmap.width
         val height = windowedBitmap.height
-        // Shift the existing bitmap content
-        val shiftedBitmap = createBitmap(width, height, windowedBitmap.config!!)
+        // Shift the existing bitmap content into the spare buffer, reusing it across
+        // scroll events. Recreate the spare only if it doesn't match current geometry.
+        val shiftedBitmap = scrollBackBuffer?.takeIf {
+            it.width == width && it.height == height && it.config == windowedBitmap.config
+        } ?: createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
         shiftedCanvas.drawColor(Color.RED) //for debugging.
         shiftedCanvas.drawBitmap(windowedBitmap, -movement.x, -movement.y, null)
 
-        // Swap in the shifted bitmap
+        // Swap in the shifted bitmap; the old live buffer becomes the next spare.
+        scrollBackBuffer = windowedBitmap
         windowedBitmap = shiftedBitmap
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
