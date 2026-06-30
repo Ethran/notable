@@ -6,7 +6,6 @@ import android.graphics.RectF
 import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
@@ -17,16 +16,14 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
+import com.ethran.notable.editor.utils.enableNativeEraser
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
-import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.ethran.notable.editor.utils.penToStroke
-import com.ethran.notable.editor.utils.prepareForPartialUpdate
-import com.ethran.notable.editor.utils.restoreDefaults
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.transformToLine
 import com.ethran.notable.ui.convertDpToPixel
@@ -95,26 +92,21 @@ class OnyxInputHandler(
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             if (touchHelper == null) return
-            if (GlobalAppSettings.current.openGLRendering) {
-                prepareForPartialUpdate(drawCanvas, touchHelper!!)
-                log.d("Eraser Mode")
-            }
+            // Re-assert the native eraser indicator because setRawDrawingEnabled(true) (called
+            // on every resume) resets it to disabled internally. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
+            enableNativeEraser(touchHelper)
+            applyEraserIndicatorStyle()
             isErasing = true
         }
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
-            if (GlobalAppSettings.current.openGLRendering) {
-                restoreDefaults(drawCanvas)
-                drawCanvas.glRenderer.clearPointBuffer()
-            }
-            drawCanvas.glRenderer.frontBufferRenderer?.cancel()
+            updatePenAndStroke()
         }
 
         override fun onRawErasingTouchPointListReceived(plist: TouchPointList?) =
             onRawErasingList(plist)
 
         override fun onRawErasingTouchPointMoveReceived(p0: TouchPoint?) {
-//            if (p0 == null) return
         }
 
         override fun onPenUpRefresh(refreshRect: RectF?) {
@@ -136,29 +128,42 @@ class OnyxInputHandler(
                 ?.setStrokeWidth(toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize * page.zoomLevel.value)
                 ?.setStrokeColor(toolbarState.penSettings[toolbarState.pen.penName]!!.color)
 
-            Mode.Erase -> {
-                when (toolbarState.eraser) {
-                    Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
-                        ?.setStrokeWidth(30f)
-                        ?.setStrokeColor(Color.GRAY)
-
-                    Eraser.SELECT -> {
-                        val dashStyleID = penToStroke(Pen.DASHED)
-                        touchHelper!!.setStrokeStyle(dashStyleID)
-                            ?.setStrokeWidth(3f)
-                            ?.setStrokeColor(Color.BLACK)
-                        val params = FloatArray(4)
-                        params[0] = 5f // thickness
-                        params[1] = 9f // no idea
-                        params[2] = 9f // no idea
-                        params[3] = 0f // no idea
-                        Device.currentDevice().setStrokeParameters(dashStyleID, params)
-                    }
-                }
-            }
+            Mode.Erase -> applyEraserIndicatorStyle(penEraserColor = Color.GRAY)
 
             Mode.Select -> touchHelper?.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
                 ?.setStrokeColor(Color.GRAY)
+        }
+    }
+
+    /**
+     * Configures the helper's stroke so the eraser feedback matches the active eraser type:
+     * a marker for the pen eraser, and a dashed line for the lasso / select eraser. Shared
+     * by the hand eraser (Mode.Erase in [updatePenAndStroke]) and the pen side-button
+     * eraser ([onBeginRawErasing], native indicator).
+     *
+     * @param penEraserColor colour for the [Eraser.PEN] marker. Hand-erase uses grey; the
+     * native button-erase indicator uses black (matches the user's preference and is more
+     * visible against ink).
+     */
+    private fun applyEraserIndicatorStyle(penEraserColor: Int = Color.BLACK) {
+        if (touchHelper == null) return
+        when (toolbarState.eraser) {
+            Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
+                ?.setStrokeWidth(30f)
+                ?.setStrokeColor(penEraserColor)
+
+            Eraser.SELECT -> {
+                val dashStyleID = penToStroke(Pen.DASHED)
+                touchHelper!!.setStrokeStyle(dashStyleID)
+                    ?.setStrokeWidth(3f)
+                    ?.setStrokeColor(Color.BLACK)
+                val params = FloatArray(4)
+                params[0] = 5f // thickness
+                params[1] = 9f // no idea
+                params[2] = 9f // no idea
+                params[3] = 0f // no idea
+                Device.currentDevice().setStrokeParameters(dashStyleID, params)
+            }
         }
     }
 
@@ -166,7 +171,6 @@ class OnyxInputHandler(
         if(touchHelper == null) return
         log.i("Update is drawing: $toolbarState.isDrawing")
         if (toolbarState.isDrawing) {
-//            DeviceCompat.delayBeforeResumingDrawing()
             touchHelper!!.setRawDrawingEnabled(true)
         } else {
             // Check if drawing is completed
@@ -197,12 +201,6 @@ class OnyxInputHandler(
         val currentLastStrokeEndTime = lastStrokeEndTime
         lastStrokeEndTime = System.currentTimeMillis()
         val startTime = System.currentTimeMillis()
-        // sometimes UI will get refreshed and frozen before we draw all the strokes.
-        // I think, its because of doing it in separate thread. Commented it for now, to
-        // observe app behavior, and determine if it fixed this bug,
-        // as I do not know reliable way to reproduce it
-        // Need testing if it will be better to do in main thread on, in separate.
-        // thread(start = true, isDaemon = false, priority = Thread.MAX_PRIORITY) {
 
         when (toolbarState.mode) {
             Mode.Erase -> onRawErasingList(plist)
@@ -228,12 +226,6 @@ class OnyxInputHandler(
                 }
             }
 
-            // After each stroke ends, we draw it on our canvas.
-            // This way, when screen unfreezes the strokes are shown.
-            // When in scribble mode, ui want be refreshed.
-            // If we UI will be refreshed and frozen before we manage to draw
-            // strokes want be visible, so we need to ensure that it will be done
-            // before anything else happens.
             Mode.Line -> {
                 coroutineScope.launch(Dispatchers.Main.immediate) {
                     CanvasEventBus.drawingInProgress.withLock {
@@ -264,7 +256,6 @@ class OnyxInputHandler(
                                 max(startPoint.x, endPoint.x).toInt(),
                                 max(startPoint.y, endPoint.y).toInt()
                             )
-//                                partialRefreshRegionOnce(this@DrawCanvas, dirtyRect)
                             drawCanvas.refreshManager.refreshUi(dirtyRect)
                             CanvasEventBus.commitHistorySignal.emit(Unit)
                         }
@@ -279,8 +270,6 @@ class OnyxInputHandler(
                         val lock = System.currentTimeMillis()
                         log.d("lock obtained in ${lock - startTime} ms")
 
-                        // Thread.sleep(1000)
-                        // transform points to page space
                         val scaledPoints =
                             copyInput(plist.points, page.scroll, page.zoomLevel.value)
                         val firstPointTime = plist.points.first().timestamp
@@ -305,13 +294,23 @@ class OnyxInputHandler(
                             )
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
-                            drawCanvas.refreshManager.drawCanvasToView(erasedByScribbleDirtyRect)
-                            partialRefreshRegionOnce(
-                                drawCanvas,
-                                erasedByScribbleDirtyRect,
-                                touchHelper!!
+                            // Union the scribble track (firmware screen coords) with the erased
+                            // strokes' bounds so commitErase overwrites both in one pass while
+                            // still frozen. Scribble is not drawn into the page bitmap — we only
+                            // need the region to cover the firmware's live track.
+                            // See docs/onyx-sdk/onyx-scribble-to-erase.md.
+                            val padding = 10
+                            val trackBox =
+                                calculateBoundingBox(plist.points) { Pair(it.x, it.y) }.toRect()
+                            val dirty = Rect(
+                                trackBox.left - padding,
+                                trackBox.top - padding,
+                                trackBox.right + padding,
+                                trackBox.bottom + padding
                             )
-
+                            erasedByScribbleDirtyRect.let { dirty.union(it) }
+                            // Use areaErase=true for the longer 500ms settle (scribble is a large gesture).
+                            drawCanvas.refreshManager.commitErase(dirty, areaErase = true)
                         }
 
                     }
@@ -327,8 +326,6 @@ class OnyxInputHandler(
         isErasing = false
 
         if (plist == null) return
-        plist.points
-
         val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
 
         val padding = 10
@@ -339,16 +336,24 @@ class OnyxInputHandler(
             boundingBox.right + padding,
             boundingBox.bottom + padding
         )
-        drawCanvas.refreshManager.refreshUi(strokeArea)
-
         val zoneEffected = handleErase(
             drawCanvas.page,
             history,
             points,
             eraser = toolbarState.eraser
         )
-        if (zoneEffected != null)
-            drawCanvas.refreshManager.refreshUi(zoneEffected)
+
+        // Single atomic commit of the whole touched region: the native eraser indicator
+        // track spans strokeArea, the erased strokes' bounds are zoneEffected, so repainting
+        // their union both wipes the indicator and shows the erased result in one pass.
+        // commitErase blocks input, draws synchronously, then drops the firmware overlay so
+        // indicator + strokes disappear together (no double refresh, no gap to draw into).
+        // See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
+        val dirty = Rect(strokeArea)
+        if (zoneEffected != null) dirty.union(zoneEffected)
+        // Area (lasso/select) erase needs the longer 500ms settle the official app uses; the
+        // pen/marker erase uses the 150ms stroke settle.
+        drawCanvas.refreshManager.commitErase(dirty, areaErase = toolbarState.eraser == Eraser.SELECT)
     }
 
 }

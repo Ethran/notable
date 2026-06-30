@@ -131,9 +131,14 @@ fun handleScribbleToErase(
         val deletedStrokeIds = deletedStrokes.map { it.id }
         page.removeStrokes(deletedStrokeIds)
         history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
-        val dirtyRect = strokeBounds(deletedStrokes)
-        page.drawAreaPageCoordinates(dirtyRect)
-        return dirtyRect
+        // Return the erased region in SCREEN coordinates (mirrors handleErase). The caller
+        // pushes this rect to the SurfaceView/EPD via commitErase, and the surface bitmap
+        // (windowedBitmap) is in screen space — returning page coords here pushed the wrong
+        // region whenever scrolled/zoomed. The caller unions this with the scribble track so
+        // the firmware ink is cleared in the same post. See docs/onyx-sdk/onyx-scribble-to-erase.md.
+        val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
+        page.drawAreaScreenCoordinates(screenArea = effectedArea)
+        return effectedArea
     }
     return null
 }
