@@ -18,6 +18,9 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,11 +36,18 @@ class EditorControlTower(
     private val clipboardStore: ClipboardStore,
 ) {
     private var scrollInProgress = Mutex()
-    private var scrollJob: Job? = null
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
     private var changePageObserverJob: Job? = null
 
+    // Accumulated, not-yet-rendered scroll delta in screen coordinates. Input events add
+    // into this; a single consumer coroutine drains and renders it. StateFlow conflation
+    // means a burst of input collapses to one render pass per frame the renderer can keep
+    // up with.
+    private val pendingScroll = MutableStateFlow(Offset.Zero)
+    private var scrollConsumerJob: Job? = null
+
     fun registerObservers() {
+        startScrollConsumer()
         if (changePageObserverJob?.isActive == true) return
 
         changePageObserverJob = scope.launch {
@@ -61,34 +71,44 @@ class EditorControlTower(
     fun unregisterObservers() {
         changePageObserverJob?.cancel()
         changePageObserverJob = null
+        scrollConsumerJob?.cancel()
+        scrollConsumerJob = null
     }
 
-    // returns delta if could not scroll, to be added to next request,
-    // this ensures that smooth scroll works reliably even if rendering takes to long
-    fun processScroll(delta: Offset): Offset {
-        if (delta == Offset.Zero) return Offset.Zero
-        if (!page.isTransformationAllowed) return Offset.Zero
-        if (scrollInProgress.isLocked) {
-            logEditorControlTower.w("Scroll in progress -- skipping")
-            return delta
-        } // Return unhandled part
+    /**
+     * Submit a scroll/drag delta (screen coordinates) for rendering. Non-blocking: the
+     * delta is accumulated and consumed by [startScrollConsumer]; bursts coalesce automatically.
+     */
+    fun requestScroll(delta: Offset) {
+        if (delta == Offset.Zero) return
+        if (!page.isTransformationAllowed) return
+        pendingScroll.update { it + delta }
+    }
 
-        scrollJob = scope.launch(Dispatchers.Main.immediate) {
-            scrollInProgress.withLock {
-                val scaledDelta = (delta / page.zoomLevel.value)
-                if (viewModel.toolbarState.value.mode == Mode.Select) {
-                    if (viewModel.selectionState.firstPageCut != null) {
-                        onOpenPageCut(scaledDelta)
+    /**
+     * Single consumer that drains [pendingScroll] and performs the actual bitmap shift.
+     * Draining atomically resets the accumulator to zero, so any input that arrives while
+     * a render is in flight piles onto a fresh zero and is picked up on the next pass —
+     * coalescing a flood of touch samples into one shift per render.
+     */
+    private fun startScrollConsumer() {
+        if (scrollConsumerJob?.isActive == true) return
+        scrollConsumerJob = scope.launch(Dispatchers.Main.immediate) {
+            pendingScroll.collect {
+                val delta = pendingScroll.getAndUpdate { Offset.Zero }
+                if (delta == Offset.Zero) return@collect
+                scrollInProgress.withLock {
+                    if (viewModel.toolbarState.value.mode == Mode.Select &&
+                        viewModel.selectionState.firstPageCut != null
+                    ) {
+                        onOpenPageCut(delta / page.zoomLevel.value)
                     } else {
                         onPageScroll(-delta)
                     }
-                } else {
-                    onPageScroll(-delta)
                 }
+                CanvasEventBus.refreshUiImmediately.emit(Unit)
             }
-            CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
-        return Offset.Zero // All handled
     }
 
 
