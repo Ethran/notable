@@ -93,7 +93,7 @@ class OnyxInputHandler(
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             if (touchHelper == null) return
             // Re-assert the native eraser indicator because setRawDrawingEnabled(true) (called
-            // on every resume) resets it to disabled internally. See docs/onyx-native-eraser-indicator.md.
+            // on every resume) resets it to disabled internally. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
             enableNativeEraser(touchHelper)
             applyEraserIndicatorStyle()
             isErasing = true
@@ -196,7 +196,7 @@ class OnyxInputHandler(
             )
         }
     }
-    private fun onRawDrawingList(plist: TouchPointList) {s
+    private fun onRawDrawingList(plist: TouchPointList) {
         if (touchHelper == null) return
         val currentLastStrokeEndTime = lastStrokeEndTime
         lastStrokeEndTime = System.currentTimeMillis()
@@ -298,7 +298,7 @@ class OnyxInputHandler(
                             // strokes' bounds so commitErase overwrites both in one pass while
                             // still frozen. Scribble is not drawn into the page bitmap — we only
                             // need the region to cover the firmware's live track.
-                            // See docs/onyx-scribble-to-erase.md.
+                            // See docs/onyx-sdk/onyx-scribble-to-erase.md.
                             val padding = 10
                             val trackBox =
                                 calculateBoundingBox(plist.points) { Pair(it.x, it.y) }.toRect()
@@ -348,7 +348,7 @@ class OnyxInputHandler(
         // their union both wipes the indicator and shows the erased result in one pass.
         // commitErase blocks input, draws synchronously, then drops the firmware overlay so
         // indicator + strokes disappear together (no double refresh, no gap to draw into).
-        // See docs/onyx-pen-up-refresh-and-screen-freeze.md.
+        // See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
         val dirty = Rect(strokeArea)
         if (zoneEffected != null) dirty.union(zoneEffected)
         // Area (lasso/select) erase needs the longer 500ms settle the official app uses; the

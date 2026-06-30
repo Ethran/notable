@@ -58,7 +58,7 @@ class DrawCanvas(
             // (see einkHelper.setupSurface -> setEraserRawDrawingEnabled), so we no longer
             // route erase touches into the OpenGL front-buffer renderer. Non-Onyx devices
             // still use OpenGL as their only renderer. The original condition is kept
-            // (commented) as a reference. See docs/onyx-native-eraser-indicator.md.
+            // (commented) as a reference. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
             // if (!DeviceCompat.isOnyxDevice || inputHandler.isErasing) {
             if (!DeviceCompat.isOnyxDevice) {
                 glRenderer.onTouchListener.onTouch(this, event)

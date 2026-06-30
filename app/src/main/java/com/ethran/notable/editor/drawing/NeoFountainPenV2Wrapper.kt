@@ -33,7 +33,7 @@ object NeoFountainPenV2Wrapper {
         // Mirror the official demo (BrushScribbleShape) via FountainShapes.createNeoPenV2 so
         // config matches the firmware's live rendering. fastMode=false yields PenPathResult
         // (smooth vector path); true would give discrete dab stamps and look faceted on redraw.
-        // See docs/onyx-neo-fountain-pen-v2.md.
+        // See docs/onyx-sdk/onyx-neo-fountain-pen-v2.md.
         val neoPen = FountainShapes.createNeoPenV2(
             strokeWidth,                                  // width
             NeoFountainPenWrapper.MIN_FOUNTAIN_PEN_WIDTH, // minWidth

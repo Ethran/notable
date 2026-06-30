@@ -183,7 +183,7 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
 
     // Enable the firmware's native eraser indicator. MUST be called after setRawDrawingEnabled(true)
     // because that call internally resets it to disabled. Also re-asserted in onBeginRawErasing.
-    // See docs/onyx-native-eraser-indicator.md.
+    // See docs/onyx-sdk/onyx-native-eraser-indicator.md.
     enableNativeEraser(touchHelper)
     log.i("Setup editable surface completed")
 
@@ -363,7 +363,7 @@ object DeviceCompat {
         //  - erase: 150ms stroke, 500ms area (lasso). Safe at 150ms because commitErase uses the
         //    heavy setRawDrawingEnabled toggle which hands the screen back atomically.
         //  - normal pen: 500ms color, 300ms monochrome.
-        // See docs/onyx-pen-up-refresh-and-screen-freeze.md.
+        // See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
         val delay = when {
             isErasing -> if (areaErase) 500.milliseconds else 150.milliseconds
             isColorDevice() -> 500.milliseconds

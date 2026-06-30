@@ -75,7 +75,7 @@ class CanvasRefreshManager(
      * already-repainted page bitmap to the panel while the screen is still frozen, then fully
      * toggles setRawDrawingEnabled(false→true) to drop the firmware layer atomically — eraser
      * indicator and erased strokes disappear in one transition with no gap to draw into.
-     * ORDER IS CRITICAL: push first, then drop. See docs/onyx-pen-up-refresh-and-screen-freeze.md.
+     * ORDER IS CRITICAL: push first, then drop. See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
      * Must be called after the page bitmap has already been repainted (after handleErase /
      * handleScribbleToErase).
      */

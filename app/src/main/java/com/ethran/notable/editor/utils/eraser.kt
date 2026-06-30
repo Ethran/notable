@@ -135,7 +135,7 @@ fun handleScribbleToErase(
         // pushes this rect to the SurfaceView/EPD via commitErase, and the surface bitmap
         // (windowedBitmap) is in screen space — returning page coords here pushed the wrong
         // region whenever scrolled/zoomed. The caller unions this with the scribble track so
-        // the firmware ink is cleared in the same post. See docs/onyx-scribble-to-erase.md.
+        // the firmware ink is cleared in the same post. See docs/onyx-sdk/onyx-scribble-to-erase.md.
         val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
         page.drawAreaScreenCoordinates(screenArea = effectedArea)
         return effectedArea
