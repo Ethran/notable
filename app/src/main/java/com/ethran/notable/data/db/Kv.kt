@@ -76,7 +76,6 @@ class KvRepository @Inject constructor(
 }
 
 
-
 /**
  * A high-level proxy for the Key-Value database.
  *
@@ -93,7 +92,10 @@ class KvProxy @Inject constructor(
     private val cryptoHelper: CryptoHelper
 ) {
     private val log = ShipBook.getLogger("KvProxy")
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
 
 
     suspend fun <T> get(key: String, serializer: KSerializer<T>): T? = withContext(Dispatchers.IO) {
