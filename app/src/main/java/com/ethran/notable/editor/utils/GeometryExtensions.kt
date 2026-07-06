@@ -4,8 +4,8 @@ import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
-import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
+import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.data.note.TouchPoint
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -74,26 +74,19 @@ fun <T> calculateBoundingBox(
 }
 
 
-fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
-    return stroke.points.map {
-        TouchPoint(
-            it.x,
-            it.y,
-            it.pressure ?: 1f,
-            stroke.size,
-            it.tiltX ?: 0,
-            it.tiltY ?: 0,
-            stroke.updatedAt.time
-        )
-    }
+// Raw digitizer pressure scale, used to normalize captured pressure to [0, 1] once at
+// capture time (see StrokePoint.pressure / Stroke.maxPressure). Raw input only exists on
+// Onyx devices (TouchHelper is not created elsewhere); the <= 0 guard covers SDK stubs.
+private val rawInputMaxPressure: Float by lazy {
+    val max = if (DeviceCompat.isOnyxDevice) EpdController.getMaxTouchPressure() else 1f
+    if (max > 0f) max else 1f
 }
-
 
 fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
     return StrokePoint(
         x = x / scale + scroll.x,
         y = y / scale + scroll.y,
-        pressure = pressure,
+        pressure = (pressure / rawInputMaxPressure).coerceIn(0f, 1f),
         tiltX = tiltX,
         tiltY = tiltY,
     )

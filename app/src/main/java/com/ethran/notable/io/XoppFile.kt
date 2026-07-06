@@ -15,6 +15,7 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
@@ -24,7 +25,6 @@ import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.ensureNotMainThread
-import com.onyx.android.sdk.api.device.epd.EpdController
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
@@ -63,7 +63,6 @@ class XoppFile @Inject constructor(
 ) {
     private val log = ShipBook.getLogger("XoppFile")
     private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
-    private val maxPressure = EpdController.getMaxTouchPressure()
 
     /**
      * Holds mutable buffers that are allocated once per import operation and reused across
@@ -556,10 +555,11 @@ class XoppFile @Inject constructor(
             val x = state.coordsBuffer[i * 2] / scaleFactor
             val y = state.coordsBuffer[i * 2 + 1] / scaleFactor
 
-            // Width attribute layout: index 0 = stroke width, indices 1..N = per-point pressure
+            // Width attribute layout: index 0 = stroke width, indices 1..N = per-point pressure.
+            // Stored normalized to [0, 1] (the stroke is created with MAX_PRESSURE_NORMALIZED).
             val pressureIdx = i + 1
             val pressure = if (pressureIdx < widthCount) {
-                state.widthsBuffer[pressureIdx] * (maxPressure * PRESSURE_FACTOR)
+                (state.widthsBuffer[pressureIdx] * PRESSURE_FACTOR).coerceIn(0f, 1f)
             } else {
                 0f
             }
@@ -592,7 +592,7 @@ class XoppFile @Inject constructor(
                 (color.green * 255).toInt(),
                 (color.blue * 255).toInt()
             ),
-            maxPressure = maxPressure.toInt()
+            maxPressure = MAX_PRESSURE_NORMALIZED
         )
     }
 

@@ -28,7 +28,16 @@ class StrokePointConverterTest {
             // Precision 2 in encoding => ~1e-2 absolute tolerance on x/y.
             assertTrue("x[$i]: expected ${e.x} ≈ ${a.x}", abs(e.x - a.x) < 1e-2f)
             assertTrue("y[$i]: expected ${e.y} ≈ ${a.y}", abs(e.y - a.y) < 1e-2f)
-            assertEquals("pressure[$i]", e.pressure, a.pressure)
+            if (e.pressure == null) {
+                assertNull("pressure[$i]", a.pressure)
+            } else {
+                // v2 stores normalized pressure as uint16 fixed-point => ~1/65535 tolerance.
+                assertNotNull("pressure[$i]", a.pressure)
+                assertTrue(
+                    "pressure[$i]: expected ${e.pressure} ≈ ${a.pressure}",
+                    abs(e.pressure - a.pressure!!) < 1e-4f
+                )
+            }
             assertEquals("tiltX[$i]", e.tiltX, a.tiltX)
             assertEquals("tiltY[$i]", e.tiltY, a.tiltY)
             assertEquals("dt[$i]", e.dt, a.dt)
@@ -53,9 +62,9 @@ class StrokePointConverterTest {
     @Test
     fun roundTrip_with_all_optional_fields_present() {
         val points = listOf(
-            StrokePoint(x = 1f, y = 2f, pressure = 100f, tiltX = -10, tiltY = 20, dt = 0.toUShort()),
-            StrokePoint(x = 3f, y = 4f, pressure = 200f, tiltX = -5, tiltY = 25, dt = 12.toUShort()),
-            StrokePoint(x = 5f, y = 6f, pressure = 4096f, tiltX = 0, tiltY = 30, dt = 100.toUShort()),
+            StrokePoint(x = 1f, y = 2f, pressure = 0.02f, tiltX = -10, tiltY = 20, dt = 0.toUShort()),
+            StrokePoint(x = 3f, y = 4f, pressure = 0.5f, tiltX = -5, tiltY = 25, dt = 12.toUShort()),
+            StrokePoint(x = 5f, y = 6f, pressure = 1f, tiltX = 0, tiltY = 30, dt = 100.toUShort()),
         )
         val encoded = encodeStrokePoints(points)
         val decoded = decodeStrokePoints(encoded)
@@ -65,8 +74,8 @@ class StrokePointConverterTest {
     @Test
     fun roundTrip_pressure_only_mask() {
         val points = listOf(
-            StrokePoint(x = 0f, y = 0f, pressure = 50f),
-            StrokePoint(x = 1f, y = 1f, pressure = 75f),
+            StrokePoint(x = 0f, y = 0f, pressure = 0.25f),
+            StrokePoint(x = 1f, y = 1f, pressure = 0.75f),
         )
         val encoded = encodeStrokePoints(points)
         val decoded = decodeStrokePoints(encoded)
@@ -77,6 +86,43 @@ class StrokePointConverterTest {
             assertNull(it.tiltY)
             assertNull(it.dt)
         }
+    }
+
+    @Test
+    fun encode_clamps_out_of_range_pressure() {
+        // The v2 encoder requires normalized [0,1] input; out-of-range values are clamped.
+        val points = listOf(
+            StrokePoint(x = 0f, y = 0f, pressure = 4096f),
+            StrokePoint(x = 1f, y = 1f, pressure = -1f),
+        )
+        val decoded = decodeStrokePoints(encodeStrokePoints(points))
+        assertEquals(1f, decoded[0].pressure!!, 1e-4f)
+        assertEquals(0f, decoded[1].pressure!!, 1e-4f)
+    }
+
+    @Test
+    fun decode_v1_blob_returns_raw_pressure() {
+        // v1 stored raw digitizer pressure as int16. Build a v1 blob by encoding a tiny
+        // (uncompressed) stroke, then patching the version byte and the pressure section
+        // using the documented layout:
+        //   header(9) | X_SIZE(4) | X_DATA | Y_SIZE(4) | Y_DATA | pressure[count] int16
+        val points = listOf(
+            StrokePoint(x = 0f, y = 0f, pressure = 0f),
+            StrokePoint(x = 1f, y = 1f, pressure = 0f),
+        )
+        val encoded = encodeStrokePoints(points)
+        assertEquals("fixture must be uncompressed", 0.toByte(), encoded[8])
+        encoded[2] = 1 // version byte -> v1
+
+        val buf = java.nio.ByteBuffer.wrap(encoded).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        buf.position(9)
+        buf.position(buf.position() + 4 + buf.getInt(buf.position())) // skip X section
+        buf.position(buf.position() + 4 + buf.getInt(buf.position())) // skip Y section
+        buf.putShort(100.toShort()).putShort(4096.toShort()) // raw v1 pressure values
+
+        val decoded = decodeStrokePoints(encoded)
+        assertEquals(100f, decoded[0].pressure!!, 1e-4f)
+        assertEquals(4096f, decoded[1].pressure!!, 1e-4f)
     }
 
     @Test
@@ -109,7 +155,7 @@ class StrokePointConverterTest {
             StrokePoint(
                 x = it.toFloat(),
                 y = (it * 2).toFloat(),
-                pressure = (1000 + (it % 100)).toFloat(),
+                pressure = (it % 100) / 100f,
                 tiltX = (it % 21) - 10,
                 tiltY = (it % 41) - 20,
                 dt = (it % 50).toUShort(),
@@ -207,14 +253,14 @@ class StrokePointConverterTest {
 
     @Test
     fun encode_then_decode_preserves_byte_layout_for_header() {
-        // Sanity-check the documented header layout: magic 'S','B', version 1, then mask byte.
+        // Sanity-check the documented header layout: magic 'S','B', version 2, then mask byte.
         val points = listOf(
-            StrokePoint(x = 0f, y = 0f, pressure = 100f),
-            StrokePoint(x = 1f, y = 1f, pressure = 200f),
+            StrokePoint(x = 0f, y = 0f, pressure = 0.1f),
+            StrokePoint(x = 1f, y = 1f, pressure = 0.2f),
         )
         val encoded = encodeStrokePoints(points)
         assertArrayEquals(
-            byteArrayOf('S'.code.toByte(), 'B'.code.toByte(), 1.toByte()),
+            byteArrayOf('S'.code.toByte(), 'B'.code.toByte(), 2.toByte()),
             encoded.copyOfRange(0, 3)
         )
         // Mask byte: pressure bit (bit 0) only.

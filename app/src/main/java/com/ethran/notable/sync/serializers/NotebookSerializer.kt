@@ -6,6 +6,7 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.data.db.encodeStrokePoints
+import com.ethran.notable.data.db.withNormalizedPressure
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -197,7 +198,8 @@ object NotebookSerializer {
                         pageId = pageDto.id,
                         createdAt = created,
                         updatedAt = updated
-                    )
+                        // Remote data from older app versions carries raw-scale pressure.
+                    ).withNormalizedPressure()
                 } catch (e: Exception) {
                     logCallStack(reason = "Skipping corrupted stroke ${strokeDto.id}: ${e.message}")
                     null

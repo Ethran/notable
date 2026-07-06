@@ -7,8 +7,8 @@ import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.offsetStroke
-import com.ethran.notable.editor.utils.strokeToTouchPoints
 import com.onyx.android.sdk.data.note.ShapeCreateArgs
+import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.pen.NeoBrushPenWrapper
 import com.onyx.android.sdk.pen.NeoCharcoalPenWrapper
 import com.onyx.android.sdk.pen.NeoMarkerPenWrapper
@@ -19,31 +19,51 @@ import io.shipbook.shipbooksdk.ShipBook
 private val strokeDrawingLogger = ShipBook.getLogger("drawStroke")
 
 
+/**
+ * Converts pipeline points to Onyx TouchPoints for the Onyx pen wrappers. This is an Onyx
+ * rendering detail — nothing outside this renderer should need TouchPoint. Fresh objects
+ * are created on every call because the SDK wrappers mutate the points they are given
+ * (e.g. NeoPenUtils.computeStrokePoints divides pressure in place).
+ */
+private fun strokeToTouchPoints(stroke: Stroke): List<TouchPoint> {
+    return stroke.points.map {
+        TouchPoint(
+            it.x,
+            it.y,
+            it.pressure ?: 1f,
+            stroke.size,
+            it.tiltX ?: 0,
+            it.tiltY ?: 0,
+            stroke.updatedAt.time
+        )
+    }
+}
 
 fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
-    //canvas.save()
-    //canvas.translate(offset.x.toFloat(), offset.y.toFloat())
-
     val paint = Paint().apply {
         color = stroke.color
         this.strokeWidth = stroke.size
     }
 
-    val points = strokeToTouchPoints(offsetStroke(stroke, offset))
+    val positionedStroke = offsetStroke(stroke, offset)
 
     // Trying to find what throws error when drawing quickly
     try {
         when (stroke.pen) {
-            Pen.BALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.REDBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.GREENBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
-            Pen.BLUEBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, points)
+            Pen.BALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
+            Pen.REDBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
+            Pen.GREENBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
+            Pen.BLUEBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
 
+            // In-memory stroke pressure is normalized to [0,1] with maxPressure == 1
+            // (see Stroke.withNormalizedPressure). The wrappers take maxPressure as the
+            // pressure denominator, so passing stroke.maxPressure is a no-op divide for
+            // normalized strokes and stays correct for raw-scale ones.
             Pen.FOUNTAIN -> {
                 NeoFountainPenV2Wrapper.drawStroke(
                     /* canvas = */ canvas,
                     /* paint = */ paint,
-                    /* points = */ points,
+                    /* points = */ strokeToTouchPoints(positionedStroke),
                     /* strokeWidth = */ stroke.size,
                     /* maxTouchPressure = */ stroke.maxPressure.toFloat(),
                 )
@@ -53,7 +73,7 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
                 NeoBrushPenWrapper.drawStroke(
                     canvas,
                     paint,
-                    points,
+                    strokeToTouchPoints(positionedStroke),
                     stroke.size,
                     stroke.maxPressure.toFloat(),
                     false
@@ -64,18 +84,21 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
                 NeoMarkerPenWrapper.drawStroke(
                     canvas,
                     paint,
-                    points,
+                    strokeToTouchPoints(positionedStroke),
                     stroke.size,
                     false
                 )
             }
 
             Pen.PENCIL -> {
-                val shapeArg = ShapeCreateArgs()
+                // ShapeCreateArgs.maxPressure defaults to the device digitizer max; it is
+                // the divisor the charcoal renderer applies to point pressure, so it must
+                // match the scale the points are stored in.
+                val shapeArg = ShapeCreateArgs().setMaxPressure(stroke.maxPressure.toFloat())
                 val arg = PenRenderArgs()
                     .setCanvas(canvas)
                     .setPaint(paint)
-                    .setPoints(points)
+                    .setPoints(strokeToTouchPoints(positionedStroke))
                     .setColor(stroke.color)
                     .setStrokeWidth(stroke.size)
                     .setTiltEnabled(true)
@@ -92,5 +115,4 @@ fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
     } catch (e: Exception) {
         strokeDrawingLogger.e("Drawing strokes failed: ${e.message}")
     }
-    //canvas.restore()
 }

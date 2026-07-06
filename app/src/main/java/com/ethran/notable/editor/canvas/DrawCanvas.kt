@@ -13,12 +13,9 @@ import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
-import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 
-
-val pressure = EpdController.getMaxTouchPressure()
 
 // keep reference of the surface view presently associated to the singleton touchhelper
 var referencedSurfaceView: String = ""

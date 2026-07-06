@@ -4,6 +4,7 @@ import io.shipbook.shipbooksdk.ShipBook
 import net.jpountz.lz4.LZ4Factory
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.roundToInt
 
 /* ------------------ Mask Bits & Helpers ------------------ */
 
@@ -68,11 +69,11 @@ private fun validateUniform(mask: Int, points: List<StrokePoint>) {
     }
 }
 
-/* ------------------ SB1 Encoding ------------------ *//*
+/* ------------------ SB Encoding ------------------ *//*
 Header (little-endian):
      MAGIC0 (1 byte) = 'S'
      MAGIC1 (1 byte) = 'B'
-     VERSION (1 byte) = 1
+     VERSION (1 byte) = 2
      MASK (1 byte)
      COUNT (4 bytes, Int)
      COMPRESSION (1 byte) = 0 (no), 1 (LZ4)
@@ -82,7 +83,7 @@ Header (little-endian):
      X_DATA [X_SIZE]
      Y_SIZE (4 bytes, Int)
      Y_DATA [Y_SIZE]
-     [if mask&PRESSURE] pressure[count] int16
+     [if mask&PRESSURE] pressure[count] uint16
      [if mask&TILT_X]   tiltX[count] int8
      [if mask&TILT_Y]   tiltY[count] int8
      [if mask&DT]       dt[count] uint16
@@ -91,11 +92,20 @@ Notes:
 - ENCODE_SIZE is always present for each channel, regardless of encoding.
 - COUNT is the logical number of points for the stroke (for metadata or array allocation).
 - All arrays must be uniform per stroke (no per-point nulls).
+- Pressure channel:
+  * v1: raw digitizer values truncated to int16 (typically 1..4096; the stroke row's
+    maxPressure column holds the denominator).
+  * v2: pressure is normalized to [0, 1] and stored as uint16 fixed-point
+    (round(p * 65535)). The encoder requires normalized input; out-of-range values
+    are clamped (and indicate a caller that skipped normalization).
 */
 
 private const val MAGIC0: Byte = 'S'.code.toByte()
 private const val MAGIC1: Byte = 'B'.code.toByte()
-private const val FORMAT_VERSION: Byte = 1
+private const val FORMAT_VERSION: Byte = 2
+
+// v2 fixed-point denominator for the normalized [0,1] pressure channel.
+private const val PRESSURE_QUANT = 65535f
 private const val HEADER_SIZE: Int = 1 + 1 + 1 + 1 + 1 + 4
 
 // Compression flag values
@@ -218,7 +228,13 @@ fun encodeStrokePoints(
     bodyBuffer.put(encodedY)
 
     if (hasP) {
-        for (p in points) bodyBuffer.putShort(p.pressure!!.toInt().toShort())
+        if (points.any { it.pressure!! > 1f }) {
+            log.e("Encoding stroke with un-normalized pressure (>1); values will be clamped. Callers must normalize to [0,1] first.")
+        }
+        for (p in points) {
+            val q = (p.pressure!!.coerceIn(0f, 1f) * PRESSURE_QUANT).roundToInt()
+            bodyBuffer.putShort(q.toShort())
+        }
     }
     if (hasTX) {
         for (p in points) bodyBuffer.put(p.tiltX!!.toByte())
@@ -339,9 +355,16 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
     val ys = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
     require(xs.size == count && ys.size == count) { "Point count mismatch, xs=${xs.size} ys=${ys.size} count=$count, $ys" }
 
-    val pressures: ShortArray? = if (mask.hasPressure()) {
+    // v1 stored raw digitizer pressure (int16); v2 stores normalized [0,1] as uint16
+    // fixed-point. Decode both: v1 values stay raw here and are normalized at load
+    // time via the stroke's maxPressure column (see Stroke.withNormalizedPressure).
+    val pressures: FloatArray? = if (mask.hasPressure()) {
         if (buffer.remaining() < count * 2) throw IllegalArgumentException("Truncated pressure section")
-        ShortArray(count) { buffer.short }
+        if (version >= 2) {
+            FloatArray(count) { (buffer.short.toInt() and 0xFFFF).toFloat() / PRESSURE_QUANT }
+        } else {
+            FloatArray(count) { buffer.short.toFloat() }
+        }
     } else null
 
     val tiltXs: ByteArray? = if (mask.hasTiltX()) {
@@ -364,7 +387,7 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
         StrokePoint(
             x = xs[i],
             y = ys[i],
-            pressure = pressures?.getOrNull(i)?.toFloat(),
+            pressure = pressures?.getOrNull(i),
             tiltX = tiltXs?.getOrNull(i)?.toInt(),
             tiltY = tiltYs?.getOrNull(i)?.toInt(),
             dt = dts?.getOrNull(i)?.toUShort(),

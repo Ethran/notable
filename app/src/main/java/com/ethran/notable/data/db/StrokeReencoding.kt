@@ -48,7 +48,9 @@ class StrokeMigrationHelper @Inject constructor(
         }
 
         var batchSize = 1500
-        val maxPressure = EpdController.getMaxTouchPressure().toLong()
+        // Legacy JSON rows carry raw digitizer pressure from this device; normalize to
+        // [0,1] before encoding (the SB v2 pressure channel is normalized fixed-point).
+        val rawMaxPressure = EpdController.getMaxTouchPressure().takeIf { it > 0f } ?: 4096f
 
         while (true) {
             val remaining = countRemaining(db, "stroke_old")
@@ -119,6 +121,10 @@ class StrokeMigrationHelper @Inject constructor(
 
                     try {
                         val pointsList = Json.decodeFromString<List<StrokePoint>>(pointsJson)
+                            .map { p ->
+                                if (p.pressure == null) p
+                                else p.copy(pressure = (p.pressure / rawMaxPressure).coerceIn(0f, 1f))
+                            }
                         val mask = computeStrokeMask(pointsList)
                         val blob = encodeStrokePoints(pointsList, mask)
 
@@ -127,7 +133,7 @@ class StrokeMigrationHelper @Inject constructor(
                         insertStmt.bindDouble(2, size)
                         insertStmt.bindString(3, pen)
                         insertStmt.bindLong(4, color.toLong())
-                        insertStmt.bindLong(5, maxPressure)
+                        insertStmt.bindLong(5, MAX_PRESSURE_NORMALIZED.toLong())
                         insertStmt.bindDouble(6, top)
                         insertStmt.bindDouble(7, bottom)
                         insertStmt.bindDouble(8, left)

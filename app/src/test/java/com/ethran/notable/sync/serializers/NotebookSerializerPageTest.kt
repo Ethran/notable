@@ -1,6 +1,7 @@
 package com.ethran.notable.sync.serializers
 
 import com.ethran.notable.data.db.Image
+import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
@@ -72,10 +73,12 @@ class NotebookSerializerPageTest {
         id: String = "stroke-1",
         pageId: String = "page-1",
         pen: Pen = Pen.BALLPEN,
+        // In-memory strokes carry normalized [0,1] pressure with maxPressure == 1
+        // (MAX_PRESSURE_NORMALIZED); serializePage encodes them as SB v2 fixed-point.
         points: List<StrokePoint> = listOf(
-            StrokePoint(x = 10f, y = 20f, pressure = 100f),
-            StrokePoint(x = 15f, y = 25f, pressure = 200f),
-            StrokePoint(x = 20f, y = 30f, pressure = 300f),
+            StrokePoint(x = 10f, y = 20f, pressure = 0.1f),
+            StrokePoint(x = 15f, y = 25f, pressure = 0.2f),
+            StrokePoint(x = 20f, y = 30f, pressure = 0.3f),
         ),
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
@@ -84,7 +87,7 @@ class NotebookSerializerPageTest {
         size = 3f,
         pen = pen,
         color = 0xFF112233.toInt(),
-        maxPressure = 4096,
+        maxPressure = MAX_PRESSURE_NORMALIZED,
         top = 20f,
         bottom = 30f,
         left = 10f,
@@ -118,7 +121,12 @@ class NotebookSerializerPageTest {
         expected.zip(actual).forEachIndexed { i, (e, a) ->
             assertTrue("x[$i] ${e.x} ≈ ${a.x}", abs(e.x - a.x) < 1e-2f)
             assertTrue("y[$i] ${e.y} ≈ ${a.y}", abs(e.y - a.y) < 1e-2f)
-            assertEquals("pressure[$i]", e.pressure, a.pressure)
+            // SB v2 quantizes normalized pressure to uint16 => ~1/65535 tolerance.
+            assertTrue(
+                "pressure[$i] ${e.pressure} ≈ ${a.pressure}",
+                (e.pressure == null && a.pressure == null)
+                        || abs(e.pressure!! - a.pressure!!) < 1e-4f
+            )
         }
     }
 
@@ -277,8 +285,8 @@ class NotebookSerializerPageTest {
         // Exercises the SB1 path that carries pressure + tilt + dt — all four mask bits set.
         val page = samplePage()
         val points = listOf(
-            StrokePoint(x = 0f, y = 0f, pressure = 100f, tiltX = -10, tiltY = 20, dt = 0.toUShort()),
-            StrokePoint(x = 5f, y = 10f, pressure = 200f, tiltX = 5, tiltY = 25, dt = 16.toUShort()),
+            StrokePoint(x = 0f, y = 0f, pressure = 0.1f, tiltX = -10, tiltY = 20, dt = 0.toUShort()),
+            StrokePoint(x = 5f, y = 10f, pressure = 0.2f, tiltX = 5, tiltY = 25, dt = 16.toUShort()),
         )
         val stroke = sampleStroke(points = points)
         val json = NotebookSerializer.serializePage(page, listOf(stroke), emptyList())

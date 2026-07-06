@@ -10,18 +10,15 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.canvas.pressure
 import com.ethran.notable.editor.utils.pointsToPath
-import com.onyx.android.sdk.data.note.TouchPoint
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.abs
-import kotlin.math.cos
 
 private val penStrokesLog = ShipBook.getLogger("PenStrokesLog")
 
 
 fun drawBallPenStroke(
-    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<TouchPoint>
+    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<StrokePoint>
 ) {
     val copyPaint = Paint(paint).apply {
         this.strokeWidth = strokeSize
@@ -85,7 +82,7 @@ fun drawEraserStroke(canvas: Canvas, points: List<StrokePoint>, strokeSize: Floa
 
 
 fun drawMarkerStroke(
-    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<TouchPoint>
+    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<StrokePoint>
 ) {
     val copyPaint = Paint(paint).apply {
         this.strokeWidth = strokeSize
@@ -101,42 +98,6 @@ fun drawMarkerStroke(
 
     canvas.drawPath(path, copyPaint)
 }
-
-fun drawFountainPenStroke(
-    canvas: Canvas, paint: Paint, strokeSize: Float, points: List<TouchPoint>
-) {
-    val copyPaint = Paint(paint).apply {
-        this.strokeWidth = strokeSize
-        this.style = Paint.Style.STROKE
-        this.strokeCap = Paint.Cap.ROUND
-        this.strokeJoin = Paint.Join.ROUND
-//        this.blendMode = BlendMode.OVERLAY
-        this.isAntiAlias = true
-    }
-
-    val path = Path()
-    val prePoint = PointF(points[0].x, points[0].y)
-    path.moveTo(prePoint.x, prePoint.y)
-
-    for (point in points) {
-        // skip strange jump point.
-        if (abs(prePoint.y - point.y) >= 30) continue
-        path.quadTo(prePoint.x, prePoint.y, point.x, point.y)
-        prePoint.x = point.x
-        prePoint.y = point.y
-        copyPaint.strokeWidth =
-            (1.5f - strokeSize / 40f) * strokeSize * (1 - cos(0.5f * 3.14f * point.pressure / pressure))
-        point.tiltX
-        point.tiltY
-        point.timestamp
-
-        canvas.drawPath(path, copyPaint)
-        path.reset()
-        path.moveTo(point.x, point.y)
-    }
-}
-
-
 
 val selectPaint = Paint().apply {
     strokeWidth = 5f
