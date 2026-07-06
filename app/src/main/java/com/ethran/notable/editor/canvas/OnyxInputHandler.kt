@@ -172,6 +172,13 @@ class OnyxInputHandler(
         log.i("Update is drawing: $toolbarState.isDrawing")
         if (toolbarState.isDrawing) {
             touchHelper!!.setRawDrawingEnabled(true)
+            // The heavy toggle wipes the framework stroke config (resetPenDefaultRawDrawing:
+            // brush channel on, eraser channel off) — re-assert the eraser channel and re-send
+            // the active pen style/width/color, or the first stroke after resume (focus regain,
+            // menu close) is drawn by the firmware with default settings. Mirrors kreader's
+            // ResumeRawDrawingRequest.updatePenParam() and commitErase's re-arm sequence.
+            enableNativeEraser(touchHelper)
+            updatePenAndStroke()
         } else {
             // Check if drawing is completed
             CanvasEventBus.waitForDrawing()
@@ -194,6 +201,14 @@ class OnyxInputHandler(
                 touchHelper,
                 toolbarHeight
             )
+            // setupSurface's closeRawDrawing()/openRawDrawing() internally reset the framework
+            // stroke style to 0 (SFTouchRender.openDrawing -> setStrokeStyle(0)) and
+            // setRawDrawingEnabled(true) resets the pen defaults, so any style sent earlier is
+            // gone. Re-send it here, inside the same coroutine, AFTER the surface is armed —
+            // callers that invoke updatePenAndStroke() right after updateActiveSurface() lose
+            // the race against this launch. Fixes the first stroke after focus switch / first
+            // draw being rendered with default firmware settings.
+            updatePenAndStroke()
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {
