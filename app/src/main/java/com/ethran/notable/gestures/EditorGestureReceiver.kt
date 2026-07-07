@@ -1,6 +1,7 @@
 package com.ethran.notable.gestures
 
 import android.graphics.Rect
+import android.view.View
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -36,6 +38,26 @@ import kotlin.math.abs
 
 private val log = ShipBook.getLogger("GestureReceiver")
 
+/**
+ * Everything the gesture pipeline needs besides the per-gesture state.
+ * Built once per pointerInput block; a new one is created whenever
+ * settings change (the pointerInput key).
+ */
+private class GestureContext(
+    val controlTower: EditorControlTower,
+    val appSettings: AppSettings,
+    val scope: CoroutineScope,
+    val view: View,
+    val updateSelectionCues: (IntOffset?, Rect?) -> Unit,
+) {
+    // Guards against events arriving while the composition is being torn
+    // down (CompletionHandlerException in resume onCancellation) or after
+    // the window lost focus.
+    fun shouldAbort(): Boolean = !scope.isActive || !view.hasWindowFocus()
+}
+
+private enum class TrackResult { Completed, Aborted, ConsumedByOther }
+
 
 @Composable
 fun EditorGestureReceiver(
@@ -49,6 +71,16 @@ fun EditorGestureReceiver(
     Box(
         modifier = Modifier
             .pointerInput(appSettings) {
+                val ctx = GestureContext(
+                    controlTower = controlTower,
+                    appSettings = appSettings,
+                    scope = coroutineScope,
+                    view = view,
+                    updateSelectionCues = { cross, rect ->
+                        crossPosition = cross
+                        rectangleBounds = rect
+                    },
+                )
                 awaitEachGesture {
                     try {
                         // Detect initial touch
@@ -58,244 +90,28 @@ fun EditorGestureReceiver(
                         if (down.type == PointerType.Stylus || down.type == PointerType.Eraser) {
                             return@awaitEachGesture // Escapes the current gesture loop, waits for the next one
                         }
-
-
-                        // testing if it will fixed exception:
-                        // kotlinx.coroutines.CompletionHandlerException: Exception in resume
-                        // onCancellation handler for CancellableContinuation(DispatchedContinuation[AndroidUiDispatcher@145d639,
-                        // Continuation at androidx.compose.foundation.gestures.PressGestureScopeImpl.reset(TapGestureDetector.kt:357)
-                        // @8b7a2c]){Completed}@4a49cf5
-                        if (!coroutineScope.isActive) return@awaitEachGesture
-                        // if window lost focus, ignore input
-                        if (!view.hasWindowFocus()) return@awaitEachGesture
-
-                        val gestureState = GestureState()
+                        if (ctx.shouldAbort()) return@awaitEachGesture
 
                         // Ignore non-touch input
                         if (down.type != PointerType.Touch) {
                             log.i("Ignoring non-touch input")
                             return@awaitEachGesture
                         }
-                        gestureState.initialTimestamp = System.currentTimeMillis()
+
+                        val gestureState = GestureState()
                         gestureState.update(down)
 
-                        do {
-                            // wait for second gesture
-                            val event =
-                                withTimeoutOrNull(HOLD_THRESHOLD_MS.toLong()) { awaitPointerEvent() }
-                            if (!coroutineScope.isActive) return@awaitEachGesture
-                            // if window lost focus, ignore input
-                            if (!view.hasWindowFocus()) return@awaitEachGesture
+                        when (trackGesture(gestureState, ctx)) {
+                            TrackResult.Aborted,
+                            TrackResult.ConsumedByOther -> return@awaitEachGesture
 
-                            if (event != null) {
-                                val fingerChange =
-                                    event.changes.filter { it.type == PointerType.Touch }
-
-                                // is already consumed return
-                                if (fingerChange.find { it.isConsumed } != null) {
-                                    log.i("Canceling gesture - already consumed")
-                                    if (gestureState.gestureMode == GestureMode.Selection) {
-                                        crossPosition = null
-                                        rectangleBounds = null
-                                        applyGestureMode(
-                                            gestureState, GestureMode.Normal, coroutineScope
-                                        )
-                                        controlTower.setIsDrawing(true)
-                                    }
-                                    return@awaitEachGesture
-                                }
-                                fingerChange.forEach { change ->
-                                    // Consume changes and update positions
-                                    change.consume()
-                                    gestureState.update(change)
-                                }
-                                // The gesture lives until all fingers are up. E-ink panels
-                                // routinely drop one contact of a multi-finger gesture for a
-                                // few ms, so multi-finger gestures get a grace window in which
-                                // a re-landing finger resumes the same gesture.
-                                if (fingerChange.isNotEmpty() && gestureState.pressedCount() == 0) {
-                                    if (gestureState.getInputCount() < 2) break
-                                    val relandEvent = withTimeoutOrNull(TOUCH_RELAND_GRACE_MS) {
-                                        var e = awaitPointerEvent()
-                                        while (e.changes.none { it.type == PointerType.Touch && it.pressed }) {
-                                            e = awaitPointerEvent()
-                                        }
-                                        e
-                                    } ?: break
-                                    relandEvent.changes
-                                        .filter { it.type == PointerType.Touch }
-                                        .forEach { change ->
-                                            change.consume()
-                                            gestureState.update(change)
-                                        }
-                                }
-                            }
-                            // events are only send on change, so we need to check for holding in place separately
-                            gestureState.lastTimestamp = System.currentTimeMillis()
-                            if (gestureState.gestureMode == GestureMode.Selection) {
-                                crossPosition = gestureState.getLastPositionIO()
-                                rectangleBounds = gestureState.calculateRectangleBounds()
-                            } else {
-                                // set selection mode
-                                if (gestureState.isHoldingOneFinger()) {
-                                    applyGestureMode(
-                                        gestureState, GestureMode.Selection, coroutineScope
-                                    )
-                                    controlTower.setIsDrawing(false) // unfreeze the screen
-                                    crossPosition = gestureState.getLastPositionIO()
-                                    rectangleBounds = gestureState.calculateRectangleBounds()
-                                    controlTower.showHint("Selection mode!")
-                                }
-                                if (appSettings.smoothScroll && gestureState.shouldEnterScroll())
-                                    applyGestureMode(
-                                        gestureState, GestureMode.Scroll, coroutineScope
-                                    )
-                                if (appSettings.continuousZoom && gestureState.shouldEnterZoom())
-                                    applyGestureMode(
-                                        gestureState, GestureMode.Zoom, coroutineScope
-                                    )
-                                if (gestureState.shouldEnterDrag()) {
-                                    applyGestureMode(
-                                        gestureState, GestureMode.Drag, coroutineScope
-                                    )
-                                    controlTower.showHint("Drag mode!")
-                                }
-                            }
-                            if (gestureState.gestureMode == GestureMode.Scroll) {
-                                val delta = gestureState.getVerticalDragDelta()
-                                controlTower.requestScroll(Offset(0f, delta.toFloat()))
-                            }
-                            if (gestureState.gestureMode == GestureMode.Zoom) {
-                                val delta = gestureState.getPinchDelta()
-                                controlTower.onPinchToZoom(delta, gestureState.getPinchCenter())
-                            }
-
-                            if (gestureState.gestureMode == GestureMode.Drag) {
-                                val delta = gestureState.getTotalDragDelta()
-                                controlTower.requestScroll(delta)
-                            }
-
-                        } while (true)
-
-                        when (gestureState.gestureMode) {
-                            GestureMode.Selection -> {
-                                resolveGesture(
-                                    settings = appSettings,
-                                    default = AppSettings.defaultHoldAction,
-                                    override = AppSettings::holdAction,
-                                    scope = coroutineScope,
-                                    rectangle = rectangleBounds!!,
-                                    controlTower = controlTower
-                                )
-                                crossPosition = null
-                                rectangleBounds = null
-                                applyGestureMode(gestureState, GestureMode.Normal, coroutineScope)
-                                controlTower.setIsDrawing(true)
-                                return@awaitEachGesture
-                            }
-
-                            GestureMode.Scroll -> {
-                                // return screen updates to normal.
-                                applyGestureMode(gestureState, GestureMode.Normal, coroutineScope)
-                                return@awaitEachGesture
-                            }
-
-                            GestureMode.Zoom, GestureMode.Drag -> {
-                                log.d("Zoom or drag -- final redraw")
-                                coroutineScope.launch {
-                                    // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
-                                    CanvasEventBus.forceUpdate.emit(null)
-                                }
-                                // return screen updates to normal.
-                                applyGestureMode(gestureState, GestureMode.Normal, coroutineScope)
-                                return@awaitEachGesture
-                            }
-
-                            GestureMode.Normal -> {}
+                            TrackResult.Completed -> {}
                         }
 
-                        if (!coroutineScope.isActive) return@awaitEachGesture
-                        // if window lost focus, ignore input
-                        if (!view.hasWindowFocus()) return@awaitEachGesture
+                        if (finishModalGesture(gestureState, ctx)) return@awaitEachGesture
+                        if (ctx.shouldAbort()) return@awaitEachGesture
 
-
-                        if (gestureState.isOneFinger()) {
-                            if (gestureState.isOneFingerTap()) {
-                                if (withTimeoutOrNull(DOUBLE_TAP_TIMEOUT_MS) {
-                                        val secondDown = awaitFirstDown()
-                                        val deltaTime =
-                                            System.currentTimeMillis() - gestureState.lastTimestamp
-                                        log.v("Second down detected: ${secondDown.type}, position: ${secondDown.position}, deltaTime: $deltaTime")
-                                        if (deltaTime < DOUBLE_TAP_MIN_MS) {
-                                            controlTower.showHint("Too quick for double click! time between: $deltaTime")
-                                            return@withTimeoutOrNull null
-                                        } else {
-                                            log.v("double click!")
-                                        }
-                                        if (secondDown.type != PointerType.Touch) {
-                                            log.i("Ignoring non-touch input during double-tap detection")
-                                            return@withTimeoutOrNull null
-                                        }
-                                        resolveGesture(
-                                            settings = appSettings,
-                                            default = AppSettings.defaultDoubleTapAction,
-                                            override = AppSettings::doubleTapAction,
-                                            scope = coroutineScope,
-                                            controlTower = controlTower
-                                        )
-
-
-                                    } != null) return@awaitEachGesture
-                            }
-                        } else if (gestureState.isTwoFingers()) {
-                            log.v("Two finger tap")
-                            if (gestureState.isTwoFingersTap()) {
-                                resolveGesture(
-                                    settings = appSettings,
-                                    default = AppSettings.defaultTwoFingerTapAction,
-                                    override = AppSettings::twoFingerTapAction,
-                                    scope = coroutineScope,
-                                    controlTower = controlTower
-                                )
-                            }
-                            // zoom gesture
-                            val zoomDelta = gestureState.getPinchDrag()
-                            if (!appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
-                                controlTower.onPinchToZoom(zoomDelta, Offset(0f, 0f))
-                                log.d("Discrete zoom: $zoomDelta")
-                            }
-                        }
-
-                        val horizontalDrag = gestureState.getHorizontalDrag()
-                        val verticalDrag = gestureState.getVerticalDrag()
-
-                        log.v("horizontalDrag $horizontalDrag, verticalDrag $verticalDrag")
-
-
-                        if (gestureState.gestureMode == GestureMode.Normal) {
-                            if (horizontalDrag < -SWIPE_THRESHOLD)
-                                resolveGesture(
-                                    settings = appSettings,
-                                    default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeLeftAction else AppSettings.defaultTwoFingerSwipeLeftAction,
-                                    override = if (gestureState.getInputCount() == 1) AppSettings::swipeLeftAction else AppSettings::twoFingerSwipeLeftAction,
-                                    scope = coroutineScope,
-                                    controlTower = controlTower
-                                )
-                            else if (horizontalDrag > SWIPE_THRESHOLD)
-                                resolveGesture(
-                                    settings = appSettings,
-                                    default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeRightAction else AppSettings.defaultTwoFingerSwipeRightAction,
-                                    override = if (gestureState.getInputCount() == 1) AppSettings::swipeRightAction else AppSettings::twoFingerSwipeRightAction,
-                                    scope = coroutineScope,
-                                    controlTower = controlTower
-                                )
-                        }
-                        if (!GlobalAppSettings.current.smoothScroll && gestureState.isOneFinger()
-                            && abs(verticalDrag) > SWIPE_THRESHOLD
-                        ) {
-                            log.d("Discrete scrolling, verticalDrag: $verticalDrag")
-                            controlTower.requestScroll(Offset(0f, verticalDrag))
-                        }
+                        classifyTapOrSwipe(gestureState, ctx)
                     } catch (e: CancellationException) {
                         log.w("Gesture coroutine canceled", e)
                     } catch (e: Exception) {
@@ -307,6 +123,248 @@ fun EditorGestureReceiver(
             .fillMaxHeight()
     )
     SelectionVisualCues(crossPosition, rectangleBounds)
+}
+
+/**
+ * The event pump: consumes touch events into [gestureState], applies mode
+ * transitions and streams Scroll/Zoom/Drag deltas until all fingers are up.
+ */
+private suspend fun AwaitPointerEventScope.trackGesture(
+    gestureState: GestureState,
+    ctx: GestureContext,
+): TrackResult {
+    while (true) {
+        // wait for the next event; on timeout re-evaluate hold detection
+        val event =
+            withTimeoutOrNull(HOLD_THRESHOLD_MS.toLong()) { awaitPointerEvent() }
+        if (ctx.shouldAbort()) return TrackResult.Aborted
+
+        if (event != null) {
+            val fingerChange =
+                event.changes.filter { it.type == PointerType.Touch }
+
+            // is already consumed return
+            if (fingerChange.find { it.isConsumed } != null) {
+                log.i("Canceling gesture - already consumed")
+                if (gestureState.gestureMode == GestureMode.Selection) {
+                    ctx.updateSelectionCues(null, null)
+                    applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
+                    ctx.controlTower.setIsDrawing(true)
+                }
+                return TrackResult.ConsumedByOther
+            }
+            fingerChange.forEach { change ->
+                // Consume changes and update positions
+                change.consume()
+                gestureState.update(change)
+            }
+            // The gesture lives until all fingers are up. E-ink panels
+            // routinely drop one contact of a multi-finger gesture for a
+            // few ms, so multi-finger gestures get a grace window in which
+            // a re-landing finger resumes the same gesture.
+            if (fingerChange.isNotEmpty() && gestureState.pressedCount() == 0) {
+                if (gestureState.getInputCount() < 2) return TrackResult.Completed
+                val relandEvent = withTimeoutOrNull(TOUCH_RELAND_GRACE_MS) {
+                    var e = awaitPointerEvent()
+                    while (e.changes.none { it.type == PointerType.Touch && it.pressed }) {
+                        e = awaitPointerEvent()
+                    }
+                    e
+                } ?: return TrackResult.Completed
+                relandEvent.changes
+                    .filter { it.type == PointerType.Touch }
+                    .forEach { change ->
+                        change.consume()
+                        gestureState.update(change)
+                    }
+            }
+        }
+        // events are only send on change, so we need to check for holding in place separately
+        gestureState.lastTimestamp = System.currentTimeMillis()
+        applyModeTransitions(gestureState, ctx)
+        streamActiveMode(gestureState, ctx)
+    }
+}
+
+/** Detects mode entry (Selection/Scroll/Zoom/Drag) and applies it. */
+private fun applyModeTransitions(gestureState: GestureState, ctx: GestureContext) {
+    if (gestureState.gestureMode == GestureMode.Selection) {
+        ctx.updateSelectionCues(
+            gestureState.getLastPositionIO(),
+            gestureState.calculateRectangleBounds()
+        )
+        return
+    }
+    if (gestureState.isHoldingOneFinger()) {
+        applyGestureMode(gestureState, GestureMode.Selection, ctx.scope)
+        ctx.controlTower.setIsDrawing(false) // unfreeze the screen
+        ctx.updateSelectionCues(
+            gestureState.getLastPositionIO(),
+            gestureState.calculateRectangleBounds()
+        )
+        ctx.controlTower.showHint("Selection mode!")
+    }
+    if (ctx.appSettings.smoothScroll && gestureState.shouldEnterScroll())
+        applyGestureMode(gestureState, GestureMode.Scroll, ctx.scope)
+    if (ctx.appSettings.continuousZoom && gestureState.shouldEnterZoom())
+        applyGestureMode(gestureState, GestureMode.Zoom, ctx.scope)
+    if (gestureState.shouldEnterDrag()) {
+        applyGestureMode(gestureState, GestureMode.Drag, ctx.scope)
+        ctx.controlTower.showHint("Drag mode!")
+    }
+}
+
+/** Streams incremental deltas of the active continuous mode. */
+private fun streamActiveMode(gestureState: GestureState, ctx: GestureContext) {
+    when (gestureState.gestureMode) {
+        GestureMode.Scroll -> {
+            val delta = gestureState.getVerticalDragDelta()
+            ctx.controlTower.requestScroll(Offset(0f, delta.toFloat()))
+        }
+
+        GestureMode.Zoom -> {
+            val delta = gestureState.getPinchDelta()
+            ctx.controlTower.onPinchToZoom(delta, gestureState.getPinchCenter())
+        }
+
+        GestureMode.Drag -> {
+            val delta = gestureState.getTotalDragDelta()
+            ctx.controlTower.requestScroll(delta)
+        }
+
+        GestureMode.Selection, GestureMode.Normal -> {}
+    }
+}
+
+/**
+ * Resolves a gesture that ended in a modal mode (Selection/Scroll/Zoom/Drag)
+ * and returns the screen to normal. Returns false for Normal, meaning the
+ * gesture still needs tap/swipe classification.
+ */
+private fun finishModalGesture(gestureState: GestureState, ctx: GestureContext): Boolean {
+    when (gestureState.gestureMode) {
+        GestureMode.Selection -> {
+            resolveGesture(
+                settings = ctx.appSettings,
+                default = AppSettings.defaultHoldAction,
+                override = AppSettings::holdAction,
+                scope = ctx.scope,
+                rectangle = gestureState.calculateRectangleBounds() ?: Rect(),
+                controlTower = ctx.controlTower
+            )
+            ctx.updateSelectionCues(null, null)
+            applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
+            ctx.controlTower.setIsDrawing(true)
+        }
+
+        GestureMode.Scroll -> {
+            // return screen updates to normal.
+            applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
+        }
+
+        GestureMode.Zoom, GestureMode.Drag -> {
+            log.d("Zoom or drag -- final redraw")
+            ctx.scope.launch {
+                // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
+                CanvasEventBus.forceUpdate.emit(null)
+            }
+            // return screen updates to normal.
+            applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
+        }
+
+        GestureMode.Normal -> return false
+    }
+    return true
+}
+
+/** End-of-gesture classification: taps, double-tap, swipes, discrete zoom/scroll. */
+private suspend fun AwaitPointerEventScope.classifyTapOrSwipe(
+    gestureState: GestureState,
+    ctx: GestureContext,
+) {
+    if (gestureState.isOneFinger()) {
+        if (gestureState.isOneFingerTap() && awaitDoubleTap(gestureState, ctx))
+            return
+    } else if (gestureState.isTwoFingers()) {
+        log.v("Two finger tap")
+        if (gestureState.isTwoFingersTap()) {
+            resolveGesture(
+                settings = ctx.appSettings,
+                default = AppSettings.defaultTwoFingerTapAction,
+                override = AppSettings::twoFingerTapAction,
+                scope = ctx.scope,
+                controlTower = ctx.controlTower
+            )
+        }
+        // zoom gesture
+        val zoomDelta = gestureState.getPinchDrag()
+        if (!ctx.appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
+            ctx.controlTower.onPinchToZoom(zoomDelta, Offset(0f, 0f))
+            log.d("Discrete zoom: $zoomDelta")
+        }
+    }
+
+    val horizontalDrag = gestureState.getHorizontalDrag()
+    val verticalDrag = gestureState.getVerticalDrag()
+
+    log.v("horizontalDrag $horizontalDrag, verticalDrag $verticalDrag")
+
+    if (gestureState.gestureMode == GestureMode.Normal) {
+        if (horizontalDrag < -SWIPE_THRESHOLD)
+            resolveGesture(
+                settings = ctx.appSettings,
+                default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeLeftAction else AppSettings.defaultTwoFingerSwipeLeftAction,
+                override = if (gestureState.getInputCount() == 1) AppSettings::swipeLeftAction else AppSettings::twoFingerSwipeLeftAction,
+                scope = ctx.scope,
+                controlTower = ctx.controlTower
+            )
+        else if (horizontalDrag > SWIPE_THRESHOLD)
+            resolveGesture(
+                settings = ctx.appSettings,
+                default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeRightAction else AppSettings.defaultTwoFingerSwipeRightAction,
+                override = if (gestureState.getInputCount() == 1) AppSettings::swipeRightAction else AppSettings::twoFingerSwipeRightAction,
+                scope = ctx.scope,
+                controlTower = ctx.controlTower
+            )
+    }
+    if (!ctx.appSettings.smoothScroll && gestureState.isOneFinger()
+        && abs(verticalDrag) > SWIPE_THRESHOLD
+    ) {
+        log.d("Discrete scrolling, verticalDrag: $verticalDrag")
+        ctx.controlTower.requestScroll(Offset(0f, verticalDrag))
+    }
+}
+
+/**
+ * Waits [DOUBLE_TAP_TIMEOUT_MS] for a second tap after a one-finger tap.
+ * Returns true if the double-tap action fired.
+ */
+private suspend fun AwaitPointerEventScope.awaitDoubleTap(
+    gestureState: GestureState,
+    ctx: GestureContext,
+): Boolean {
+    return withTimeoutOrNull(DOUBLE_TAP_TIMEOUT_MS) {
+        val secondDown = awaitFirstDown()
+        val deltaTime = System.currentTimeMillis() - gestureState.lastTimestamp
+        log.v("Second down detected: ${secondDown.type}, position: ${secondDown.position}, deltaTime: $deltaTime")
+        if (deltaTime < DOUBLE_TAP_MIN_MS) {
+            ctx.controlTower.showHint("Too quick for double click! time between: $deltaTime")
+            return@withTimeoutOrNull null
+        } else {
+            log.v("double click!")
+        }
+        if (secondDown.type != PointerType.Touch) {
+            log.i("Ignoring non-touch input during double-tap detection")
+            return@withTimeoutOrNull null
+        }
+        resolveGesture(
+            settings = ctx.appSettings,
+            default = AppSettings.defaultDoubleTapAction,
+            override = AppSettings::doubleTapAction,
+            scope = ctx.scope,
+            controlTower = ctx.controlTower
+        )
+    } != null
 }
 
 
