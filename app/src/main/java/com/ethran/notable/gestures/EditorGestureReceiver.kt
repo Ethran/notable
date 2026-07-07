@@ -245,12 +245,9 @@ private fun finishModalGesture(gestureState: GestureState, ctx: GestureContext):
     when (gestureState.gestureMode) {
         GestureMode.Selection -> {
             resolveGesture(
-                settings = ctx.appSettings,
-                default = AppSettings.defaultHoldAction,
-                override = AppSettings::holdAction,
-                scope = ctx.scope,
+                action = ctx.appSettings.holdAction,
+                ctx = ctx,
                 rectangle = gestureState.calculateRectangleBounds() ?: Rect(),
-                controlTower = ctx.controlTower
             )
             ctx.updateSelectionCues(null, null)
             applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
@@ -288,13 +285,7 @@ private suspend fun AwaitPointerEventScope.classifyTapOrSwipe(
     } else if (gestureState.isTwoFingers()) {
         log.v("Two finger tap")
         if (gestureState.isTwoFingersTap()) {
-            resolveGesture(
-                settings = ctx.appSettings,
-                default = AppSettings.defaultTwoFingerTapAction,
-                override = AppSettings::twoFingerTapAction,
-                scope = ctx.scope,
-                controlTower = ctx.controlTower
-            )
+            resolveGesture(ctx.appSettings.twoFingerTapAction, ctx)
         }
         // zoom gesture
         val zoomDelta = gestureState.getPinchDrag()
@@ -310,21 +301,18 @@ private suspend fun AwaitPointerEventScope.classifyTapOrSwipe(
     log.v("horizontalDrag $horizontalDrag, verticalDrag $verticalDrag")
 
     if (gestureState.gestureMode == GestureMode.Normal) {
+        val oneFinger = gestureState.getInputCount() == 1
         if (horizontalDrag < -SWIPE_THRESHOLD)
             resolveGesture(
-                settings = ctx.appSettings,
-                default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeLeftAction else AppSettings.defaultTwoFingerSwipeLeftAction,
-                override = if (gestureState.getInputCount() == 1) AppSettings::swipeLeftAction else AppSettings::twoFingerSwipeLeftAction,
-                scope = ctx.scope,
-                controlTower = ctx.controlTower
+                if (oneFinger) ctx.appSettings.swipeLeftAction
+                else ctx.appSettings.twoFingerSwipeLeftAction,
+                ctx
             )
         else if (horizontalDrag > SWIPE_THRESHOLD)
             resolveGesture(
-                settings = ctx.appSettings,
-                default = if (gestureState.getInputCount() == 1) AppSettings.defaultSwipeRightAction else AppSettings.defaultTwoFingerSwipeRightAction,
-                override = if (gestureState.getInputCount() == 1) AppSettings::swipeRightAction else AppSettings::twoFingerSwipeRightAction,
-                scope = ctx.scope,
-                controlTower = ctx.controlTower
+                if (oneFinger) ctx.appSettings.swipeRightAction
+                else ctx.appSettings.twoFingerSwipeRightAction,
+                ctx
             )
     }
     if (!ctx.appSettings.smoothScroll && gestureState.isOneFinger()
@@ -357,13 +345,7 @@ private suspend fun AwaitPointerEventScope.awaitDoubleTap(
             log.i("Ignoring non-touch input during double-tap detection")
             return@withTimeoutOrNull null
         }
-        resolveGesture(
-            settings = ctx.appSettings,
-            default = AppSettings.defaultDoubleTapAction,
-            override = AppSettings::doubleTapAction,
-            scope = ctx.scope,
-            controlTower = ctx.controlTower
-        )
+        resolveGesture(ctx.appSettings.doubleTapAction, ctx)
     } != null
 }
 
@@ -406,30 +388,27 @@ private fun applyGestureMode(
 }
 
 private fun resolveGesture(
-    settings: AppSettings?,
-    default: AppSettings.GestureAction,
-    override: AppSettings.() -> AppSettings.GestureAction,
-    scope: CoroutineScope,
+    action: AppSettings.GestureAction,
+    ctx: GestureContext,
     rectangle: Rect = Rect(),
-    controlTower: EditorControlTower
 ) {
-    when (if (settings != null) override(settings) else default) {
+    when (action) {
         AppSettings.GestureAction.None -> log.i("No Action")
-        AppSettings.GestureAction.PreviousPage -> controlTower.goToPreviousPage()
+        AppSettings.GestureAction.PreviousPage -> ctx.controlTower.goToPreviousPage()
 
-        AppSettings.GestureAction.NextPage -> controlTower.goToNextPage()
+        AppSettings.GestureAction.NextPage -> ctx.controlTower.goToNextPage()
 
-        AppSettings.GestureAction.ChangeTool -> controlTower.toggleTool()
+        AppSettings.GestureAction.ChangeTool -> ctx.controlTower.toggleTool()
 
-        AppSettings.GestureAction.ToggleZen -> controlTower.toggleZen()
+        AppSettings.GestureAction.ToggleZen -> ctx.controlTower.toggleZen()
 
-        AppSettings.GestureAction.Undo -> controlTower.undo()
+        AppSettings.GestureAction.Undo -> ctx.controlTower.undo()
 
-        AppSettings.GestureAction.Redo -> controlTower.redo()
+        AppSettings.GestureAction.Redo -> ctx.controlTower.redo()
 
         AppSettings.GestureAction.Select -> {
             log.i("select")
-            scope.launch {
+            ctx.scope.launch {
 //                log.w( "rect in screen coord: $rectangle")
                 CanvasEventBus.rectangleToSelectByGesture.emit(rectangle)
             }

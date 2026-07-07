@@ -68,16 +68,6 @@ data class AppSettings(
     val destructiveMigrations: Boolean = false,
 
     ) {
-    companion object {
-        val defaultDoubleTapAction = GestureAction.Undo
-        val defaultTwoFingerTapAction = GestureAction.ChangeTool
-        val defaultSwipeLeftAction = GestureAction.NextPage
-        val defaultSwipeRightAction = GestureAction.PreviousPage
-        val defaultTwoFingerSwipeLeftAction = GestureAction.ToggleZen
-        val defaultTwoFingerSwipeRightAction = GestureAction.ToggleZen
-        val defaultHoldAction = GestureAction.Select
-    }
-
     enum class GestureAction {
         None, Undo, Redo, PreviousPage, NextPage, ChangeTool, ToggleZen, Select
     }
