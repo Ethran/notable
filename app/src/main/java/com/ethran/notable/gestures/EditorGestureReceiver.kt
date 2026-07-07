@@ -74,7 +74,7 @@ fun EditorGestureReceiver(
                             return@awaitEachGesture
                         }
                         gestureState.initialTimestamp = System.currentTimeMillis()
-                        gestureState.insertPosition(down)
+                        gestureState.update(down)
 
                         do {
                             // wait for second gesture
@@ -102,11 +102,27 @@ fun EditorGestureReceiver(
                                 fingerChange.forEach { change ->
                                     // Consume changes and update positions
                                     change.consume()
-                                    gestureState.insertPosition(change)
+                                    gestureState.update(change)
                                 }
-                                if (fingerChange.any { !it.pressed }) {
-                                    gestureState.lastTimestamp = System.currentTimeMillis()
-                                    break
+                                // The gesture lives until all fingers are up. E-ink panels
+                                // routinely drop one contact of a multi-finger gesture for a
+                                // few ms, so multi-finger gestures get a grace window in which
+                                // a re-landing finger resumes the same gesture.
+                                if (fingerChange.isNotEmpty() && gestureState.pressedCount() == 0) {
+                                    if (gestureState.getInputCount() < 2) break
+                                    val relandEvent = withTimeoutOrNull(TOUCH_RELAND_GRACE_MS) {
+                                        var e = awaitPointerEvent()
+                                        while (e.changes.none { it.type == PointerType.Touch && it.pressed }) {
+                                            e = awaitPointerEvent()
+                                        }
+                                        e
+                                    } ?: break
+                                    relandEvent.changes
+                                        .filter { it.type == PointerType.Touch }
+                                        .forEach { change ->
+                                            change.consume()
+                                            gestureState.update(change)
+                                        }
                                 }
                             }
                             // events are only send on change, so we need to check for holding in place separately

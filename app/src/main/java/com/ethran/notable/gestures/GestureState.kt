@@ -13,9 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.launch
-import kotlin.collections.iterator
 import kotlin.math.abs
-import kotlin.math.sqrt
 
 
 const val HOLD_THRESHOLD_MS = 300
@@ -33,6 +31,12 @@ const val DOUBLE_TAP_TIMEOUT_MS = 170L
 const val DOUBLE_TAP_MIN_MS = 20L
 const val ZOOM_SNAP_THRESHOLD = 0.02f
 
+// E-ink touch panels routinely drop one contact of a multi-finger gesture for
+// a few ms and re-report it with a new pointer id. After all fingers lift,
+// multi-finger gestures wait this long for a re-landing contact before the
+// gesture is considered finished.
+const val TOUCH_RELAND_GRACE_MS = 80L
+
 enum class GestureMode {
     Selection,
     Scroll,
@@ -41,11 +45,19 @@ enum class GestureMode {
     Drag
 }
 
+/**
+ * Life of a single pointer within a gesture. Entries are kept after the
+ * pointer lifts so end-of-gesture classification sees the full history;
+ * live computations (drag delta, pinch) filter to pressed pointers.
+ */
+private class PointerTrack(
+    val downPosition: Offset,
+    var currentPosition: Offset,
+    var pressed: Boolean = true,
+)
 
-data class GestureState(
+class GestureState(
     val scope: CoroutineScope,
-    val initialPositions: MutableMap<PointerId, Offset> = mutableMapOf(),
-    val lastPositions: MutableMap<PointerId, Offset> = mutableMapOf(),
     var initialTimestamp: Long = System.currentTimeMillis(),
     var lastTimestamp: Long = initialTimestamp,
 ) {
@@ -79,79 +91,105 @@ data class GestureState(
                 field = value
             }
         }
-    private var lastCheckForMovementPosition: List<Offset>? = null
+
+    // Insertion-ordered: first entry is the first finger that went down.
+    private val pointers = LinkedHashMap<PointerId, PointerTrack>()
+
+    /**
+     * Highest number of simultaneously pressed fingers seen in this gesture.
+     * Pointer ids churn on e-ink panels (contacts are dropped and re-reported
+     * with new ids), so gestures are classified by this high-water mark, not
+     * by how many ids were ever seen or are pressed at gesture end.
+     */
+    var maxConcurrentPressed: Int = 0
+        private set
+
+    // The two pointers pinch math is computed from, fixed when the second
+    // finger lands so both distances always use the same finger pair. Kept
+    // even after a finger lifts: discrete zoom is evaluated at gesture end.
+    private var pinchPair: Pair<PointerId, PointerId>? = null
+
+    // Reference for incremental drag deltas: centroid of pressed pointers and
+    // the id set it was computed from. When the set changes (finger lands,
+    // lifts, or id churns) the reference is reset instead of accumulating a
+    // bogus jump.
+    private var movementRefCentroid: Offset? = null
+    private var movementRefIds: Set<PointerId> = emptySet()
+
+    private var lastPinchDistance: Float? = null
+
+    /** Feed every touch [PointerInputChange] of the gesture through this. */
+    fun update(change: PointerInputChange) {
+        lastTimestamp = System.currentTimeMillis()
+        val track = pointers[change.id]
+        if (track == null) {
+            if (!change.pressed) return
+            pointers[change.id] = PointerTrack(change.position, change.position)
+            val pressed = pressedCount()
+            if (pressed > maxConcurrentPressed) maxConcurrentPressed = pressed
+            if (pinchPair == null && pressed == 2) {
+                val ids = pointers.filterValues { it.pressed }.keys.toList()
+                pinchPair = ids[0] to ids[1]
+            }
+        } else {
+            track.currentPosition = change.position
+            track.pressed = change.pressed
+        }
+    }
+
+    /** Number of fingers currently on the screen. */
+    fun pressedCount(): Int = pointers.values.count { it.pressed }
+
+    /** Finger count used for gesture classification (see [maxConcurrentPressed]). */
+    fun getInputCount(): Int = maxConcurrentPressed
 
     fun getElapsedTime(): Long {
         return lastTimestamp - initialTimestamp
     }
 
     private fun calculateTotalDelta(): Float {
-        return initialPositions.keys.sumOf { id ->
-            val initial = initialPositions[id] ?: Offset.Zero
-            val last = lastPositions[id] ?: initial
-            (initial - last).getDistance().toDouble()
+        return pointers.values.sumOf { track ->
+            (track.downPosition - track.currentPosition).getDistance().toDouble()
         }.toFloat()
     }
 
     fun getFirstPosition(): IntOffset? {
-        return initialPositions.values.firstOrNull()?.let { point ->
+        return pointers.values.firstOrNull()?.downPosition?.let { point ->
             IntOffset(point.x.toInt(), point.y.toInt())
         }
     }
 
     fun getFirstPositionF(): SimplePointF? {
-        return initialPositions.values.firstOrNull()?.let { point ->
+        return pointers.values.firstOrNull()?.downPosition?.let { point ->
             SimplePointF(point.x, point.y)
         }
     }
 
     fun getLastPositionIO(): IntOffset? {
-        return lastPositions.values.firstOrNull()?.let { point ->
+        return pointers.values.firstOrNull()?.currentPosition?.let { point ->
             IntOffset(point.x.toInt(), point.y.toInt())
-        } ?: getFirstPosition()
-    }
-
-    fun calculateRectangleBounds(): Rect? {
-        if (initialPositions.isEmpty() && lastPositions.isEmpty()) return null
-
-        val firstPosition = initialPositions.values.firstOrNull() ?: return null
-        val lastPosition = lastPositions.values.firstOrNull() ?: firstPosition
-
-        return Rect(
-            firstPosition.x.coerceAtMost(lastPosition.x).toInt(),
-            firstPosition.y.coerceAtMost(lastPosition.y).toInt(),
-            firstPosition.x.coerceAtLeast(lastPosition.x).toInt(),
-            firstPosition.y.coerceAtLeast(lastPosition.y).toInt()
-        )
-    }
-
-    // Insert a position for the given pointer ID
-    fun insertPosition(input: PointerInputChange) {
-        lastTimestamp = System.currentTimeMillis()
-        if (initialPositions.containsKey(input.id)) {
-            // Update last position if the pointer ID already exists in initial positions
-            lastPositions[input.id] = input.position
-
-        } else {
-            // Add to initial positions if the pointer ID is new
-            initialPositions[input.id] = input.position
         }
     }
 
-    // Get the current number of active inputs
-    fun getInputCount(): Int {
-        return initialPositions.size
+    fun calculateRectangleBounds(): Rect? {
+        val track = pointers.values.firstOrNull() ?: return null
+        val first = track.downPosition
+        val last = track.currentPosition
+
+        return Rect(
+            first.x.coerceAtMost(last.x).toInt(),
+            first.y.coerceAtMost(last.y).toInt(),
+            first.x.coerceAtLeast(last.x).toInt(),
+            first.y.coerceAtLeast(last.y).toInt()
+        )
     }
 
     //return smallest horizontal movement, or 0, if movement is not horizontal
     fun getHorizontalDrag(): Int {
-        if (initialPositions.isEmpty() || lastPositions.isEmpty()) return 0
-
         var minHorizontalMovement: Float? = null
 
-        for ((id, initial) in initialPositions) {
-            val last = lastPositions[id] ?: continue
-            val delta = last - initial
+        for (track in pointers.values) {
+            val delta = track.currentPosition - track.downPosition
 
             // Check if the movement is more horizontal than vertical
             if (abs(delta.x) <= abs(delta.y)) return 0
@@ -166,13 +204,10 @@ data class GestureState(
 
     //return smallest vertical movement, or 0, if movement is not vertical
     fun getVerticalDrag(): Float {
-        if (initialPositions.isEmpty() || lastPositions.isEmpty()) return 0f
-
         var minVerticalMovement: Float? = null
 
-        for ((id, initial) in initialPositions) {
-            val last = lastPositions[id] ?: continue
-            val delta = last - initial
+        for (track in pointers.values) {
+            val delta = track.currentPosition - track.downPosition
 
             // Check if the movement is more vertical than horizontal
             if (abs(delta.y) <= abs(delta.x)) return 0f
@@ -185,79 +220,58 @@ data class GestureState(
         return minVerticalMovement ?: 0f
     }
 
-
     // returns the delta from last request
     fun getVerticalDragDelta(): Int {
-        if (lastPositions.isEmpty()) return 0
-        val currentPosition = lastPositions.values.toList()
-        if (lastCheckForMovementPosition.isNullOrEmpty()) {
-            lastCheckForMovementPosition = currentPosition
-            return 0
-        }
-        val initial = lastCheckForMovementPosition?.get(0)?.y ?: return 0
-        val last = currentPosition[0].y
-        val delta = (last - initial).toInt()
-        lastCheckForMovementPosition = currentPosition
-        return delta
+        return getTotalDragDelta().y.toInt()
     }
 
     fun getTotalDragDelta(): Offset {
-        if (lastPositions.isEmpty()) return Offset.Zero
-        val currentPosition = lastPositions.values.toList()
-        if (lastCheckForMovementPosition.isNullOrEmpty()) {
-            lastCheckForMovementPosition = currentPosition
-            return Offset.Zero
+        val pressed = pointers.filterValues { it.pressed }
+        if (pressed.isEmpty()) return Offset.Zero
+
+        var sumX = 0f
+        var sumY = 0f
+        for (track in pressed.values) {
+            sumX += track.currentPosition.x
+            sumY += track.currentPosition.y
         }
-        val initial = lastCheckForMovementPosition?.get(0) ?: return Offset.Zero
-        val last = currentPosition[0]
-        val delta = last - initial
-        lastCheckForMovementPosition = currentPosition
-        return Offset(delta.x, delta.y)
+        val centroid = Offset(sumX / pressed.size, sumY / pressed.size)
+        val ids = pressed.keys.toSet()
+
+        val reference = movementRefCentroid
+        val delta = if (reference != null && ids == movementRefIds) {
+            centroid - reference
+        } else {
+            Offset.Zero
+        }
+        movementRefCentroid = centroid
+        movementRefIds = ids
+        return delta
     }
 
-    private fun calculateDistance(point1: Offset, point2: Offset): Float {
-        val dx = point1.x - point2.x
-        val dy = point1.y - point2.y
-        return sqrt(dx * dx + dy * dy)
+    private fun pinchDistance(position: (PointerTrack) -> Offset): Float? {
+        val (a, b) = pinchPair ?: return null
+        val trackA = pointers[a] ?: return null
+        val trackB = pointers[b] ?: return null
+        return (position(trackA) - position(trackB)).getDistance()
     }
 
     // returns value to be added or subtracted to zoom
     fun getPinchDrag(): Float {
-        if (lastPositions.size < 2 || initialPositions.size < 2) return 0.0f
+        val currentDistance = pinchDistance { it.currentPosition } ?: return 0f
+        val initialDistance = pinchDistance { it.downPosition } ?: return 0f
 
-        val currentDistance = calculateDistance(
-            lastPositions.values.elementAt(0),
-            lastPositions.values.elementAt(1)
-        )
-
-        val initialDistance = calculateDistance(
-            initialPositions.values.elementAt(0),
-            initialPositions.values.elementAt(1)
-        )
-
-        if (initialDistance == 0f) return 0.0f
-        return currentDistance / initialDistance - 1.0f
+        if (initialDistance == 0f) return 0f
+        return currentDistance / initialDistance - 1f
     }
 
     // Returns incremental zoom delta since last check
     fun getPinchDelta(): Float {
-        val currentPosition = lastPositions.values.toList()
-        if (currentPosition.size < 2) return 0f
+        val currentDistance = pinchDistance { it.currentPosition } ?: return 0f
+        val lastDistance = lastPinchDistance
+        lastPinchDistance = currentDistance
 
-        val previousPosition = lastCheckForMovementPosition
-        if (previousPosition.isNullOrEmpty() || previousPosition.size < 2) {
-            lastCheckForMovementPosition = currentPosition
-            return 0f
-        }
-
-        val currentDistance = calculateDistance(currentPosition[0], currentPosition[1])
-        val lastDistance = calculateDistance(previousPosition[0], previousPosition[1])
-
-        // Avoid division by zero
-        if (lastDistance == 0f) return 0f
-
-        lastCheckForMovementPosition = currentPosition
-
+        if (lastDistance == null || lastDistance == 0f) return 0f
         return currentDistance / lastDistance - 1f
     }
 
@@ -265,72 +279,51 @@ data class GestureState(
      * Returns the current focal point (center) of the pinch gesture in screen coordinates.
      */
     fun getPinchCenter(): Offset? {
-        val src: Collection<Offset> = when {
-            lastPositions.size >= 2 -> lastPositions.values
-            initialPositions.size >= 2 -> initialPositions.values
-            else -> return null
-        }
-        var sumX = 0f
-        var sumY = 0f
-        var count = 0
-        for (p in src) {
-            sumX += p.x
-            sumY += p.y
-            count++
-        }
-        if (count < 2) return null
-        return Offset(sumX / count, sumY / count)
+        val (a, b) = pinchPair ?: return null
+        val positionA = pointers[a]?.currentPosition ?: return null
+        val positionB = pointers[b]?.currentPosition ?: return null
+        return Offset((positionA.x + positionB.x) / 2f, (positionA.y + positionB.y) / 2f)
     }
 
     fun isHoldingOneFinger(): Boolean {
-        return if (getElapsedTime() >= HOLD_THRESHOLD_MS && getInputCount() == 1)
-            if (calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE)
-                true
-            else
-                false
-        else
-            false
+        return getElapsedTime() >= HOLD_THRESHOLD_MS &&
+                maxConcurrentPressed == 1 &&
+                calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE
     }
 
     fun checkHoldingTwoFingers(): Boolean {
-        return if (getElapsedTime() >= HOLD_THRESHOLD_MS && gestureMode == GestureMode.Normal)
-            if (calculateTotalDelta() < 2 * TAP_MOVEMENT_TOLERANCE && getInputCount() == 2) {
-                gestureMode = GestureMode.Drag
-                true
-            } else
-                false
-        else
+        if (getElapsedTime() < HOLD_THRESHOLD_MS || gestureMode != GestureMode.Normal) return false
+        return if (calculateTotalDelta() < 2 * TAP_MOVEMENT_TOLERANCE && maxConcurrentPressed == 2) {
+            gestureMode = GestureMode.Drag
+            true
+        } else
             false
     }
 
     fun checkSmoothScrolling(): Boolean {
-        return if (GlobalAppSettings.current.smoothScroll && gestureMode == GestureMode.Normal) {
-            if (abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && getInputCount() == 1) {
-                gestureMode = GestureMode.Scroll
-                true
-            } else
-                false
+        if (!GlobalAppSettings.current.smoothScroll || gestureMode != GestureMode.Normal) return false
+        return if (abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && maxConcurrentPressed == 1) {
+            gestureMode = GestureMode.Scroll
+            true
         } else
             false
     }
 
     fun checkContinuousZoom(): Boolean {
-        return if (GlobalAppSettings.current.continuousZoom && gestureMode == GestureMode.Normal) {
-            if (abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS && getInputCount() == 2) {
-                gestureMode = GestureMode.Zoom
-                true
-            } else
-                false
+        if (!GlobalAppSettings.current.continuousZoom || gestureMode != GestureMode.Normal) return false
+        return if (abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS && maxConcurrentPressed == 2) {
+            gestureMode = GestureMode.Zoom
+            true
         } else
             false
     }
 
     fun isOneFinger(): Boolean {
-        return getInputCount() == 1
+        return maxConcurrentPressed == 1
     }
 
     fun isTwoFingers(): Boolean {
-        return getInputCount() == 2
+        return maxConcurrentPressed == 2
     }
 
     fun isOneFingerTap(): Boolean {
