@@ -310,6 +310,12 @@ class EditorControlTower(
     override fun showHint(text: String) = viewModel.showHint(text)
 
     override fun selectRectangle(rect: Rect) {
+        // Take shared ownership of the EPD animation mode now, before the
+        // gesture receiver releases its handle: the selection flow runs
+        // asynchronously, and the overlap keeps fast refresh on across the
+        // hand-over. Released in SelectionState.reset() or by Select.kt if
+        // the rectangle selects nothing.
+        viewModel.selectionState.holdRefresh()
         scope.launch {
             CanvasEventBus.rectangleToSelectByGesture.emit(rect)
         }

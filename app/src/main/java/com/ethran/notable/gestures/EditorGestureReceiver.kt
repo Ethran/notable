@@ -23,15 +23,11 @@ import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.ui.SelectionVisualCues
-import com.ethran.notable.editor.utils.setAnimationMode
+import com.ethran.notable.editor.utils.EpdRefreshArbiter
 
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 
@@ -49,11 +45,11 @@ private class GestureContext(
     val view: View,
     val updateSelectionCues: (IntOffset?, Rect?) -> Unit,
 ) {
-    // The delayed setAnimationMode(false) posted when a gesture returns to
-    // Normal. Entering the next animated mode must cancel it, or a rapid
-    // follow-up gesture (flick scrolling) gets its animation mode disabled
-    // mid-gesture by the stale coroutine.
-    var pendingAnimationOff: Job? = null
+    // Held while a gesture mode with fast (animation) refresh is active.
+    // Lives on the context, not the per-gesture state: a rapid follow-up
+    // gesture re-acquires before the previous release settles, so the
+    // refresh mode never drops between flicks.
+    var refreshHandle: EpdRefreshArbiter.Handle? = null
 
     // Guards against events arriving while the composition is being torn
     // down (CompletionHandlerException in resume onCancellation) or after
@@ -367,29 +363,21 @@ private fun applyGestureMode(
 ) {
     val previous = gestureState.gestureMode
     if (previous == new) return
+    log.d("Entered ${new.name} gesture mode")
     when (new) {
         GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection, GestureMode.Drag -> {
-            log.d("Entered ${new.name} gesture mode")
-            ctx.pendingAnimationOff?.cancel()
-            ctx.pendingAnimationOff = null
-            setAnimationMode(true)
+            if (ctx.refreshHandle == null)
+                ctx.refreshHandle = EpdRefreshArbiter.acquire("gesture")
         }
 
         GestureMode.Normal -> {
-            // if there was a selection we might want to keep the animation mode
-            // TODO: there should be better solution to this, but for now its enough.
-            if (previous != GestureMode.Selection) {
-                log.d("Entered ${new.name} gesture mode")
-                ctx.pendingAnimationOff?.cancel()
-                ctx.pendingAnimationOff = ctx.scope.launch(Dispatchers.Default) {
-                    // Just to reduce flicker
-                    awaitFrame()
-                    awaitFrame()
-                    // TODO: We should instead wait till full refresh is ready to be posted,
-                    //  instead of hardcoding delay.
-                    setAnimationMode(false)
-                }
-            }
+            // If the gesture produced a selection, the selection flow has
+            // already acquired its own handle (EditorControlTower
+            // .selectRectangle), so releasing ours keeps the mode on until
+            // the selection is dismissed. The settle window lets a follow-up
+            // flick re-acquire before quality refresh returns.
+            ctx.refreshHandle?.releaseAfterMillis(GESTURE_REFRESH_SETTLE_MS)
+            ctx.refreshHandle = null
         }
     }
     gestureState.gestureMode = new

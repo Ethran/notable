@@ -19,7 +19,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import com.ethran.notable.editor.utils.setAnimationMode
+import com.ethran.notable.editor.utils.EpdRefreshArbiter
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -94,17 +94,20 @@ fun ReorderableGridItem(
     // The gesture modifier will only be applied if isEnabled is true.
     val gestureModifier = if (isEnabled) {
         Modifier.pointerInput(Unit) { // Use Unit as the key if it doesn't need to be re-evaluated
+            var refreshHandle: EpdRefreshArbiter.Handle? = null
             detectDragGesturesAfterLongPress(
                 onDragStart = {
                     state.draggingId = itemId
                     state.fromIndex = index
                     state.dragDelta = IntOffset.Zero
                     state.hoverInsertionIndex = index
-                    setAnimationMode(true)
+                    if (refreshHandle == null)
+                        refreshHandle = EpdRefreshArbiter.acquire("grid-reorder")
                 },
                 onDragCancel = {
                     state.reset()
-                    setAnimationMode(false)
+                    refreshHandle?.release()
+                    refreshHandle = null
                 },
                 onDragEnd = {
                     val id = state.draggingId
@@ -114,7 +117,8 @@ fun ReorderableGridItem(
                         currentOnDrop.value.invoke(from, to, id)
                     }
                     state.reset()
-                    setAnimationMode(false)
+                    refreshHandle?.release()
+                    refreshHandle = null
                 }
             ) { change, dragAmount ->
                 change.consume()

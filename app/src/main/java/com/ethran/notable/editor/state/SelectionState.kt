@@ -17,9 +17,9 @@ import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.utils.imageBoundsInt
+import com.ethran.notable.editor.utils.EpdRefreshArbiter
 import com.ethran.notable.editor.utils.offsetImage
 import com.ethran.notable.editor.utils.offsetStroke
-import com.ethran.notable.editor.utils.setAnimationMode
 import com.ethran.notable.io.copyBitmapToClipboard
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -59,6 +59,22 @@ class SelectionState {
     var selectionRect by mutableStateOf<Rect?>(null)
     var placementMode by mutableStateOf<PlacementMode?>(null)
 
+    // Keeps EPD animation mode on for the lifetime of the selection, so
+    // moving the selected bitmap stays on fast refresh.
+    private var refreshHandle: EpdRefreshArbiter.Handle? = null
+
+    /** Acquire the animation-mode handle for this selection (idempotent). */
+    fun holdRefresh() {
+        if (refreshHandle == null)
+            refreshHandle = EpdRefreshArbiter.acquire("selection")
+    }
+
+    /** Release the selection's animation-mode handle (idempotent). */
+    fun releaseRefresh() {
+        refreshHandle?.release()
+        refreshHandle = null
+    }
+
     fun reset() {
         log.v("reset")
         selectedStrokes = null
@@ -70,7 +86,7 @@ class SelectionState {
         selectionStartOffset = null
         selectionDisplaceOffset = null
         placementMode = null
-        setAnimationMode(false)
+        releaseRefresh()
     }
 
     fun isNonEmpty(): Boolean {

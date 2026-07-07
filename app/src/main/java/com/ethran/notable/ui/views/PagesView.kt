@@ -49,7 +49,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.editor.ui.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
-import com.ethran.notable.editor.utils.setAnimationMode
+import com.ethran.notable.editor.utils.EpdRefreshArbiter
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.FastScroller
@@ -307,13 +307,22 @@ fun PagesContent(
             }
 
             if (state.pageIds.size > 30) {
+                var scrollerRefreshHandle: EpdRefreshArbiter.Handle? by remember {
+                    mutableStateOf(null)
+                }
                 FastScroller(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     state = gridState,
                     itemCount = state.pageIds.size,
                     getVisibleIndex = { gridState.firstVisibleItemIndex },
-                    onDragStart = { setAnimationMode(true) },
-                    onDragEnd = { setAnimationMode(false) })
+                    onDragStart = {
+                        if (scrollerRefreshHandle == null)
+                            scrollerRefreshHandle = EpdRefreshArbiter.acquire("fast-scroller")
+                    },
+                    onDragEnd = {
+                        scrollerRefreshHandle?.release()
+                        scrollerRefreshHandle = null
+                    })
             }
         }
     }

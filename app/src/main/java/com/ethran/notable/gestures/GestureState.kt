@@ -31,6 +31,12 @@ const val ZOOM_SNAP_THRESHOLD = 0.02f
 // gesture is considered finished.
 const val TOUCH_RELAND_GRACE_MS = 80L
 
+// How long fast (animation) refresh is kept after a gesture ends. A follow-up
+// flick lands and re-acquires within this window, so rapid flick scrolling
+// never drops to a quality refresh in between; only after the user actually
+// stops does the screen settle back to full quality.
+const val GESTURE_REFRESH_SETTLE_MS = 500L
+
 enum class GestureMode {
     Selection,
     Scroll,
