@@ -190,7 +190,7 @@ fun drawOnCanvasFromPage(
                 // if stroke is not inside page section
                 if (!bounds.toRect().intersect(pageArea)) return@forEach
 
-                drawStroke(this, stroke, -page.scroll)
+                StrokeRenderers.current.drawStroke(this, stroke, -page.scroll)
             }
         } catch (e: Exception) {
             val error = DomainError.DrawingError("Strokes failed: ${e.message ?: e.toString()}")
