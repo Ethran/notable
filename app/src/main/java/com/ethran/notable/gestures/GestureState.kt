@@ -1,6 +1,7 @@
 package com.ethran.notable.gestures
 
 import android.graphics.Rect
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -49,13 +50,21 @@ private class PointerTrack(
     var pressed: Boolean = true,
 )
 
+// Timestamps use the uptime base (SystemClock.uptimeMillis), matching
+// PointerInputChange.uptimeMillis, so durations are immune to wall-clock
+// jumps.
 class GestureState(
-    var initialTimestamp: Long = System.currentTimeMillis(),
-    var lastTimestamp: Long = initialTimestamp,
+    val initialTimestamp: Long = SystemClock.uptimeMillis(),
 ) {
     // Mode transitions carry EPD refresh-mode side effects; the receiver
     // applies them in one place (applyGestureMode) — never assign directly.
     var gestureMode: GestureMode = GestureMode.Normal
+
+    // Timestamp of the last real input event; only [update] may advance it,
+    // so double-tap timing always measures from the finger, never from a
+    // hold-detection tick.
+    var lastInputTimestamp: Long = initialTimestamp
+        private set
 
     // Insertion-ordered: first entry is the first finger that went down.
     private val pointers = LinkedHashMap<PointerId, PointerTrack>()
@@ -85,7 +94,7 @@ class GestureState(
 
     /** Feed every touch [PointerInputChange] of the gesture through this. */
     fun update(change: PointerInputChange) {
-        lastTimestamp = System.currentTimeMillis()
+        lastInputTimestamp = change.uptimeMillis
         val track = pointers[change.id]
         if (track == null) {
             if (!change.pressed) return
@@ -108,9 +117,15 @@ class GestureState(
     /** Finger count used for gesture classification (see [maxConcurrentPressed]). */
     fun getInputCount(): Int = maxConcurrentPressed
 
+    /** Duration between the first and the last input event of the gesture. */
     fun getElapsedTime(): Long {
-        return lastTimestamp - initialTimestamp
+        return lastInputTimestamp - initialTimestamp
     }
+
+    // Events only arrive on change, so hold detection must measure against
+    // "now": a stationary finger produces no input to advance
+    // lastInputTimestamp.
+    private fun elapsedSinceStart(): Long = SystemClock.uptimeMillis() - initialTimestamp
 
     private fun calculateTotalDelta(): Float {
         return pointers.values.sumOf { track ->
@@ -185,12 +200,12 @@ class GestureState(
         return minVerticalMovement ?: 0f
     }
 
-    // returns the delta from last request
-    fun getVerticalDragDelta(): Int {
-        return getTotalDragDelta().y.toInt()
-    }
-
-    fun getTotalDragDelta(): Offset {
+    /**
+     * Consumes and returns the drag delta since the previous call: the
+     * centroid movement of the pressed pointers, with the reference advanced
+     * to the current centroid. Not a pure getter — call once per frame.
+     */
+    fun consumeDragDelta(): Offset {
         val pressed = pointers.filterValues { it.pressed }
         if (pressed.isEmpty()) return Offset.Zero
 
@@ -230,8 +245,12 @@ class GestureState(
         return currentDistance / initialDistance - 1f
     }
 
-    // Returns incremental zoom delta since last check
-    fun getPinchDelta(): Float {
+    /**
+     * Consumes and returns the incremental zoom delta since the previous
+     * call, advancing the pinch-distance reference. Not a pure getter — call
+     * once per frame.
+     */
+    fun consumePinchDelta(): Float {
         val currentDistance = pinchDistance { it.currentPosition } ?: return 0f
         val lastDistance = lastPinchDistance
         lastPinchDistance = currentDistance
@@ -251,14 +270,14 @@ class GestureState(
     }
 
     fun isHoldingOneFinger(): Boolean {
-        return getElapsedTime() >= HOLD_THRESHOLD_MS &&
+        return elapsedSinceStart() >= HOLD_THRESHOLD_MS &&
                 maxConcurrentPressed == 1 &&
                 calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE
     }
 
     fun shouldEnterDrag(): Boolean {
         return gestureMode == GestureMode.Normal &&
-                getElapsedTime() >= HOLD_THRESHOLD_MS &&
+                elapsedSinceStart() >= HOLD_THRESHOLD_MS &&
                 maxConcurrentPressed == 2 &&
                 calculateTotalDelta() < 2 * TAP_MOVEMENT_TOLERANCE
     }

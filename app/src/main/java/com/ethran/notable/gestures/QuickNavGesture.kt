@@ -6,9 +6,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlin.coroutines.cancellation.CancellationException
 
+private val log = ShipBook.getLogger("QuickNavGesture")
 
 /**
  * Detects a three-finger touch (simultaneous finger contacts) to open QuickNav.
@@ -22,11 +23,8 @@ fun Modifier.quickNavGesture(
         try {
             awaitPointerEventScope {
                 // Wait for a DOWN that was not already consumed by children.
-                val firstDown = try {
+                val firstDown =
                     awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Main)
-                } catch (_: CancellationException) {
-                    return@awaitPointerEventScope
-                }
 
                 // Only react to finger input; ignore stylus or other pointer types.
                 if (firstDown.type != PointerType.Touch) {
@@ -61,11 +59,12 @@ fun Modifier.quickNavGesture(
                     if (event.changes.none { it.pressed }) break
                 }
             }
-        } catch (_: CancellationException) {
-            // Pointer input was cancelled (e.g., recomposition);
-            return@pointerInput
-        } catch (e: Throwable) {
-            Log.e("QuickNavGesture","Router: Error in pointerInput", e)
+        } catch (e: CancellationException) {
+            // Cancellation (composition disposal, pointerInput restart) is
+            // normal control flow — propagate it.
+            throw e
+        } catch (e: Exception) {
+            log.e("Router: Error in pointerInput", e)
         }
     }
 }

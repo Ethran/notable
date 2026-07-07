@@ -2,6 +2,7 @@ package com.ethran.notable.editor
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.canvas.CanvasEventBus
@@ -14,6 +15,7 @@ import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
+import com.ethran.notable.gestures.GestureActions
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +36,7 @@ class EditorControlTower(
     private var history: History,
     private val viewModel: EditorViewModel,
     private val clipboardStore: ClipboardStore,
-) {
+) : GestureActions {
     private var scrollInProgress = Mutex()
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
     private var changePageObserverJob: Job? = null
@@ -79,7 +81,7 @@ class EditorControlTower(
      * Submit a scroll/drag delta (screen coordinates) for rendering. Non-blocking: the
      * delta is accumulated and consumed by [startScrollConsumer]; bursts coalesce automatically.
      */
-    fun requestScroll(delta: Offset) {
+    override fun requestScroll(delta: Offset) {
         if (delta == Offset.Zero) return
         if (!page.isTransformationAllowed) return
         pendingScroll.update { it + delta }
@@ -112,7 +114,7 @@ class EditorControlTower(
     }
 
 
-    fun setIsDrawing(value: Boolean) {
+    override fun setIsDrawing(value: Boolean) {
         if (viewModel.toolbarState.value.isDrawing == value) {
             logEditorControlTower.w("IsDrawing already set to $value")
             return
@@ -120,12 +122,12 @@ class EditorControlTower(
         scope.launch { CanvasEventBus.isDrawing.emit(value) }
     }
 
-    fun toggleTool() {
+    override fun toggleTool() {
         val mode = viewModel.toolbarState.value.mode
         viewModel.onToolbarAction(ToolbarAction.ChangeMode(if (mode == Mode.Draw) Mode.Erase else Mode.Draw))
     }
 
-    fun toggleZen() {
+    override fun toggleZen() {
         viewModel.onToolbarAction(ToolbarAction.ToggleToolbar)
     }
 
@@ -137,19 +139,19 @@ class EditorControlTower(
         return requireNotNull(viewModel.selectionState.selectedBitmap)
     }
 
-    fun goToNextPage() {
+    override fun goToNextPage() {
         logEditorControlTower.i("Going to next page")
         viewModel.goToNextPage()
         history.cleanHistory()
     }
 
-    fun goToPreviousPage() {
+    override fun goToPreviousPage() {
         logEditorControlTower.i("Going to previous page")
         viewModel.goToPreviousPage()
         history.cleanHistory()
     }
 
-    fun undo() {
+    override fun undo() {
         scope.launch {
             logEditorControlTower.i("Undo called")
             history.undo()
@@ -157,7 +159,7 @@ class EditorControlTower(
         }
     }
 
-    fun redo() {
+    override fun redo() {
         scope.launch {
             logEditorControlTower.i("Redo called")
             history.redo()
@@ -165,7 +167,7 @@ class EditorControlTower(
         }
     }
 
-    fun onPinchToZoom(delta: Float, center: Offset?) {
+    override fun onPinchToZoom(delta: Float, center: Offset?) {
         if (!page.isTransformationAllowed) return
         if (viewModel.toolbarState.value.mode == Mode.Select)
             return
@@ -305,5 +307,17 @@ class EditorControlTower(
         showHint("Pasted content from clipboard")
     }
 
-    fun showHint(text: String) = viewModel.showHint(text)
+    override fun showHint(text: String) = viewModel.showHint(text)
+
+    override fun selectRectangle(rect: Rect) {
+        scope.launch {
+            CanvasEventBus.rectangleToSelectByGesture.emit(rect)
+        }
+    }
+
+    override fun redrawCanvas() {
+        scope.launch {
+            CanvasEventBus.forceUpdate.emit(null)
+        }
+    }
 }

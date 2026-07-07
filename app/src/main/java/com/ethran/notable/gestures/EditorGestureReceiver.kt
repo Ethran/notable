@@ -22,14 +22,13 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.editor.EditorControlTower
-import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.ui.SelectionVisualCues
 import com.ethran.notable.editor.utils.setAnimationMode
 
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -44,12 +43,18 @@ private val log = ShipBook.getLogger("GestureReceiver")
  * settings change (the pointerInput key).
  */
 private class GestureContext(
-    val controlTower: EditorControlTower,
+    val actions: GestureActions,
     val appSettings: AppSettings,
     val scope: CoroutineScope,
     val view: View,
     val updateSelectionCues: (IntOffset?, Rect?) -> Unit,
 ) {
+    // The delayed setAnimationMode(false) posted when a gesture returns to
+    // Normal. Entering the next animated mode must cancel it, or a rapid
+    // follow-up gesture (flick scrolling) gets its animation mode disabled
+    // mid-gesture by the stale coroutine.
+    var pendingAnimationOff: Job? = null
+
     // Guards against events arriving while the composition is being torn
     // down (CompletionHandlerException in resume onCancellation) or after
     // the window lost focus.
@@ -61,7 +66,7 @@ private enum class TrackResult { Completed, Aborted, ConsumedByOther }
 
 @Composable
 fun EditorGestureReceiver(
-    controlTower: EditorControlTower,
+    actions: GestureActions,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val appSettings = GlobalAppSettings.current
@@ -72,7 +77,7 @@ fun EditorGestureReceiver(
         modifier = Modifier
             .pointerInput(appSettings) {
                 val ctx = GestureContext(
-                    controlTower = controlTower,
+                    actions = actions,
                     appSettings = appSettings,
                     scope = coroutineScope,
                     view = view,
@@ -113,7 +118,9 @@ fun EditorGestureReceiver(
 
                         classifyTapOrSwipe(gestureState, ctx)
                     } catch (e: CancellationException) {
-                        log.w("Gesture coroutine canceled", e)
+                        // Cancellation is normal control flow (composition
+                        // disposal, pointerInput restart) — propagate it.
+                        throw e
                     } catch (e: Exception) {
                         log.e("Unexpected error in gesture handling", e)
                     }
@@ -148,8 +155,8 @@ private suspend fun AwaitPointerEventScope.trackGesture(
                 log.i("Canceling gesture - already consumed")
                 if (gestureState.gestureMode == GestureMode.Selection) {
                     ctx.updateSelectionCues(null, null)
-                    applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
-                    ctx.controlTower.setIsDrawing(true)
+                    applyGestureMode(gestureState, GestureMode.Normal, ctx)
+                    ctx.actions.setIsDrawing(true)
                 }
                 return TrackResult.ConsumedByOther
             }
@@ -179,8 +186,8 @@ private suspend fun AwaitPointerEventScope.trackGesture(
                     }
             }
         }
-        // events are only send on change, so we need to check for holding in place separately
-        gestureState.lastTimestamp = System.currentTimeMillis()
+        // events are only sent on change; hold detection re-evaluates against
+        // "now" inside the state's hold predicates
         applyModeTransitions(gestureState, ctx)
         streamActiveMode(gestureState, ctx)
     }
@@ -196,21 +203,21 @@ private fun applyModeTransitions(gestureState: GestureState, ctx: GestureContext
         return
     }
     if (gestureState.isHoldingOneFinger()) {
-        applyGestureMode(gestureState, GestureMode.Selection, ctx.scope)
-        ctx.controlTower.setIsDrawing(false) // unfreeze the screen
+        applyGestureMode(gestureState, GestureMode.Selection, ctx)
+        ctx.actions.setIsDrawing(false) // unfreeze the screen
         ctx.updateSelectionCues(
             gestureState.getLastPositionIO(),
             gestureState.calculateRectangleBounds()
         )
-        ctx.controlTower.showHint("Selection mode!")
+        ctx.actions.showHint("Selection mode!")
     }
     if (ctx.appSettings.smoothScroll && gestureState.shouldEnterScroll())
-        applyGestureMode(gestureState, GestureMode.Scroll, ctx.scope)
+        applyGestureMode(gestureState, GestureMode.Scroll, ctx)
     if (ctx.appSettings.continuousZoom && gestureState.shouldEnterZoom())
-        applyGestureMode(gestureState, GestureMode.Zoom, ctx.scope)
+        applyGestureMode(gestureState, GestureMode.Zoom, ctx)
     if (gestureState.shouldEnterDrag()) {
-        applyGestureMode(gestureState, GestureMode.Drag, ctx.scope)
-        ctx.controlTower.showHint("Drag mode!")
+        applyGestureMode(gestureState, GestureMode.Drag, ctx)
+        ctx.actions.showHint("Drag mode!")
     }
 }
 
@@ -218,18 +225,18 @@ private fun applyModeTransitions(gestureState: GestureState, ctx: GestureContext
 private fun streamActiveMode(gestureState: GestureState, ctx: GestureContext) {
     when (gestureState.gestureMode) {
         GestureMode.Scroll -> {
-            val delta = gestureState.getVerticalDragDelta()
-            ctx.controlTower.requestScroll(Offset(0f, delta.toFloat()))
+            val delta = gestureState.consumeDragDelta()
+            ctx.actions.requestScroll(Offset(0f, delta.y))
         }
 
         GestureMode.Zoom -> {
-            val delta = gestureState.getPinchDelta()
-            ctx.controlTower.onPinchToZoom(delta, gestureState.getPinchCenter())
+            val delta = gestureState.consumePinchDelta()
+            ctx.actions.onPinchToZoom(delta, gestureState.getPinchCenter())
         }
 
         GestureMode.Drag -> {
-            val delta = gestureState.getTotalDragDelta()
-            ctx.controlTower.requestScroll(delta)
+            val delta = gestureState.consumeDragDelta()
+            ctx.actions.requestScroll(delta)
         }
 
         GestureMode.Selection, GestureMode.Normal -> {}
@@ -250,23 +257,21 @@ private fun finishModalGesture(gestureState: GestureState, ctx: GestureContext):
                 rectangle = gestureState.calculateRectangleBounds() ?: Rect(),
             )
             ctx.updateSelectionCues(null, null)
-            applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
-            ctx.controlTower.setIsDrawing(true)
+            applyGestureMode(gestureState, GestureMode.Normal, ctx)
+            ctx.actions.setIsDrawing(true)
         }
 
         GestureMode.Scroll -> {
             // return screen updates to normal.
-            applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
+            applyGestureMode(gestureState, GestureMode.Normal, ctx)
         }
 
         GestureMode.Zoom, GestureMode.Drag -> {
             log.d("Zoom or drag -- final redraw")
-            ctx.scope.launch {
-                // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
-                CanvasEventBus.forceUpdate.emit(null)
-            }
+            // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
+            ctx.actions.redrawCanvas()
             // return screen updates to normal.
-            applyGestureMode(gestureState, GestureMode.Normal, ctx.scope)
+            applyGestureMode(gestureState, GestureMode.Normal, ctx)
         }
 
         GestureMode.Normal -> return false
@@ -290,7 +295,7 @@ private suspend fun AwaitPointerEventScope.classifyTapOrSwipe(
         // zoom gesture
         val zoomDelta = gestureState.getPinchDrag()
         if (!ctx.appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
-            ctx.controlTower.onPinchToZoom(zoomDelta, Offset(0f, 0f))
+            ctx.actions.onPinchToZoom(zoomDelta, Offset(0f, 0f))
             log.d("Discrete zoom: $zoomDelta")
         }
     }
@@ -319,7 +324,7 @@ private suspend fun AwaitPointerEventScope.classifyTapOrSwipe(
         && abs(verticalDrag) > SWIPE_THRESHOLD
     ) {
         log.d("Discrete scrolling, verticalDrag: $verticalDrag")
-        ctx.controlTower.requestScroll(Offset(0f, verticalDrag))
+        ctx.actions.requestScroll(Offset(0f, verticalDrag))
     }
 }
 
@@ -333,10 +338,10 @@ private suspend fun AwaitPointerEventScope.awaitDoubleTap(
 ): Boolean {
     return withTimeoutOrNull(DOUBLE_TAP_TIMEOUT_MS) {
         val secondDown = awaitFirstDown()
-        val deltaTime = System.currentTimeMillis() - gestureState.lastTimestamp
+        val deltaTime = secondDown.uptimeMillis - gestureState.lastInputTimestamp
         log.v("Second down detected: ${secondDown.type}, position: ${secondDown.position}, deltaTime: $deltaTime")
         if (deltaTime < DOUBLE_TAP_MIN_MS) {
-            ctx.controlTower.showHint("Too quick for double click! time between: $deltaTime")
+            ctx.actions.showHint("Too quick for double click! time between: $deltaTime")
             return@withTimeoutOrNull null
         } else {
             log.v("double click!")
@@ -358,13 +363,15 @@ private suspend fun AwaitPointerEventScope.awaitDoubleTap(
 private fun applyGestureMode(
     gestureState: GestureState,
     new: GestureMode,
-    scope: CoroutineScope,
+    ctx: GestureContext,
 ) {
     val previous = gestureState.gestureMode
     if (previous == new) return
     when (new) {
         GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection, GestureMode.Drag -> {
             log.d("Entered ${new.name} gesture mode")
+            ctx.pendingAnimationOff?.cancel()
+            ctx.pendingAnimationOff = null
             setAnimationMode(true)
         }
 
@@ -373,7 +380,8 @@ private fun applyGestureMode(
             // TODO: there should be better solution to this, but for now its enough.
             if (previous != GestureMode.Selection) {
                 log.d("Entered ${new.name} gesture mode")
-                scope.launch(Dispatchers.Default) {
+                ctx.pendingAnimationOff?.cancel()
+                ctx.pendingAnimationOff = ctx.scope.launch(Dispatchers.Default) {
                     // Just to reduce flicker
                     awaitFrame()
                     awaitFrame()
@@ -394,24 +402,21 @@ private fun resolveGesture(
 ) {
     when (action) {
         AppSettings.GestureAction.None -> log.i("No Action")
-        AppSettings.GestureAction.PreviousPage -> ctx.controlTower.goToPreviousPage()
+        AppSettings.GestureAction.PreviousPage -> ctx.actions.goToPreviousPage()
 
-        AppSettings.GestureAction.NextPage -> ctx.controlTower.goToNextPage()
+        AppSettings.GestureAction.NextPage -> ctx.actions.goToNextPage()
 
-        AppSettings.GestureAction.ChangeTool -> ctx.controlTower.toggleTool()
+        AppSettings.GestureAction.ChangeTool -> ctx.actions.toggleTool()
 
-        AppSettings.GestureAction.ToggleZen -> ctx.controlTower.toggleZen()
+        AppSettings.GestureAction.ToggleZen -> ctx.actions.toggleZen()
 
-        AppSettings.GestureAction.Undo -> ctx.controlTower.undo()
+        AppSettings.GestureAction.Undo -> ctx.actions.undo()
 
-        AppSettings.GestureAction.Redo -> ctx.controlTower.redo()
+        AppSettings.GestureAction.Redo -> ctx.actions.redo()
 
         AppSettings.GestureAction.Select -> {
             log.i("select")
-            ctx.scope.launch {
-//                log.w( "rect in screen coord: $rectangle")
-                CanvasEventBus.rectangleToSelectByGesture.emit(rectangle)
-            }
+            ctx.actions.selectRectangle(rectangle)
         }
     }
 }

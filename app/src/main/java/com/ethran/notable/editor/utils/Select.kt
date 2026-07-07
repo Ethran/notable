@@ -275,7 +275,6 @@ fun selectRectangle(
     val strokesToSelect =
         page.pageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
     if (imagesToSelect != null && strokesToSelect != null) {
-        CanvasEventBus.rectangleToSelectByGesture.value = null
         if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
             selectImagesAndStrokes(
                 scope = coroutineScope,
