@@ -5,14 +5,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.unit.IntOffset
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.model.SimplePointF
-import com.ethran.notable.editor.utils.setAnimationMode
-import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 
@@ -57,40 +50,12 @@ private class PointerTrack(
 )
 
 class GestureState(
-    val scope: CoroutineScope,
     var initialTimestamp: Long = System.currentTimeMillis(),
     var lastTimestamp: Long = initialTimestamp,
 ) {
-    val log = ShipBook.getLogger("GestureState")
-
+    // Mode transitions carry EPD refresh-mode side effects; the receiver
+    // applies them in one place (applyGestureMode) — never assign directly.
     var gestureMode: GestureMode = GestureMode.Normal
-        set(value) {
-            if (field != value) {
-                when (value) {
-                    GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection, GestureMode.Drag -> {
-                        log.d("Entered ${value.name} gesture mode")
-                        setAnimationMode(true)
-                    }
-
-                    GestureMode.Normal -> {
-                        // if there was a selection we might want to keep the animation mode
-                        // TODO: there should be better solution to this, but for now its enough.
-                        if (field != GestureMode.Selection) {
-                            log.d("Entered ${value.name} gesture mode")
-                            scope.launch(Dispatchers.Default) {
-                                // Just to reduce flicker
-                                awaitFrame()
-                                awaitFrame()
-                                // TODO: We should instead wait till full refresh is ready to be posted,
-                                //  instead of hardcoding delay.
-                                setAnimationMode(false)
-                            }
-                        }
-                    }
-                }
-                field = value
-            }
-        }
 
     // Insertion-ordered: first entry is the first finger that went down.
     private val pointers = LinkedHashMap<PointerId, PointerTrack>()
@@ -291,31 +256,23 @@ class GestureState(
                 calculateTotalDelta() < TAP_MOVEMENT_TOLERANCE
     }
 
-    fun checkHoldingTwoFingers(): Boolean {
-        if (getElapsedTime() < HOLD_THRESHOLD_MS || gestureMode != GestureMode.Normal) return false
-        return if (calculateTotalDelta() < 2 * TAP_MOVEMENT_TOLERANCE && maxConcurrentPressed == 2) {
-            gestureMode = GestureMode.Drag
-            true
-        } else
-            false
+    fun shouldEnterDrag(): Boolean {
+        return gestureMode == GestureMode.Normal &&
+                getElapsedTime() >= HOLD_THRESHOLD_MS &&
+                maxConcurrentPressed == 2 &&
+                calculateTotalDelta() < 2 * TAP_MOVEMENT_TOLERANCE
     }
 
-    fun checkSmoothScrolling(): Boolean {
-        if (!GlobalAppSettings.current.smoothScroll || gestureMode != GestureMode.Normal) return false
-        return if (abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH && maxConcurrentPressed == 1) {
-            gestureMode = GestureMode.Scroll
-            true
-        } else
-            false
+    fun shouldEnterScroll(): Boolean {
+        return gestureMode == GestureMode.Normal &&
+                maxConcurrentPressed == 1 &&
+                abs(getVerticalDrag()) > SWIPE_THRESHOLD_SMOOTH
     }
 
-    fun checkContinuousZoom(): Boolean {
-        if (!GlobalAppSettings.current.continuousZoom || gestureMode != GestureMode.Normal) return false
-        return if (abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS && maxConcurrentPressed == 2) {
-            gestureMode = GestureMode.Zoom
-            true
-        } else
-            false
+    fun shouldEnterZoom(): Boolean {
+        return gestureMode == GestureMode.Normal &&
+                maxConcurrentPressed == 2 &&
+                abs(getPinchDrag()) > PINCH_ZOOM_THRESHOLD_CONTINUOUS
     }
 
     fun isOneFinger(): Boolean {

@@ -23,9 +23,12 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorControlTower
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.ui.SelectionVisualCues
+import com.ethran.notable.editor.utils.setAnimationMode
 
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -66,7 +69,7 @@ fun EditorGestureReceiver(
                         // if window lost focus, ignore input
                         if (!view.hasWindowFocus()) return@awaitEachGesture
 
-                        val gestureState = GestureState(scope = coroutineScope)
+                        val gestureState = GestureState()
 
                         // Ignore non-touch input
                         if (down.type != PointerType.Touch) {
@@ -94,7 +97,9 @@ fun EditorGestureReceiver(
                                     if (gestureState.gestureMode == GestureMode.Selection) {
                                         crossPosition = null
                                         rectangleBounds = null
-                                        gestureState.gestureMode = GestureMode.Normal
+                                        applyGestureMode(
+                                            gestureState, GestureMode.Normal, coroutineScope
+                                        )
                                         controlTower.setIsDrawing(true)
                                     }
                                     return@awaitEachGesture
@@ -133,17 +138,28 @@ fun EditorGestureReceiver(
                             } else {
                                 // set selection mode
                                 if (gestureState.isHoldingOneFinger()) {
-                                    gestureState.gestureMode = GestureMode.Selection
+                                    applyGestureMode(
+                                        gestureState, GestureMode.Selection, coroutineScope
+                                    )
                                     controlTower.setIsDrawing(false) // unfreeze the screen
                                     crossPosition = gestureState.getLastPositionIO()
                                     rectangleBounds = gestureState.calculateRectangleBounds()
                                     controlTower.showHint("Selection mode!")
                                 }
-                                gestureState.checkSmoothScrolling()
-                                gestureState.checkContinuousZoom()
-                                if (gestureState.checkHoldingTwoFingers())
+                                if (appSettings.smoothScroll && gestureState.shouldEnterScroll())
+                                    applyGestureMode(
+                                        gestureState, GestureMode.Scroll, coroutineScope
+                                    )
+                                if (appSettings.continuousZoom && gestureState.shouldEnterZoom())
+                                    applyGestureMode(
+                                        gestureState, GestureMode.Zoom, coroutineScope
+                                    )
+                                if (gestureState.shouldEnterDrag()) {
+                                    applyGestureMode(
+                                        gestureState, GestureMode.Drag, coroutineScope
+                                    )
                                     controlTower.showHint("Drag mode!")
-
+                                }
                             }
                             if (gestureState.gestureMode == GestureMode.Scroll) {
                                 val delta = gestureState.getVerticalDragDelta()
@@ -173,14 +189,14 @@ fun EditorGestureReceiver(
                                 )
                                 crossPosition = null
                                 rectangleBounds = null
-                                gestureState.gestureMode = GestureMode.Normal
+                                applyGestureMode(gestureState, GestureMode.Normal, coroutineScope)
                                 controlTower.setIsDrawing(true)
                                 return@awaitEachGesture
                             }
 
                             GestureMode.Scroll -> {
-                                gestureState.gestureMode =
-                                    GestureMode.Normal // return screen updates to normal.
+                                // return screen updates to normal.
+                                applyGestureMode(gestureState, GestureMode.Normal, coroutineScope)
                                 return@awaitEachGesture
                             }
 
@@ -190,8 +206,8 @@ fun EditorGestureReceiver(
                                     // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
                                     CanvasEventBus.forceUpdate.emit(null)
                                 }
-                                gestureState.gestureMode =
-                                    GestureMode.Normal // return screen updates to normal.
+                                // return screen updates to normal.
+                                applyGestureMode(gestureState, GestureMode.Normal, coroutineScope)
                                 return@awaitEachGesture
                             }
 
@@ -293,6 +309,43 @@ fun EditorGestureReceiver(
     SelectionVisualCues(crossPosition, rectangleBounds)
 }
 
+
+/**
+ * The single place gesture-mode transitions are applied, because they carry
+ * EPD refresh-mode side effects: active modes draw with fast animation
+ * refresh, returning to Normal restores full-quality refresh.
+ */
+private fun applyGestureMode(
+    gestureState: GestureState,
+    new: GestureMode,
+    scope: CoroutineScope,
+) {
+    val previous = gestureState.gestureMode
+    if (previous == new) return
+    when (new) {
+        GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection, GestureMode.Drag -> {
+            log.d("Entered ${new.name} gesture mode")
+            setAnimationMode(true)
+        }
+
+        GestureMode.Normal -> {
+            // if there was a selection we might want to keep the animation mode
+            // TODO: there should be better solution to this, but for now its enough.
+            if (previous != GestureMode.Selection) {
+                log.d("Entered ${new.name} gesture mode")
+                scope.launch(Dispatchers.Default) {
+                    // Just to reduce flicker
+                    awaitFrame()
+                    awaitFrame()
+                    // TODO: We should instead wait till full refresh is ready to be posted,
+                    //  instead of hardcoding delay.
+                    setAnimationMode(false)
+                }
+            }
+        }
+    }
+    gestureState.gestureMode = new
+}
 
 private fun resolveGesture(
     settings: AppSettings?,
