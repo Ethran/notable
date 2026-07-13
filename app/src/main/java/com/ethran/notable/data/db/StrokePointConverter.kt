@@ -27,7 +27,7 @@ fun Int.hasDeltaTime() = (this and DT_MASK) != 0
 
 /**
  * Compute mask strictly from the first point.
- * SB1 invariant: if a bit is set, ALL points must have that field non-null;
+ * SB invariant: if a bit is set, ALL points must have that field non-null;
  * if a bit is clear, ALL points must have that field null.
  * Validation is performed separately to produce a clear error message.
  */
@@ -202,7 +202,7 @@ fun encodeStrokePoints(
     }
     val count = points.size
     require(count > 0) { "Empty point list" }
-    // Enforce SB1 invariant before writing.
+    // Enforce SB invariant before writing.
     validateUniform(mask, points)
 
     // encode mandatory data, using Polyline
@@ -299,12 +299,12 @@ fun getStrokeMask(bytes: ByteArray): Int {
 /* ------------------ Decoding ------------------ */
 
 /**
- * SB1 decoding assumes uniform presence per mask. It still tolerates a future dt null sentinel:
+ * SB decoding assumes uniform presence per mask. It still tolerates a future dt null sentinel:
  * if a decoded dt equals 0xFFFF, it returns null for that field.
  */
 fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
     if (bytes.size < HEADER_SIZE + 8) {
-        throw IllegalArgumentException("Buffer too small for SB1 header (need $HEADER_SIZE bytes)")
+        throw IllegalArgumentException("Buffer too small for SB header (need $HEADER_SIZE bytes)")
     }
     val header = ByteBuffer.wrap(bytes, 0, HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
 

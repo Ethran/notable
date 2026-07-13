@@ -17,8 +17,8 @@ private val log = ShipBook.getLogger("StrokeReencode")
 
 /**
  * Runtime backfill:
- *  - Reads legacy rows from stroke_old (JSON points)
- *  - Re-encodes to binary (SB1) and inserts into stroke
+ *  - Reads rows from stroke_old (JSON points)
+ *  - Re-encodes to the binary SB format and inserts into stroke
  *  - Deletes migrated rows
  *  - Drops stroke_old when empty
  *
@@ -30,7 +30,7 @@ class StrokeMigrationHelper @Inject constructor(
     @param:ApplicationContext private val appContext: Context
 ) {
 
-    fun reencodeStrokePointsToSB1() {
+    fun reencodeStrokePointsToBinary() {
 
         if (!hasFilePermission(appContext)) {
             appEventBus.tryEmit(AppEvent.StrokeMigrationPermissionMissing)

@@ -11,9 +11,8 @@ import javax.inject.Inject
 
 /**
  * The value of [Stroke.maxPressure] marking that the stroke's point pressures are
- * normalized to [0, 1]. Every in-memory stroke must be in this state; rows written by
- * older versions carry their raw digitizer scale (e.g. 4096) and are converted on load
- * via [withNormalizedPressure].
+ * normalized to [0, 1]. Every in-memory stroke must be in this state; stored rows may still
+ * carry a raw digitizer scale (e.g. 4096) and are converted on load via [withNormalizedPressure].
  */
 const val MAX_PRESSURE_NORMALIZED = 1
 
@@ -21,7 +20,7 @@ const val MAX_PRESSURE_NORMALIZED = 1
 data class StrokePoint(
     val x: Float,                   // with scroll
     var y: Float,                   // with scroll
-    val pressure: Float? = null,    // normalized to [0, 1]; raw digitizer scale in legacy rows
+    val pressure: Float? = null,    // normalized to [0, 1] in memory; raw digitizer scale in stored rows
     val tiltX: Int? = null,         // tilt values in degrees, -90 to 90
     val tiltY: Int? = null,
     val dt: UShort? = null,         // delta time in milliseconds, from first point in stroke, not used yet.
@@ -62,9 +61,8 @@ data class Stroke(
     val pen: Pen,
     @ColumnInfo(defaultValue = "0xFF000000")
     val color: Int = 0xFF000000.toInt(),
-    // Denominator of the stored pressure values: MAX_PRESSURE_NORMALIZED (1) for rows
-    // written with normalized [0,1] pressure; the capture device's raw max (e.g. 4096)
-    // for legacy rows. See withNormalizedPressure().
+    // Denominator of the stored pressure values: MAX_PRESSURE_NORMALIZED (1) for normalized
+    // [0,1] pressure, or the capture device's raw max (e.g. 4096). See withNormalizedPressure().
     @ColumnInfo(defaultValue = "4096")
     val maxPressure: Int = 4096,
 

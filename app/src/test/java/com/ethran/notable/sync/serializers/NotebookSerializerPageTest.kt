@@ -226,7 +226,7 @@ class NotebookSerializerPageTest {
         val json = NotebookSerializer.serializePage(page, listOf(good, bad), emptyList())
 
         // Replace the bad stroke's pointsData payload with bytes that decode but
-        // don't form a valid SB1 blob — decodeStrokePoints will throw, the
+        // don't form a valid SB blob — decodeStrokePoints will throw, the
         // serializer should swallow that and drop only this stroke.
         val corruptedJson = json.replace(
             Regex("(\"id\"\\s*:\\s*\"bad\"[^}]*\"pointsData\"\\s*:\\s*\")[^\"]+(\")"),
@@ -282,7 +282,7 @@ class NotebookSerializerPageTest {
 
     @Test
     fun stroke_with_all_optional_point_fields_round_trips_through_base64() {
-        // Exercises the SB1 path that carries pressure + tilt + dt — all four mask bits set.
+        // Exercises the SB path that carries pressure + tilt + dt — all four mask bits set.
         val page = samplePage()
         val points = listOf(
             StrokePoint(x = 0f, y = 0f, pressure = 0.1f, tiltX = -10, tiltY = 20, dt = 0.toUShort()),
@@ -296,7 +296,7 @@ class NotebookSerializerPageTest {
         val (_, strokes, _) = (result as AppResult.Success).data
         assertEquals(1, strokes.size)
         assertPointsApprox(points, strokes[0].points)
-        // Spot-check tilt + dt survived the Base64 + SB1 trip.
+        // Spot-check tilt + dt survived the Base64 + SB trip.
         assertNotNull(strokes[0].points[0].tiltX)
         assertEquals(-10, strokes[0].points[0].tiltX)
         assertEquals(0.toUShort(), strokes[0].points[0].dt)

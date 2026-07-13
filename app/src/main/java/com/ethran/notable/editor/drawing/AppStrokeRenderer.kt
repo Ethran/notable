@@ -8,10 +8,9 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.offsetStroke
 
 /**
- * Onyx-free renderer stub that exercises the StrokeRenderer seam before the real
- * perfect-freehand geometry exists (plan Phase 1/2). Every pen renders through the
- * existing ballpen/marker path code, so strokes persist, undo, erase and re-render —
- * they just all look like plain lines for now.
+ * Onyx-free renderer that draws every pen through plain Canvas path code. Markers use the
+ * marker path; all other pens fall back to the ballpen path, so strokes render as flat lines
+ * with no pressure or texture. Usable on any device where the Onyx SDK is unavailable.
  */
 object AppStrokeRenderer : StrokeRenderer {
 

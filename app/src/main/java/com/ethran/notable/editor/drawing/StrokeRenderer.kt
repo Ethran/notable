@@ -17,8 +17,7 @@ interface StrokeRenderer {
 object StrokeRenderers {
     /**
      * The single place the dry-ink renderer is chosen. The Onyx pen wrappers are plain
-     * canvas code and run on every device, so this matches pre-seam behavior everywhere.
-     * Phase 0.3 replaces this hardcoded choice with the settings-backed backend flag.
+     * canvas code and run on every device, so this renderer is safe as the default.
      */
     val current: StrokeRenderer = OnyxStrokeRenderer
 }

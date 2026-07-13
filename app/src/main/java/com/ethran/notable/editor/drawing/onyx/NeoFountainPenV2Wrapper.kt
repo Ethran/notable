@@ -1,4 +1,4 @@
-package com.ethran.notable.editor.drawing
+package com.ethran.notable.editor.drawing.onyx
 
 import android.graphics.Canvas
 import android.graphics.Paint
