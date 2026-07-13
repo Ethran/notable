@@ -11,6 +11,9 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val log = ShipBook.getLogger("QuickNavGesture")
 
+// Simultaneous finger contacts that open QuickNav.
+private const val QUICK_NAV_FINGER_COUNT = 3
+
 /**
  * Detects a three-finger touch (simultaneous finger contacts) to open QuickNav.
  *
@@ -18,7 +21,7 @@ private val log = ShipBook.getLogger("QuickNavGesture")
 fun Modifier.quickNavGesture(
     onOpen: () -> Unit
 ): Modifier = this.pointerInput(GlobalAppSettings.current.enableQuickNav) {
-    if(!GlobalAppSettings.current.enableQuickNav) return@pointerInput
+    if (!GlobalAppSettings.current.enableQuickNav) return@pointerInput
     while (true) {
         try {
             awaitPointerEventScope {
@@ -46,9 +49,9 @@ fun Modifier.quickNavGesture(
                         event.changes.filter { it.type == PointerType.Touch && it.pressed }
 
                     // Recognize three-finger touch once; consume only upon recognition
-                    if (!opened && touches.size >= 3) {
+                    if (!opened && touches.size >= QUICK_NAV_FINGER_COUNT) {
                         opened = true
-                        touches.take(3).forEach { it.consume() }
+                        touches.take(QUICK_NAV_FINGER_COUNT).forEach { it.consume() }
                         onOpen()
                     } else if (opened) {
                         // After recognition, keep consuming these touches to avoid bleed-through

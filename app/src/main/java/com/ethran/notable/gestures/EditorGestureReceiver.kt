@@ -1,6 +1,7 @@
 package com.ethran.notable.gestures
 
 import android.graphics.Rect
+import android.os.SystemClock
 import android.view.View
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -20,6 +21,7 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.ui.SelectionVisualCues
@@ -29,7 +31,6 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.isActive
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.abs
 
 private val log = ShipBook.getLogger("GestureReceiver")
 
@@ -43,6 +44,7 @@ private class GestureContext(
     val appSettings: AppSettings,
     val scope: CoroutineScope,
     val view: View,
+    val thresholds: GestureThresholds,
     val updateSelectionCues: (IntOffset?, Rect?) -> Unit,
 ) {
     // Held while a gesture mode with fast (animation) refresh is active.
@@ -55,6 +57,17 @@ private class GestureContext(
     // down (CompletionHandlerException in resume onCancellation) or after
     // the window lost focus.
     fun shouldAbort(): Boolean = !scope.isActive || !view.hasWindowFocus()
+}
+
+/**
+ * Per-gesture recognizer state: the pointer geometry plus the recognizer
+ * phase. [mode] carries EPD refresh-mode side effects on transition and is
+ * only ever assigned through `applyGestureMode` (both are private to this
+ * file, so the compiler enforces it).
+ */
+private class Recognizer {
+    val tracker = PointerTracker(now = { SystemClock.uptimeMillis() })
+    var mode: GestureMode = GestureMode.Normal
 }
 
 private enum class TrackResult { Completed, Aborted, ConsumedByOther }
@@ -77,12 +90,14 @@ fun EditorGestureReceiver(
                     appSettings = appSettings,
                     scope = coroutineScope,
                     view = view,
+                    thresholds = GestureThresholds(density = this),
                     updateSelectionCues = { cross, rect ->
                         crossPosition = cross
                         rectangleBounds = rect
                     },
                 )
                 awaitEachGesture {
+                    var recognizer: Recognizer? = null
                     try {
                         // Detect initial touch
                         val down = awaitFirstDown()
@@ -99,26 +114,34 @@ fun EditorGestureReceiver(
                             return@awaitEachGesture
                         }
 
-                        val gestureState = GestureState()
-                        gestureState.update(down)
+                        recognizer = Recognizer()
+                        recognizer.tracker.update(down)
 
-                        when (trackGesture(gestureState, ctx)) {
+                        when (trackGesture(recognizer, ctx)) {
                             TrackResult.Aborted,
                             TrackResult.ConsumedByOther -> return@awaitEachGesture
 
                             TrackResult.Completed -> {}
                         }
 
-                        if (finishModalGesture(gestureState, ctx)) return@awaitEachGesture
+                        if (finishModalGesture(recognizer, ctx)) return@awaitEachGesture
                         if (ctx.shouldAbort()) return@awaitEachGesture
 
-                        classifyTapOrSwipe(gestureState, ctx)
+                        handleGestureEnd(recognizer, ctx)
                     } catch (e: CancellationException) {
                         // Cancellation is normal control flow (composition
                         // disposal, pointerInput restart) — propagate it.
                         throw e
                     } catch (e: Exception) {
                         log.e("Unexpected error in gesture handling", e)
+                    } finally {
+                        // Every exit path — completion, abort, consumed-by-
+                        // other, unexpected exception, cancellation — funnels
+                        // through here, so the refresh handle can never
+                        // outlive the gesture (the arbiter's contract) and
+                        // Selection UI state can't get stuck. No-op when the
+                        // gesture already finished normally.
+                        recognizer?.let { cleanupGesture(it, ctx) }
                     }
                 }
             }
@@ -129,11 +152,12 @@ fun EditorGestureReceiver(
 }
 
 /**
- * The event pump: consumes touch events into [gestureState], applies mode
- * transitions and streams Scroll/Zoom/Drag deltas until all fingers are up.
+ * The event pump: consumes touch events into the recognizer's tracker,
+ * applies mode transitions and streams Scroll/Transform deltas until all
+ * fingers are up.
  */
 private suspend fun AwaitPointerEventScope.trackGesture(
-    gestureState: GestureState,
+    recognizer: Recognizer,
     ctx: GestureContext,
 ): TrackResult {
     while (true) {
@@ -146,27 +170,22 @@ private suspend fun AwaitPointerEventScope.trackGesture(
             val fingerChange =
                 event.changes.filter { it.type == PointerType.Touch }
 
-            // is already consumed return
+            // Another recognizer already claimed these events — bail.
             if (fingerChange.find { it.isConsumed } != null) {
                 log.i("Canceling gesture - already consumed")
-                if (gestureState.gestureMode == GestureMode.Selection) {
-                    ctx.updateSelectionCues(null, null)
-                    applyGestureMode(gestureState, GestureMode.Normal, ctx)
-                    ctx.actions.setIsDrawing(true)
-                }
                 return TrackResult.ConsumedByOther
             }
             fingerChange.forEach { change ->
                 // Consume changes and update positions
                 change.consume()
-                gestureState.update(change)
+                recognizer.tracker.update(change)
             }
             // The gesture lives until all fingers are up. E-ink panels
             // routinely drop one contact of a multi-finger gesture for a
             // few ms, so multi-finger gestures get a grace window in which
             // a re-landing finger resumes the same gesture.
-            if (fingerChange.isNotEmpty() && gestureState.pressedCount() == 0) {
-                if (gestureState.getInputCount() < 2) return TrackResult.Completed
+            if (fingerChange.isNotEmpty() && recognizer.tracker.pressedCount() == 0) {
+                if (recognizer.tracker.maxConcurrentPressed < 2) return TrackResult.Completed
                 val relandEvent = withTimeoutOrNull(TOUCH_RELAND_GRACE_MS) {
                     var e = awaitPointerEvent()
                     while (e.changes.none { it.type == PointerType.Touch && it.pressed }) {
@@ -178,61 +197,67 @@ private suspend fun AwaitPointerEventScope.trackGesture(
                     .filter { it.type == PointerType.Touch }
                     .forEach { change ->
                         change.consume()
-                        gestureState.update(change)
+                        recognizer.tracker.update(change)
                     }
             }
         }
         // events are only sent on change; hold detection re-evaluates against
-        // "now" inside the state's hold predicates
-        applyModeTransitions(gestureState, ctx)
-        streamActiveMode(gestureState, ctx)
+        // "now" inside the hold predicates
+        applyModeTransitions(recognizer, ctx)
+        streamActiveMode(recognizer, ctx)
     }
 }
 
-/** Detects mode entry (Selection/Scroll/Zoom/Drag) and applies it. */
-private fun applyModeTransitions(gestureState: GestureState, ctx: GestureContext) {
-    if (gestureState.gestureMode == GestureMode.Selection) {
+/** Detects mode entry (Selection/Scroll/Transform) and applies it. */
+private fun applyModeTransitions(recognizer: Recognizer, ctx: GestureContext) {
+    val tracker = recognizer.tracker
+    if (recognizer.mode == GestureMode.Selection) {
         ctx.updateSelectionCues(
-            gestureState.getLastPositionIO(),
-            gestureState.calculateRectangleBounds()
+            tracker.lastPosition()?.toIntOffset(),
+            tracker.dragRect()?.toAndroidRect()
         )
         return
     }
-    if (gestureState.isHoldingOneFinger()) {
-        applyGestureMode(gestureState, GestureMode.Selection, ctx)
+    if (isHoldingOneFinger(tracker, ctx.thresholds)) {
+        applyGestureMode(recognizer, GestureMode.Selection, ctx)
         ctx.actions.setIsDrawing(false) // unfreeze the screen
         ctx.updateSelectionCues(
-            gestureState.getLastPositionIO(),
-            gestureState.calculateRectangleBounds()
+            tracker.lastPosition()?.toIntOffset(),
+            tracker.dragRect()?.toAndroidRect()
         )
         ctx.actions.showHint("Selection mode!")
     }
-    if (ctx.appSettings.smoothScroll && gestureState.shouldEnterScroll())
-        applyGestureMode(gestureState, GestureMode.Scroll, ctx)
-    if (ctx.appSettings.continuousZoom && gestureState.shouldEnterZoom())
-        applyGestureMode(gestureState, GestureMode.Zoom, ctx)
-    if (gestureState.shouldEnterDrag()) {
-        applyGestureMode(gestureState, GestureMode.Drag, ctx)
-        ctx.actions.showHint("Drag mode!")
-    }
+    if (ctx.appSettings.smoothScroll && shouldEnterScroll(tracker, recognizer.mode, ctx.thresholds))
+        applyGestureMode(recognizer, GestureMode.Scroll, ctx)
+    if (shouldEnterTransform(
+            tracker,
+            recognizer.mode,
+            ctx.thresholds,
+            ctx.appSettings.continuousZoom
+        )
+    )
+        applyGestureMode(recognizer, GestureMode.Transform, ctx)
 }
 
 /** Streams incremental deltas of the active continuous mode. */
-private fun streamActiveMode(gestureState: GestureState, ctx: GestureContext) {
-    when (gestureState.gestureMode) {
+private fun streamActiveMode(recognizer: Recognizer, ctx: GestureContext) {
+    when (recognizer.mode) {
         GestureMode.Scroll -> {
-            val delta = gestureState.consumeDragDelta()
+            val delta = recognizer.tracker.consumeDragDelta()
             ctx.actions.requestScroll(Offset(0f, delta.y))
         }
 
-        GestureMode.Zoom -> {
-            val delta = gestureState.consumePinchDelta()
-            ctx.actions.onPinchToZoom(delta, gestureState.getPinchCenter())
-        }
-
-        GestureMode.Drag -> {
-            val delta = gestureState.consumeDragDelta()
-            ctx.actions.requestScroll(delta)
+        GestureMode.Transform -> {
+            // Zoom and pan together: scale about the pinch center, then
+            // translate by the centroid delta (the same point for two
+            // fingers), so the content stays under the fingers.
+            if (ctx.appSettings.continuousZoom) {
+                val zoom = recognizer.tracker.consumePinchDelta()
+                if (zoom != 0f)
+                    ctx.actions.onPinchToZoom(zoom, recognizer.tracker.pinchCenter())
+            }
+            val pan = recognizer.tracker.consumeDragDelta()
+            if (pan != Offset.Zero) ctx.actions.requestScroll(pan)
         }
 
         GestureMode.Selection, GestureMode.Normal -> {}
@@ -240,34 +265,34 @@ private fun streamActiveMode(gestureState: GestureState, ctx: GestureContext) {
 }
 
 /**
- * Resolves a gesture that ended in a modal mode (Selection/Scroll/Zoom/Drag)
+ * Resolves a gesture that ended in a modal mode (Selection/Scroll/Transform)
  * and returns the screen to normal. Returns false for Normal, meaning the
  * gesture still needs tap/swipe classification.
  */
-private fun finishModalGesture(gestureState: GestureState, ctx: GestureContext): Boolean {
-    when (gestureState.gestureMode) {
+private fun finishModalGesture(recognizer: Recognizer, ctx: GestureContext): Boolean {
+    when (recognizer.mode) {
         GestureMode.Selection -> {
-            resolveGesture(
-                action = ctx.appSettings.holdAction,
-                ctx = ctx,
-                rectangle = gestureState.calculateRectangleBounds() ?: Rect(),
+            dispatchEvent(
+                GestureEvent.HoldSelect(recognizer.tracker.dragRect() ?: IntRect.Zero),
+                ctx
             )
             ctx.updateSelectionCues(null, null)
-            applyGestureMode(gestureState, GestureMode.Normal, ctx)
+            applyGestureMode(recognizer, GestureMode.Normal, ctx)
             ctx.actions.setIsDrawing(true)
         }
 
         GestureMode.Scroll -> {
             // return screen updates to normal.
-            applyGestureMode(gestureState, GestureMode.Normal, ctx)
+            applyGestureMode(recognizer, GestureMode.Normal, ctx)
         }
 
-        GestureMode.Zoom, GestureMode.Drag -> {
-            log.d("Zoom or drag -- final redraw")
-            // we need to redraw if we zoomed in only -- for now we will just always redraw after exiting gesture.
+        GestureMode.Transform -> {
+            log.d("Transform (pan/zoom) ended -- final redraw")
+            // A zoom leaves the snapshot upscaled; redraw once at the settled
+            // transform. (A pan-only transform redraws harmlessly.)
             ctx.actions.redrawCanvas()
             // return screen updates to normal.
-            applyGestureMode(gestureState, GestureMode.Normal, ctx)
+            applyGestureMode(recognizer, GestureMode.Normal, ctx)
         }
 
         GestureMode.Normal -> return false
@@ -275,66 +300,98 @@ private fun finishModalGesture(gestureState: GestureState, ctx: GestureContext):
     return true
 }
 
-/** End-of-gesture classification: taps, double-tap, swipes, discrete zoom/scroll. */
-private suspend fun AwaitPointerEventScope.classifyTapOrSwipe(
-    gestureState: GestureState,
+/**
+ * End-of-gesture handling: classify what the fingers did into
+ * [GestureEvent]s, then act on each. The one-finger tap is special-cased
+ * because double-tap recognition needs to await a second down — pump
+ * territory, not classification.
+ */
+private suspend fun AwaitPointerEventScope.handleGestureEnd(
+    recognizer: Recognizer,
     ctx: GestureContext,
 ) {
-    if (gestureState.isOneFinger()) {
-        if (gestureState.isOneFingerTap() && awaitDoubleTap(gestureState, ctx))
-            return
-    } else if (gestureState.isTwoFingers()) {
-        log.v("Two finger tap")
-        if (gestureState.isTwoFingersTap()) {
-            resolveGesture(ctx.appSettings.twoFingerTapAction, ctx)
+    val events = classifyGesture(
+        tracker = recognizer.tracker,
+        mode = recognizer.mode,
+        flags = GestureFlags(
+            smoothScroll = ctx.appSettings.smoothScroll,
+            continuousZoom = ctx.appSettings.continuousZoom,
+        ),
+        thresholds = ctx.thresholds,
+    )
+    if (events.isNotEmpty()) log.v("Gesture events: $events")
+
+    for (event in events) {
+        if (event is GestureEvent.Tap && event.fingers == 1) {
+            if (awaitDoubleTap(recognizer.tracker, ctx)) {
+                dispatchEvent(GestureEvent.DoubleTap, ctx)
+                return
+            }
+        } else {
+            dispatchEvent(event, ctx)
         }
-        // zoom gesture
-        val zoomDelta = gestureState.getPinchDrag()
-        if (!ctx.appSettings.continuousZoom && abs(zoomDelta) > PINCH_ZOOM_THRESHOLD) {
-            ctx.actions.onPinchToZoom(zoomDelta, Offset(0f, 0f))
-            log.d("Discrete zoom: $zoomDelta")
-        }
-    }
-
-    val horizontalDrag = gestureState.getHorizontalDrag()
-    val verticalDrag = gestureState.getVerticalDrag()
-
-    log.v("horizontalDrag $horizontalDrag, verticalDrag $verticalDrag")
-
-    if (gestureState.gestureMode == GestureMode.Normal) {
-        val oneFinger = gestureState.getInputCount() == 1
-        if (horizontalDrag < -SWIPE_THRESHOLD)
-            resolveGesture(
-                if (oneFinger) ctx.appSettings.swipeLeftAction
-                else ctx.appSettings.twoFingerSwipeLeftAction,
-                ctx
-            )
-        else if (horizontalDrag > SWIPE_THRESHOLD)
-            resolveGesture(
-                if (oneFinger) ctx.appSettings.swipeRightAction
-                else ctx.appSettings.twoFingerSwipeRightAction,
-                ctx
-            )
-    }
-    if (!ctx.appSettings.smoothScroll && gestureState.isOneFinger()
-        && abs(verticalDrag) > SWIPE_THRESHOLD
-    ) {
-        log.d("Discrete scrolling, verticalDrag: $verticalDrag")
-        ctx.actions.requestScroll(Offset(0f, verticalDrag))
     }
 }
 
 /**
+ * Acts on one recognized gesture: maps it to the configured
+ * [AppSettings.GestureAction] (via [resolveGesture]) or to the direct
+ * [GestureActions] call for the non-remappable ones.
+ */
+private fun dispatchEvent(event: GestureEvent, ctx: GestureContext) {
+    when (event) {
+        is GestureEvent.Tap -> when (event.fingers) {
+            // A lone one-finger tap has no mapped action (it only seeds
+            // double-tap detection); 3+ fingers are reserved for QuickNav.
+            2 -> resolveGesture(ctx.appSettings.twoFingerTapAction, ctx)
+            else -> {}
+        }
+
+        GestureEvent.DoubleTap -> resolveGesture(ctx.appSettings.doubleTapAction, ctx)
+
+        is GestureEvent.Swipe -> {
+            val oneFinger = event.fingers == 1
+            val action = when (event.direction) {
+                GestureEvent.Direction.Left ->
+                    if (oneFinger) ctx.appSettings.swipeLeftAction
+                    else ctx.appSettings.twoFingerSwipeLeftAction
+
+                GestureEvent.Direction.Right ->
+                    if (oneFinger) ctx.appSettings.swipeRightAction
+                    else ctx.appSettings.twoFingerSwipeRightAction
+            }
+            resolveGesture(action, ctx)
+        }
+
+        is GestureEvent.HoldSelect ->
+            resolveGesture(ctx.appSettings.holdAction, ctx, event.rect.toAndroidRect())
+
+        is GestureEvent.PinchZoom -> {
+            log.d("Discrete zoom: ${event.delta}")
+            // Discrete zoom snaps to fixed levels (fit-width / 100%), which are
+            // focal-point independent, so no pinch center is passed.
+            ctx.actions.onPinchToZoom(event.delta, null)
+        }
+
+        is GestureEvent.VerticalScroll -> {
+            log.d("Discrete scrolling, verticalDrag: ${event.delta}")
+            ctx.actions.requestScroll(Offset(0f, event.delta))
+        }
+    }
+
+}
+
+/**
  * Waits [DOUBLE_TAP_TIMEOUT_MS] for a second tap after a one-finger tap.
- * Returns true if the double-tap action fired.
+ * Returns true if a double-tap was recognized.
  */
 private suspend fun AwaitPointerEventScope.awaitDoubleTap(
-    gestureState: GestureState,
+    tracker: PointerTracker,
     ctx: GestureContext,
 ): Boolean {
     return withTimeoutOrNull(DOUBLE_TAP_TIMEOUT_MS) {
         val secondDown = awaitFirstDown()
-        val deltaTime = secondDown.uptimeMillis - gestureState.lastInputTimestamp
+        val deltaTime = secondDown.uptimeMillis - tracker.lastInputTimestamp
         log.v("Second down detected: ${secondDown.type}, position: ${secondDown.position}, deltaTime: $deltaTime")
         if (deltaTime < DOUBLE_TAP_MIN_MS) {
             ctx.actions.showHint("Too quick for double click! time between: $deltaTime")
@@ -346,10 +403,23 @@ private suspend fun AwaitPointerEventScope.awaitDoubleTap(
             log.i("Ignoring non-touch input during double-tap detection")
             return@withTimeoutOrNull null
         }
-        resolveGesture(ctx.appSettings.doubleTapAction, ctx)
     } != null
 }
 
+
+/**
+ * Last-resort cleanup, run in the gesture's `finally`. Returning the mode to
+ * Normal releases the refresh handle (with the settle delay); a gesture
+ * abandoned in Selection mode additionally needs its visual cues removed and
+ * drawing re-enabled.
+ */
+private fun cleanupGesture(recognizer: Recognizer, ctx: GestureContext) {
+    if (recognizer.mode == GestureMode.Selection) {
+        ctx.updateSelectionCues(null, null)
+        ctx.actions.setIsDrawing(true)
+    }
+    applyGestureMode(recognizer, GestureMode.Normal, ctx)
+}
 
 /**
  * The single place gesture-mode transitions are applied, because they carry
@@ -357,15 +427,15 @@ private suspend fun AwaitPointerEventScope.awaitDoubleTap(
  * refresh, returning to Normal restores full-quality refresh.
  */
 private fun applyGestureMode(
-    gestureState: GestureState,
+    recognizer: Recognizer,
     new: GestureMode,
     ctx: GestureContext,
 ) {
-    val previous = gestureState.gestureMode
+    val previous = recognizer.mode
     if (previous == new) return
     log.d("Entered ${new.name} gesture mode")
     when (new) {
-        GestureMode.Zoom, GestureMode.Scroll, GestureMode.Selection, GestureMode.Drag -> {
+        GestureMode.Transform, GestureMode.Scroll, GestureMode.Selection -> {
             if (ctx.refreshHandle == null)
                 ctx.refreshHandle = EpdRefreshArbiter.acquire("gesture")
         }
@@ -380,7 +450,7 @@ private fun applyGestureMode(
             ctx.refreshHandle = null
         }
     }
-    gestureState.gestureMode = new
+    recognizer.mode = new
 }
 
 private fun resolveGesture(
@@ -408,3 +478,7 @@ private fun resolveGesture(
         }
     }
 }
+
+private fun Offset.toIntOffset() = IntOffset(x.toInt(), y.toInt())
+
+private fun IntRect.toAndroidRect() = Rect(left, top, right, bottom)

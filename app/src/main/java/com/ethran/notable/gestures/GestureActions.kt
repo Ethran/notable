@@ -24,6 +24,6 @@ interface GestureActions {
     /** Select the page content inside [rect] (screen coordinates). */
     fun selectRectangle(rect: Rect)
 
-    /** Full canvas redraw, used after a zoom/drag gesture settles. */
+    /** Full canvas redraw, used after a two-finger transform gesture settles. */
     fun redrawCanvas()
 }

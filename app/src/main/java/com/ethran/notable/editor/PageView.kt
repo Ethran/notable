@@ -39,6 +39,9 @@ import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
+import com.ethran.notable.gestures.MAX_ZOOM
+import com.ethran.notable.gestures.MIN_ZOOM
+import com.ethran.notable.gestures.ZOOM_SENSITIVITY
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
@@ -612,15 +615,22 @@ class PageView(
         val portraitRatio = SCREEN_WIDTH.toFloat() / SCREEN_HEIGHT
 
         return if (!GlobalAppSettings.current.continuousZoom) {
-            // Discrete zoom mode - snap to either 1.0 or screen ratio
-            if (scaleDelta <= 1.0f) {
+            // Discrete zoom mode - snap to either 1.0 or screen ratio.
+            // scaleDelta is a growth ratio minus 1 (see PointerTracker.pinchRatio),
+            // so it is negative when pinching in (zoom out) and positive when
+            // spreading (zoom in); split on 0, not 1.
+            if (scaleDelta <= 0f) {
                 if (SCREEN_HEIGHT > SCREEN_WIDTH) portraitRatio else 1.0f
             } else {
                 if (SCREEN_HEIGHT > SCREEN_WIDTH) 1.0f else portraitRatio
             }
         } else {
-            // Continuous zoom mode with snap behavior
-            val newZoom = (scaleDelta / 3 + currentZoom).coerceIn(0.1f, 10.0f)
+            // Continuous zoom: scaleDelta is the per-frame growth ratio minus 1,
+            // so the zoom scales multiplicatively. ZOOM_SENSITIVITY damps how
+            // hard the pinch drives the zoom (< 1 zooms more gently than the
+            // fingers spread).
+            val newZoom =
+                (currentZoom * (1f + scaleDelta * ZOOM_SENSITIVITY)).coerceIn(MIN_ZOOM, MAX_ZOOM)
 
             // Snap to either 1.0 or screen ratio depending on which is closer
             val snapTarget = if (abs(newZoom - 1.0f) < abs(newZoom - portraitRatio)) {
