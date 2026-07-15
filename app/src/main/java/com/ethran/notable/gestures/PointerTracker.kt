@@ -66,6 +66,14 @@ class PointerTracker(
 
     private var lastPinchDistance: Float? = null
 
+    // Net centroid translation accumulated across the whole gesture, with the
+    // same guarded-reference pattern as the drag delta: when the pressed set
+    // changes the reference resets, so a finger dropping and re-landing
+    // mid-swipe neither adds a bogus jump nor under-measures the travel.
+    private var netTravelRefCentroid: Offset? = null
+    private var netTravelRefIds: Set<Long> = emptySet()
+    private var netTravel: Offset = Offset.Zero
+
     /** Feed every touch [PointerInputChange] of the gesture through this. */
     fun update(change: PointerInputChange) =
         update(change.id.value, change.position, change.pressed, change.uptimeMillis)
@@ -87,6 +95,28 @@ class PointerTracker(
             track.currentPosition = position
             track.pressed = pressed
         }
+        advanceNetTravel()
+    }
+
+    private fun advanceNetTravel() {
+        val pressed = pointers.filterValues { it.pressed }
+        if (pressed.isEmpty()) {
+            netTravelRefCentroid = null
+            netTravelRefIds = emptySet()
+            return
+        }
+        var sumX = 0f
+        var sumY = 0f
+        for (track in pressed.values) {
+            sumX += track.currentPosition.x
+            sumY += track.currentPosition.y
+        }
+        val centroid = Offset(sumX / pressed.size, sumY / pressed.size)
+        val ids = pressed.keys.toSet()
+        val reference = netTravelRefCentroid
+        if (reference != null && ids == netTravelRefIds) netTravel += centroid - reference
+        netTravelRefCentroid = centroid
+        netTravelRefIds = ids
     }
 
     /** Number of fingers currently on the screen. */
@@ -126,6 +156,14 @@ class PointerTracker(
         return Offset(dx / pressed.size, dy / pressed.size).getDistance()
     }
 
+    /**
+     * Net centroid translation accumulated over the whole gesture. Unlike
+     * [centroidTravel] (down → current of the pressed fingers) it survives
+     * fingers lifting and re-landing mid-gesture, so it is the swipe distance
+     * for multi-finger gestures.
+     */
+    fun netCentroidTravel(): Offset = netTravel
+
     /** Current position of the first finger that went down. */
     fun lastPosition(): Offset? = pointers.values.firstOrNull()?.currentPosition
 
@@ -143,12 +181,18 @@ class PointerTracker(
         )
     }
 
-    // return smallest horizontal movement, or 0, if movement is not horizontal
-    fun horizontalDrag(): Float {
+    /**
+     * Smallest horizontal movement across the fingers, or 0 if any finger
+     * moved more vertically than horizontally. Pointers whose total delta is
+     * under [noiseFloorPx] (phantom palm contacts, re-landed fingers that
+     * barely moved) neither veto nor contribute.
+     */
+    fun horizontalDrag(noiseFloorPx: Float = 0f): Float {
         var minHorizontalMovement: Float? = null
 
         for (track in pointers.values) {
             val delta = track.currentPosition - track.downPosition
+            if (delta.getDistance() < noiseFloorPx) continue
 
             // Check if the movement is more horizontal than vertical
             if (abs(delta.x) <= abs(delta.y)) return 0f
@@ -161,12 +205,17 @@ class PointerTracker(
         return minHorizontalMovement ?: 0f
     }
 
-    // return smallest vertical movement, or 0, if movement is not vertical
-    fun verticalDrag(): Float {
+    /**
+     * Smallest vertical movement across the fingers, or 0 if any finger moved
+     * more horizontally than vertically. Same [noiseFloorPx] rule as
+     * [horizontalDrag].
+     */
+    fun verticalDrag(noiseFloorPx: Float = 0f): Float {
         var minVerticalMovement: Float? = null
 
         for (track in pointers.values) {
             val delta = track.currentPosition - track.downPosition
+            if (delta.getDistance() < noiseFloorPx) continue
 
             // Check if the movement is more vertical than horizontal
             if (abs(delta.y) <= abs(delta.x)) return 0f

@@ -350,15 +350,20 @@ private fun dispatchEvent(event: GestureEvent, ctx: GestureContext) {
         GestureEvent.DoubleTap -> resolveGesture(ctx.appSettings.doubleTapAction, ctx)
 
         is GestureEvent.Swipe -> {
-            val oneFinger = event.fingers == 1
-            val action = when (event.direction) {
-                GestureEvent.Direction.Left ->
-                    if (oneFinger) ctx.appSettings.swipeLeftAction
-                    else ctx.appSettings.twoFingerSwipeLeftAction
+            val action = when (event.fingers) {
+                1 -> when (event.direction) {
+                    GestureEvent.Direction.Left -> ctx.appSettings.swipeLeftAction
+                    GestureEvent.Direction.Right -> ctx.appSettings.swipeRightAction
+                }
 
-                GestureEvent.Direction.Right ->
-                    if (oneFinger) ctx.appSettings.swipeRightAction
-                    else ctx.appSettings.twoFingerSwipeRightAction
+                // Two fingers are pan/zoom (Transform), so the multi-finger
+                // swipe actions live on three fingers. Two still lands here
+                // on rare churn edge cases (a finger lifting mid-gesture),
+                // where firing the same action is the sensible outcome.
+                else -> when (event.direction) {
+                    GestureEvent.Direction.Left -> ctx.appSettings.twoFingerSwipeLeftAction
+                    GestureEvent.Direction.Right -> ctx.appSettings.twoFingerSwipeRightAction
+                }
             }
             resolveGesture(action, ctx)
         }

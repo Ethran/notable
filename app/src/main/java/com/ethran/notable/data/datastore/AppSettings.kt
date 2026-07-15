@@ -52,6 +52,8 @@ data class AppSettings(
     val twoFingerTapAction: GestureAction = GestureAction.ChangeTool,
     val swipeLeftAction: GestureAction = GestureAction.NextPage,
     val swipeRightAction: GestureAction = GestureAction.PreviousPage,
+    // Fired by *three*-finger swipes (two fingers are pan/zoom); the field
+    // names are kept for persisted-settings compatibility.
     val twoFingerSwipeLeftAction: GestureAction = GestureAction.ToggleZen,
     val twoFingerSwipeRightAction: GestureAction = GestureAction.ToggleZen,
     val holdAction: GestureAction = GestureAction.Select,

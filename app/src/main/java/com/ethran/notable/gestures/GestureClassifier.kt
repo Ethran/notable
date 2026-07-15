@@ -49,16 +49,28 @@ fun classifyGesture(
     }
 
     if (mode == GestureMode.Normal) {
-        val horizontalDrag = tracker.horizontalDrag()
-        if (horizontalDrag < -thresholds.swipePx) {
+        // Multi-finger swipes use the accumulated centroid travel (survives
+        // fingers re-landing mid-swipe) and a shorter distance threshold;
+        // one-finger swipes keep the per-track measure.
+        val horizontalDrag: Float
+        val swipeThresholdPx: Float
+        if (fingers == 1) {
+            horizontalDrag = tracker.horizontalDrag(thresholds.swipeNoiseFloorPx)
+            swipeThresholdPx = thresholds.swipePx
+        } else {
+            val net = tracker.netCentroidTravel()
+            horizontalDrag = if (abs(net.x) > abs(net.y)) net.x else 0f
+            swipeThresholdPx = thresholds.multiFingerSwipePx
+        }
+        if (horizontalDrag < -swipeThresholdPx) {
             events += GestureEvent.Swipe(fingers, GestureEvent.Direction.Left)
-        } else if (horizontalDrag > thresholds.swipePx) {
+        } else if (horizontalDrag > swipeThresholdPx) {
             events += GestureEvent.Swipe(fingers, GestureEvent.Direction.Right)
         }
     }
 
     if (!flags.smoothScroll && fingers == 1) {
-        val verticalDrag = tracker.verticalDrag()
+        val verticalDrag = tracker.verticalDrag(thresholds.swipeNoiseFloorPx)
         if (abs(verticalDrag) > thresholds.swipePx) {
             events += GestureEvent.VerticalScroll(verticalDrag)
         }
@@ -85,6 +97,19 @@ fun isTwoFingerTap(
     return tracker.totalTravel() < thresholds.twoFingerTapMovementTolerancePx &&
             duration < TWO_FINGER_TOUCH_TAP_MAX_TIME &&
             duration > TWO_FINGER_TOUCH_TAP_MIN_TIME
+}
+
+/**
+ * Three or more fingers swiping up — the app-level gesture that opens
+ * QuickNav. Measured on the accumulated centroid travel so a finger dropping
+ * and re-landing mid-swipe doesn't under-measure it; the direction check
+ * keeps it clear of the horizontal three-finger swipe actions.
+ */
+fun isQuickNavSwipe(tracker: PointerTracker, thresholds: GestureThresholds): Boolean {
+    if (tracker.maxConcurrentPressed < QUICK_NAV_FINGER_COUNT) return false
+    val net = tracker.netCentroidTravel()
+    // Screen coordinates: up is negative y.
+    return net.y < -thresholds.multiFingerSwipePx && abs(net.y) > abs(net.x)
 }
 
 /** Hold detection measures against "now" — a stationary finger sends no events. */
@@ -120,5 +145,5 @@ fun shouldEnterScroll(
 ): Boolean {
     return mode == GestureMode.Normal &&
             tracker.maxConcurrentPressed == 1 &&
-            abs(tracker.verticalDrag()) > thresholds.smoothScrollEnterPx
+            abs(tracker.verticalDrag(thresholds.swipeNoiseFloorPx)) > thresholds.smoothScrollEnterPx
 }

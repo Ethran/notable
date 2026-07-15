@@ -24,6 +24,9 @@ const val ZOOM_SENSITIVITY = 0.4f
 const val MIN_ZOOM = 0.1f
 const val MAX_ZOOM = 10.0f
 
+// Simultaneous finger contacts for the QuickNav swipe-up.
+const val QUICK_NAV_FINGER_COUNT = 3
+
 // E-ink touch panels routinely drop one contact of a multi-finger gesture for
 // a few ms and re-report it with a new pointer id. After all fingers lift,
 // multi-finger gestures wait this long for a re-landing contact before the
@@ -42,10 +45,18 @@ const val GESTURE_REFRESH_SETTLE_MS = 500L
 private val TAP_MOVEMENT_TOLERANCE = 15.dp
 private val TWO_FINGER_TAP_MOVEMENT_TOLERANCE = 20.dp
 
+// Pointer deltas below this are contact noise (phantom palm touches,
+// re-landed fingers): they neither veto nor contribute to a swipe direction.
+private val SWIPE_NOISE_FLOOR = 10.dp
+
 // One-finger swipe distance (the default page-turn) and the shorter travel
 // that engages smooth scrolling.
 private val SWIPE_THRESHOLD = 160.dp
 private val SWIPE_THRESHOLD_SMOOTH = 100.dp
+
+// Multi-finger swipes are physically shorter than one-finger ones, so they
+// get a lower distance threshold. Also gates the QuickNav swipe-up.
+private val MULTI_FINGER_SWIPE_THRESHOLD = 100.dp
 
 // How far two fingers must translate together before a pan engages. No
 // stationary hold first, so panning feels immediate; a pure pinch keeps the
@@ -65,6 +76,12 @@ class GestureThresholds(density: Density) {
     /** Max total travel (both fingers combined) for a two-finger tap. */
     val twoFingerTapMovementTolerancePx: Float =
         with(density) { TWO_FINGER_TAP_MOVEMENT_TOLERANCE.toPx() }
+
+    /** Per-pointer delta below which a contact is noise for swipe direction. */
+    val swipeNoiseFloorPx: Float = with(density) { SWIPE_NOISE_FLOOR.toPx() }
+
+    /** Min directional travel for a multi-finger (3+) swipe, QuickNav included. */
+    val multiFingerSwipePx: Float = with(density) { MULTI_FINGER_SWIPE_THRESHOLD.toPx() }
 
     /** Net two-finger translation before a pan engages. */
     val panEnterPx: Float = with(density) { PAN_ENTER_THRESHOLD.toPx() }

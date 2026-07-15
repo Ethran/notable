@@ -35,6 +35,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.AppEventUiBridge
@@ -203,6 +204,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        setOnyxSystemGesturesBlocked(false)
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
             CanvasEventBus.refreshUi.emit(Unit)
@@ -223,9 +225,22 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         enableFullScreen()
+        setOnyxSystemGesturesBlocked(true)
         lifecycleScope.launch {
             CanvasEventBus.onFocusChange.emit(true)
         }
+    }
+
+    // Onyx SystemUI's TouchInteractionService swallows multi-finger touches for its
+    // global gestures (three-finger screenshot, edge shortcuts), which steals our
+    // three-finger swipes. Raising this flag makes it stand down; the flag is global
+    // and sticky (nothing else clears it), so it must be released whenever we pause.
+    private fun setOnyxSystemGesturesBlocked(blocked: Boolean) {
+        if (!DeviceCompat.isOnyxDevice) return
+        val action =
+            if (blocked) "onyx.action.INTERCEPT_GESTURE"
+            else "onyx.action.DO_NOT_INTERCEPT_GESTURE"
+        sendBroadcast(Intent(action))
     }
 
 

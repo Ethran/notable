@@ -2,7 +2,6 @@ package com.ethran.notable.gestures
 
 import androidx.compose.ui.geometry.Offset
 import org.junit.Assert.assertEquals
-import org.junit.Ignore
 import org.junit.Test
 
 private const val T0 = 1_000L
@@ -173,7 +172,6 @@ class PointerTrackerTest {
         assertEquals(300f, tracker.verticalDrag(), 1e-6f)
     }
 
-    @Ignore("Finding 5a (gesture-handling-review): deltas below a noise floor should not veto")
     @Test
     fun `a phantom low-delta contact does not veto a swipe`() {
         tracker.down(1, 0f, 0f, T0)
@@ -182,6 +180,31 @@ class PointerTrackerTest {
         tracker.down(9, 500f, 500f, T0 + 40)
         tracker.moveTo(9, 501f, 503f, T0 + 60)
         tracker.up(9, 501f, 503f, T0 + 70)
-        assertEquals(300f, tracker.horizontalDrag(), 1e-6f)
+        assertEquals(300f, tracker.horizontalDrag(noiseFloorPx = 10f), 1e-6f)
+    }
+
+    // --- Net centroid travel (multi-finger swipe distance) -----------------
+
+    @Test
+    fun `net centroid travel survives a finger re-landing mid-swipe`() {
+        tracker.down(1, 0f, 0f, T0)
+        tracker.down(2, 0f, 100f, T0 + 10)
+        tracker.moveTo(1, 100f, 0f, T0 + 40)
+        tracker.moveTo(2, 100f, 100f, T0 + 40)
+        // The panel drops contact 2 and re-reports it as id 3; the swipe goes on.
+        tracker.up(2, 100f, 100f, T0 + 60)
+        tracker.down(3, 102f, 100f, T0 + 65)
+        tracker.moveTo(1, 300f, 0f, T0 + 100)
+        tracker.moveTo(3, 302f, 100f, T0 + 100)
+        assertEquals(300f, tracker.netCentroidTravel().x, 1e-4f)
+    }
+
+    @Test
+    fun `a symmetric pinch accumulates no net centroid travel`() {
+        tracker.down(1, 100f, 0f, T0)
+        tracker.down(2, 200f, 0f, T0 + 10)
+        tracker.moveTo(1, 60f, 0f, T0 + 30)
+        tracker.moveTo(2, 240f, 0f, T0 + 30)
+        assertEquals(0f, tracker.netCentroidTravel().x, 1e-4f)
     }
 }

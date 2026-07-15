@@ -14,7 +14,8 @@ class GestureClassifierTest {
     private val tracker = PointerTracker(now = { clockTime })
 
     // Density 1 ⇒ dp values equal px values: tap tolerance 15, two-finger
-    // tap tolerance 20, swipe 160, smooth-scroll entry 100.
+    // tap tolerance 20, swipe 160, multi-finger swipe 100, smooth-scroll
+    // entry 100, swipe noise floor 10.
     private val thresholds = GestureThresholds(Density(1f))
     private val noFlags = GestureFlags(smoothScroll = false, continuousZoom = false)
 
@@ -93,6 +94,52 @@ class GestureClassifierTest {
         tracker.down(2, 60f, 50f, T0 + 50)
         clockTime = T0 + 400
         assertFalse(isHoldingOneFinger(tracker, thresholds))
+    }
+
+    // --- QuickNav swipe-up (3+ fingers, app-level) ----------------------------
+
+    @Test
+    fun `three fingers swiping up is a quicknav swipe`() {
+        tracker.down(1, 100f, 500f, T0)
+        tracker.down(2, 200f, 500f, T0 + 10)
+        tracker.down(3, 300f, 500f, T0 + 20)
+        // All three slide up by 150 px (> 100 px multi-finger threshold).
+        tracker.moveTo(1, 100f, 350f, T0 + 120)
+        tracker.moveTo(2, 200f, 350f, T0 + 120)
+        tracker.moveTo(3, 300f, 350f, T0 + 120)
+        assertTrue(isQuickNavSwipe(tracker, thresholds))
+    }
+
+    @Test
+    fun `a horizontal three-finger swipe is not a quicknav swipe`() {
+        tracker.down(1, 100f, 300f, T0)
+        tracker.down(2, 200f, 300f, T0 + 10)
+        tracker.down(3, 300f, 300f, T0 + 20)
+        tracker.moveTo(1, 250f, 290f, T0 + 120)
+        tracker.moveTo(2, 350f, 290f, T0 + 120)
+        tracker.moveTo(3, 450f, 290f, T0 + 120)
+        assertFalse(isQuickNavSwipe(tracker, thresholds))
+    }
+
+    @Test
+    fun `a short upward travel is not a quicknav swipe`() {
+        tracker.down(1, 100f, 500f, T0)
+        tracker.down(2, 200f, 500f, T0 + 10)
+        tracker.down(3, 300f, 500f, T0 + 20)
+        // 60 px up < the 100 px multi-finger threshold.
+        tracker.moveTo(1, 100f, 440f, T0 + 120)
+        tracker.moveTo(2, 200f, 440f, T0 + 120)
+        tracker.moveTo(3, 300f, 440f, T0 + 120)
+        assertFalse(isQuickNavSwipe(tracker, thresholds))
+    }
+
+    @Test
+    fun `two fingers swiping up are not a quicknav swipe`() {
+        tracker.down(1, 100f, 500f, T0)
+        tracker.down(2, 200f, 500f, T0 + 10)
+        tracker.moveTo(1, 100f, 300f, T0 + 120)
+        tracker.moveTo(2, 200f, 300f, T0 + 120)
+        assertFalse(isQuickNavSwipe(tracker, thresholds))
     }
 
     // --- Swipes ---------------------------------------------------------------
