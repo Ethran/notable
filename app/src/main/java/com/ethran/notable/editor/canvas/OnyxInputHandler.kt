@@ -172,6 +172,11 @@ class OnyxInputHandler(
         log.i("Update is drawing: $toolbarState.isDrawing")
         if (toolbarState.isDrawing) {
             touchHelper!!.setRawDrawingEnabled(true)
+            // setRawDrawingEnabled(true) resets the framework stroke config to firmware defaults
+            // (brush channel on, eraser channel off). Re-assert the eraser channel and re-send the
+            // active pen style/width/color so the next stroke is rendered with the current tool.
+            enableNativeEraser(touchHelper)
+            updatePenAndStroke()
         } else {
             // Check if drawing is completed
             CanvasEventBus.waitForDrawing()
@@ -194,6 +199,11 @@ class OnyxInputHandler(
                 touchHelper,
                 toolbarHeight
             )
+            // setupSurface resets the framework stroke style to firmware defaults. Re-send the
+            // pen style here, inside the same coroutine and after the surface is armed: a caller
+            // that invokes updatePenAndStroke() right after updateActiveSurface() would otherwise
+            // race this launch and have its style overwritten.
+            updatePenAndStroke()
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {

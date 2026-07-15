@@ -1,4 +1,4 @@
-package com.ethran.notable.editor.drawing
+package com.ethran.notable.editor.drawing.onyx
 
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -25,10 +25,12 @@ object NeoFountainPenV2Wrapper {
             return
         }
 
-        // Fountain V2 produces closed (filled) paths. The pressure must be in [0, 1].
-        // Work on a copy so we never mutate the caller's points (otherwise re-rendering
-        // the same stroke after an unfreeze would normalize the pressures again).
-        val renderPoints = copyAndNormalizePressure(points, maxTouchPressure)
+        // Fountain V2 produces closed (filled) paths. The pressure must be in [0, 1];
+        // maxTouchPressure is the denominator of the incoming values (1 for the normalized
+        // strokes the pipeline produces — see Stroke.maxPressure). Divide on a copy so we
+        // never mutate the caller's points.
+        val renderPoints = if (maxTouchPressure == 1f || maxTouchPressure <= 0f) points
+        else points.map { p -> TouchPoint(p).apply { pressure /= maxTouchPressure } }
 
         // Mirror the official demo (BrushScribbleShape) via FountainShapes.createNeoPenV2 so
         // config matches the firmware's live rendering. fastMode=false yields PenPathResult
@@ -60,15 +62,4 @@ object NeoFountainPenV2Wrapper {
         }
     }
 
-    private fun copyAndNormalizePressure(
-        points: List<TouchPoint>,
-        maxTouchPressure: Float,
-    ): List<TouchPoint> {
-        val needNormalize = maxTouchPressure > 0f && points.any { it.pressure > 1.0f }
-        return points.map { p ->
-            TouchPoint(p).apply {
-                if (needNormalize) pressure /= maxTouchPressure
-            }
-        }
-    }
 }

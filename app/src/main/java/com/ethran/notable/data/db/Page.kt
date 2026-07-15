@@ -117,8 +117,10 @@ class PageRepository @Inject constructor(
         val data = db.getPageWithDataById(pageId)
         if (data == null) {
             Log.w("PageRepository", "Page not found: $pageId")
+            return null
         }
-        return data
+        // Normalize legacy raw-pressure rows on load; in-memory strokes are always [0,1].
+        return data.copy(strokes = data.strokes.map { it.withNormalizedPressure() })
     }
 
 

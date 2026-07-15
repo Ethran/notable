@@ -6,6 +6,7 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.data.db.encodeStrokePoints
+import com.ethran.notable.data.db.withNormalizedPressure
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -92,7 +93,7 @@ object NotebookSerializer {
 
     /**
      * Serialize a page with its strokes and images to JSON format.
-     * Stroke points are embedded as base64-encoded SB1 binary format.
+     * Stroke points are embedded as base64-encoded SB binary format.
      */
     fun serializePage(page: Page, strokes: List<Stroke>, images: List<Image>): String {
         val strokeDtos = strokes.map { stroke ->
@@ -146,7 +147,7 @@ object NotebookSerializer {
     }
 
     /**
-     * Deserialize page JSON with embedded base64-encoded SB1 binary stroke data safely.
+     * Deserialize page JSON with embedded base64-encoded SB binary stroke data safely.
      * Corrupted individual strokes or images are skipped to save the rest of the page.
      */
     fun deserializePage(jsonString: String): AppResult<Triple<Page, List<Stroke>, List<Image>>, DomainError> {
@@ -197,7 +198,8 @@ object NotebookSerializer {
                         pageId = pageDto.id,
                         createdAt = created,
                         updatedAt = updated
-                    )
+                        // Remote data may carry raw-scale pressure; normalize to [0, 1].
+                    ).withNormalizedPressure()
                 } catch (e: Exception) {
                     logCallStack(reason = "Skipping corrupted stroke ${strokeDto.id}: ${e.message}")
                     null
