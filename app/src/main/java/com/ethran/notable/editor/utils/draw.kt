@@ -1,10 +1,10 @@
 package com.ethran.notable.editor.utils
 
 import androidx.core.graphics.toRect
+import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.PageView
-import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
 
 
@@ -35,7 +35,8 @@ fun handleDraw(
             right = boundingBox.right,
             points = touchPoints,
             color = color,
-            maxPressure = EpdController.getMaxTouchPressure().toInt()
+            // Pressure is normalized to [0,1] at capture (TouchPoint.toStrokePoint).
+            maxPressure = MAX_PRESSURE_NORMALIZED
         )
         page.addStrokes(listOf(stroke))
         // this is causing lagging and crushing, neo pens are not good

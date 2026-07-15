@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
                                 ?: AppSettings(version = 1)
 
                         GlobalAppSettings.update(savedSettings)
-                        strokeMigrationHelper.get().reencodeStrokePointsToSB1()
+                        strokeMigrationHelper.get().reencodeStrokePointsToBinary()
                         pageDataManager.get()
                             .registerComponentCallbacks(this@MainActivity.applicationContext)
                         editorSettingCacheManager.get().init()

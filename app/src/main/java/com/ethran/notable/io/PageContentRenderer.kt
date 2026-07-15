@@ -20,7 +20,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.Native
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawImage
-import com.ethran.notable.editor.drawing.drawStroke
+import com.ethran.notable.editor.drawing.StrokeRenderers
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
@@ -125,7 +125,7 @@ class PageContentRenderer @Inject constructor(
             )
 
             data.images.forEach { drawImage(context, canvas, it, -scroll) }
-            data.strokes.forEach { drawStroke(canvas, it, -scroll) }
+            data.strokes.forEach { StrokeRenderers.current.drawStroke(canvas, it, -scroll) }
         }
     }
 
