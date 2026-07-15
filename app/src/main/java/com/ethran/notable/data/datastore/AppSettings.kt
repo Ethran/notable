@@ -58,6 +58,11 @@ data class AppSettings(
     val twoFingerSwipeRightAction: GestureAction = GestureAction.ToggleZen,
     val holdAction: GestureAction = GestureAction.Select,
     val enableQuickNav: Boolean = true,
+    // Onyx only: broadcast onyx.action.INTERCEPT_GESTURE while the app is resumed so
+    // SystemUI's three-finger screenshot cannot steal our multi-finger gestures. The
+    // same SystemUI pipeline serves the side/bottom edge navigation swipes, so those
+    // stop working inside the app while this is on — hence opt-in.
+    val blockSystemGestures: Boolean = false,
     val renameOnCreate: Boolean = true,
 
     // Debug

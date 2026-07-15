@@ -87,7 +87,7 @@ class PointerTrackerTest {
         tracker.down(3, 500f, 500f, T0 + 20)
         tracker.moveTo(3, 900f, 900f, T0 + 40)
         assertEquals(0f, tracker.pinchRatio(), 1e-6f)
-        assertEquals(Offset(50f, 0f), tracker.pinchCenter())
+        assertEquals(Offset(50f, 0f), requireNotNull(tracker.pinchCenter()))
     }
 
     @Test

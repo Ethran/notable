@@ -167,16 +167,21 @@ private suspend fun AwaitPointerEventScope.trackGesture(
         if (ctx.shouldAbort()) return TrackResult.Aborted
 
         if (event != null) {
-            val fingerChange =
-                event.changes.filter { it.type == PointerType.Touch }
-
-            // Another recognizer already claimed these events — bail.
-            if (fingerChange.find { it.isConsumed } != null) {
-                log.i("Canceling gesture - already consumed")
-                return TrackResult.ConsumedByOther
+            // This runs on every pointer event; indexed loops keep it
+            // allocation-free. Two passes so nothing is consumed if another
+            // recognizer already claimed any of these events.
+            for (i in event.changes.indices) {
+                val change = event.changes[i]
+                if (change.type == PointerType.Touch && change.isConsumed) {
+                    log.i("Canceling gesture - already consumed")
+                    return TrackResult.ConsumedByOther
+                }
             }
-            fingerChange.forEach { change ->
-                // Consume changes and update positions
+            var sawFinger = false
+            for (i in event.changes.indices) {
+                val change = event.changes[i]
+                if (change.type != PointerType.Touch) continue
+                sawFinger = true
                 change.consume()
                 recognizer.tracker.update(change)
             }
@@ -184,7 +189,7 @@ private suspend fun AwaitPointerEventScope.trackGesture(
             // routinely drop one contact of a multi-finger gesture for a
             // few ms, so multi-finger gestures get a grace window in which
             // a re-landing finger resumes the same gesture.
-            if (fingerChange.isNotEmpty() && recognizer.tracker.pressedCount() == 0) {
+            if (sawFinger && recognizer.tracker.pressedCount() == 0) {
                 if (recognizer.tracker.maxConcurrentPressed < 2) return TrackResult.Completed
                 val relandEvent = withTimeoutOrNull(TOUCH_RELAND_GRACE_MS) {
                     var e = awaitPointerEvent()
@@ -193,12 +198,12 @@ private suspend fun AwaitPointerEventScope.trackGesture(
                     }
                     e
                 } ?: return TrackResult.Completed
-                relandEvent.changes
-                    .filter { it.type == PointerType.Touch }
-                    .forEach { change ->
-                        change.consume()
-                        recognizer.tracker.update(change)
-                    }
+                for (i in relandEvent.changes.indices) {
+                    val change = relandEvent.changes[i]
+                    if (change.type != PointerType.Touch) continue
+                    change.consume()
+                    recognizer.tracker.update(change)
+                }
             }
         }
         // events are only sent on change; hold detection re-evaluates against

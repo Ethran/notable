@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -111,6 +112,8 @@ class MainActivity : ComponentActivity() {
         SCREEN_WIDTH = applicationContext.resources.displayMetrics.widthPixels
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
 
+        trackSystemGestureBlocking()
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 syncWorkUiBridge.syncUiEvents.collect { event ->
@@ -204,7 +207,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        setOnyxSystemGesturesBlocked(false)
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
             CanvasEventBus.refreshUi.emit(Unit)
@@ -225,18 +227,36 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         enableFullScreen()
-        setOnyxSystemGesturesBlocked(true)
         lifecycleScope.launch {
             CanvasEventBus.onFocusChange.emit(true)
         }
     }
 
     // Onyx SystemUI's TouchInteractionService swallows multi-finger touches for its
-    // global gestures (three-finger screenshot, edge shortcuts), which steals our
-    // three-finger swipes. Raising this flag makes it stand down; the flag is global
-    // and sticky (nothing else clears it), so it must be released whenever we pause.
-    private fun setOnyxSystemGesturesBlocked(blocked: Boolean) {
+    // global gestures (three-finger screenshot), which steals our three-finger
+    // swipes. Raising this flag makes it stand down — but the same pipeline serves
+    // the side/bottom edge navigation swipes, so blocking is opt-in via settings.
+    // The flag is global and sticky (nothing else clears it), so it is held only
+    // while the activity is resumed AND the setting is on, released otherwise.
+    private var onyxSystemGesturesBlocked = false
+
+    private fun trackSystemGestureBlocking() {
         if (!DeviceCompat.isOnyxDevice) return
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                try {
+                    snapshotFlow { GlobalAppSettings.current.blockSystemGestures }
+                        .collect { setOnyxSystemGesturesBlocked(it) }
+                } finally {
+                    setOnyxSystemGesturesBlocked(false)
+                }
+            }
+        }
+    }
+
+    private fun setOnyxSystemGesturesBlocked(blocked: Boolean) {
+        if (blocked == onyxSystemGesturesBlocked) return
+        onyxSystemGesturesBlocked = blocked
         val action =
             if (blocked) "onyx.action.INTERCEPT_GESTURE"
             else "onyx.action.DO_NOT_INTERCEPT_GESTURE"

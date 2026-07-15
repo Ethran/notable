@@ -35,6 +35,7 @@
     <string name="gestures_three_finger_swipe_left_action">Three Finger Swipe Left Action</string>
     <string name="gestures_three_finger_swipe_right_action">Three Finger Swipe Right Action</string>
     <string name="enable_quick_nav">Swipe up with three fingers to open QuickNav</string>
+    <string name="block_system_gestures">Block system gestures while in Notable — fixes three-finger gestures when the system screenshot gesture is on, but edge navigation swipes stop working in the app</string>
     <string name="work_in_progress">(work in progress)</string>
     <string name="toolbar_position_top">Top</string>
     <string name="toolbar_position_bottom">Bottom</string>

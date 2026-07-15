@@ -44,9 +44,12 @@ fun Modifier.quickNavGesture(
             // Track without consuming until all fingers are up, then decide.
             while (tracker.pressedCount() > 0) {
                 val event = awaitPointerEvent(PointerEventPass.Main)
-                event.changes
-                    .filter { it.type == PointerType.Touch }
-                    .forEach { tracker.update(it) }
+                // Per-event hot path shared by every gesture in the app;
+                // indexed loop keeps it allocation-free.
+                for (i in event.changes.indices) {
+                    val change = event.changes[i]
+                    if (change.type == PointerType.Touch) tracker.update(change)
+                }
             }
             if (isQuickNavSwipe(tracker, thresholds)) onOpen()
         } catch (e: CancellationException) {
