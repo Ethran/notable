@@ -7,7 +7,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -36,18 +35,6 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 private val log = ShipBook.getLogger("einkHelper")
-
-fun setAnimationMode(isAnimationMode: Boolean) {
-// reference:
-// https://github.com/onyx-intl/OnyxAndroidDemo/blob/d3a1ffd3af231fe4de60a2a0da692c17cb35ce31/app/OnyxPenDemo/src/main/java/com/onyx/android/eink/pen/demo/ui/PenDemoActivity.java#L500
-    if (isAnimationMode) {
-        EpdController.applyTransientUpdate(UpdateMode.ANIMATION_X)
-        log.d("Animation mode enabled")
-    } else {
-        EpdController.clearTransientUpdate(true)
-        log.d("Animation mode disabled")
-    }
-}
 
 fun setRecommendedMode() {
     EpdController.setAppScopeRefreshMode(UpdateOption.NORMAL)
@@ -264,33 +251,29 @@ fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
 
 
 /**
- * Automatically toggles e‑ink animation mode when the attached subtree scrolls.
+ * Automatically holds e‑ink animation mode while the attached subtree scrolls.
  * Works with any Compose scrollable that supports nested scroll (Lazy* and scrollable()).
  *
- * - Turns on immediately when any scroll/drag/fling starts.
- * - Turns off after [debounceOffMillis] from the end of drag/fling.
+ * - Acquires an [EpdRefreshArbiter] handle when any scroll/drag/fling starts.
+ * - Releases it [debounceOffMillis] after the end of drag/fling; a scroll
+ *   resuming inside that window acquires a fresh handle, so the mode never
+ *   drops in between.
  */
 fun Modifier.autoEInkAnimationOnScroll(
     debounceOffMillis: Long = 500,
-    setMode: (Boolean) -> Unit = ::setAnimationMode
 ): Modifier = composed {
-    val scope = rememberCoroutineScope()
-    var offJob: Job? by remember { mutableStateOf(null) }
+    var handle: EpdRefreshArbiter.Handle? by remember { mutableStateOf(null) }
 
     fun turnOn() {
-        offJob?.cancel()
-        setMode(true)
+        if (handle == null) handle = EpdRefreshArbiter.acquire("scroll-ui")
     }
 
     fun scheduleOff() {
-        offJob?.cancel()
-        offJob = scope.launch {
-            delay(debounceOffMillis)
-            setMode(false)
-        }
+        handle?.releaseAfterMillis(debounceOffMillis)
+        handle = null
     }
 
-    val connection = remember(debounceOffMillis, setMode) {
+    val connection = remember(debounceOffMillis) {
         object : NestedScrollConnection {
             // Any pre-scroll (user drag) -> ON
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -328,7 +311,10 @@ fun Modifier.autoEInkAnimationOnScroll(
     }
 
     DisposableEffect(Unit) {
-        onDispose { offJob?.cancel() }
+        onDispose {
+            handle?.release()
+            handle = null
+        }
     }
 
     this.nestedScroll(connection)

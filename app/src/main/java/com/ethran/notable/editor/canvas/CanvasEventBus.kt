@@ -37,7 +37,9 @@ object CanvasEventBus {
     // It might be bad idea, but plan is to insert graphic in this, and then take it from it
     // There is probably better way
     val addImageByUri = MutableStateFlow<Uri?>(null)
-    val rectangleToSelectByGesture = MutableStateFlow<Rect?>(null)
+
+    // Event, not state: each emission is one gesture-selection request.
+    val rectangleToSelectByGesture = MutableSharedFlow<Rect>()
     val drawingInProgress = Mutex()
 
     // For cleaning whole page, activated from toolbar menu

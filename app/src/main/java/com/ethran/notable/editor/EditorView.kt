@@ -232,7 +232,7 @@ fun EditorView(
 
 
         InkaTheme {
-            EditorGestureReceiver(controlTower = editorControlTower)
+            EditorGestureReceiver(actions = editorControlTower)
             EditorSurface(
                 viewModel = viewModel,
                 page = page,

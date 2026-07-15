@@ -52,10 +52,17 @@ data class AppSettings(
     val twoFingerTapAction: GestureAction = GestureAction.ChangeTool,
     val swipeLeftAction: GestureAction = GestureAction.NextPage,
     val swipeRightAction: GestureAction = GestureAction.PreviousPage,
+    // Fired by *three*-finger swipes (two fingers are pan/zoom); the field
+    // names are kept for persisted-settings compatibility.
     val twoFingerSwipeLeftAction: GestureAction = GestureAction.ToggleZen,
     val twoFingerSwipeRightAction: GestureAction = GestureAction.ToggleZen,
     val holdAction: GestureAction = GestureAction.Select,
     val enableQuickNav: Boolean = true,
+    // Onyx only: broadcast onyx.action.INTERCEPT_GESTURE while the app is resumed so
+    // SystemUI's three-finger screenshot cannot steal our multi-finger gestures. The
+    // same SystemUI pipeline serves the side/bottom edge navigation swipes, so those
+    // stop working inside the app while this is on — hence opt-in.
+    val blockSystemGestures: Boolean = false,
     val renameOnCreate: Boolean = true,
 
     // Debug
@@ -68,16 +75,6 @@ data class AppSettings(
     val destructiveMigrations: Boolean = false,
 
     ) {
-    companion object {
-        val defaultDoubleTapAction = GestureAction.Undo
-        val defaultTwoFingerTapAction = GestureAction.ChangeTool
-        val defaultSwipeLeftAction = GestureAction.NextPage
-        val defaultSwipeRightAction = GestureAction.PreviousPage
-        val defaultTwoFingerSwipeLeftAction = GestureAction.ToggleZen
-        val defaultTwoFingerSwipeRightAction = GestureAction.ToggleZen
-        val defaultHoldAction = GestureAction.Select
-    }
-
     enum class GestureAction {
         None, Undo, Redo, PreviousPage, NextPage, ChangeTool, ToggleZen, Select
     }

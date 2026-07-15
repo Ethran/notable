@@ -184,11 +184,9 @@ class CanvasObserverRegistry(
 
     private fun observeSelectionGesture() {
         observerScope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.drop(1).collect {
-                if (it != null) {
-                    log.v("Area to Select (screen): $it")
-                    selectRectangle(page, drawCanvas.coroutineScope, viewModel, it)
-                }
+            CanvasEventBus.rectangleToSelectByGesture.collect {
+                log.v("Area to Select (screen): $it")
+                selectRectangle(page, drawCanvas.coroutineScope, viewModel, it)
             }
         }
     }

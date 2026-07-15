@@ -1,71 +1,63 @@
 package com.ethran.notable.gestures
 
+import android.os.SystemClock
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlin.coroutines.cancellation.CancellationException
 
+private val log = ShipBook.getLogger("QuickNavGesture")
 
 /**
- * Detects a three-finger touch (simultaneous finger contacts) to open QuickNav.
+ * App-level recognizer for the three-finger swipe-up that opens QuickNav.
  *
+ * Sits above the whole NavHost so QuickNav is reachable from any screen.
+ * Recognition happens when the fingers lift ([isQuickNavSwipe]), so three
+ * fingers merely landing (a palm contact, or the start of a horizontal
+ * three-finger swipe) do not open it. Deconfliction with the editor's
+ * gestures is by classification, not consumption: the editor only acts on
+ * *horizontal* three-finger swipes.
  */
 fun Modifier.quickNavGesture(
     onOpen: () -> Unit
 ): Modifier = this.pointerInput(GlobalAppSettings.current.enableQuickNav) {
-    if(!GlobalAppSettings.current.enableQuickNav) return@pointerInput
-    while (true) {
+    if (!GlobalAppSettings.current.enableQuickNav) return@pointerInput
+    val thresholds = GestureThresholds(density = this)
+    awaitEachGesture {
         try {
-            awaitPointerEventScope {
-                // Wait for a DOWN that was not already consumed by children.
-                val firstDown = try {
-                    awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Main)
-                } catch (_: CancellationException) {
-                    return@awaitPointerEventScope
-                }
+            // Wait for a DOWN that was not already consumed by children.
+            val firstDown =
+                awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Main)
 
-                // Only react to finger input; ignore stylus or other pointer types.
-                if (firstDown.type != PointerType.Touch) {
-                    // Drain without consuming until all pointers are up; then restart listening.
-                    do {
-                        val e = awaitPointerEvent(PointerEventPass.Main)
-                    } while (e.changes.any { it.pressed })
-                    return@awaitPointerEventScope
-                }
+            // Only react to finger input; awaitEachGesture waits for all
+            // pointers to lift before the next gesture, so just bail.
+            if (firstDown.type != PointerType.Touch) return@awaitEachGesture
 
-                var opened = false
+            val tracker = PointerTracker(now = { SystemClock.uptimeMillis() })
+            tracker.update(firstDown)
 
-                // Track until all pointers lift (single gesture life cycle).
-                while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Main)
-
-                    // Count currently pressed finger touches
-                    val touches =
-                        event.changes.filter { it.type == PointerType.Touch && it.pressed }
-
-                    // Recognize three-finger touch once; consume only upon recognition
-                    if (!opened && touches.size >= 3) {
-                        opened = true
-                        touches.take(3).forEach { it.consume() }
-                        onOpen()
-                    } else if (opened) {
-                        // After recognition, keep consuming these touches to avoid bleed-through
-                        touches.forEach { it.consume() }
-                    }
-
-                    // End when all pointers are up
-                    if (event.changes.none { it.pressed }) break
+            // Track without consuming until all fingers are up, then decide.
+            while (tracker.pressedCount() > 0) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                // Per-event hot path shared by every gesture in the app;
+                // indexed loop keeps it allocation-free.
+                for (i in event.changes.indices) {
+                    val change = event.changes[i]
+                    if (change.type == PointerType.Touch) tracker.update(change)
                 }
             }
-        } catch (_: CancellationException) {
-            // Pointer input was cancelled (e.g., recomposition);
-            return@pointerInput
-        } catch (e: Throwable) {
-            Log.e("QuickNavGesture","Router: Error in pointerInput", e)
+            if (isQuickNavSwipe(tracker, thresholds)) onOpen()
+        } catch (e: CancellationException) {
+            // Cancellation (composition disposal, pointerInput restart) is
+            // normal control flow — propagate it.
+            throw e
+        } catch (e: Exception) {
+            log.e("Unexpected error in QuickNav gesture", e)
         }
     }
 }

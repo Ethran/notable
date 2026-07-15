@@ -127,7 +127,7 @@ fun selectImagesAndStrokes(
     viewModel.selectionState.selectionStartOffset = startOffset
     viewModel.selectionState.selectionDisplaceOffset = IntOffset(0, 0)
     viewModel.selectionState.placementMode = PlacementMode.Move
-    setAnimationMode(true)
+    viewModel.selectionState.holdRefresh()
     page.drawAreaPageCoordinates(
         pageBounds,
         ignoredImageIds = imagesToSelect.map { it.id },
@@ -275,7 +275,6 @@ fun selectRectangle(
     val strokesToSelect =
         page.pageDataManager.getStrokesInRectangle(inPageCoordinates, page.currentPageId)
     if (imagesToSelect != null && strokesToSelect != null) {
-        CanvasEventBus.rectangleToSelectByGesture.value = null
         if (imagesToSelect.isNotEmpty() || strokesToSelect.isNotEmpty()) {
             selectImagesAndStrokes(
                 scope = coroutineScope,
@@ -285,7 +284,7 @@ fun selectRectangle(
                 strokesToSelect = strokesToSelect
             )
         } else {
-            setAnimationMode(false)
+            viewModel.selectionState.releaseRefresh()
             viewModel.snackDispatcher.showOrUpdateSnack(
                 SnackConf(
                     text = "There isn't anything.",
@@ -293,11 +292,13 @@ fun selectRectangle(
                 )
             )
         }
-    } else viewModel.snackDispatcher.showOrUpdateSnack( // Show or update!!
-        SnackConf(
-            text = "Page is empty!",
-            duration = 3000,
+    } else {
+        viewModel.selectionState.releaseRefresh()
+        viewModel.snackDispatcher.showOrUpdateSnack( // Show or update!!
+            SnackConf(
+                text = "Page is empty!",
+                duration = 3000,
+            )
         )
-    )
-
+    }
 }

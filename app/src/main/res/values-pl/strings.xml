@@ -34,8 +34,8 @@
     <string name="gestures_two_finger_tap_action">Stuknięcie dwoma palcami</string>
     <string name="gestures_swipe_left_action">Przeciągnięcie w lewo</string>
     <string name="gestures_swipe_right_action">Przeciągnięcie w prawo</string>
-    <string name="gestures_two_finger_swipe_left_action">Przeciągnięcie dwoma palcami w lewo</string>
-    <string name="gestures_two_finger_swipe_right_action">Przeciągnięcie dwoma palcami w prawo</string>
+    <string name="gestures_three_finger_swipe_left_action">Przeciągnięcie trzema palcami w lewo</string>
+    <string name="gestures_three_finger_swipe_right_action">Przeciągnięcie trzema palcami w prawo</string>
 
     <string name="gesture_action_undo">Cofnij</string>
     <string name="gesture_action_redo">Ponów</string>
@@ -44,7 +44,8 @@
     <string name="gesture_action_toggle_pen_eraser">Przełącz pióro/gumkę</string>
     <string name="gesture_action_toggle_zen_mode">Przełącz tryb Zen</string>
 
-    <string name="enable_quick_nav">Dotknij trzema palcami aby pokazać QuickNav</string>
+    <string name="enable_quick_nav">Przeciągnij trzema palcami w górę aby pokazać QuickNav</string>
+    <string name="block_system_gestures">Blokuj gesty systemowe w Notable — naprawia gesty trzema palcami przy włączonym systemowym zrzucie ekranu, ale krawędziowe gesty nawigacji przestaną działać w aplikacji</string>
     <string name="work_in_progress">(w trakcie implementacji)</string>
     <string name="toolbar_position_top">Góra</string>
     <string name="toolbar_position_bottom">Dół</string>

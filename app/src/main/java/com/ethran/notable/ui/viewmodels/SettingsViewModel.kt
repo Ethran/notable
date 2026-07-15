@@ -305,11 +305,11 @@ class SettingsViewModel @Inject constructor(
             settings.swipeRightAction,
         ) { a -> updateSettings(settings.copy(swipeRightAction = a)) },
         GestureRowModel(
-            (R.string.gestures_two_finger_swipe_left_action),
+            (R.string.gestures_three_finger_swipe_left_action),
             settings.twoFingerSwipeLeftAction,
         ) { a -> updateSettings(settings.copy(twoFingerSwipeLeftAction = a)) },
         GestureRowModel(
-            R.string.gestures_two_finger_swipe_right_action,
+            R.string.gestures_three_finger_swipe_right_action,
             settings.twoFingerSwipeRightAction,
         ) { a -> updateSettings(settings.copy(twoFingerSwipeRightAction = a)) },
     )

@@ -9,6 +9,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.ui.viewmodels.GestureRowModel
 
 @Composable
@@ -37,6 +38,15 @@ fun GesturesSettings(
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(enableQuickNav = isChecked))
             })
+
+        if (DeviceCompat.isOnyxDevice) {
+            SettingToggleRow(
+                label = stringResource(R.string.block_system_gestures),
+                value = settings.blockSystemGestures,
+                onToggle = { isChecked ->
+                    onSettingsChange(settings.copy(blockSystemGestures = isChecked))
+                })
+        }
     }
 }
 
