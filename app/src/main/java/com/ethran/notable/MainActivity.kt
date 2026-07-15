@@ -47,7 +47,7 @@ import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.SyncWorkUiBridge
 import com.ethran.notable.ui.components.NotableApp
 import com.ethran.notable.ui.theme.InkaTheme
-import com.ethran.notable.utils.hasFilePermission
+import com.ethran.notable.utils.hasUsableStorage
 import com.onyx.android.sdk.api.device.epd.EpdController
 import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log
@@ -133,7 +133,7 @@ class MainActivity : ComponentActivity() {
             var isInitialized by remember { mutableStateOf(false) }
 
             LaunchedEffect(Unit) {
-                if (hasFilePermission(this@MainActivity)) {
+                if (hasUsableStorage(this@MainActivity)) {
                     withContext(Dispatchers.IO) {
                         // Init app settings, also do migration
                         val savedSettings =

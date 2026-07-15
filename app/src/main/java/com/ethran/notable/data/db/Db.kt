@@ -7,7 +7,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import com.ethran.notable.data.getDbDir
+import com.ethran.notable.data.dbDirPath
+import com.ethran.notable.data.getDbDirOrNull
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -45,7 +46,7 @@ class Converters {
     }
 
     @TypeConverter
-    fun toStrokePoints(bytes: ByteArray?): List<StrokePoint>? {
+    fun toStrokePoints(bytes: ByteArray?): List<StrokePoint> {
         if (bytes == null || bytes.isEmpty()) return emptyList()
         return decodeStrokePoints(bytes)
     }
@@ -120,7 +121,13 @@ object DatabaseModule {
         @ApplicationContext context: Context
     ): AppDatabase {
 
-        val dbDir = getDbDir()
+        // getDbDir() throws when storage isn't usable (permission revoked, storage not
+        // mounted yet, ...), which would crash Dagger's graph construction before the
+        // welcome screen ever gets a chance to render. Room doesn't open the database
+        // file until the first real query, and query paths verify storage access first
+        // (KvRepository, StrokeMigrationHelper), so fall back to the expected path and
+        // let the UI route to the welcome/setup screen instead.
+        val dbDir = getDbDirOrNull() ?: dbDirPath()
         val dbFile = File(dbDir, "app_database")
 
         return Room.databaseBuilder(

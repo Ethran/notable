@@ -15,25 +15,33 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 fun getDbDir(): File {
+    return getDbDirOrNull() ?: throw IllegalStateException(
+        "Database directory could not be created or is not writable at " +
+                "${dbDirPath().absolutePath}. " +
+                "Grant 'All files access' to Notable in system settings and restart the app."
+    )
+}
+
+/**
+ * Like [getDbDir], but returns null instead of throwing when the directory cannot be
+ * created or written to (missing permission, storage not mounted yet, etc.), so callers
+ * can fall back to the welcome/setup screen instead of crashing.
+ */
+fun getDbDirOrNull(): File? {
+    val dbDir = dbDirPath()
+    if (!dbDir.exists() && !dbDir.mkdirs() && !dbDir.exists()) return null
+    if (!dbDir.canWrite()) return null
+    return dbDir
+}
+
+/**
+ * The expected database directory path, without checking that it exists or is writable.
+ * Use [getDbDir] or [getDbDirOrNull] when actual access is needed.
+ */
+fun dbDirPath(): File {
     val documentsDir =
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-    val dbDir = File(documentsDir, "notabledb")
-    if (!dbDir.exists()) {
-        val created = dbDir.mkdirs()
-        if (!created && !dbDir.exists()) {
-            throw IllegalStateException(
-                "Database directory could not be created at ${dbDir.absolutePath}. " +
-                "Grant 'All files access' to Notable in system settings and restart the app."
-            )
-        }
-    }
-    if (!dbDir.canWrite()) {
-        throw IllegalStateException(
-            "Database directory is not writable: ${dbDir.absolutePath}. " +
-            "Grant 'All files access' to Notable in system settings and restart the app."
-        )
-    }
-    return dbDir
+    return File(documentsDir, "notabledb")
 }
 
 fun ensureImagesFolder(): File {
