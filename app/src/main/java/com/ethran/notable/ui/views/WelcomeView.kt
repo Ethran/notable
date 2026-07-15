@@ -62,7 +62,7 @@ import com.ethran.notable.editor.utils.isRecommendedRefreshMode
 import com.ethran.notable.editor.utils.setRecommendedMode
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.viewmodels.WelcomeViewModel
-import com.ethran.notable.utils.hasFilePermission
+import com.ethran.notable.utils.hasUsableStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -80,14 +80,14 @@ fun WelcomeView(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
 
-    var filePermissionGranted by remember { mutableStateOf(hasFilePermission(context)) }
+    var filePermissionGranted by remember { mutableStateOf(hasUsableStorage(context)) }
     var recommendedRefreshMode by remember { mutableStateOf(isRecommendedRefreshMode()) }
     var refreshModeString by remember { mutableStateOf(getCurRefreshModeString()) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                filePermissionGranted = hasFilePermission(context)
+                filePermissionGranted = hasUsableStorage(context)
                 recommendedRefreshMode = isRecommendedRefreshMode()
                 refreshModeString = getCurRefreshModeString()
             }
