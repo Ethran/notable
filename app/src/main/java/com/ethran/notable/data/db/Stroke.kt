@@ -64,7 +64,7 @@ data class Stroke(
     // Denominator of the stored pressure values: MAX_PRESSURE_NORMALIZED (1) for normalized
     // [0,1] pressure, or the capture device's raw max (e.g. 4096). See withNormalizedPressure().
     @ColumnInfo(defaultValue = "4096")
-    val maxPressure: Int = 4096,
+    val maxPressure: Int = 4096, // In SB2 is set to 1. In SB1 it was set to max pressure of the device.
 
     var top: Float,
     var bottom: Float,
