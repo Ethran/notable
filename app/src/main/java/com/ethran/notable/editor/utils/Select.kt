@@ -128,6 +128,11 @@ fun selectImagesAndStrokes(
     viewModel.selectionState.selectionDisplaceOffset = IntOffset(0, 0)
     viewModel.selectionState.placementMode = PlacementMode.Move
     viewModel.selectionState.holdRefresh()
+    // Exit drawing mode *before* the caller's refreshUi runs: setting it inside the launch
+    // below raced the Select-branch refreshUi in OnyxInputHandler, which then saw
+    // isDrawing==true, armed resetScreenFreeze's delayed resume, and re-froze the screen
+    // after updateIsDrawing() had disabled raw drawing — the "frozen after select" bug.
+    viewModel.setDrawingStateFromCanvas(false)
     page.drawAreaPageCoordinates(
         pageBounds,
         ignoredImageIds = imagesToSelect.map { it.id },
@@ -135,7 +140,6 @@ fun selectImagesAndStrokes(
 
     scope.launch {
         CanvasEventBus.refreshUi.emit(Unit)
-        viewModel.setDrawingStateFromCanvas(false)
     }
 }
 
