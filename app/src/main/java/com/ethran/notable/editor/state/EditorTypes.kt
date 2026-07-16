@@ -8,6 +8,14 @@ enum class Mode {
 }
 
 /**
+ * Shapes the SHAPE tool can draw. Only LINE exists today (backed by [Mode.Line]);
+ * RECT/ELLIPSE/ARROW are future entries — the shape-picker submenu grows automatically.
+ */
+enum class Shape {
+    LINE
+}
+
+/**
  * Placement mode for selection operations.
  * If state is Move then applySelectionDisplace() will delete original strokes and images.
  */
