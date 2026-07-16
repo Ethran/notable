@@ -255,6 +255,8 @@
     <string name="toolbar_settings_pick_pen_type">Rodzaj pisaka</string>
     <string name="toolbar_settings_edit_pen">Edytuj pisak</string>
     <string name="toolbar_settings_delete">Usuń</string>
+    <string name="toolbar_settings_hide">Ukryj</string>
+    <string name="toolbar_settings_menu_locked">Przycisku menu nie można ukryć — to jedyny sposób na otwarcie menu paska narzędzi</string>
     <string name="toolbar_settings_size">Rozmiar</string>
     <string name="toolbar_settings_color">Kolor</string>
 
