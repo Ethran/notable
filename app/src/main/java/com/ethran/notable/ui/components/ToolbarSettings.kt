@@ -1,5 +1,7 @@
 package com.ethran.notable.ui.components
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -50,8 +53,11 @@ import com.ethran.notable.editor.ui.toolbar.model.IconRef
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarElementId
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarElements
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayoutFile
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.editor.utils.Pen
+import com.ethran.notable.ui.LocalSnackContext
+import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.theme.InkaTheme
 import android.graphics.Color as AndroidColor
 
@@ -79,6 +85,48 @@ fun ToolbarSettings(
 
     var addPenOpen by remember { mutableStateOf(false) }
     var editedPresetId by remember { mutableStateOf<String?>(null) }
+
+    val context = LocalContext.current
+    val snackState = LocalSnackContext.current
+    fun snack(text: String) = snackState.showOrUpdateSnack(SnackConf(text = text, duration = 3000))
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver.openOutputStream(uri, "wt")?.use { stream ->
+                stream.write(ToolbarLayoutFile.encode(layout, pens).toByteArray())
+            } ?: error("Cannot open the selected file")
+            snack(context.getString(R.string.toolbar_settings_export_done))
+        } catch (e: Exception) {
+            snack(context.getString(R.string.toolbar_settings_export_failed, e.message ?: ""))
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            val text = context.contentResolver.openInputStream(uri)
+                ?.use { it.readBytes().decodeToString() }
+                ?: error("Cannot open the selected file")
+            val result = ToolbarLayoutFile.decode(text)
+            onSettingsChange(
+                settings.copy(toolbarLayout = result.layout, toolbarPens = result.pens)
+            )
+            snack(
+                if (result.droppedCount == 0)
+                    context.getString(R.string.toolbar_settings_import_done)
+                else context.getString(
+                    R.string.toolbar_settings_import_dropped, result.droppedCount
+                )
+            )
+        } catch (e: Exception) {
+            snack(context.getString(R.string.toolbar_settings_import_failed, e.message ?: ""))
+        }
+    }
 
     Column {
         ToolbarPreview(layout, pens)
@@ -132,6 +180,31 @@ fun ToolbarSettings(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(stringResource(R.string.toolbar_settings_add_divider))
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { exportLauncher.launch("notable-toolbar.json") },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(stringResource(R.string.toolbar_settings_export))
+            }
+            OutlinedButton(
+                // OpenDocument filters on MIME; some file managers report .json as
+                // text/plain or octet-stream, so accept broadly and validate content.
+                onClick = {
+                    importLauncher.launch(
+                        arrayOf("application/json", "text/plain", "application/octet-stream")
+                    )
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(stringResource(R.string.toolbar_settings_import))
             }
         }
         OutlinedButton(

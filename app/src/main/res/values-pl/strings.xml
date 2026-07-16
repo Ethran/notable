@@ -245,6 +245,13 @@
     <string name="toolbar_settings_add_pen">Dodaj pisak</string>
     <string name="toolbar_settings_add_divider">Dodaj separator</string>
     <string name="toolbar_settings_reset">Przywróć domyślne</string>
+    <string name="toolbar_settings_export">Eksportuj…</string>
+    <string name="toolbar_settings_import">Importuj…</string>
+    <string name="toolbar_settings_export_done">Wyeksportowano układ paska narzędzi</string>
+    <string name="toolbar_settings_export_failed">Eksport nie powiódł się: %1$s</string>
+    <string name="toolbar_settings_import_done">Zaimportowano układ paska narzędzi</string>
+    <string name="toolbar_settings_import_dropped">Zaimportowano układ paska narzędzi; pominięto nieznane elementy: %1$d</string>
+    <string name="toolbar_settings_import_failed">Import nie powiódł się: %1$s</string>
     <string name="toolbar_settings_pick_pen_type">Rodzaj pisaka</string>
     <string name="toolbar_settings_edit_pen">Edytuj pisak</string>
     <string name="toolbar_settings_delete">Usuń</string>

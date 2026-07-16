@@ -232,6 +232,13 @@
     <string name="toolbar_settings_add_pen">Add pen</string>
     <string name="toolbar_settings_add_divider">Add divider</string>
     <string name="toolbar_settings_reset">Reset to default</string>
+    <string name="toolbar_settings_export">Export…</string>
+    <string name="toolbar_settings_import">Import…</string>
+    <string name="toolbar_settings_export_done">Toolbar layout exported</string>
+    <string name="toolbar_settings_export_failed">Export failed: %1$s</string>
+    <string name="toolbar_settings_import_done">Toolbar layout imported</string>
+    <string name="toolbar_settings_import_dropped">Toolbar layout imported; %1$d unknown entries dropped</string>
+    <string name="toolbar_settings_import_failed">Import failed: %1$s</string>
     <string name="toolbar_settings_pick_pen_type">Pen type</string>
     <string name="toolbar_settings_edit_pen">Edit pen</string>
     <string name="toolbar_settings_delete">Delete</string>
