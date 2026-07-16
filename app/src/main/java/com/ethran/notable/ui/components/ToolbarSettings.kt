@@ -2,6 +2,7 @@ package com.ethran.notable.ui.components
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,7 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -30,12 +33,14 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -59,6 +64,8 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.theme.InkaTheme
+import compose.icons.FeatherIcons
+import compose.icons.feathericons.EyeOff
 import android.graphics.Color as AndroidColor
 
 /**
@@ -90,6 +97,13 @@ fun ToolbarSettings(
     val snackState = LocalSnackContext.current
     fun snack(text: String) = snackState.showOrUpdateSnack(SnackConf(text = text, duration = 3000))
 
+    // Resolved at composition — the launcher callbacks can't call stringResource.
+    val exportDoneMsg = stringResource(R.string.toolbar_settings_export_done)
+    val exportFailedMsg = stringResource(R.string.toolbar_settings_export_failed)
+    val importDoneMsg = stringResource(R.string.toolbar_settings_import_done)
+    val importDroppedMsg = stringResource(R.string.toolbar_settings_import_dropped)
+    val importFailedMsg = stringResource(R.string.toolbar_settings_import_failed)
+
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -98,9 +112,9 @@ fun ToolbarSettings(
             context.contentResolver.openOutputStream(uri, "wt")?.use { stream ->
                 stream.write(ToolbarLayoutFile.encode(layout, pens).toByteArray())
             } ?: error("Cannot open the selected file")
-            snack(context.getString(R.string.toolbar_settings_export_done))
+            snack(exportDoneMsg)
         } catch (e: Exception) {
-            snack(context.getString(R.string.toolbar_settings_export_failed, e.message ?: ""))
+            snack(exportFailedMsg.format(e.message ?: ""))
         }
     }
 
@@ -117,14 +131,11 @@ fun ToolbarSettings(
                 settings.copy(toolbarLayout = result.layout, toolbarPens = result.pens)
             )
             snack(
-                if (result.droppedCount == 0)
-                    context.getString(R.string.toolbar_settings_import_done)
-                else context.getString(
-                    R.string.toolbar_settings_import_dropped, result.droppedCount
-                )
+                if (result.droppedCount == 0) importDoneMsg
+                else importDroppedMsg.format(result.droppedCount)
             )
         } catch (e: Exception) {
-            snack(context.getString(R.string.toolbar_settings_import_failed, e.message ?: ""))
+            snack(importFailedMsg.format(e.message ?: ""))
         }
     }
 
@@ -135,7 +146,7 @@ fun ToolbarSettings(
         Text(
             text = stringResource(R.string.toolbar_settings_drag_hint),
             style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+            color = Color.Black,
             modifier = Modifier.padding(vertical = 4.dp)
         )
 
@@ -170,10 +181,10 @@ fun ToolbarSettings(
                 .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(onClick = { addPenOpen = true }, modifier = Modifier.weight(1f)) {
+            EInkButton(onClick = { addPenOpen = true }, modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.toolbar_settings_add_pen))
             }
-            OutlinedButton(
+            EInkButton(
                 onClick = {
                     commit(layout.copy(scrollable = layout.scrollable + ToolbarElementId.DIVIDER.name))
                 },
@@ -188,13 +199,13 @@ fun ToolbarSettings(
                 .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(
+            EInkButton(
                 onClick = { exportLauncher.launch("notable-toolbar.json") },
                 modifier = Modifier.weight(1f)
             ) {
                 Text(stringResource(R.string.toolbar_settings_export))
             }
-            OutlinedButton(
+            EInkButton(
                 // OpenDocument filters on MIME; some file managers report .json as
                 // text/plain or octet-stream, so accept broadly and validate content.
                 onClick = {
@@ -207,7 +218,7 @@ fun ToolbarSettings(
                 Text(stringResource(R.string.toolbar_settings_import))
             }
         }
-        OutlinedButton(
+        EInkButton(
             onClick = {
                 onSettingsChange(
                     settings.copy(toolbarLayout = null, toolbarPens = ToolbarPen.DEFAULT_PENS)
@@ -330,8 +341,15 @@ private fun ReorderableElementList(
     // Local order during a drag; rebuilt whenever the persisted settings change.
     var rows by remember(layout, pens) { mutableStateOf(buildRows(layout, pens)) }
     var draggingIndex by remember(layout, pens) { mutableStateOf<Int?>(null) }
-    var dragOffset by remember { mutableStateOf(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(LocalDensity.current) { ROW_HEIGHT.toPx() }
+
+    val snackState = LocalSnackContext.current
+    val menuLockedMsg = stringResource(R.string.toolbar_settings_menu_locked)
+    // Fixed id: repeated attempts refresh the one snack instead of stacking copies.
+    fun menuLockedSnack() = snackState.showOrUpdateSnack(
+        SnackConf(id = "toolbar-menu-locked", text = menuLockedMsg, duration = 3000)
+    )
 
     /** One-slot move of the dragged row; false when blocked (list end, or MENU into
      * Hidden — the validator would silently snap it back, so refuse the drop instead). */
@@ -342,7 +360,10 @@ private fun ReorderableElementList(
         if (to < 1 || to > rows.lastIndex) return false
         val moved = rows.toMutableList().apply { add(to, removeAt(from)) }
         val entry = (moved[to] as? ToolbarRow.Element)?.entry
-        if (entry == ToolbarElementId.MENU.name && zoneAt(moved, to) == Zone.HIDDEN) return false
+        if (entry == ToolbarElementId.MENU.name && zoneAt(moved, to) == Zone.HIDDEN) {
+            menuLockedSnack()
+            return false
+        }
         rows = moved
         draggingIndex = to
         dragOffset -= step * rowHeightPx
@@ -363,8 +384,8 @@ private fun ReorderableElementList(
                     if (draggingIndex == null) return@detectDragGesturesAfterLongPress
                     change.consume()
                     dragOffset += amount.y
-                    while (dragOffset > rowHeightPx * 0.6f && moveDragged(1)) Unit
-                    while (dragOffset < -rowHeightPx * 0.6f && moveDragged(-1)) Unit
+                    while (dragOffset > rowHeightPx * 0.6f) if (!moveDragged(1)) break
+                    while (dragOffset < -rowHeightPx * 0.6f) if (!moveDragged(-1)) break
                 },
                 onDragEnd = {
                     if (draggingIndex != null) {
@@ -387,10 +408,21 @@ private fun ReorderableElementList(
 
                 is ToolbarRow.Element -> {
                     val isDragged = index == draggingIndex
+                    // Hidden = dropped from the layout. Not offered for rows already in
+                    // Hidden, for MENU (locked, see menuLockedSnack), or for dividers
+                    // (hiding one equals deleting it — they have the delete button).
+                    val hidable = zoneAt(rows, index) != Zone.HIDDEN &&
+                            row.entry != ToolbarElementId.MENU.name &&
+                            row.entry != ToolbarElementId.DIVIDER.name
                     ElementRow(
                         entry = row.entry,
                         pens = pens,
                         onEditPen = onEditPen,
+                        onHide = if (!hidable) null else ({
+                            onLayoutChange(
+                                rowsToLayout(rows.filterIndexed { i, _ -> i != index })
+                            )
+                        }),
                         onDelete = deleteActionFor(
                             row.entry, rows, index, onDeletePen, onDeleteDivider
                         ),
@@ -442,7 +474,7 @@ private fun SectionHeaderRow(zone: Zone) {
         modifier = Modifier
             .fillMaxWidth()
             .height(ROW_HEIGHT)
-            .background(MaterialTheme.colors.onSurface.copy(alpha = 0.06f))
+            .background(Color.Black)
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -455,7 +487,38 @@ private fun SectionHeaderRow(zone: Zone) {
                 }
             ),
             style = MaterialTheme.typography.subtitle2,
+            color = Color.White,
         )
+    }
+}
+
+/**
+ * A tool's icon at list/dialog scale: [ToolbarButton]'s look (circular pen-color
+ * background, white tint on dark colors) but smaller — the real 38 dp toolbar buttons
+ * read oversized next to settings text.
+ */
+@Composable
+private fun ToolIcon(icon: IconRef?, penColor: Color? = null, onClick: (() -> Unit)? = null) {
+    val tint =
+        if (penColor == Color.Black || penColor == Color.DarkGray) Color.White else Color.Black
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .background(penColor ?: Color.Transparent, CircleShape)
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        when (icon) {
+            is IconRef.Drawable -> Icon(
+                painterResource(icon.resId), null, tint = tint, modifier = Modifier.size(18.dp)
+            )
+
+            is IconRef.Vector -> Icon(
+                icon.imageVector, null, tint = tint, modifier = Modifier.size(18.dp)
+            )
+
+            null -> Unit
+        }
     }
 }
 
@@ -464,6 +527,7 @@ private fun ElementRow(
     entry: String,
     pens: List<ToolbarPen>,
     onEditPen: (String) -> Unit,
+    onHide: (() -> Unit)?,
     onDelete: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -483,17 +547,17 @@ private fun ElementRow(
         Icon(
             imageVector = Icons.Default.Menu,
             contentDescription = null,
-            tint = MaterialTheme.colors.onSurface.copy(alpha = 0.3f),
+            tint = Color.Black,
             modifier = Modifier
                 .padding(horizontal = 8.dp)
                 .size(18.dp)
         )
 
         if (preset != null) {
-            ToolbarButton(
+            ToolIcon(
+                icon = ToolbarElements.penIcon(preset.pen),
                 penColor = Color(preset.color),
-                iconId = (ToolbarElements.penIcon(preset.pen) as IconRef.Drawable).resId,
-                onSelect = { onEditPen(preset.id) },
+                onClick = { onEditPen(preset.id) },
             )
             Spacer(Modifier.width(12.dp))
             Text(
@@ -503,18 +567,15 @@ private fun ElementRow(
             )
         } else {
             val id = ToolbarElementId.fromString(entry)
-            val icon = id?.let { ToolbarElements.all[it]?.icon }
-            Box(Modifier.size(38.dp), contentAlignment = Alignment.Center) {
-                when (icon) {
-                    is IconRef.Drawable -> ToolbarButton(iconId = icon.resId)
-                    is IconRef.Vector -> ToolbarButton(vectorIcon = icon.imageVector)
-                    null -> if (id == ToolbarElementId.DIVIDER) Box(
-                        Modifier
-                            .size(width = 2.dp, height = 24.dp)
-                            .background(MaterialTheme.colors.onSurface)
-                    )
-                }
-            }
+            if (id == ToolbarElementId.DIVIDER) Box(
+                Modifier.size(28.dp), contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 2.dp, height = 20.dp)
+                        .background(MaterialTheme.colors.onSurface)
+                )
+            } else ToolIcon(icon = id?.let { ToolbarElements.all[it]?.icon })
             Spacer(Modifier.width(12.dp))
             Text(
                 text = id?.let { stringResource(elementNameRes(it)) } ?: entry,
@@ -523,6 +584,16 @@ private fun ElementRow(
             )
         }
 
+        if (onHide != null) {
+            IconButton(onClick = onHide) {
+                Icon(
+                    imageVector = FeatherIcons.EyeOff,
+                    contentDescription = stringResource(R.string.toolbar_settings_hide),
+                    tint = MaterialTheme.colors.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         if (onDelete != null) {
             IconButton(onClick = onDelete) {
                 Icon(
@@ -551,9 +622,8 @@ private fun ToolbarPreview(layout: ToolbarLayout, pens: List<ToolbarPen>) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.3f))
-            .padding(horizontal = 4.dp, vertical = 2.dp)
-            .horizontalScroll(rememberScrollState()),
+            .border(1.dp, Color.Black)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         @Composable
@@ -613,9 +683,20 @@ private fun ToolbarPreview(layout: ToolbarLayout, pens: List<ToolbarPen>) {
             }
         }
 
-        layout.scrollable.forEach { previewEntry(it) }
+        // Mirror the real toolbar: the scrollable zone takes the free space (and scrolls),
+        // so the pinned zone is pushed hard against the right edge.
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            layout.scrollable.forEach { previewEntry(it) }
+        }
         Spacer(Modifier.width(12.dp))
-        layout.pinned.forEach { previewEntry(it) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            layout.pinned.forEach { previewEntry(it) }
+        }
     }
 }
 
@@ -645,9 +726,7 @@ private fun AddPenDialog(onPick: (Pen) -> Unit, onClose: () -> Unit) {
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ToolbarButton(
-                        iconId = (ToolbarElements.penIcon(pen) as IconRef.Drawable).resId,
-                    )
+                    ToolIcon(icon = ToolbarElements.penIcon(pen))
                     Spacer(Modifier.width(12.dp))
                     Text(stringResource(penNameRes(pen)))
                 }
@@ -696,9 +775,9 @@ private fun PenEditDialog(
                 .padding(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ToolbarButton(
+                ToolIcon(
+                    icon = ToolbarElements.penIcon(edited.pen),
                     penColor = Color(edited.color),
-                    iconId = (ToolbarElements.penIcon(edited.pen) as IconRef.Drawable).resId,
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
@@ -723,8 +802,7 @@ private fun PenEditDialog(
                                 .background(Color(colorInt))
                                 .border(
                                     if (included) 3.dp else 1.dp,
-                                    if (included) MaterialTheme.colors.onSurface
-                                    else MaterialTheme.colors.onSurface.copy(alpha = 0.2f),
+                                    Color.Black,
                                 )
                                 .clickable {
                                     // Re-added colors append at the end: the user's
@@ -777,6 +855,30 @@ private fun PenEditDialog(
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Buttons
+// ---------------------------------------------------------------------------
+
+/** Pure black-on-white, square-cornered button — no theme grays, e-ink friendly. */
+@Composable
+private fun EInkButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RectangleShape,
+        border = BorderStroke(1.dp, Color.Black),
+        colors = ButtonDefaults.outlinedButtonColors(
+            backgroundColor = Color.White,
+            contentColor = Color.Black,
+        ),
+        content = content,
+    )
 }
 
 // ---------------------------------------------------------------------------

@@ -242,6 +242,8 @@
     <string name="toolbar_settings_pick_pen_type">Pen type</string>
     <string name="toolbar_settings_edit_pen">Edit pen</string>
     <string name="toolbar_settings_delete">Delete</string>
+    <string name="toolbar_settings_hide">Hide</string>
+    <string name="toolbar_settings_menu_locked">The menu button can\'t be hidden — it\'s the only way to open the toolbar menu</string>
     <string name="toolbar_settings_size">Size</string>
     <string name="toolbar_settings_color">Color</string>
 
