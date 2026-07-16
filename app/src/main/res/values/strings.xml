@@ -223,4 +223,38 @@
     <string name="sync_experimental_warning">The synchronization feature is currently in testing. It is not guaranteed to be stable and may result in the loss or duplication of data.\n\nPlease ensure you have local backups of your notes before proceeding.</string>
     <string name="sync_experimental_confirm">I Understand &amp; Accept the Risk</string>
 
+    <!-- Toolbar settings -->
+    <string name="settings_tab_toolbar_name">Toolbar</string>
+    <string name="toolbar_settings_section_scrollable">Scrollable section</string>
+    <string name="toolbar_settings_section_pinned">Pinned section</string>
+    <string name="toolbar_settings_section_hidden">Hidden</string>
+    <string name="toolbar_settings_drag_hint">Long-press a row and drag to reorder or move between sections</string>
+    <string name="toolbar_settings_add_pen">Add pen</string>
+    <string name="toolbar_settings_add_divider">Add divider</string>
+    <string name="toolbar_settings_reset">Reset to default</string>
+    <string name="toolbar_settings_pick_pen_type">Pen type</string>
+    <string name="toolbar_settings_edit_pen">Edit pen</string>
+    <string name="toolbar_settings_delete">Delete</string>
+    <string name="toolbar_settings_size">Size</string>
+    <string name="toolbar_settings_color">Color</string>
+
+    <string name="pen_name_ballpen">Ballpoint pen</string>
+    <string name="pen_name_pencil">Pencil</string>
+    <string name="pen_name_brush">Brush</string>
+    <string name="pen_name_fountain">Fountain pen</string>
+    <string name="pen_name_marker">Marker</string>
+
+    <string name="toolbar_element_shape">Shape</string>
+    <string name="toolbar_element_eraser">Eraser</string>
+    <string name="toolbar_element_select">Lasso select</string>
+    <string name="toolbar_element_image">Insert image</string>
+    <string name="toolbar_element_paste">Paste</string>
+    <string name="toolbar_element_reset_view">Reset view</string>
+    <string name="toolbar_element_undo">Undo</string>
+    <string name="toolbar_element_redo">Redo</string>
+    <string name="toolbar_element_page_nav">Page number</string>
+    <string name="toolbar_element_home">Library</string>
+    <string name="toolbar_element_menu">Menu</string>
+    <string name="toolbar_element_divider">Divider</string>
+
 </resources>

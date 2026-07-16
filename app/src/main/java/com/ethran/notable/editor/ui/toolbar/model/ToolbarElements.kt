@@ -13,19 +13,6 @@ import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.RefreshCcw
 
-// Size presets, formerly hardcoded in ToolbarContent.
-val SIZES_STROKES_DEFAULT = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
-val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "XXL" to 80f)
-
-// Color presets, formerly hardcoded in PenToolbarButton.
-val COLORS_DEFAULT = listOf(
-    Color.Red, Color.Green, Color.Blue, Color.Cyan, Color.Magenta,
-    Color.Yellow, Color.Gray, Color.DarkGray, Color.Black,
-)
-
-private val STROKE_SUBMENU = StrokeSubmenuSpec(SIZES_STROKES_DEFAULT, COLORS_DEFAULT)
-private val MARKER_SUBMENU = StrokeSubmenuSpec(SIZES_MARKER_DEFAULT, COLORS_DEFAULT)
-
 /**
  * The registry: every placeable **static** toolbar element, keyed by id. Pen buttons are
  * not here — they are user-created [ToolbarPen] presets, resolved into [PenElement]s by
@@ -133,15 +120,23 @@ object ToolbarElements {
         }
     )
 
-    /** Builds the toolbar element for a pen preset. */
+    /** Builds the toolbar element for a pen preset. The StrokeMenu options come from the
+     * preset itself — which colors/sizes appear is per-pen, edited in toolbar settings. */
     fun penElement(preset: ToolbarPen): PenElement = PenElement(
         icon = penIcon(preset.pen),
         contentDescription = preset.pen.penName,
         presetId = preset.id,
         pen = preset.pen,
         setting = preset.setting(),
-        submenu = if (preset.pen == Pen.MARKER) MARKER_SUBMENU else STROKE_SUBMENU,
+        submenu = StrokeSubmenuSpec(
+            sizeOptions = preset.effectiveSizeOptions().map { sizeLabel(it) to it },
+            colorOptions = preset.effectiveColorOptions().map { Color(it) },
+        ),
     )
+
+    /** "3", "5", "10" — numeric labels; custom option sets have no natural S/M/L names. */
+    fun sizeLabel(size: Float): String =
+        if (size == size.toInt().toFloat()) size.toInt().toString() else size.toString()
 
     /**
      * Resolves a persisted layout entry: `"PEN:<id>"` against the preset list, anything
