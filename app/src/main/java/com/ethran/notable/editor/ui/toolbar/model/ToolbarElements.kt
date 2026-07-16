@@ -171,6 +171,16 @@ object ToolbarElements {
         all.getValue(id)
 
     /**
+     * Canonical per-pen defaults, derived from the specs — the single source of truth.
+     * EditorViewModel.DEFAULT_PEN_SETTINGS aliases this; do not re-declare values there.
+     * Copies keep spec instances isolated (PenSetting fields are mutable). These are
+     * fallbacks for pens absent from persisted settings — never re-seed user values.
+     */
+    val defaultPenSettings: Map<String, PenSetting> =
+        all.values.filterIsInstance<PenElement>()
+            .associate { it.pen.penName to it.defaultSetting.copy() }
+
+    /**
      * Collapsed-toolbar icon: the element matching the active mode/pen. In Line mode both
      * the shape button and the active pen report selected — the mode tool wins, matching
      * the old presentlyUsedToolIcon() behavior.
@@ -178,6 +188,9 @@ object ToolbarElements {
     fun presentlyUsedToolIcon(state: ToolbarUiState): IconRef? {
         val selected = all.values.filter { it.isSelected(state) }
         val element = selected.firstOrNull { it !is PenElement } ?: selected.firstOrNull()
-        return (element ?: of(ToolbarElementId.PEN_BALL)).icon
+        // No element matches only in Draw mode with an element-less pen. Today that is
+        // exactly Pen.DASHED (erase-indicator only, never a toolbar pen) — mirror the old
+        // exhaustive when(pen) by showing the dashed-line icon.
+        return element?.icon ?: IconRef.Drawable(R.drawable.line_dashed)
     }
 }
