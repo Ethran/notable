@@ -5,9 +5,10 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.editor.drawing.OnyxStrokeStyle
 import com.ethran.notable.editor.drawing.StrokeRenderer
+import com.ethran.notable.editor.drawing.StrokeStyleRegistry
 import com.ethran.notable.editor.drawing.drawBallPenStroke
-import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.offsetStroke
 import com.onyx.android.sdk.data.note.ShapeCreateArgs
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -23,6 +24,8 @@ private val strokeDrawingLogger = ShipBook.getLogger("OnyxStrokeRenderer")
 /**
  * Renders dry strokes with the Onyx SDK pen wrappers (NeoPen family). This is the only
  * renderer that speaks Onyx types; the TouchPoint conversion below is its private detail.
+ * Which wrapper a pen uses comes from [StrokeStyleRegistry] — this object only executes
+ * the style it is handed.
  */
 object OnyxStrokeRenderer : StrokeRenderer {
 
@@ -46,6 +49,12 @@ object OnyxStrokeRenderer : StrokeRenderer {
     }
 
     override fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
+        val style = StrokeStyleRegistry.forPen(stroke.pen)
+        if (style == null) {
+            strokeDrawingLogger.e("No stroke style for pen: ${stroke.pen}")
+            return
+        }
+
         val paint = Paint().apply {
             color = stroke.color
             this.strokeWidth = stroke.size
@@ -55,17 +64,15 @@ object OnyxStrokeRenderer : StrokeRenderer {
 
         // Trying to find what throws error when drawing quickly
         try {
-            when (stroke.pen) {
-                Pen.BALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
-                Pen.REDBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
-                Pen.GREENBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
-                Pen.BLUEBALLPEN -> drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
+            // In-memory stroke pressure is normalized to [0,1] with maxPressure == 1
+            // (see Stroke.withNormalizedPressure). The wrappers take maxPressure as the
+            // pressure denominator, so passing stroke.maxPressure is a no-op divide for
+            // normalized strokes and stays correct for raw-scale ones.
+            when (val onyx = style.onyx) {
+                OnyxStrokeStyle.BallPen ->
+                    drawBallPenStroke(canvas, paint, stroke.size, positionedStroke.points)
 
-                // In-memory stroke pressure is normalized to [0,1] with maxPressure == 1
-                // (see Stroke.withNormalizedPressure). The wrappers take maxPressure as the
-                // pressure denominator, so passing stroke.maxPressure is a no-op divide for
-                // normalized strokes and stays correct for raw-scale ones.
-                Pen.FOUNTAIN -> {
+                OnyxStrokeStyle.Fountain -> {
                     NeoFountainPenV2Wrapper.drawStroke(
                         /* canvas = */ canvas,
                         /* paint = */ paint,
@@ -75,7 +82,7 @@ object OnyxStrokeRenderer : StrokeRenderer {
                     )
                 }
 
-                Pen.BRUSH -> {
+                OnyxStrokeStyle.Brush -> {
                     NeoBrushPenWrapper.drawStroke(
                         canvas,
                         paint,
@@ -86,7 +93,7 @@ object OnyxStrokeRenderer : StrokeRenderer {
                     )
                 }
 
-                Pen.MARKER -> {
+                OnyxStrokeStyle.Marker -> {
                     NeoMarkerPenWrapper.drawStroke(
                         canvas,
                         paint,
@@ -96,7 +103,7 @@ object OnyxStrokeRenderer : StrokeRenderer {
                     )
                 }
 
-                Pen.PENCIL -> {
+                is OnyxStrokeStyle.Charcoal -> {
                     // ShapeCreateArgs.maxPressure defaults to the device digitizer max; it is
                     // the divisor the charcoal renderer applies to point pressure, so it must
                     // match the scale the points are stored in.
@@ -107,15 +114,12 @@ object OnyxStrokeRenderer : StrokeRenderer {
                         .setPoints(strokeToTouchPoints(positionedStroke))
                         .setColor(stroke.color)
                         .setStrokeWidth(stroke.size)
-                        .setTiltEnabled(true)
+                        .setTiltEnabled(onyx.tiltEnabled)
                         .setErase(false)
                         .setCreateArgs(shapeArg)
                         .setRenderMatrix(Matrix())
                         .setScreenMatrix(Matrix())
                     NeoCharcoalPenWrapper.drawNormalStroke(arg)
-                }
-                else -> {
-                    strokeDrawingLogger.e("Unknown pen type: ${stroke.pen}")
                 }
             }
         } catch (e: Exception) {
