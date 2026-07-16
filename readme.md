@@ -101,10 +101,15 @@ Notable features intuitive gesture controls within Editor mode to optimize the e
 * **Hold and drag:** select text and images.
 
 #### ✌️ 2 Fingers
-* **Swipe left or right:** show or hide the toolbar.
 * **Single tap:** switch between writing and eraser modes.
 * **Pinch:** zoom in and out.
-* **Hold and drag:** move the canvas.
+* **Drag:** move the canvas.
+
+#### 🤟 3 Fingers
+* **Swipe left or right:** show or hide the toolbar.
+* **Swipe up:** open QuickNav (can be disabled in Gesture settings).
+
+> ⚠️ **Caveat:** on Onyx devices, a three-finger swipe is also the system's screenshot gesture, which can steal the touch before Notable sees it. Enabling **"Block system gestures while in Notable"** in Gesture settings fixes this, but as a side effect, edge-navigation swipes (e.g. back/recent-apps) stop working while the app is open.
 
 #### 🔲 Selection
 * **Drag:** move the selection.
@@ -132,24 +137,23 @@ The app supports the following formats:
 ---
 
 ## Roadmap
+This is a rough, unordered list of ideas and in-progress work, not a committed schedule — priorities shift depending on what's needed at the time.
 
-### Near-term
+- Currently being worked on:
+  - Customizable toolbar: allow modifying which tools appear and in what order.
+  - Non-Onyx device support: make Notable usable on other Android devices, without depending on the Onyx SDK.
+- Sync: groundwork already exists in the codebase, but it's not ready for use yet.
 - Better selection tools:
   - Stroke editing (color, size, etc.)
   - Rotate and flip selection
   - Auto‑scroll when dragging a selection near screen edges
   - Easier selection movement, including dragging while scrolling
 - PDF improvements:
-  - Migration to a dedicated PDF library to replace the default Android renderer
   - Allow saving annotations back to the original PDF
   - Improved rendering and stability across devices
-
-### Planned
 - PDF annotation enhancements:
   - Display annotations from other programs
   - Additional quality‑of‑life tools for annotating imported PDFs
-
-### Long-term
 - Bookmarks, tags, and internal links — see [issue #52](https://github.com/Ethran/notable/issues/52), including link export to PDF.
 - Figure and text recognition — see [issue #44](https://github.com/Ethran/notable/issues/44):
   - Searchable notes
