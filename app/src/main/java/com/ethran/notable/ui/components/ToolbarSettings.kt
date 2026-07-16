@@ -228,6 +228,12 @@ private fun rowsToLayout(rows: List<ToolbarRow>): ToolbarLayout {
     return ToolbarLayout(scrollable, pinned)
 }
 
+/** The zone the row at [index] belongs to: the nearest section header above it. */
+private fun zoneAt(rows: List<ToolbarRow>, index: Int): Zone {
+    for (i in index downTo 0) (rows[i] as? ToolbarRow.SectionHeader)?.let { return it.zone }
+    return Zone.SCROLLABLE
+}
+
 /**
  * All three sections rendered as one column so a single drag can reorder within a zone
  * *and* move across zones (an entry dragged past a header changes section). Slot-based:
@@ -254,14 +260,20 @@ private fun ReorderableElementList(
     var dragOffset by remember { mutableStateOf(0f) }
     val rowHeightPx = with(LocalDensity.current) { ROW_HEIGHT.toPx() }
 
-    fun moveDragged(step: Int) {
-        val from = draggingIndex ?: return
+    /** One-slot move of the dragged row; false when blocked (list end, or MENU into
+     * Hidden — the validator would silently snap it back, so refuse the drop instead). */
+    fun moveDragged(step: Int): Boolean {
+        val from = draggingIndex ?: return false
         val to = from + step
         // Row 0 is the Scrollable header; nothing may move above it.
-        if (to < 1 || to > rows.lastIndex) return
-        rows = rows.toMutableList().apply { add(to, removeAt(from)) }
+        if (to < 1 || to > rows.lastIndex) return false
+        val moved = rows.toMutableList().apply { add(to, removeAt(from)) }
+        val entry = (moved[to] as? ToolbarRow.Element)?.entry
+        if (entry == ToolbarElementId.MENU.name && zoneAt(moved, to) == Zone.HIDDEN) return false
+        rows = moved
         draggingIndex = to
         dragOffset -= step * rowHeightPx
+        return true
     }
 
     Column(
@@ -278,8 +290,8 @@ private fun ReorderableElementList(
                     if (draggingIndex == null) return@detectDragGesturesAfterLongPress
                     change.consume()
                     dragOffset += amount.y
-                    while (dragOffset > rowHeightPx * 0.6f) moveDragged(1)
-                    while (dragOffset < -rowHeightPx * 0.6f) moveDragged(-1)
+                    while (dragOffset > rowHeightPx * 0.6f && moveDragged(1)) Unit
+                    while (dragOffset < -rowHeightPx * 0.6f && moveDragged(-1)) Unit
                 },
                 onDragEnd = {
                     if (draggingIndex != null) {
@@ -576,6 +588,10 @@ private fun AddPenDialog(onPick: (Pen) -> Unit, onClose: () -> Unit) {
  * its toolbar popup. Multi-select toggles over the candidate sets; the pen's *current*
  * color/size is still picked from the toolbar's StrokeMenu, as always. At least one
  * color and two sizes must stay included (the discrete size slider needs a range).
+ *
+ * Toggles edit a local copy; the settings blob is written once, on dismiss — not per
+ * tap. If an edit removes the option the pen currently draws with, the active
+ * color/size is clamped to a surviving option so it never falls off its own palette.
  */
 @Composable
 private fun PenEditDialog(
@@ -583,10 +599,23 @@ private fun PenEditDialog(
     onChange: (ToolbarPen) -> Unit,
     onClose: () -> Unit,
 ) {
-    val includedColors = preset.effectiveColorOptions()
-    val includedSizes = preset.effectiveSizeOptions()
+    var edited by remember(preset.id) { mutableStateOf(preset) }
+    val includedColors = edited.effectiveColorOptions()
+    val includedSizes = edited.effectiveSizeOptions()
 
-    Dialog(onDismissRequest = onClose) {
+    fun commitAndClose() {
+        if (edited != preset) onChange(
+            edited.copy(
+                color = if (edited.color in edited.effectiveColorOptions()) edited.color
+                else edited.effectiveColorOptions().first(),
+                size = if (edited.size in edited.effectiveSizeOptions()) edited.size
+                else edited.effectiveSizeOptions().minBy { kotlin.math.abs(it - edited.size) },
+            )
+        )
+        onClose()
+    }
+
+    Dialog(onDismissRequest = ::commitAndClose) {
         Column(
             modifier = Modifier
                 .background(MaterialTheme.colors.background)
@@ -595,12 +624,12 @@ private fun PenEditDialog(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ToolbarButton(
-                    penColor = Color(preset.color),
-                    iconId = (ToolbarElements.penIcon(preset.pen) as IconRef.Drawable).resId,
+                    penColor = Color(edited.color),
+                    iconId = (ToolbarElements.penIcon(edited.pen) as IconRef.Drawable).resId,
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    text = stringResource(penNameRes(preset.pen)),
+                    text = stringResource(penNameRes(edited.pen)),
                     style = MaterialTheme.typography.h6,
                 )
             }
@@ -625,12 +654,14 @@ private fun PenEditDialog(
                                     else MaterialTheme.colors.onSurface.copy(alpha = 0.2f),
                                 )
                                 .clickable {
+                                    // Re-added colors append at the end: the user's
+                                    // stored palette order is preserved, not re-sorted
+                                    // to candidate order.
                                     val updated =
                                         if (included) includedColors - colorInt
-                                        else ToolbarPen.COLOR_CANDIDATES
-                                            .filter { it in includedColors || it == colorInt }
+                                        else includedColors + colorInt
                                     if (updated.isNotEmpty())
-                                        onChange(preset.copy(colorOptions = updated))
+                                        edited = edited.copy(colorOptions = updated)
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -665,7 +696,7 @@ private fun PenEditDialog(
                                     if (included) includedSizes - size
                                     else (includedSizes + size).sorted()
                                 if (updated.size >= 2)
-                                    onChange(preset.copy(sizeOptions = updated))
+                                    edited = edited.copy(sizeOptions = updated)
                             },
                         )
                     }
