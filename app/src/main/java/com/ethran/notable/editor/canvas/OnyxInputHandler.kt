@@ -14,6 +14,7 @@ import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
+import com.ethran.notable.editor.utils.cancelPendingScreenFreezeReset
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
 import com.ethran.notable.editor.utils.enableNativeEraser
@@ -178,6 +179,9 @@ class OnyxInputHandler(
             enableNativeEraser(touchHelper)
             updatePenAndStroke()
         } else {
+            // A pending resetScreenFreeze resume would re-freeze the screen after we disable
+            // raw drawing (e.g. lasso select: the select-stroke refreshUi armed it) — kill it.
+            cancelPendingScreenFreezeReset()
             // Check if drawing is completed
             CanvasEventBus.waitForDrawing()
             // draw to view, before showing drawing, avoid stutter

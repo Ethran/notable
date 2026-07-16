@@ -62,33 +62,33 @@ suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice(
     when (updateOption) {
         UpdateOption.NORMAL -> {
             // HD mode
-            delay(190) // On my device ~160 is the minimal delay
+            delay(190.milliseconds) // On my device ~160 is the minimal delay
         }
 
         UpdateOption.REGAL -> {
             // regal mode
-            delay(180) // On my device ~150 is the minimal delay
+            delay(180.milliseconds) // On my device ~150 is the minimal delay
         }
 
         UpdateOption.FAST -> {
             //ultra fast, fast, balanced
-            delay(20) // 5ms is problematic sometimes on balanced mode.
+            delay(20.milliseconds) // 5ms is problematic sometimes on balanced mode.
         }
 
         UpdateOption.FAST_X -> {
             // no idea what it is
-            delay(4) // Minimal delay
+            delay(4.milliseconds) // Minimal delay
         }
 
         UpdateOption.FAST_QUALITY -> {
             // no idea what it is
-            delay(15)
+            delay(15.milliseconds)
         }
 
         else -> {
             // Default fallback
             log.e("Unknown refresh mode: $updateOption")
-            delay(10)
+            delay(10.milliseconds)
         }
     }
 }
@@ -233,6 +233,13 @@ fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelp
 // fresh 500 ms resume timer — the timers stack and "Resuming raw drawing" floods at the end.
 private val screenFreezeScope = CoroutineScope(Dispatchers.Default)
 private var screenFreezeResetJob: Job? = null
+
+// When raw drawing is being turned off entirely (e.g. entering selection), a pending resume
+// must not fire afterwards: its delayed isRawDrawingRenderEnabled=true would hand the screen
+// back to the firmware with input disabled — a frozen screen nothing unfreezes.
+fun cancelPendingScreenFreezeReset() {
+    screenFreezeResetJob?.cancel()
+}
 
 fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
     if(touchHelper == null) {
