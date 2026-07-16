@@ -65,6 +65,7 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.DebugSettings
 import com.ethran.notable.ui.components.GeneralSettings
 import com.ethran.notable.ui.components.GesturesSettings
+import com.ethran.notable.ui.components.ToolbarSettings
 import com.ethran.notable.ui.theme.InkaTheme
 import com.ethran.notable.ui.viewmodels.GestureRowModel
 import com.ethran.notable.ui.viewmodels.SettingsViewModel
@@ -146,6 +147,7 @@ fun SettingsContent(
     val tabs = listOf(
         stringResource(R.string.settings_tab_general_name),
         stringResource(R.string.settings_tab_gestures_name),
+        stringResource(R.string.settings_tab_toolbar_name),
 //        stringResource(R.string.settings_tab_sync_name),
         stringResource(R.string.settings_tab_debug_name)
     )
@@ -176,12 +178,14 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-//                    2 -> SyncSettings(
+                    2 -> ToolbarSettings(settings, onUpdateSettings)
+
+//                    3 -> SyncSettings(
 //                        state = syncUiState,
 //                        callbacks = syncCallbacks,
 //                    )
 
-                    2 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
+                    3 -> DebugSettings(settings, onUpdateSettings, goToWelcome, goToSystemInfo)
                 }
             }
 

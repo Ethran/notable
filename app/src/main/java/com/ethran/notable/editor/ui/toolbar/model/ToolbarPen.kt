@@ -23,6 +23,13 @@ data class ToolbarPen(
     val pen: Pen,
     val color: Int,
     val size: Float,
+    /**
+     * Which colors this pen's StrokeMenu offers, user-picked in the toolbar settings.
+     * Null (also for pre-existing persisted presets) → [DEFAULT_COLOR_OPTIONS].
+     */
+    val colorOptions: List<Int>? = null,
+    /** Which sizes this pen's StrokeMenu offers. Null → the base type's default set. */
+    val sizeOptions: List<Float>? = null,
 ) {
     /** The preset's color/size as a fresh [PenSetting] (its fields are mutable). */
     fun setting(): PenSetting = PenSetting(size, color)
@@ -30,8 +37,34 @@ data class ToolbarPen(
     /** How this preset is referenced from [ToolbarLayout] lists. */
     val layoutEntry: String get() = "$LAYOUT_PREFIX$id"
 
+    fun effectiveColorOptions(): List<Int> = colorOptions ?: DEFAULT_COLOR_OPTIONS
+
+    fun effectiveSizeOptions(): List<Float> =
+        sizeOptions ?: if (pen == Pen.MARKER) DEFAULT_MARKER_SIZES else DEFAULT_STROKE_SIZES
+
     companion object {
         const val LAYOUT_PREFIX = "PEN:"
+
+        /** Matches the historical hardcoded StrokeMenu palette (compose defaults). */
+        val DEFAULT_COLOR_OPTIONS: List<Int> = listOf(
+            AndroidColor.RED, AndroidColor.GREEN, AndroidColor.BLUE, AndroidColor.CYAN,
+            AndroidColor.MAGENTA, AndroidColor.YELLOW, AndroidColor.GRAY,
+            AndroidColor.DKGRAY, AndroidColor.BLACK,
+        )
+
+        /** Everything the settings editor offers for inclusion in [colorOptions]. */
+        val COLOR_CANDIDATES: List<Int> = DEFAULT_COLOR_OPTIONS + listOf(
+            AndroidColor.LTGRAY,
+            0xFFFFA500.toInt(), // orange
+            0xFF800080.toInt(), // purple
+            0xFF8B4513.toInt(), // brown
+        )
+
+        val DEFAULT_STROKE_SIZES = listOf(3f, 5f, 10f, 20f)
+        val DEFAULT_MARKER_SIZES = listOf(25f, 40f, 60f, 80f)
+
+        /** Everything the settings editor offers for inclusion in [sizeOptions]. */
+        val SIZE_CANDIDATES = listOf(1f, 2f, 3f, 5f, 8f, 10f, 15f, 20f, 25f, 30f, 40f, 60f, 80f)
 
         fun newId(): String = UUID.randomUUID().toString().take(8)
 
