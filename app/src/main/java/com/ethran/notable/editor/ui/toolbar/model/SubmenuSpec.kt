@@ -10,10 +10,7 @@ import com.ethran.notable.editor.utils.Eraser
  */
 sealed interface SubmenuSpec
 
-/**
- * Size/color picker for stroke-producing tools, rendered by the existing StrokeMenu.
- * [colorOptions] is filtered out in monochrome mode by the renderer.
- */
+/** Size/color picker for stroke-producing tools, rendered by the existing StrokeMenu. */
 data class StrokeSubmenuSpec(
     val sizeOptions: List<Pair<String, Float>>,
     val colorOptions: List<Color>,

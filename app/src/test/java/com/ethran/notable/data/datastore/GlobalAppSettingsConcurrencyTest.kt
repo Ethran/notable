@@ -22,10 +22,10 @@ class GlobalAppSettingsConcurrencyTest {
 
     @Test
     fun update_isVisibleAfterCommit() {
-        GlobalAppSettings.update(AppSettings(version = 1, neoTools = false))
-        GlobalAppSettings.update(AppSettings(version = 1, neoTools = true))
+        GlobalAppSettings.update(AppSettings(version = 1, debugMode = false))
+        GlobalAppSettings.update(AppSettings(version = 1, debugMode = true))
 
-        assertEquals(true, GlobalAppSettings.current.neoTools)
+        assertEquals(true, GlobalAppSettings.current.debugMode)
     }
 
     /**

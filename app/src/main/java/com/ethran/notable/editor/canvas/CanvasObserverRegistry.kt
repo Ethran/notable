@@ -223,7 +223,9 @@ class CanvasObserverRegistry(
     private fun observePenChanges() {
         observerScope.launch(Dispatchers.Default) {
             viewModel.toolbarState
-                .map { it.pen }
+                // Preset id, not just the base pen type: switching between two ballpen
+                // presets changes color/size without changing `pen`.
+                .map { it.pen to it.penPresetId }
                 .distinctUntilChanged()
                 .collect { pen ->
                     log.v("pen change: $pen")
