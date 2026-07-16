@@ -169,7 +169,10 @@ class EditorControlTower(
 
     override fun onPinchToZoom(delta: Float, center: Offset?) {
         if (!page.isTransformationAllowed) return
-        if (viewModel.toolbarState.value.mode == Mode.Select)
+        // Zooming under an active selection (floating bitmap, in-progress page
+        // cut) would desync the screen-space overlay from the strokes below it;
+        // with the select tool merely armed, zooming is fine.
+        if (viewModel.selectionState.isNonEmpty() || viewModel.selectionState.firstPageCut != null)
             return
         scope.launch {
             scrollInProgress.withLock {
