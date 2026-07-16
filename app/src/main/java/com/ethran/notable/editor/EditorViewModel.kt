@@ -1,7 +1,6 @@
 package com.ethran.notable.editor
 
 import android.content.Context
-import android.graphics.Color
 import android.net.Uri
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -21,6 +20,7 @@ import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.SelectionState
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarElements
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -729,16 +729,9 @@ class EditorViewModel @Inject constructor(
     }
 
     companion object {
-        val DEFAULT_PEN_SETTINGS = mapOf(
-            Pen.BALLPEN.penName to PenSetting(5f, Color.BLACK),
-            Pen.REDBALLPEN.penName to PenSetting(5f, Color.RED),
-            Pen.BLUEBALLPEN.penName to PenSetting(5f, Color.BLUE),
-            Pen.GREENBALLPEN.penName to PenSetting(5f, Color.GREEN),
-            Pen.PENCIL.penName to PenSetting(5f, Color.BLACK),
-            Pen.BRUSH.penName to PenSetting(5f, Color.BLACK),
-            Pen.MARKER.penName to PenSetting(40f, Color.LTGRAY),
-            Pen.FOUNTAIN.penName to PenSetting(5f, Color.BLACK)
-        )
+        // Canonical values live in the toolbar element specs (PenElement.defaultSetting) —
+        // one source of truth. These are fallbacks only; persisted user settings win.
+        val DEFAULT_PEN_SETTINGS = ToolbarElements.defaultPenSettings
     }
 
 

@@ -23,6 +23,12 @@ sealed interface IconRef {
  * Visibility predicate for an element. Absorbs the legacy layout conditionals
  * (monochromeMode, neoTools, hasClipboard, showResetView, notebookId): settings are
  * passed in explicitly so the model stays unit-testable without Compose snapshot state.
+ *
+ * Deliberate deviation from the design doc's `(ToolbarUiState) -> Boolean`:
+ * monochromeMode/neoTools are not part of ToolbarUiState. The renderer must evaluate
+ * these predicates **during composition**, passing `GlobalAppSettings.current` — that is
+ * a Compose snapshot-state read, so setting changes recompose the toolbar automatically
+ * (colored pens / neo tools toggle live). Do not cache the result outside composition.
  */
 typealias VisibleWhen = (state: ToolbarUiState, settings: AppSettings) -> Boolean
 

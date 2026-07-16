@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.ui.toolbar.model
 
+import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Pen
@@ -51,6 +52,46 @@ class ToolbarElementsTest {
         assertFalse(eraser.isSelected(ToolbarUiState(mode = Mode.Select)))
         assertTrue(select.isSelected(ToolbarUiState(mode = Mode.Select)))
         assertFalse(select.isSelected(ToolbarUiState(mode = Mode.Draw)))
+    }
+
+    @Test
+    fun `every pen except the indicator-only DASHED has an element`() {
+        val pensWithElements = ToolbarElements.all.values
+            .filterIsInstance<PenElement>().map { it.pen }.toSet()
+        Pen.entries.forEach { pen ->
+            if (pen == Pen.DASHED) {
+                assertFalse("DASHED must stay element-less (erase indicator only)", pen in pensWithElements)
+            } else {
+                assertTrue("Pen $pen has no toolbar element", pen in pensWithElements)
+            }
+        }
+    }
+
+    @Test
+    fun `default pen settings are the single source of truth for the viewmodel`() {
+        // Same object: EditorViewModel must alias the registry, not re-declare values.
+        assertTrue(EditorViewModel.DEFAULT_PEN_SETTINGS === ToolbarElements.defaultPenSettings)
+        // And the map matches the specs exactly.
+        ToolbarElements.all.values.filterIsInstance<PenElement>().forEach { element ->
+            assertEquals(
+                "Default setting drifted for ${element.pen}",
+                element.defaultSetting,
+                ToolbarElements.defaultPenSettings[element.pen.penName],
+            )
+        }
+        assertEquals(
+            ToolbarElements.all.values.filterIsInstance<PenElement>().size,
+            ToolbarElements.defaultPenSettings.size,
+        )
+    }
+
+    @Test
+    fun `collapsed icon falls back to dashed-line for the element-less DASHED pen`() {
+        val state = ToolbarUiState(mode = Mode.Draw, pen = Pen.DASHED)
+        assertEquals(
+            IconRef.Drawable(com.ethran.notable.R.drawable.line_dashed),
+            ToolbarElements.presentlyUsedToolIcon(state),
+        )
     }
 
     @Test
