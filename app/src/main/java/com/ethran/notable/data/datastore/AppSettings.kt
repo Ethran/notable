@@ -2,6 +2,8 @@ package com.ethran.notable.data.datastore
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import kotlinx.serialization.Serializable
 
 
@@ -37,15 +39,19 @@ data class AppSettings(
     val monitorBgFiles: Boolean = false,
     val defaultNativeTemplate: String = "blank",
     val quickNavPages: List<String> = listOf(),
-    val neoTools: Boolean = false,
     val scribbleToEraseEnabled: Boolean = false,
     val toolbarPosition: Position = Position.Top,
     val smoothScroll: Boolean = true,
     val continuousZoom: Boolean = false,
     val continuousStrokeSlider: Boolean = false,
-    val monochromeMode: Boolean = false,
     val paginatePdf: Boolean = true,
     val visualizePdfPagination: Boolean = false,
+    // null → ToolbarLayout.DEFAULT. Sanitize with ToolbarLayout.validated() when reading:
+    // persisted layouts may predate elements or omit the mandatory MENU entry.
+    val toolbarLayout: ToolbarLayout? = null,
+    // User-created pen instances; layouts reference them as "PEN:<id>". The preset is the
+    // single source of truth for a pen's color/size — StrokeMenu edits write back here.
+    val toolbarPens: List<ToolbarPen> = ToolbarPen.DEFAULT_PENS,
 
     // Gestures
     val doubleTapAction: GestureAction = GestureAction.Undo,

@@ -28,8 +28,8 @@ import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.editor.utils.Pen
-import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.noRippleClickable
@@ -174,7 +174,7 @@ fun ToolbarMenuPreview() {
             notebookId = "book1",
             mode = Mode.Draw,
             pen = Pen.BALLPEN,
-            penSettings = mapOf(Pen.BALLPEN.penName to PenSetting(5f, android.graphics.Color.BLACK))
+            penSettings = ToolbarPen.defaultPenSettings
         ),
         onAction = {}
     )

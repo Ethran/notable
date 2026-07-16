@@ -6,10 +6,11 @@ import kotlinx.serialization.Serializable
  * The user's toolbar layout: which elements appear, in what order, in which of the two
  * physical zones. Global (lives in AppSettings, step 4), not per-notebook.
  *
- * Ids serialize as **strings, not enum ordinals**: unknown names are dropped on load
- * (a layout exported from a newer app version still imports), and reordering
- * [ToolbarElementId] can never corrupt saved layouts. An element absent from both lists
- * is simply hidden.
+ * Entries serialize as **strings, not enum ordinals**: static elements by
+ * [ToolbarElementId] name, pen presets as `"PEN:<preset id>"` (see [ToolbarPen]). Unknown
+ * names are dropped on load (a layout exported from a newer app version still imports),
+ * and reordering [ToolbarElementId] can never corrupt saved layouts. An element absent
+ * from both lists is simply hidden.
  */
 @Serializable
 data class ToolbarLayout(
@@ -19,18 +20,12 @@ data class ToolbarLayout(
     val pinned: List<String>,
 ) {
 
-    /** [scrollable] resolved to ids, in order. Only meaningful on a [validated] layout. */
-    fun scrollableIds(): List<ToolbarElementId> =
-        scrollable.mapNotNull { ToolbarElementId.fromString(it) }
-
-    /** [pinned] resolved to ids, in order. Only meaningful on a [validated] layout. */
-    fun pinnedIds(): List<ToolbarElementId> =
-        pinned.mapNotNull { ToolbarElementId.fromString(it) }
-
     /**
      * Sanitizes a layout on load/import:
-     * - drops names that resolve to no [ToolbarElementId];
-     * - drops [ToolbarElementId.TOGGLE] — it is structural, always rendered first;
+     * - drops names that resolve to no [ToolbarElementId], and `"PEN:<id>"` entries whose
+     *   preset is absent from [pens] (deleted, or from another device's export);
+     * - drops [ToolbarElementId.TOGGLE] (structural, always rendered first) and the bare
+     *   [ToolbarElementId.PEN] sentinel (pens are only placeable as `"PEN:<id>"`);
      * - drops duplicates across both zones (first occurrence wins), except
      *   [ToolbarElementId.DIVIDER], which may repeat freely;
      * - enforces the single invariant: [ToolbarElementId.MENU] must be present somewhere;
@@ -38,29 +33,36 @@ data class ToolbarLayout(
      *
      * Everything else — including hiding elements by omission — is the user's business.
      */
-    fun validated(): ToolbarLayout {
-        val seen = mutableSetOf<ToolbarElementId>()
+    fun validated(pens: List<ToolbarPen>): ToolbarLayout {
+        val seen = mutableSetOf<String>()
 
         fun sanitize(names: List<String>): List<String> = names.mapNotNull { name ->
+            if (name.startsWith(ToolbarPen.LAYOUT_PREFIX)) {
+                val presetId = name.removePrefix(ToolbarPen.LAYOUT_PREFIX)
+                if (pens.none { it.id == presetId }) return@mapNotNull null
+                if (!seen.add(name)) return@mapNotNull null
+                return@mapNotNull name
+            }
             val id = ToolbarElementId.fromString(name) ?: return@mapNotNull null
-            if (id == ToolbarElementId.TOGGLE) return@mapNotNull null
-            if (id != ToolbarElementId.DIVIDER && !seen.add(id)) return@mapNotNull null
+            if (id == ToolbarElementId.TOGGLE || id == ToolbarElementId.PEN) return@mapNotNull null
+            if (id != ToolbarElementId.DIVIDER && !seen.add(id.name)) return@mapNotNull null
             id.name
         }
 
         val cleanScrollable = sanitize(scrollable)
         var cleanPinned = sanitize(pinned)
-        if (ToolbarElementId.MENU !in seen) {
+        if (ToolbarElementId.MENU.name !in seen) {
             cleanPinned = cleanPinned + ToolbarElementId.MENU.name
         }
         return ToolbarLayout(cleanScrollable, cleanPinned)
     }
 
     companion object {
+        /** References the stable seed ids of [ToolbarPen.DEFAULT_PENS]. */
         val DEFAULT = ToolbarLayout(
             scrollable = listOf(
-                "PEN_BALL", "PEN_RED", "PEN_BLUE", "PEN_GREEN", "PEN_PENCIL", "PEN_BRUSH",
-                "PEN_FOUNTAIN", "SHAPE", "DIVIDER", "PEN_MARKER", "DIVIDER", "ERASER",
+                "PEN:ball", "PEN:red", "PEN:blue", "PEN:green", "PEN:pencil", "PEN:brush",
+                "PEN:fountain", "SHAPE", "DIVIDER", "PEN:marker", "DIVIDER", "ERASER",
                 "DIVIDER", "SELECT", "DIVIDER", "IMAGE", "DIVIDER", "PASTE", "RESET_VIEW",
             ),
             pinned = listOf(

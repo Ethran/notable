@@ -152,14 +152,14 @@ private fun PenElementView(
     var isStrokeMenuOpen by remember { mutableStateOf(false) }
     val isSelected = element.isSelected(uiState)
     val penSetting =
-        uiState.penSettings[element.pen.penName] ?: element.defaultSetting.copy()
+        uiState.penSettings[element.presetId] ?: element.setting.copy()
 
     Box {
         ToolbarButton(
             isSelected = isSelected,
             onSelect = {
                 if (isSelected) isStrokeMenuOpen = !isStrokeMenuOpen
-                else onAction(ToolbarAction.ChangePen(element.pen))
+                else onAction(ToolbarAction.ChangePen(element.presetId))
             },
             penColor = Color(penSetting.color),
             iconId = (element.icon as? IconRef.Drawable)?.resId,
@@ -170,7 +170,7 @@ private fun PenElementView(
         if (isStrokeMenuOpen) {
             StrokeMenu(
                 value = penSetting,
-                onChange = { onAction(ToolbarAction.ChangePenSetting(element.pen, it)) },
+                onChange = { onAction(ToolbarAction.ChangePenSetting(element.presetId, it)) },
                 onClose = { isStrokeMenuOpen = false },
                 sizeOptions = element.submenu.sizeOptions,
                 colorOptions = element.submenu.colorOptions,

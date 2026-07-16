@@ -4,8 +4,6 @@ import com.ethran.notable.data.db.Kv
 import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.Eraser
-import com.ethran.notable.editor.utils.NamedSettings
-import com.ethran.notable.editor.utils.Pen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -18,7 +16,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 
-const val persistVersion = 2
+// v3: pen identified by ToolbarPen preset id; per-pen settings live in
+// AppSettings.toolbarPens (the preset is the setting), no longer cached here.
+// Older versions are discarded on init (users just land on the default pen once).
+const val persistVersion = 3
 
 @Singleton
 class EditorSettingCacheManager
@@ -30,9 +31,8 @@ class EditorSettingCacheManager
     data class EditorSettings(
         val version: Int = persistVersion,
         val isToolbarOpen: Boolean,
-        val pen: Pen,
+        val penPresetId: String,
         val eraser: Eraser? = Eraser.PEN,
-        val penSettings: NamedSettings,
         val mode: Mode
     )
 

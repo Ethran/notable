@@ -15,12 +15,10 @@
     <string name="lines">Lines</string>
     <string name="small_squares_grid">Small squares grid</string>
     <string name="hexagon_grid">Hexagon grid</string>
-    <string name="use_onyx_neotools_may_cause_crashes">Use Onyx NeoTools (may cause crashes)</string>
     <string name="enable_scribble_to_erase">Enable scribble-to-erase (scribble out your mistakes to erase them)</string>
     <string name="enable_smooth_scrolling">Enable smooth scrolling</string>
     <string name="continuous_zoom">Continuous Zoom</string>
     <string name="continuous_stroke_slider">Continuous Stroke Slider</string>
-    <string name="monochrome_mode">Monochrome mode</string>
     <string name="rename_on_create">Open properties on new notebook</string>
     <string name="paginate_pdf">Paginate PDF</string>
     <string name="preview_pdf_pagination">Preview PDF Pagination</string>

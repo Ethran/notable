@@ -126,8 +126,8 @@ class OnyxInputHandler(
         when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
             Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
-                ?.setStrokeWidth(toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize * page.zoomLevel.value)
-                ?.setStrokeColor(toolbarState.penSettings[toolbarState.pen.penName]!!.color)
+                ?.setStrokeWidth(toolbarState.activePenSetting.strokeSize * page.zoomLevel.value)
+                ?.setStrokeColor(toolbarState.activePenSetting.color)
 
             Mode.Erase -> applyEraserIndicatorStyle(penEraserColor = Color.GRAY)
 
@@ -257,8 +257,8 @@ class OnyxInputHandler(
                         handleDraw(
                             drawCanvas.page,
                             strokeHistoryBatch,
-                            toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize,
-                            toolbarState.penSettings[toolbarState.pen.penName]!!.color,
+                            toolbarState.activePenSetting.strokeSize,
+                            toolbarState.activePenSetting.color,
                             toolbarState.pen,
                             linePoints
                         )
@@ -301,8 +301,8 @@ class OnyxInputHandler(
                             handleDraw(
                                 drawCanvas.page,
                                 strokeHistoryBatch,
-                                toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize,
-                                toolbarState.penSettings[toolbarState.pen.penName]!!.color,
+                                toolbarState.activePenSetting.strokeSize,
+                                toolbarState.activePenSetting.color,
                                 toolbarState.pen,
                                 scaledPoints
                             )

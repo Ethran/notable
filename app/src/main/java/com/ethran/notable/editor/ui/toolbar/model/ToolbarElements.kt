@@ -1,6 +1,5 @@
 package com.ethran.notable.editor.ui.toolbar.model
 
-import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.Color
 import com.ethran.notable.R
 import com.ethran.notable.editor.ToolbarAction
@@ -9,7 +8,6 @@ import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.Shape
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
-import com.ethran.notable.editor.utils.PenSetting
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
@@ -19,35 +17,21 @@ import compose.icons.feathericons.RefreshCcw
 val SIZES_STROKES_DEFAULT = listOf("S" to 3f, "M" to 5f, "L" to 10f, "XL" to 20f)
 val SIZES_MARKER_DEFAULT = listOf("M" to 25f, "L" to 40f, "XL" to 60f, "XXL" to 80f)
 
-// Color presets, formerly hardcoded in PenToolbarButton. StrokeMenu substitutes its
-// grayscale palette in monochrome mode.
+// Color presets, formerly hardcoded in PenToolbarButton.
 val COLORS_DEFAULT = listOf(
     Color.Red, Color.Green, Color.Blue, Color.Cyan, Color.Magenta,
     Color.Yellow, Color.Gray, Color.DarkGray, Color.Black,
 )
 
 private val STROKE_SUBMENU = StrokeSubmenuSpec(SIZES_STROKES_DEFAULT, COLORS_DEFAULT)
-
-private fun pen(
-    id: ToolbarElementId,
-    pen: Pen,
-    icon: Int,
-    defaultColor: Int = AndroidColor.BLACK,
-    visibleWhen: VisibleWhen = { _, _ -> true },
-) = PenElement(
-    id = id,
-    icon = IconRef.Drawable(icon),
-    contentDescription = pen.penName,
-    visibleWhen = visibleWhen,
-    pen = pen,
-    defaultSetting = PenSetting(5f, defaultColor),
-    submenu = STROKE_SUBMENU,
-)
+private val MARKER_SUBMENU = StrokeSubmenuSpec(SIZES_MARKER_DEFAULT, COLORS_DEFAULT)
 
 /**
- * The registry: every placeable toolbar element, keyed by id. Adding a tool = adding one
- * entry here (plus, for stroke-producing pens, a StrokeStyleRegistry entry — step 2).
- * A unit test asserts every [ToolbarElementId] resolves.
+ * The registry: every placeable **static** toolbar element, keyed by id. Pen buttons are
+ * not here — they are user-created [ToolbarPen] presets, resolved into [PenElement]s by
+ * [ToolbarElements.resolve]. Adding a static tool = adding one entry here (plus, for
+ * stroke-producing pens, a StrokeStyleRegistry entry — step 2). A unit test asserts every
+ * [ToolbarElementId] except the pen sentinel resolves.
  */
 object ToolbarElements {
 
@@ -57,40 +41,6 @@ object ToolbarElements {
             icon = IconRef.Vector(FeatherIcons.EyeOff),
             contentDescription = "close toolbar",
             action = ToolbarAction.ToggleToolbar,
-        ),
-
-        pen(ToolbarElementId.PEN_BALL, Pen.BALLPEN, R.drawable.ballpen),
-        pen(
-            ToolbarElementId.PEN_RED, Pen.REDBALLPEN, R.drawable.ballpenred,
-            defaultColor = AndroidColor.RED,
-            visibleWhen = { _, settings -> !settings.monochromeMode },
-        ),
-        pen(
-            ToolbarElementId.PEN_BLUE, Pen.BLUEBALLPEN, R.drawable.ballpenblue,
-            defaultColor = AndroidColor.BLUE,
-            visibleWhen = { _, settings -> !settings.monochromeMode },
-        ),
-        pen(
-            ToolbarElementId.PEN_GREEN, Pen.GREENBALLPEN, R.drawable.ballpengreen,
-            defaultColor = AndroidColor.GREEN,
-            visibleWhen = { _, settings -> !settings.monochromeMode },
-        ),
-        pen(
-            ToolbarElementId.PEN_PENCIL, Pen.PENCIL, R.drawable.pencil,
-            visibleWhen = { _, settings -> settings.neoTools },
-        ),
-        pen(
-            ToolbarElementId.PEN_BRUSH, Pen.BRUSH, R.drawable.brush,
-            visibleWhen = { _, settings -> settings.neoTools },
-        ),
-        pen(ToolbarElementId.PEN_FOUNTAIN, Pen.FOUNTAIN, R.drawable.fountain),
-        PenElement(
-            id = ToolbarElementId.PEN_MARKER,
-            icon = IconRef.Drawable(R.drawable.marker),
-            contentDescription = Pen.MARKER.penName,
-            pen = Pen.MARKER,
-            defaultSetting = PenSetting(40f, AndroidColor.LTGRAY),
-            submenu = StrokeSubmenuSpec(SIZES_MARKER_DEFAULT, COLORS_DEFAULT),
         ),
 
         ShapeElement(
@@ -170,27 +120,53 @@ object ToolbarElements {
     fun of(id: ToolbarElementId): ToolbarElement =
         all.getValue(id)
 
-    /**
-     * Canonical per-pen defaults, derived from the specs — the single source of truth.
-     * EditorViewModel.DEFAULT_PEN_SETTINGS aliases this; do not re-declare values there.
-     * Copies keep spec instances isolated (PenSetting fields are mutable). These are
-     * fallbacks for pens absent from persisted settings — never re-seed user values.
-     */
-    val defaultPenSettings: Map<String, PenSetting> =
-        all.values.filterIsInstance<PenElement>()
-            .associate { it.pen.penName to it.defaultSetting.copy() }
+    /** Icon for a base pen type. Legacy color variants share the plain ballpen icon —
+     * the button's tint comes from the preset's color. */
+    fun penIcon(pen: Pen): IconRef = IconRef.Drawable(
+        when (pen) {
+            Pen.BALLPEN, Pen.REDBALLPEN, Pen.GREENBALLPEN, Pen.BLUEBALLPEN -> R.drawable.ballpen
+            Pen.PENCIL -> R.drawable.pencil
+            Pen.BRUSH -> R.drawable.brush
+            Pen.MARKER -> R.drawable.marker
+            Pen.FOUNTAIN -> R.drawable.fountain
+            Pen.DASHED -> R.drawable.line_dashed
+        }
+    )
+
+    /** Builds the toolbar element for a pen preset. */
+    fun penElement(preset: ToolbarPen): PenElement = PenElement(
+        icon = penIcon(preset.pen),
+        contentDescription = preset.pen.penName,
+        presetId = preset.id,
+        pen = preset.pen,
+        setting = preset.setting(),
+        submenu = if (preset.pen == Pen.MARKER) MARKER_SUBMENU else STROKE_SUBMENU,
+    )
 
     /**
-     * Collapsed-toolbar icon: the element matching the active mode/pen. In Line mode both
-     * the shape button and the active pen report selected — the mode tool wins, matching
-     * the old presentlyUsedToolIcon() behavior.
+     * Resolves a persisted layout entry: `"PEN:<id>"` against the preset list, anything
+     * else against the static registry. Null for unknown names and deleted presets —
+     * callers skip those entries.
      */
-    fun presentlyUsedToolIcon(state: ToolbarUiState): IconRef? {
-        val selected = all.values.filter { it.isSelected(state) }
-        val element = selected.firstOrNull { it !is PenElement } ?: selected.firstOrNull()
-        // No element matches only in Draw mode with an element-less pen. Today that is
-        // exactly Pen.DASHED (erase-indicator only, never a toolbar pen) — mirror the old
-        // exhaustive when(pen) by showing the dashed-line icon.
-        return element?.icon ?: IconRef.Drawable(R.drawable.line_dashed)
+    fun resolve(name: String, pens: List<ToolbarPen>): ToolbarElement? {
+        if (name.startsWith(ToolbarPen.LAYOUT_PREFIX)) {
+            val presetId = name.removePrefix(ToolbarPen.LAYOUT_PREFIX)
+            return pens.find { it.id == presetId }?.let(::penElement)
+        }
+        val id = ToolbarElementId.fromString(name) ?: return null
+        return all[id]
+    }
+
+    /**
+     * Collapsed-toolbar icon: the mode tool if one is selected (shape/eraser/select —
+     * in Line mode the shape button wins over the pen, matching old behavior), otherwise
+     * the active pen preset's icon.
+     */
+    fun presentlyUsedToolIcon(state: ToolbarUiState, pens: List<ToolbarPen>): IconRef {
+        all.values.firstOrNull { it.isSelected(state) }?.icon?.let { return it }
+        val pen = pens.find { it.id == state.penPresetId }?.pen
+        // No preset matches only if the active one was deleted (or the transient DASHED
+        // erase indicator) — show the dashed-line icon, mirroring the old fallback.
+        return pen?.let(::penIcon) ?: IconRef.Drawable(R.drawable.line_dashed)
     }
 }

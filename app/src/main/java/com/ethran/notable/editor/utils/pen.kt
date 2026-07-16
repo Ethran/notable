@@ -7,6 +7,10 @@ import kotlinx.serialization.Serializable
 
 enum class Pen(val penName: String) {
     BALLPEN("BALLPEN"),
+    // RED/GREEN/BLUE ballpens are legacy: since toolbar pens became ToolbarPen presets
+    // (a colored pen is a BALLPEN preset), nothing creates strokes with these values.
+    // DO NOT REMOVE — existing DB stroke rows and Xopp/sync imports persist these names,
+    // and StrokeStyleRegistry/penIcon must keep resolving them to render old notebooks.
     REDBALLPEN("REDBALLPEN"),
     GREENBALLPEN("GREENBALLPEN"),
     BLUEBALLPEN("BLUEBALLPEN"),
@@ -44,5 +48,3 @@ data class PenSetting(
     //TODO: Rename to strokeColor
     var color: Int
 )
-
-typealias NamedSettings = Map<String, PenSetting>

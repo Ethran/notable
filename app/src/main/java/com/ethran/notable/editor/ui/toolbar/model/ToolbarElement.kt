@@ -21,11 +21,11 @@ sealed interface IconRef {
 
 /**
  * Visibility predicate for an element. Absorbs the legacy layout conditionals
- * (monochromeMode, neoTools, hasClipboard, showResetView, notebookId): settings are
- * passed in explicitly so the model stays unit-testable without Compose snapshot state.
+ * (hasClipboard, showResetView, notebookId): settings are passed in explicitly so the
+ * model stays unit-testable without Compose snapshot state.
  *
- * Deliberate deviation from the design doc's `(ToolbarUiState) -> Boolean`:
- * monochromeMode/neoTools are not part of ToolbarUiState. The renderer must evaluate
+ * Deliberate deviation from the design doc's `(ToolbarUiState) -> Boolean`: settings
+ * flags are not part of ToolbarUiState. The renderer must evaluate
  * these predicates **during composition**, passing `GlobalAppSettings.current` — that is
  * a Compose snapshot-state read, so setting changes recompose the toolbar automatically
  * (colored pens / neo tools toggle live). Do not cache the result outside composition.
@@ -50,19 +50,27 @@ sealed interface ToolbarElement {
     fun isSelected(state: ToolbarUiState): Boolean = false
 }
 
-/** A pen: produces strokes; size/color configurable via its [StrokeSubmenuSpec]. */
+/**
+ * A pen instance, built from a [ToolbarPen] preset (see [ToolbarElements.penElement]).
+ * Produces strokes; size/color configurable via its [StrokeSubmenuSpec]. Identity is the
+ * preset id, not the base [Pen] type — two ballpens in different colors are two elements.
+ */
 data class PenElement(
-    override val id: ToolbarElementId,
     override val icon: IconRef,
     override val contentDescription: String,
     override val visibleWhen: VisibleWhen = ALWAYS,
-    /** Key into stroke DB rows and (step 2) the StrokeStyleRegistry. */
+    /** The [ToolbarPen] preset this button represents. */
+    val presetId: String,
+    /** Base type: key into stroke DB rows and the StrokeStyleRegistry. */
     val pen: Pen,
-    val defaultSetting: PenSetting,
+    /** The preset's color/size — fallback when absent from `ToolbarUiState.penSettings`. */
+    val setting: PenSetting,
     val submenu: StrokeSubmenuSpec,
 ) : ToolbarElement {
+    override val id: ToolbarElementId get() = ToolbarElementId.PEN
+
     override fun isSelected(state: ToolbarUiState): Boolean =
-        (state.mode == Mode.Draw || state.mode == Mode.Line) && state.pen == pen
+        (state.mode == Mode.Draw || state.mode == Mode.Line) && state.penPresetId == presetId
 }
 
 /** The single SHAPE button; its picker submenu selects among [shapes]. */

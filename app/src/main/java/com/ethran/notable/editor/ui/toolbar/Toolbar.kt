@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
@@ -28,8 +29,8 @@ import com.ethran.notable.editor.ui.toolbar.model.IconRef
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarElementId
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarElements
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.editor.utils.Pen
-import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.ui.dialogs.BackgroundSelector
 
 /**
@@ -70,14 +71,19 @@ fun ToolbarContent(
         return
     }
 
-    // Snapshot read: setting changes (monochromeMode, neoTools, …) recompose the toolbar.
+    // Snapshot read: setting changes (toolbarPens, toolbarPosition, …) recompose the toolbar.
     val settings = GlobalAppSettings.current
-    val layout = ToolbarLayout.DEFAULT // step 4 reads this from settings
+    // Persisted layouts must be sanitized: they may predate elements, duplicate ids,
+    // or omit the mandatory MENU entry. DEFAULT is validated by construction (tested);
+    // its entries for deleted presets are skipped by resolve() below.
+    val layout = remember(settings.toolbarLayout, settings.toolbarPens) {
+        settings.toolbarLayout?.validated(settings.toolbarPens) ?: ToolbarLayout.DEFAULT
+    }
 
     @Composable
-    fun renderZone(ids: List<ToolbarElementId>) {
-        for (id in ids) {
-            val element = ToolbarElements.of(id)
+    fun renderZone(names: List<String>) {
+        for (name in names) {
+            val element = ToolbarElements.resolve(name, settings.toolbarPens) ?: continue
             if (!element.visibleWhen(uiState, settings)) continue
             ToolbarElementView(
                 element = element,
@@ -120,12 +126,12 @@ fun ToolbarContent(
                     .weight(1f)
                     .horizontalScroll(rememberScrollState())
             ) {
-                renderZone(layout.scrollableIds())
+                renderZone(layout.scrollable)
             }
 
             // Right zone: pinned.
             Row {
-                renderZone(layout.pinnedIds())
+                renderZone(layout.pinned)
             }
         }
 
@@ -138,13 +144,15 @@ private fun CollapsedToolbarButton(
     uiState: ToolbarUiState,
     onAction: (ToolbarAction) -> Unit,
 ) {
-    val icon = ToolbarElements.presentlyUsedToolIcon(uiState)
+    val icon = ToolbarElements.presentlyUsedToolIcon(
+        uiState, GlobalAppSettings.current.toolbarPens
+    )
     ToolbarButton(
         onSelect = { onAction(ToolbarAction.ToggleToolbar) },
         iconId = (icon as? IconRef.Drawable)?.resId,
         vectorIcon = (icon as? IconRef.Vector)?.imageVector,
         penColor = if (uiState.mode != Mode.Erase)
-            uiState.penSettings[uiState.pen.penName]?.color?.let { Color(it) }
+            uiState.penSettings[uiState.penPresetId]?.color?.let { Color(it) }
         else null,
         contentDescription = "open toolbar",
         modifier = Modifier
@@ -170,10 +178,8 @@ fun ToolbarPreview() {
         isToolbarOpen = true,
         mode = Mode.Draw,
         pen = Pen.BALLPEN,
-        penSettings = mapOf(
-            Pen.BALLPEN.penName to PenSetting(5f, android.graphics.Color.BLACK),
-            Pen.MARKER.penName to PenSetting(40f, android.graphics.Color.LTGRAY)
-        ),
+        penPresetId = ToolbarPen.DEFAULT_PENS.first().id,
+        penSettings = ToolbarPen.defaultPenSettings,
         pageNumberInfo = "3/12",
         notebookId = "dummy_book"
     )
