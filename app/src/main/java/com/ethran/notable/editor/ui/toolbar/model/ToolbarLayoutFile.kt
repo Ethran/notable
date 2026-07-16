@@ -33,10 +33,15 @@ data class ToolbarLayoutFile(
             json.encodeToString(serializer(), ToolbarLayoutFile(layout = layout, pens = pens))
 
         /**
-         * Parses and sanitizes an imported file. Malformed JSON or a wrong `type` throws
-         * [IllegalArgumentException] with a user-presentable message; entries the
-         * validator drops are reported via [droppedCount] so the caller can mention them
-         * in a snackbar rather than failing the import.
+         * Parses and sanitizes an imported file. Malformed JSON, a wrong `type`, or a
+         * newer `version` throws [IllegalArgumentException] with a user-presentable
+         * message; entries the validator drops are reported via [droppedCount] so the
+         * caller can mention them in a snackbar rather than failing the import.
+         *
+         * Pens are sanitized symmetrically with the layout: duplicate ids are dropped
+         * (first wins — `"PEN:<id>"` resolution takes the first match anyway), and
+         * option lists that violate the editor's invariants (≥1 color, ≥2 sizes — the
+         * discrete size slider needs a range) fall back to null, i.e. the defaults.
          */
         fun decode(text: String): ImportResult {
             val file = try {
@@ -45,11 +50,21 @@ data class ToolbarLayoutFile(
                 throw IllegalArgumentException("Not a toolbar layout file", e)
             }
             require(file.type == TYPE) { "Not a toolbar layout file" }
-            val validated = file.layout.validated(file.pens)
+            require(file.version <= VERSION) {
+                "File version ${file.version} is newer than this app supports ($VERSION)"
+            }
+            val pens = file.pens.distinctBy { it.id }.map { pen ->
+                pen.copy(
+                    colorOptions = pen.colorOptions?.distinct()?.takeIf { it.isNotEmpty() },
+                    sizeOptions = pen.sizeOptions?.distinct()?.sorted()
+                        ?.takeIf { it.size >= 2 },
+                )
+            }
+            val validated = file.layout.validated(pens)
             val original = file.layout.scrollable + file.layout.pinned
             val kept = validated.scrollable.size + validated.pinned.size -
                     if (ToolbarElementId.MENU.name in original) 0 else 1 // validator appends MENU
-            return ImportResult(validated, file.pens, original.size - kept)
+            return ImportResult(validated, pens, original.size - kept)
         }
     }
 

@@ -63,6 +63,7 @@ import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
 import com.ethran.notable.ui.theme.InkaTheme
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.EyeOff
@@ -92,6 +93,9 @@ fun ToolbarSettings(
 
     var addPenOpen by remember { mutableStateOf(false) }
     var editedPresetId by remember { mutableStateOf<String?>(null) }
+    // Decoded but not yet applied — importing replaces the layout *and* every pen
+    // preset irreversibly, so it waits behind a confirmation dialog.
+    var pendingImport by remember { mutableStateOf<ToolbarLayoutFile.ImportResult?>(null) }
 
     val context = LocalContext.current
     val snackState = LocalSnackContext.current
@@ -126,17 +130,28 @@ fun ToolbarSettings(
             val text = context.contentResolver.openInputStream(uri)
                 ?.use { it.readBytes().decodeToString() }
                 ?: error("Cannot open the selected file")
-            val result = ToolbarLayoutFile.decode(text)
-            onSettingsChange(
-                settings.copy(toolbarLayout = result.layout, toolbarPens = result.pens)
-            )
-            snack(
-                if (result.droppedCount == 0) importDoneMsg
-                else importDroppedMsg.format(result.droppedCount)
-            )
+            pendingImport = ToolbarLayoutFile.decode(text)
         } catch (e: Exception) {
             snack(importFailedMsg.format(e.message ?: ""))
         }
+    }
+
+    pendingImport?.let { result ->
+        ShowSimpleConfirmationDialog(
+            title = stringResource(R.string.toolbar_settings_import_confirm_title),
+            message = stringResource(R.string.toolbar_settings_import_confirm_message),
+            onConfirm = {
+                onSettingsChange(
+                    settings.copy(toolbarLayout = result.layout, toolbarPens = result.pens)
+                )
+                snack(
+                    if (result.droppedCount == 0) importDoneMsg
+                    else importDroppedMsg.format(result.droppedCount)
+                )
+                pendingImport = null
+            },
+            onCancel = { pendingImport = null },
+        )
     }
 
     Column {

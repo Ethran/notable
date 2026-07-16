@@ -1,9 +1,11 @@
 package com.ethran.notable.editor.ui.toolbar.model
 
+import com.ethran.notable.editor.utils.Pen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import android.graphics.Color as AndroidColor
 
 class ToolbarLayoutFileTest {
 
@@ -40,6 +42,51 @@ class ToolbarLayoutFileTest {
         val text = ToolbarLayoutFile.encode(ToolbarLayout.DEFAULT, pens)
             .replace(ToolbarLayoutFile.TYPE, "some-other-format")
         assertThrows(IllegalArgumentException::class.java) { ToolbarLayoutFile.decode(text) }
+    }
+
+    @Test
+    fun `newer file version is rejected`() {
+        val text = ToolbarLayoutFile.encode(ToolbarLayout.DEFAULT, pens)
+            .replace("\"version\": ${ToolbarLayoutFile.VERSION}", "\"version\": 99")
+        assertThrows(IllegalArgumentException::class.java) { ToolbarLayoutFile.decode(text) }
+    }
+
+    @Test
+    fun `duplicate pen ids are deduplicated, first wins`() {
+        val duplicated = listOf(
+            ToolbarPen("dup", Pen.BALLPEN, AndroidColor.RED, 5f),
+            ToolbarPen("dup", Pen.MARKER, AndroidColor.BLACK, 40f),
+        )
+        val layout = ToolbarLayout(scrollable = listOf("PEN:dup"), pinned = listOf("MENU"))
+        val result = ToolbarLayoutFile.decode(ToolbarLayoutFile.encode(layout, duplicated))
+        assertEquals(1, result.pens.size)
+        assertEquals(Pen.BALLPEN, result.pens.single().pen)
+        assertEquals(0, result.droppedCount)
+    }
+
+    @Test
+    fun `degenerate pen option lists fall back to defaults`() {
+        val pen = ToolbarPen(
+            "p", Pen.BALLPEN, AndroidColor.BLACK, 5f,
+            colorOptions = emptyList(), // violates >=1 color
+            sizeOptions = listOf(5f, 5f), // one distinct value violates >=2 sizes
+        )
+        val layout = ToolbarLayout(scrollable = listOf("PEN:p"), pinned = listOf("MENU"))
+        val result = ToolbarLayoutFile.decode(ToolbarLayoutFile.encode(layout, listOf(pen)))
+        assertEquals(null, result.pens.single().colorOptions)
+        assertEquals(null, result.pens.single().sizeOptions)
+    }
+
+    @Test
+    fun `duplicates across zones are dropped and counted`() {
+        val layout = ToolbarLayout(
+            scrollable = listOf("ERASER", "PEN:ball"),
+            pinned = listOf("ERASER", "PEN:ball", "MENU"),
+        )
+        val result = ToolbarLayoutFile.decode(ToolbarLayoutFile.encode(layout, pens))
+        assertEquals(listOf("ERASER", "PEN:ball"), result.layout.scrollable)
+        assertEquals(listOf("MENU"), result.layout.pinned)
+        assertEquals(2, result.droppedCount)
     }
 
     @Test
