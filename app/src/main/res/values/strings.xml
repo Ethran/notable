@@ -239,6 +239,8 @@
     <string name="toolbar_settings_import_done">Toolbar layout imported</string>
     <string name="toolbar_settings_import_dropped">Toolbar layout imported; %1$d unknown entries dropped</string>
     <string name="toolbar_settings_import_failed">Import failed: %1$s</string>
+    <string name="toolbar_settings_import_confirm_title">Import toolbar layout?</string>
+    <string name="toolbar_settings_import_confirm_message">This replaces your current toolbar layout and all pen presets. This cannot be undone.</string>
     <string name="toolbar_settings_pick_pen_type">Pen type</string>
     <string name="toolbar_settings_edit_pen">Edit pen</string>
     <string name="toolbar_settings_delete">Delete</string>

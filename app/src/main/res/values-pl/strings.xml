@@ -252,6 +252,8 @@
     <string name="toolbar_settings_import_done">Zaimportowano układ paska narzędzi</string>
     <string name="toolbar_settings_import_dropped">Zaimportowano układ paska narzędzi; pominięto nieznane elementy: %1$d</string>
     <string name="toolbar_settings_import_failed">Import nie powiódł się: %1$s</string>
+    <string name="toolbar_settings_import_confirm_title">Zaimportować układ paska narzędzi?</string>
+    <string name="toolbar_settings_import_confirm_message">Zastąpi to obecny układ paska narzędzi i wszystkie pisaki. Tej operacji nie można cofnąć.</string>
     <string name="toolbar_settings_pick_pen_type">Rodzaj pisaka</string>
     <string name="toolbar_settings_edit_pen">Edytuj pisak</string>
     <string name="toolbar_settings_delete">Usuń</string>
