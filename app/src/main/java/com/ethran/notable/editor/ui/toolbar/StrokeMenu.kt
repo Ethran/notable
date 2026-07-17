@@ -130,7 +130,9 @@ fun ColumnScope.StrokeSizePicker(
     heightOfPicker: Int = 40
 ) {
 
-    if (!GlobalAppSettings.current.continuousStrokeSlider) {
+    // The slider needs at least two values to define a range; a single-size pen
+    // falls back to the button picker regardless of the setting.
+    if (!GlobalAppSettings.current.continuousStrokeSlider || sizeOptions.size < 2) {
         ThicknessPicker(
             value,
             onChange,

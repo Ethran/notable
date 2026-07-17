@@ -167,11 +167,12 @@ fun SettingsContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            val scrollState = rememberScrollState()
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
             ) {
                 when (selectedTab) {
                     0 -> GeneralSettings(settings, onUpdateSettings)
@@ -179,7 +180,7 @@ fun SettingsContent(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
 
-                    2 -> ToolbarSettings(settings, onUpdateSettings)
+                    2 -> ToolbarSettings(settings, onUpdateSettings, scrollState)
 
                     3 -> SyncSettings(
                         state = syncUiState,

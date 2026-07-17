@@ -1,12 +1,15 @@
 package com.ethran.notable.ui.components
 
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,8 +35,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +48,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -67,6 +76,8 @@ import com.ethran.notable.ui.dialogs.ShowSimpleConfirmationDialog
 import com.ethran.notable.ui.theme.InkaTheme
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.EyeOff
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import android.graphics.Color as AndroidColor
 
 /**
@@ -80,7 +91,10 @@ import android.graphics.Color as AndroidColor
  */
 @Composable
 fun ToolbarSettings(
-    settings: AppSettings, onSettingsChange: (AppSettings) -> Unit
+    settings: AppSettings,
+    onSettingsChange: (AppSettings) -> Unit,
+    /** The settings page's own scroll — auto-scrolled when a drag nears the screen edge. */
+    pageScrollState: ScrollState = rememberScrollState(),
 ) {
     val pens = settings.toolbarPens
     val layout = (settings.toolbarLayout ?: ToolbarLayout.DEFAULT).validated(pens)
@@ -102,6 +116,8 @@ fun ToolbarSettings(
     fun snack(text: String) = snackState.showOrUpdateSnack(SnackConf(text = text, duration = 3000))
 
     // Resolved at composition — the launcher callbacks can't call stringResource.
+    // Format args are applied with the configuration locale, not the JVM default.
+    val locale = LocalConfiguration.current.locales[0]
     val exportDoneMsg = stringResource(R.string.toolbar_settings_export_done)
     val exportFailedMsg = stringResource(R.string.toolbar_settings_export_failed)
     val importDoneMsg = stringResource(R.string.toolbar_settings_import_done)
@@ -118,7 +134,10 @@ fun ToolbarSettings(
             } ?: error("Cannot open the selected file")
             snack(exportDoneMsg)
         } catch (e: Exception) {
-            snack(exportFailedMsg.format(e.message ?: ""))
+            // CreateDocument already created the target — don't leave an empty .json
+            // behind to contradict the failure message.
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            snack(String.format(locale, exportFailedMsg, e.message ?: ""))
         }
     }
 
@@ -132,7 +151,7 @@ fun ToolbarSettings(
                 ?: error("Cannot open the selected file")
             pendingImport = ToolbarLayoutFile.decode(text)
         } catch (e: Exception) {
-            snack(importFailedMsg.format(e.message ?: ""))
+            snack(String.format(locale, importFailedMsg, e.message ?: ""))
         }
     }
 
@@ -146,7 +165,7 @@ fun ToolbarSettings(
                 )
                 snack(
                     if (result.droppedCount == 0) importDoneMsg
-                    else importDroppedMsg.format(result.droppedCount)
+                    else String.format(locale, importDroppedMsg, result.droppedCount)
                 )
                 pendingImport = null
             },
@@ -168,6 +187,7 @@ fun ToolbarSettings(
         ReorderableElementList(
             layout = layout,
             pens = pens,
+            pageScrollState = pageScrollState,
             onLayoutChange = { commit(it) },
             onEditPen = { editedPresetId = it },
             onDeletePen = { presetId ->
@@ -348,6 +368,7 @@ private fun zoneAt(rows: List<ToolbarRow>, index: Int): Zone {
 private fun ReorderableElementList(
     layout: ToolbarLayout,
     pens: List<ToolbarPen>,
+    pageScrollState: ScrollState,
     onLayoutChange: (ToolbarLayout) -> Unit,
     onEditPen: (String) -> Unit,
     onDeletePen: (String) -> Unit,
@@ -358,6 +379,9 @@ private fun ReorderableElementList(
     var draggingIndex by remember(layout, pens) { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(LocalDensity.current) { ROW_HEIGHT.toPx() }
+    // -1 = page scrolls up, +1 = down, 0 = idle; set while a drag holds near a screen edge.
+    var edgeScrollDir by remember { mutableIntStateOf(0) }
+    var columnCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     val snackState = LocalSnackContext.current
     val menuLockedMsg = stringResource(R.string.toolbar_settings_menu_locked)
@@ -385,37 +409,70 @@ private fun ReorderableElementList(
         return true
     }
 
+    /** Converts accumulated offset into slot moves, in both directions. */
+    fun settleDrag() {
+        while (dragOffset > rowHeightPx * 0.6f) if (!moveDragged(1)) break
+        while (dragOffset < -rowHeightPx * 0.6f) if (!moveDragged(-1)) break
+    }
+
+    // Dragging to the top/bottom of the screen scrolls the settings page, so long lists
+    // can be reordered end to end in one drag. Runs on a timer: the finger holds still
+    // at the edge, so no further onDrag events arrive. The page scrolling under the
+    // stationary finger is pointer movement in column coordinates — feed the consumed
+    // amount back into dragOffset so the slot math tracks the finger, not the column.
+    LaunchedEffect(edgeScrollDir) {
+        while (edgeScrollDir != 0 && draggingIndex != null) {
+            val consumed = pageScrollState.scrollBy(edgeScrollDir * rowHeightPx)
+            if (consumed == 0f) break // page end reached
+            dragOffset += consumed
+            settleDrag()
+            delay(200.milliseconds)
+        }
+    }
+
     Column(
-        modifier = Modifier.pointerInput(layout, pens) {
-            detectDragGesturesAfterLongPress(
-                onDragStart = { offset ->
-                    val index = (offset.y / rowHeightPx).toInt()
-                    if (index > 0 && rows.getOrNull(index) is ToolbarRow.Element) {
-                        draggingIndex = index
-                        dragOffset = 0f
-                    }
-                },
-                onDrag = { change, amount ->
-                    if (draggingIndex == null) return@detectDragGesturesAfterLongPress
-                    change.consume()
-                    dragOffset += amount.y
-                    while (dragOffset > rowHeightPx * 0.6f) if (!moveDragged(1)) break
-                    while (dragOffset < -rowHeightPx * 0.6f) if (!moveDragged(-1)) break
-                },
-                onDragEnd = {
-                    if (draggingIndex != null) {
+        modifier = Modifier
+            .onGloballyPositioned { columnCoords = it }
+            .pointerInput(layout, pens) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        val index = (offset.y / rowHeightPx).toInt()
+                        if (index > 0 && rows.getOrNull(index) is ToolbarRow.Element) {
+                            draggingIndex = index
+                            dragOffset = 0f
+                        }
+                    },
+                    onDrag = { change, amount ->
+                        if (draggingIndex == null) return@detectDragGesturesAfterLongPress
+                        change.consume()
+                        dragOffset += amount.y
+                        settleDrag()
+                        edgeScrollDir = columnCoords?.let { coords ->
+                            val rootY = coords.localToRoot(change.position).y
+                            val rootHeight = coords.findRootCoordinates().size.height
+                            when {
+                                rootY < rowHeightPx * 2 -> -1
+                                rootY > rootHeight - rowHeightPx * 2 -> 1
+                                else -> 0
+                            }
+                        } ?: 0
+                    },
+                    onDragEnd = {
+                        edgeScrollDir = 0
+                        if (draggingIndex != null) {
+                            draggingIndex = null
+                            dragOffset = 0f
+                            onLayoutChange(rowsToLayout(rows))
+                        }
+                    },
+                    onDragCancel = {
+                        edgeScrollDir = 0
                         draggingIndex = null
                         dragOffset = 0f
-                        onLayoutChange(rowsToLayout(rows))
-                    }
-                },
-                onDragCancel = {
-                    draggingIndex = null
-                    dragOffset = 0f
-                    rows = buildRows(layout, pens)
-                },
-            )
-        }
+                        rows = buildRows(layout, pens)
+                    },
+                )
+            }
     ) {
         rows.forEachIndexed { index, row ->
             when (row) {
@@ -599,6 +656,15 @@ private fun ElementRow(
             )
         }
 
+        if (onDelete != null) {
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = stringResource(R.string.toolbar_settings_delete),
+                    tint = MaterialTheme.colors.onSurface,
+                )
+            }
+        }
         if (onHide != null) {
             IconButton(onClick = onHide) {
                 Icon(
@@ -606,15 +672,6 @@ private fun ElementRow(
                     contentDescription = stringResource(R.string.toolbar_settings_hide),
                     tint = MaterialTheme.colors.onSurface,
                     modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        if (onDelete != null) {
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = stringResource(R.string.toolbar_settings_delete),
-                    tint = MaterialTheme.colors.onSurface,
                 )
             }
         }
@@ -754,7 +811,8 @@ private fun AddPenDialog(onPick: (Pen) -> Unit, onClose: () -> Unit) {
  * Per-pen StrokeMenu contents editor: which colors and which sizes this pen offers in
  * its toolbar popup. Multi-select toggles over the candidate sets; the pen's *current*
  * color/size is still picked from the toolbar's StrokeMenu, as always. At least one
- * color and two sizes must stay included (the discrete size slider needs a range).
+ * color and one size must stay included (a single-size pen's StrokeMenu shows the
+ * button picker instead of the slider).
  *
  * Toggles edit a local copy; the settings blob is written once, on dismiss — not per
  * tap. If an edit removes the option the pen currently draws with, the active
@@ -861,7 +919,7 @@ private fun PenEditDialog(
                                 val updated =
                                     if (included) includedSizes - size
                                     else (includedSizes + size).sorted()
-                                if (updated.size >= 2)
+                                if (updated.isNotEmpty())
                                     edited = edited.copy(sizeOptions = updated)
                             },
                         )

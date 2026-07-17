@@ -39,9 +39,11 @@ data class ToolbarLayoutFile(
          * caller can mention them in a snackbar rather than failing the import.
          *
          * Pens are sanitized symmetrically with the layout: duplicate ids are dropped
-         * (first wins — `"PEN:<id>"` resolution takes the first match anyway), and
-         * option lists that violate the editor's invariants (≥1 color, ≥2 sizes — the
-         * discrete size slider needs a range) fall back to null, i.e. the defaults.
+         * (first wins — `"PEN:<id>"` resolution takes the first match anyway, and each
+         * dropped duplicate counts toward [droppedCount]), option values a hand-edited
+         * file carries outside the editor's candidate sets are removed (the edit dialog
+         * can only render candidates — an off-candidate option would be invisible and
+         * unremovable), and option lists left empty fall back to null, i.e. the defaults.
          */
         fun decode(text: String): ImportResult {
             val file = try {
@@ -55,16 +57,20 @@ data class ToolbarLayoutFile(
             }
             val pens = file.pens.distinctBy { it.id }.map { pen ->
                 pen.copy(
-                    colorOptions = pen.colorOptions?.distinct()?.takeIf { it.isNotEmpty() },
-                    sizeOptions = pen.sizeOptions?.distinct()?.sorted()
-                        ?.takeIf { it.size >= 2 },
+                    colorOptions = pen.colorOptions?.distinct()
+                        ?.filter { it in ToolbarPen.COLOR_CANDIDATES }
+                        ?.takeIf { it.isNotEmpty() },
+                    sizeOptions = pen.sizeOptions?.distinct()
+                        ?.filter { it in ToolbarPen.SIZE_CANDIDATES }
+                        ?.sorted()?.takeIf { it.isNotEmpty() },
                 )
             }
+            val droppedPens = file.pens.size - pens.size
             val validated = file.layout.validated(pens)
             val original = file.layout.scrollable + file.layout.pinned
             val kept = validated.scrollable.size + validated.pinned.size -
                     if (ToolbarElementId.MENU.name in original) 0 else 1 // validator appends MENU
-            return ImportResult(validated, pens, original.size - kept)
+            return ImportResult(validated, pens, original.size - kept + droppedPens)
         }
     }
 

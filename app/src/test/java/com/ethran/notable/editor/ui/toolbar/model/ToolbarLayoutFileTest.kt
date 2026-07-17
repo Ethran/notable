@@ -52,7 +52,7 @@ class ToolbarLayoutFileTest {
     }
 
     @Test
-    fun `duplicate pen ids are deduplicated, first wins`() {
+    fun `duplicate pen ids are deduplicated, first wins, and counted as dropped`() {
         val duplicated = listOf(
             ToolbarPen("dup", Pen.BALLPEN, AndroidColor.RED, 5f),
             ToolbarPen("dup", Pen.MARKER, AndroidColor.BLACK, 40f),
@@ -61,19 +61,40 @@ class ToolbarLayoutFileTest {
         val result = ToolbarLayoutFile.decode(ToolbarLayoutFile.encode(layout, duplicated))
         assertEquals(1, result.pens.size)
         assertEquals(Pen.BALLPEN, result.pens.single().pen)
-        assertEquals(0, result.droppedCount)
+        assertEquals(1, result.droppedCount)
     }
 
     @Test
-    fun `degenerate pen option lists fall back to defaults`() {
+    fun `empty pen option lists fall back to defaults`() {
         val pen = ToolbarPen(
             "p", Pen.BALLPEN, AndroidColor.BLACK, 5f,
-            colorOptions = emptyList(), // violates >=1 color
-            sizeOptions = listOf(5f, 5f), // one distinct value violates >=2 sizes
+            colorOptions = emptyList(),
+            sizeOptions = emptyList(),
         )
         val layout = ToolbarLayout(scrollable = listOf("PEN:p"), pinned = listOf("MENU"))
         val result = ToolbarLayoutFile.decode(ToolbarLayoutFile.encode(layout, listOf(pen)))
         assertEquals(null, result.pens.single().colorOptions)
+        assertEquals(null, result.pens.single().sizeOptions)
+    }
+
+    @Test
+    fun `a single valid size option is kept`() {
+        val pen = ToolbarPen("p", Pen.BALLPEN, AndroidColor.BLACK, 5f, sizeOptions = listOf(5f))
+        val layout = ToolbarLayout(scrollable = listOf("PEN:p"), pinned = listOf("MENU"))
+        val result = ToolbarLayoutFile.decode(ToolbarLayoutFile.encode(layout, listOf(pen)))
+        assertEquals(listOf(5f), result.pens.single().sizeOptions)
+    }
+
+    @Test
+    fun `off-candidate option values are removed, all-foreign lists fall back to defaults`() {
+        val pen = ToolbarPen(
+            "p", Pen.BALLPEN, AndroidColor.BLACK, 5f,
+            colorOptions = listOf(0x123456, AndroidColor.RED), // 0x123456 isn't a candidate
+            sizeOptions = listOf(7.5f, 999f), // neither is a candidate
+        )
+        val layout = ToolbarLayout(scrollable = listOf("PEN:p"), pinned = listOf("MENU"))
+        val result = ToolbarLayoutFile.decode(ToolbarLayoutFile.encode(layout, listOf(pen)))
+        assertEquals(listOf(AndroidColor.RED), result.pens.single().colorOptions)
         assertEquals(null, result.pens.single().sizeOptions)
     }
 
