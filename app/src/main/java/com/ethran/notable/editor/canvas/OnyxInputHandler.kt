@@ -301,6 +301,8 @@ class OnyxInputHandler(
                             scaledPoints,
                             history,
                             toolbarState.pen,
+                            toolbarState.activePenSetting.strokeSize,
+                            toolbarState.activePenSetting.color,
                             currentLastStrokeEndTime,
                             firstPointTime
                         )
