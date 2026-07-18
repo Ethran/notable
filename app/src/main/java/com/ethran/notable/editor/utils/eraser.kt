@@ -20,6 +20,13 @@ enum class Eraser(val _name: String) {
 const val SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS = 150L
 const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
 
+/**
+ * Width (px) of the pen-eraser swath: the diameter of the region [handleErase] actually deletes.
+ * Shared so the native side-button eraser indicator (see einkHelper.enableNativeEraser) is drawn
+ * at exactly the size it erases.
+ */
+const val ERASER_SWATH_WIDTH = 30f
+
 const val MINIMUM_SCRIBBLE_POINTS = 15
 
 
@@ -149,7 +156,7 @@ fun handleErase(
     page: PageView, history: History, points: List<SimplePointF>, eraser: Eraser
 ): Rect? {
     val paint = Paint().apply {
-        this.strokeWidth = 30f
+        this.strokeWidth = ERASER_SWATH_WIDTH
         this.style = Paint.Style.STROKE
         this.strokeCap = Paint.Cap.ROUND
         this.strokeJoin = Paint.Join.ROUND

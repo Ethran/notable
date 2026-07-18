@@ -177,14 +177,61 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
 }
 
 /**
+ * Firmware stroke style dedicated to the native eraser track. Not a public [TouchHelper]
+ * constant (those stop at 7); the stock Onyx note app (com.onyx.kreader) uses style 8 for the
+ * drag-erase indicator. Its width is bound to [Device.setStrokeParameters], independent of the
+ * pen's stroke config. This is the ONLY reliable style: with STROKE_STYLE_MARKER the eraser
+ * channel falls back to the global setStrokeWidth (thin pen) and the first-erase bug returns.
+ */
+private const val ERASER_STROKE_STYLE = 8
+
+/**
+ * Native eraser indicator thickness. Bound to [ERASER_SWATH_WIDTH] so the indicator is drawn at
+ * exactly the diameter [handleErase] deletes — the stock app likewise draws the indicator at the
+ * eraser's full width (kreader: eraserWidth*2).
+ */
+private const val ERASER_STROKE_WIDTH = ERASER_SWATH_WIDTH
+
+/**
+ * Style 8's 2nd/3rd SurfaceFlinger shape params (kreader passes {width, 0.5, 0.1}). These are
+ * per-style SHAPE params (edge/smooth), NOT colour — CONFIRMED on-device: sweeping param[1] from
+ * 0.01..0.8 changes the track only subtly and never its colour. Left at kreader's values. The
+ * track colour is set separately via setStrokeColor (see onBeginRawErasing / ERASER_INDICATOR_COLOR).
+ */
+private const val ERASER_STROKE_PARAM1 = 0.5f
+private const val ERASER_STROKE_PARAM2 = 1f // how much the strokes are filled in with dots, or something, I don't know
+
+/**
+ * Colour of the native eraser track. The eraser channel carries no colour of its own; the firmware
+ * draws the track using the global setStrokeColor state (SET_STROKE_COLOR). Applied in
+ * onBeginRawErasing (mirrors the old working behaviour). Tune here for a lighter/darker grey.
+ */
+internal val ERASER_INDICATOR_COLOR = android.graphics.Color.BLACK
+
+/**
  * Enables the firmware's native eraser-stroke rendering for pen side-button erasing.
  * MUST be called after every setRawDrawingEnabled(true) (which resets it to disabled).
  * Wrapped in try/catch because the Onyx SDK is unstable across devices/firmware.
+ *
+ * Configures the eraser style's parameters PROACTIVELY via [Device.setStrokeParameters], the way
+ * the stock Onyx note app does (PenEventHandler.x()/y()): the eraser track width is then bound to
+ * the eraser STYLE's own parameters, NOT the pen's current setStrokeWidth. This decouples the
+ * indicator from the active pen so the side-button eraser renders at the correct thickness on the
+ * FIRST erase after drawing with a thin pen — previously the width was set reactively in
+ * onBeginRawErasing, too late for the firmware's stroke snapshot, so the first erase inherited the
+ * thin pen. Must be the dedicated style 8: with STROKE_STYLE_MARKER the eraser channel ignores
+ * these params and falls back to the pen's global width, bringing the bug back.
+ * See docs/onyx-sdk/onyx-native-eraser-indicator.md.
  */
 fun enableNativeEraser(touchHelper: TouchHelper?) {
     if (touchHelper == null) return
     try {
-        touchHelper.setEraserRawDrawingEnabled(true, TouchHelper.STROKE_STYLE_MARKER)
+        Device.currentDevice().setStrokeParameters(
+            ERASER_STROKE_STYLE,
+            floatArrayOf(ERASER_STROKE_WIDTH, ERASER_STROKE_PARAM1, ERASER_STROKE_PARAM2)
+        )
+        touchHelper.setEraserRawDrawingEnabled(true, ERASER_STROKE_STYLE)
+//        touchHelper.setEraserRawDrawingEnabled(true, TouchHelper.STROKE_STYLE_MARKER)
     } catch (t: Throwable) {
         log.w("setEraserRawDrawingEnabled not supported on this device: ${t.message}")
     }

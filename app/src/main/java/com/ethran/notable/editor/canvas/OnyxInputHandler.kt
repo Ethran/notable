@@ -17,6 +17,7 @@ import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.cancelPendingScreenFreezeReset
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
+import com.ethran.notable.editor.utils.ERASER_INDICATOR_COLOR
 import com.ethran.notable.editor.utils.enableNativeEraser
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.editor.utils.handleDraw
@@ -94,9 +95,17 @@ class OnyxInputHandler(
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             if (touchHelper == null) return
             // Re-assert the native eraser indicator because setRawDrawingEnabled(true) (called
-            // on every resume) resets it to disabled internally. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
+            // on every resume) resets it to disabled internally. enableNativeEraser configures the
+            // dedicated eraser stroke style (8) whose width/colour is independent of the active pen,
+            // so the indicator no longer needs to be styled here (doing so was too late for the
+            // firmware snapshot and left the indicator inheriting the previous thin pen).
+            // See docs/onyx-sdk/onyx-native-eraser-indicatorCan.md.
             enableNativeEraser(touchHelper)
-            applyEraserIndicatorStyle()
+            // The eraser channel carries no colour of its own — the firmware paints the track with
+            // the global setStrokeColor. Set it here (width already comes from style-8 params, so
+            // this touches colour only, not thickness). This is the one thing we still set on begin.
+            touchHelper?.setStrokeColor(ERASER_INDICATOR_COLOR)
+//            applyEraserIndicatorStyle()
             isErasing = true
         }
 
