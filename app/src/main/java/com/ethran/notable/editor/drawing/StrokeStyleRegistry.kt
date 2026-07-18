@@ -21,8 +21,14 @@ sealed interface OnyxStrokeStyle {
     /** NeoMarkerPenWrapper — flat translucent band. */
     data object Marker : OnyxStrokeStyle
 
-    /** NeoCharcoalPenWrapper — textured pencil. */
+    /** NeoCharcoalPenWrapper — textured pencil (charcoal V1). */
     data class Charcoal(val tiltEnabled: Boolean) : OnyxStrokeStyle
+
+    /** NeoCharcoalPenV2Wrapper — charcoal V2 texture. */
+    data class CharcoalV2(val tiltEnabled: Boolean) : OnyxStrokeStyle
+
+    /** NeoSquarePen — chisel/calligraphy nib at a fixed angle (degrees). */
+    data class Calligraphy(val angle: Float) : OnyxStrokeStyle
 }
 
 /**
@@ -53,6 +59,8 @@ object StrokeStyleRegistry {
         Pen.BRUSH to StrokeStyle(OnyxStrokeStyle.Brush),
         Pen.MARKER to StrokeStyle(OnyxStrokeStyle.Marker),
         Pen.PENCIL to StrokeStyle(OnyxStrokeStyle.Charcoal(tiltEnabled = true)),
+        Pen.CHARCOAL to StrokeStyle(OnyxStrokeStyle.CharcoalV2(tiltEnabled = true)),
+        Pen.CALLIGRAPHY to StrokeStyle(OnyxStrokeStyle.Calligraphy(angle = 45f)),
         // Pen.DASHED intentionally absent: erase-indicator only, never persisted as ink.
     )
 

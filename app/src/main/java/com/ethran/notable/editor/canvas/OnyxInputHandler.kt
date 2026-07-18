@@ -16,6 +16,7 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.cancelPendingScreenFreezeReset
 import com.ethran.notable.editor.utils.copyInput
+import com.ethran.notable.editor.utils.configureCalligraphyLiveAngle
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
 import com.ethran.notable.editor.utils.ERASER_INDICATOR_COLOR
 import com.ethran.notable.editor.utils.enableNativeEraser
@@ -134,9 +135,17 @@ class OnyxInputHandler(
         log.i("Update pen and stroke")
         when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
-                ?.setStrokeWidth(toolbarState.activePenSetting.strokeSize * page.zoomLevel.value)
-                ?.setStrokeColor(toolbarState.activePenSetting.color)
+            Mode.Draw, Mode.Line -> {
+                val scaledWidth = toolbarState.activePenSetting.strokeSize * page.zoomLevel.value
+                touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
+                    ?.setStrokeWidth(scaledWidth)
+                    ?.setStrokeColor(toolbarState.activePenSetting.color)
+                // Match the live square-pen nib angle to the dry render (+45°) so the calligraphy
+                // stroke doesn't rotate on pen-up. See docs/onyx-sdk/onyx-pen-styles-catalog.md.
+                if (toolbarState.pen == Pen.CALLIGRAPHY) {
+                    configureCalligraphyLiveAngle(angleDegrees = 45f, strokeWidth = scaledWidth)
+                }
+            }
 
             Mode.Erase -> applyEraserIndicatorStyle(penEraserColor = Color.GRAY)
 

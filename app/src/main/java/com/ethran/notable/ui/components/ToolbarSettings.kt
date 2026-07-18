@@ -960,10 +960,12 @@ private fun EInkButton(
 
 private fun penNameRes(pen: Pen): Int = when (pen) {
     Pen.BALLPEN, Pen.REDBALLPEN, Pen.GREENBALLPEN, Pen.BLUEBALLPEN -> R.string.pen_name_ballpen
-    Pen.PENCIL -> R.string.pen_name_pencil
+    Pen.PENCIL -> R.string.pen_name_pencil // charcoal V1, shown as "Pencil"
+    Pen.CHARCOAL -> R.string.pen_name_charcoal
     Pen.BRUSH -> R.string.pen_name_brush
     Pen.FOUNTAIN -> R.string.pen_name_fountain
     Pen.MARKER -> R.string.pen_name_marker
+    Pen.CALLIGRAPHY -> R.string.pen_name_calligraphy
     Pen.DASHED -> R.string.pen_name_ballpen // not placeable; unreachable in practice
 }
 

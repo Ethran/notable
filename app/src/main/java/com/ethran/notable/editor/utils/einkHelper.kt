@@ -237,6 +237,27 @@ fun enableNativeEraser(touchHelper: TouchHelper?) {
     }
 }
 
+/** Firmware square-pen (calligraphy) stroke style — [TouchHelper.STROKE_STYLE_SQUARE_PEN]. */
+private const val SQUARE_PEN_STYLE = 7
+
+/**
+ * Configures the firmware's LIVE square-pen (calligraphy) nib angle so the ink drawn while writing
+ * matches Notable's dry re-render (NeoSquarePenWrapper, +45°). Without this the firmware uses its
+ * default nib orientation and the stroke visibly rotates on pen-up. Mirrors the stock app's
+ * NoteRenderUtils.setSquarePenStrokeParameters: params[1] = width (≤10), params[2] = angle.
+ */
+fun configureCalligraphyLiveAngle(angleDegrees: Float, strokeWidth: Float) {
+    try {
+        val params = Device.currentDevice().getStrokeParameters(SQUARE_PEN_STYLE) ?: return
+        if (params.size < 3) return
+        params[1] = strokeWidth.coerceAtMost(10f)
+        params[2] = angleDegrees
+        Device.currentDevice().setStrokeParameters(SQUARE_PEN_STYLE, params)
+    } catch (t: Throwable) {
+        log.w("configureCalligraphyLiveAngle not supported on this device: ${t.message}")
+    }
+}
+
 fun prepareForPartialUpdate(view: View, touchHelper: TouchHelper?) {
     if(touchHelper == null) return
     EpdController.setDisplayScheme(SCHEME_SCRIBBLE)

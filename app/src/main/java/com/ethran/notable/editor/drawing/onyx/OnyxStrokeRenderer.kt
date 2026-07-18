@@ -13,6 +13,7 @@ import com.ethran.notable.editor.utils.offsetStroke
 import com.onyx.android.sdk.data.note.ShapeCreateArgs
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.pen.NeoBrushPenWrapper
+import com.onyx.android.sdk.pen.NeoCharcoalPenV2Wrapper
 import com.onyx.android.sdk.pen.NeoCharcoalPenWrapper
 import com.onyx.android.sdk.pen.NeoMarkerPenWrapper
 import com.onyx.android.sdk.pen.PenRenderArgs
@@ -46,6 +47,33 @@ object OnyxStrokeRenderer : StrokeRenderer {
                 stroke.updatedAt.time
             )
         }
+    }
+
+    /**
+     * Shared PenRenderArgs for the charcoal pens (V1 and V2 take the same args, only the
+     * wrapper differs). [stroke] is the already-offset stroke.
+     */
+    private fun charcoalArgs(
+        canvas: Canvas,
+        paint: Paint,
+        stroke: Stroke,
+        tiltEnabled: Boolean,
+    ): PenRenderArgs {
+        // ShapeCreateArgs.maxPressure defaults to the device digitizer max; it is the divisor the
+        // charcoal renderer applies to point pressure, so it must match the scale the points are
+        // stored in.
+        val shapeArg = ShapeCreateArgs().setMaxPressure(stroke.maxPressure.toFloat())
+        return PenRenderArgs()
+            .setCanvas(canvas)
+            .setPaint(paint)
+            .setPoints(strokeToTouchPoints(stroke))
+            .setColor(stroke.color)
+            .setStrokeWidth(stroke.size)
+            .setTiltEnabled(tiltEnabled)
+            .setErase(false)
+            .setCreateArgs(shapeArg)
+            .setRenderMatrix(Matrix())
+            .setScreenMatrix(Matrix())
     }
 
     override fun drawStroke(canvas: Canvas, stroke: Stroke, offset: Offset) {
@@ -103,23 +131,25 @@ object OnyxStrokeRenderer : StrokeRenderer {
                     )
                 }
 
-                is OnyxStrokeStyle.Charcoal -> {
-                    // ShapeCreateArgs.maxPressure defaults to the device digitizer max; it is
-                    // the divisor the charcoal renderer applies to point pressure, so it must
-                    // match the scale the points are stored in.
-                    val shapeArg = ShapeCreateArgs().setMaxPressure(stroke.maxPressure.toFloat())
-                    val arg = PenRenderArgs()
-                        .setCanvas(canvas)
-                        .setPaint(paint)
-                        .setPoints(strokeToTouchPoints(positionedStroke))
-                        .setColor(stroke.color)
-                        .setStrokeWidth(stroke.size)
-                        .setTiltEnabled(onyx.tiltEnabled)
-                        .setErase(false)
-                        .setCreateArgs(shapeArg)
-                        .setRenderMatrix(Matrix())
-                        .setScreenMatrix(Matrix())
-                    NeoCharcoalPenWrapper.drawNormalStroke(arg)
+                is OnyxStrokeStyle.Charcoal ->
+                    NeoCharcoalPenWrapper.drawNormalStroke(
+                        charcoalArgs(canvas, paint, positionedStroke, onyx.tiltEnabled)
+                    )
+
+                is OnyxStrokeStyle.CharcoalV2 ->
+                    NeoCharcoalPenV2Wrapper.drawNormalStroke(
+                        charcoalArgs(canvas, paint, positionedStroke, onyx.tiltEnabled)
+                    )
+
+                is OnyxStrokeStyle.Calligraphy -> {
+                    NeoSquarePenWrapper.drawStroke(
+                        canvas,
+                        paint,
+                        strokeToTouchPoints(positionedStroke),
+                        stroke.size,
+                        onyx.angle,
+                        stroke.maxPressure.toFloat(),
+                    )
                 }
             }
         } catch (e: Exception) {

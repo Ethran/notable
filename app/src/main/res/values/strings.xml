@@ -254,6 +254,9 @@
     <string name="pen_name_brush">Brush</string>
     <string name="pen_name_fountain">Fountain pen</string>
     <string name="pen_name_marker">Marker</string>
+    <string name="pen_name_charcoal">Charcoal</string>
+    <string name="pen_name_charcoal_classic">Charcoal (classic)</string>
+    <string name="pen_name_calligraphy">Calligraphy</string>
 
     <string name="toolbar_element_shape">Shape</string>
     <string name="toolbar_element_eraser">Eraser</string>

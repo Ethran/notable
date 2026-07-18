@@ -112,10 +112,12 @@ object ToolbarElements {
     fun penIcon(pen: Pen): IconRef = IconRef.Drawable(
         when (pen) {
             Pen.BALLPEN, Pen.REDBALLPEN, Pen.GREENBALLPEN, Pen.BLUEBALLPEN -> R.drawable.ballpen
-            Pen.PENCIL -> R.drawable.pencil
+            Pen.PENCIL -> R.drawable.pencil        // charcoal V1, labelled "Pencil"
+            Pen.CHARCOAL -> R.drawable.sponge      // charcoal V2 — sponge icon
             Pen.BRUSH -> R.drawable.brush
             Pen.MARKER -> R.drawable.marker
             Pen.FOUNTAIN -> R.drawable.fountain
+            Pen.CALLIGRAPHY -> R.drawable.calligraphy
             Pen.DASHED -> R.drawable.line_dashed
         }
     )

@@ -69,8 +69,13 @@ data class ToolbarPen(
         fun newId(): String = UUID.randomUUID().toString().take(8)
 
         /** Base types offered when creating a preset — legacy color variants and the
-         * erase-indicator DASHED are not placeable. */
-        val BASE_TYPES = listOf(Pen.BALLPEN, Pen.PENCIL, Pen.BRUSH, Pen.FOUNTAIN, Pen.MARKER)
+         * erase-indicator DASHED are not placeable. Pen.PENCIL is charcoal V1 ("Charcoal
+         * (classic)"), kept for the historical default preset; new work should prefer
+         * Pen.CHARCOAL (V2). */
+        val BASE_TYPES = listOf(
+            Pen.BALLPEN, Pen.FOUNTAIN, Pen.BRUSH, Pen.MARKER,
+            Pen.CHARCOAL, Pen.PENCIL, Pen.CALLIGRAPHY,
+        )
 
         /**
          * Reproduces the historical eight pen buttons. Seed ids are stable so

@@ -14,11 +14,15 @@ enum class Pen(val penName: String) {
     REDBALLPEN("REDBALLPEN"),
     GREENBALLPEN("GREENBALLPEN"),
     BLUEBALLPEN("BLUEBALLPEN"),
-    PENCIL("PENCIL"),
+    PENCIL("PENCIL"),          // charcoal V1 — labelled "Charcoal (classic)" in the UI
     BRUSH("BRUSH"),
     MARKER("MARKER"),
     FOUNTAIN("FOUNTAIN"),
-    DASHED("DASHED");
+    DASHED("DASHED"),
+    // Added pens (see docs/onyx-sdk/onyx-pen-styles-catalog.md):
+    CHARCOAL("CHARCOAL"),      // charcoal V2 texture — labelled "Charcoal"
+    CALLIGRAPHY("CALLIGRAPHY");// NeoSquarePen, fixed +45° nib
+
 
     companion object {
         fun fromString(name: String?): Pen {
@@ -38,6 +42,8 @@ fun penToStroke(pen: Pen): Int {
         Pen.MARKER -> StrokeStyle.MARKER
         Pen.FOUNTAIN -> StrokeStyle.FOUNTAIN
         Pen.DASHED -> StrokeStyle.DASH
+        Pen.CHARCOAL -> StrokeStyle.CHARCOAL_V2
+        Pen.CALLIGRAPHY -> StrokeStyle.SQUARE_PEN
     }
 }
 
