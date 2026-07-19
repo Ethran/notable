@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+  <!-- A fountain-pen nib ("stalówka"): rounded shoulders tapering to a point, with a
+       breather hole and centre slit. -->
+  <path
+      android:fillColor="#000000"
+      android:fillType="evenOdd"
+      android:pathData="M32,30C44,23 52,23 64,30L48,76L32,30Z
+                        M44,42a4,4 0 1,1 8,0a4,4 0 1,1 -8,0Z
+                        M46.5,46L49.5,46L48.4,68L47.6,68Z"/>
+</vector>

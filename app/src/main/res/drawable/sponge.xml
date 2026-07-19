@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+  <!-- A sponge: a rounded block with holes punched through it. -->
+  <path
+      android:fillColor="#000000"
+      android:fillType="evenOdd"
+      android:pathData="M32,26L64,26Q78,26 78,40L78,56Q78,70 64,70L32,70Q18,70 18,56L18,40Q18,26 32,26Z
+                        M34,42a5,5 0 1,1 10,0a5,5 0 1,1 -10,0Z
+                        M52,38a6,6 0 1,1 12,0a6,6 0 1,1 -12,0Z
+                        M58,56a5,5 0 1,1 10,0a5,5 0 1,1 -10,0Z
+                        M36,58a5,5 0 1,1 10,0a5,5 0 1,1 -10,0Z"/>
+</vector>
