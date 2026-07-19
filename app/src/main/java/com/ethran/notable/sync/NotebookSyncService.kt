@@ -1,5 +1,6 @@
 package com.ethran.notable.sync
 
+import android.net.Uri
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
@@ -292,7 +293,9 @@ class NotebookSyncService @Inject constructor(
             val errors = ErrorAccumulator()
             for (image in pageWithData.images) {
                 if (!image.uri.isNullOrEmpty()) {
-                    val localFile = File(image.uri)
+                    // Normalize the URI: some rows store a `file://` scheme that File() can't resolve,
+                    // which silently skipped the upload and left a dangling reference (Phase 8c).
+                    val localFile = resolveLocalFile(image.uri)
                     if (localFile.exists()) {
                         val remotePath = SyncPaths.imageFile(notebookId, localFile.name)
                         // Unknown existence -> upload anyway; PUT is idempotent.
@@ -303,12 +306,18 @@ class NotebookSyncService @Inject constructor(
                                 }.onError { errors.add(it) }
                         }
                     } else {
-                        log.w(TAG, "Image file not found: ${image.uri}")
+                        // Dangling reference: the page references an image we can't find locally, so
+                        // it will 404 on every other device. Surface it (Phase 8e).
+                        log.w(TAG, "Image referenced by page but missing locally: ${image.uri}")
                     }
                 }
             }
 
-            if (page.backgroundType != "native" && page.background != "blank") {
+            // Linked external PDFs (absolute path outside managed storage) can't be synced -- skip
+            // (Phase 8d); the reference is left as-is and is non-fatal on download.
+            if (page.backgroundType != "native" && page.background != "blank" &&
+                !File(page.background).isAbsolute
+            ) {
                 val bgFile = File(ensureBackgroundsFolder(), page.background)
                 if (bgFile.exists()) {
                     val remotePath = SyncPaths.backgroundFile(notebookId, bgFile.name)
@@ -317,6 +326,8 @@ class NotebookSyncService @Inject constructor(
                             log.i(TAG, "Uploaded background: ${bgFile.name}")
                         }.onError { errors.add(it) }
                     }
+                } else {
+                    log.w(TAG, "Background referenced by page but missing locally: ${page.background}")
                 }
             }
 
@@ -375,8 +386,10 @@ class NotebookSyncService @Inject constructor(
 
         // 4. Download and persist all pages.
         val errors = ErrorAccumulator()
+        // Backgrounds are often shared across pages (e.g. a PDF); fetch each distinct one once.
+        val attemptedBackgrounds = mutableSetOf<String>()
         for (pageId in notebook.pageIds) {
-            downloadPage(pageId, notebookId, client).onError { errors.add(it) }
+            downloadPage(pageId, notebookId, client, attemptedBackgrounds).onError { errors.add(it) }
         }
 
         // 5. Commit: only when every page landed, write the notebook row with the real remote
@@ -407,7 +420,8 @@ class NotebookSyncService @Inject constructor(
     private suspend fun downloadPage(
         pageId: String,
         notebookId: String,
-        client: WebDAVClient
+        client: WebDAVClient,
+        attemptedBackgrounds: MutableSet<String>
     ): AppResult<Unit, DomainError> {
 
         // 1. Fetch JSON file (Early Return on error)
@@ -433,13 +447,7 @@ class NotebookSyncService @Inject constructor(
                         localFile
                     ).onSuccess {
                         log.i(TAG, "Downloaded image: $filename")
-                    }
-                        .onError { error ->
-                            log.e(TAG, "Failed to download image $filename: ${error.userMessage}")
-                            // Image download error doesn't interrupt the whole page sync,
-                            // but is aggregated to notify the UI.
-                            errors.add(error)
-                        }
+                    }.onError { error -> addMediaError(errors, "image $filename", error) }
                 }
                 image.copy(uri = localFile.absolutePath)
             } else {
@@ -447,20 +455,28 @@ class NotebookSyncService @Inject constructor(
             }
         }
 
-        // 4. Download page background
+        // 4. Download page background.
         if (page.backgroundType != "native" && page.background != "blank") {
             val filename = page.background
-            val localFile = File(ensureBackgroundsFolder(), filename)
-
-            if (!localFile.exists()) {
-                client.getFile(
-                    SyncPaths.backgroundFile(notebookId, filename),
-                    localFile
-                ).onSuccess {
-                    log.i(TAG, "Downloaded background: $filename")
-                }.onError { error ->
-                    log.e(TAG, "Failed to download background $filename: ${error.userMessage}")
-                    errors.add(error)
+            // Linked external PDFs live outside managed storage (absolute path); they can't be synced
+            // -- skip them entirely, and don't treat their absence as a failure (Phase 8d).
+            if (File(filename).isAbsolute) {
+                log.i(TAG, "Skipping external background (not in managed storage): $filename")
+            } else if (filename in attemptedBackgrounds) {
+                // A background shared by many pages is only fetched once per notebook (Phase 8a-3).
+            } else {
+                attemptedBackgrounds.add(filename)
+                val localFile = File(ensureBackgroundsFolder(), filename)
+                if (!localFile.exists()) {
+                    localFile.parentFile?.mkdirs()
+                    // Remote path uses the basename (flat), matching how upload stores it (Phase 8b).
+                    val remoteName = File(filename).name
+                    client.getFile(
+                        SyncPaths.backgroundFile(notebookId, remoteName),
+                        localFile
+                    ).onSuccess {
+                        log.i(TAG, "Downloaded background: $filename")
+                    }.onError { error -> addMediaError(errors, "background $filename", error) }
                 }
             }
         }
@@ -531,7 +547,26 @@ class NotebookSyncService @Inject constructor(
         }
     }
 
+    /**
+     * Aggregate a media (image/background) download failure. A [DomainError.RemoteMissing] (404) is
+     * a *permanent* absence — log and skip it so one missing media file can't wedge the whole
+     * notebook download into an endless retry (Phase 8a-2). Transient errors are still aggregated so
+     * the notebook keeps its stale timestamp and retries next sync.
+     */
+    private fun addMediaError(errors: ErrorAccumulator, what: String, error: DomainError) {
+        if (error is DomainError.RemoteMissing) {
+            log.w(TAG, "Media missing on server, skipping $what")
+        } else {
+            log.e(TAG, "Failed to download $what: ${error.userMessage}")
+            errors.add(error)
+        }
+    }
+
     private fun extractFilename(uri: String): String = uri.substringAfterLast('/')
+
+    /** Resolve a stored media URI to a [File], tolerating a `file://` scheme (Phase 8c). */
+    private fun resolveLocalFile(uri: String): File =
+        if (uri.startsWith("file:")) File(Uri.parse(uri).path ?: uri) else File(uri)
 
     private fun detectMimeType(file: File): String = when (file.extension.lowercase()) {
         "jpg", "jpeg" -> "image/jpeg"

@@ -54,6 +54,14 @@ sealed class DomainError(
     data object SyncInProgress : DomainError("Sync already in progress.")
     data object SyncConflict : DomainError("Conflict detected during sync.")
 
+    /**
+     * A resource was not found on the server (HTTP 404) — a *permanent* absence, as opposed to a
+     * transient [NetworkError]. Lets callers treat missing media as skippable instead of retrying it
+     * forever. Not recoverable (retrying a 404 won't help).
+     */
+    data class RemoteMissing(val path: String) :
+        DomainError("Not found on server: $path", recoverable = false)
+
     data class SyncError(
         val message: String,
         override val recoverable: Boolean = true

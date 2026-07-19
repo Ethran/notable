@@ -217,10 +217,14 @@ class WebDAVClient(
         execute("GET", {
             Request.Builder().url(buildUrl(path)).get().header("Authorization", credentials).build()
         }) { response ->
-            if (response.isSuccessful) {
-                AppResult.Success(DownloadedFile(response.body.bytes(), response.header("ETag")))
-            } else {
-                AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
+            when {
+                response.isSuccessful ->
+                    AppResult.Success(DownloadedFile(response.body.bytes(), response.header("ETag")))
+
+                response.code == HttpURLConnection.HTTP_NOT_FOUND ->
+                    AppResult.Error(DomainError.RemoteMissing(path))
+
+                else -> AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
             }
         }
 
