@@ -19,7 +19,7 @@ sealed class SyncState {
         SyncState()
 }
 
-data class ItemProgress(val index: Int, val total: Int, val name: String)
+data class ItemProgress(val index: Int, val total: Int, val name: String, val id: String? = null)
 
 enum class SyncStep {
     INITIALIZING, SYNCING_FOLDERS, APPLYING_DELETIONS, SYNCING_NOTEBOOKS,

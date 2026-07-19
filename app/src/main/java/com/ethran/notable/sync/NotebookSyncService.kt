@@ -148,7 +148,7 @@ class NotebookSyncService @Inject constructor(
                 log.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
                 val total = newNotebookIds.size
                 newNotebookIds.forEachIndexed { i, notebookId ->
-                    reporter.beginItem(index = i + 1, total = total, name = notebookId)
+                    reporter.beginItem(index = i + 1, total = total, name = notebookId, id = notebookId)
                     downloadNotebook(notebookId, client).onError { errors.add(it) }
                 }
                 reporter.endItem()

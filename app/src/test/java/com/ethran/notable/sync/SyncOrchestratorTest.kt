@@ -12,7 +12,7 @@ class SyncOrchestratorTest {
         override val state = kotlinx.coroutines.flow.MutableStateFlow<SyncState>(SyncState.Idle)
 
         override fun beginStep(step: SyncStep, stepProgress: Float, details: String) = Unit
-        override fun beginItem(index: Int, total: Int, name: String) = Unit
+        override fun beginItem(index: Int, total: Int, name: String, id: String?) = Unit
         override fun endItem() = Unit
         override fun reset() = Unit
 

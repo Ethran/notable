@@ -8,7 +8,22 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Per-notebook sync badge shown in the library. */
-enum class SyncBadge { NOT_SYNCED, SYNCING, SYNCED, ERROR }
+enum class SyncBadge {
+    /** Local changes not yet synced (no sync running). */
+    NOT_SYNCED,
+
+    /** A sync is running and this notebook is queued but not yet its turn. */
+    SCHEDULED,
+
+    /** This notebook is being uploaded/downloaded right now. */
+    SYNCING,
+
+    /** Local matches the last committed sync. */
+    SYNCED,
+
+    /** The last sync of this notebook failed. */
+    ERROR,
+}
 
 /**
  * Derives a per-notebook [SyncBadge] map from the notebook list, the `notebook_sync_state` table,
@@ -26,6 +41,8 @@ class NotebookSyncStatusStore @Inject constructor(
         reporter.state,
     ) { notebooks, states, syncState ->
         val syncing = syncState is SyncState.Syncing
+        // The one notebook the engine is processing right now (null between items).
+        val currentId = (syncState as? SyncState.Syncing)?.item?.id
         val byId = states.associateBy { it.notebookId }
         notebooks.associate { nb ->
             val row = byId[nb.id]
@@ -36,8 +53,15 @@ class NotebookSyncStatusStore @Inject constructor(
                 nb.updatedAt.time - row.localUpdatedAtAtSync.time > TOLERANCE_MS -> SyncBadge.NOT_SYNCED
                 else -> SyncBadge.SYNCED
             }
-            // While a sync is running, anything not already synced reads as in-progress.
-            nb.id to if (syncing && base != SyncBadge.SYNCED) SyncBadge.SYNCING else base
+            val badge = when {
+                base == SyncBadge.SYNCED -> SyncBadge.SYNCED
+                // Exactly the notebook being transferred right now spins.
+                syncing && currentId == nb.id -> SyncBadge.SYNCING
+                // Other pending notebooks during a run are queued, not "syncing".
+                syncing -> SyncBadge.SCHEDULED
+                else -> base
+            }
+            nb.id to badge
         }
     }
 

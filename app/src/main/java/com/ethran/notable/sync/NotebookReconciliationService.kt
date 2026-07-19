@@ -30,7 +30,7 @@ class NotebookReconciliationService @Inject constructor(
         val errors = ErrorAccumulator()
 
         localNotebooks.forEachIndexed { i, notebook ->
-            reporter.beginItem(index = i + 1, total = total, name = notebook.title)
+            reporter.beginItem(index = i + 1, total = total, name = notebook.title, id = notebook.id)
             // Individual notebook sync failures are non-fatal for the whole process
             syncNotebook(notebook.id, client, uploadOnly).onError { errors.add(it) }
         }
@@ -95,6 +95,15 @@ class NotebookReconciliationService @Inject constructor(
                         log.i(
                             TAG,
                             "= No changes (within tolerance), skipping ${localNotebook.title}"
+                        )
+                        // Already in sync: refresh the sync-state row so an unchanged notebook
+                        // still reads as SYNCED (otherwise a skipped notebook keeps no row and
+                        // shows NOT_SYNCED/SYNCING forever).
+                        appRepository.notebookSyncStateRepository.markSynced(
+                            notebookId = notebookId,
+                            localUpdatedAt = localNotebook.updatedAt,
+                            remoteUpdatedAt = remoteUpdatedAt,
+                            remoteEtag = remoteEtag,
                         )
                         AppResult.Success(Unit)
                     }

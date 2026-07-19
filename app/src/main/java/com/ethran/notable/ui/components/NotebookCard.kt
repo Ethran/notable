@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -106,6 +107,7 @@ fun NotebookCard(
 private fun SyncBadge.iconOrNull(): ImageVector? = when (this) {
     SyncBadge.SYNCED -> Icons.Default.CloudDone
     SyncBadge.NOT_SYNCED -> Icons.Default.CloudOff
+    SyncBadge.SCHEDULED -> Icons.Default.Schedule
     SyncBadge.SYNCING -> Icons.Default.Sync
     SyncBadge.ERROR -> Icons.Default.ErrorOutline
 }
