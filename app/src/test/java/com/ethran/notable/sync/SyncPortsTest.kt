@@ -1,5 +1,6 @@
 package com.ethran.notable.sync
 
+import okhttp3.OkHttpClient
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 
@@ -7,7 +8,7 @@ class SyncPortsTest {
 
     @Test
     fun webDavClientFactoryAdapter_creates_client_instance() {
-        val factory = WebDavClientFactoryAdapter()
+        val factory = WebDavClientFactoryAdapter(OkHttpClient())
 
         val client = factory.create(
             serverUrl = "https://example.com",
