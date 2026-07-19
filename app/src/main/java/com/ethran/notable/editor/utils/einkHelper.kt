@@ -118,7 +118,7 @@ private fun tryToSetRefreshMode(view: View, mode: UpdateMode): Boolean {
 
 fun onSurfaceInit(view: View) {
     log.v("onSurfaceInit, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
-    if(!tryToSetRefreshMode(view, UpdateMode.HAND_WRITING_REPAINT_MODE))
+    if (!tryToSetRefreshMode(view, UpdateMode.HAND_WRITING_REPAINT_MODE))
         tryToSetRefreshMode(view, UpdateMode.REGAL)
     EpdController.enablePost(1)
 }
@@ -130,14 +130,14 @@ fun onSurfaceChanged(view: View) {
 
 
 fun onSurfaceDestroy(view: View, touchHelper: TouchHelper?) {
-    if(touchHelper == null) return
+    if (touchHelper == null) return
     log.v("onSurfaceDestroy, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
     touchHelper.setRawDrawingEnabled(false)
 }
 
 
 fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
-    if(touchHelper == null) return
+    if (touchHelper == null) return
     // Takes at least 50ms on Note 4c,
     // and I don't think that we need it immediately
     log.i("Setup editable surface")
@@ -199,7 +199,8 @@ private const val ERASER_STROKE_WIDTH = ERASER_SWATH_WIDTH
  * track colour is set separately via setStrokeColor (see onBeginRawErasing / ERASER_INDICATOR_COLOR).
  */
 private const val ERASER_STROKE_PARAM1 = 0.5f
-private const val ERASER_STROKE_PARAM2 = 1f // how much the strokes are filled in with dots, or something, I don't know
+private const val ERASER_STROKE_PARAM2 =
+    1f // how much the strokes are filled in with dots, or something, I don't know
 
 /**
  * Colour of the native eraser track. The eraser channel carries no colour of its own; the firmware
@@ -207,6 +208,15 @@ private const val ERASER_STROKE_PARAM2 = 1f // how much the strokes are filled i
  * onBeginRawErasing (mirrors the old working behaviour). Tune here for a lighter/darker grey.
  */
 internal val ERASER_INDICATOR_COLOR = android.graphics.Color.BLACK
+
+/**
+ * Firmware DASH stroke style ([TouchHelper.STROKE_STYLE_DASH]) used for the LASSO/SELECT eraser
+ * track — a dotted outline, matching what the lasso eraser drew before the native-eraser rework.
+ * kreader likewise uses style 5 for area/lasso erase (isMoveStrokeErase ? 8 : 5). Params are
+ * {thickness, dashLen, gapLen, phase} (same values the old applyEraserIndicatorStyle used).
+ */
+private const val SELECT_ERASER_STYLE = 5
+private val SELECT_ERASER_PARAMS = floatArrayOf(5f, 9f, 9f, 0f)
 
 /**
  * Enables the firmware's native eraser-stroke rendering for pen side-button erasing.
@@ -223,15 +233,26 @@ internal val ERASER_INDICATOR_COLOR = android.graphics.Color.BLACK
  * these params and falls back to the pen's global width, bringing the bug back.
  * See docs/onyx-sdk/onyx-native-eraser-indicator.md.
  */
-fun enableNativeEraser(touchHelper: TouchHelper?) {
+fun enableNativeEraser(touchHelper: TouchHelper?, eraser: Eraser = Eraser.PEN) {
     if (touchHelper == null) return
     try {
-        Device.currentDevice().setStrokeParameters(
-            ERASER_STROKE_STYLE,
-            floatArrayOf(ERASER_STROKE_WIDTH, ERASER_STROKE_PARAM1, ERASER_STROKE_PARAM2)
-        )
-        touchHelper.setEraserRawDrawingEnabled(true, ERASER_STROKE_STYLE)
-//        touchHelper.setEraserRawDrawingEnabled(true, TouchHelper.STROKE_STYLE_MARKER)
+        when (eraser) {
+            // Lasso/select erase: a dotted outline (firmware DASH style 5).
+            Eraser.SELECT -> {
+                Device.currentDevice()
+                    .setStrokeParameters(SELECT_ERASER_STYLE, SELECT_ERASER_PARAMS)
+                touchHelper.setEraserRawDrawingEnabled(true, SELECT_ERASER_STYLE)
+            }
+            // Drag/pen erase: the wide marker track (style 8), width from its own params.
+            Eraser.PEN -> {
+                Device.currentDevice().setStrokeParameters(
+                    ERASER_STROKE_STYLE,
+                    floatArrayOf(ERASER_STROKE_WIDTH, ERASER_STROKE_PARAM1, ERASER_STROKE_PARAM2)
+                )
+                touchHelper.setEraserRawDrawingEnabled(true, ERASER_STROKE_STYLE)
+//                touchHelper.setEraserRawDrawingEnabled(true, TouchHelper.STROKE_STYLE_MARKER)
+            }
+        }
     } catch (t: Throwable) {
         log.w("setEraserRawDrawingEnabled not supported on this device: ${t.message}")
     }
@@ -259,7 +280,7 @@ fun configureCalligraphyLiveAngle(angleDegrees: Float, strokeWidth: Float) {
 }
 
 fun prepareForPartialUpdate(view: View, touchHelper: TouchHelper?) {
-    if(touchHelper == null) return
+    if (touchHelper == null) return
     EpdController.setDisplayScheme(SCHEME_SCRIBBLE)
     EpdController.enableA2ForSpecificView(view)
     EpdController.setEpdTurbo(100)
@@ -291,7 +312,7 @@ fun restoreDefaults(view: View) {
 }
 
 fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelper?) {
-    if(touchHelper == null) return
+    if (touchHelper == null) return
     refreshScreenRegion(view, dirtyRect)
     resetScreenFreeze(touchHelper)
 }
@@ -310,7 +331,7 @@ fun cancelPendingScreenFreezeReset() {
 }
 
 fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
-    if(touchHelper == null) {
+    if (touchHelper == null) {
         log.w("touchHelper is null")
         return
     }
@@ -427,6 +448,7 @@ object DeviceCompat {
             false
         }
     }
+
     suspend fun delayBeforeResumingDrawing(isErasing: Boolean = false, areaErase: Boolean = false) {
         if (!isOnyxDevice) return
         // Delays mirror kreader's WaitForUpdateFinishedAction:
