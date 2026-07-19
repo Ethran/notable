@@ -11,6 +11,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.flow.Flow
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -53,6 +54,9 @@ interface NotebookDao {
     @Query("SELECT * FROM notebook")
     fun getAll(): List<Notebook>
 
+    @Query("SELECT * FROM notebook")
+    fun getAllFlow(): Flow<List<Notebook>>
+
     @Query("SELECT * FROM notebook WHERE id = (:notebookId)")
     fun getByIdLive(notebookId: String): LiveData<Notebook>
 
@@ -83,6 +87,10 @@ class BookRepository @Inject constructor(
 
     fun getAll(): List<Notebook> {
         return notebookDao.getAll()
+    }
+
+    fun getAllFlow(): Flow<List<Notebook>> {
+        return notebookDao.getAllFlow()
     }
 
     suspend fun create(notebook: Notebook) {
