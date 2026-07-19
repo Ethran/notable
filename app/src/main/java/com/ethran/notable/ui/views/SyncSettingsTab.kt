@@ -289,6 +289,14 @@ private fun SyncBehaviorSection(
                 value = state.syncSettings.uploadOnly,
                 onToggle = { onUpdate(state.syncSettings.copy(uploadOnly = it), true) }
             )
+            if (state.syncSettings.uploadOnly) {
+                Text(
+                    text = stringResource(R.string.sync_upload_only_hint),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp, start = 4.dp, end = 4.dp)
+                )
+            }
         }
     }
 }

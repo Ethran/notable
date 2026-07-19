@@ -324,11 +324,8 @@ internal fun finalizeSyncResult(
     summary: SyncSummary,
     nonCriticalError: DomainError?
 ): AppResult<Unit, DomainError> {
-    if (nonCriticalError != null && nonCriticalError.isOnlyUploadSkip()) {
-        reporter.finishSuccess(summary)
-        return AppResult.Success(Unit)
-    }
-
+    // Upload-only skips are ordinary planned no-ops now (6b), so the only thing that reaches here
+    // as a nonCriticalError is a genuine per-notebook failure.
     if (nonCriticalError != null) {
         reporter.finishError(nonCriticalError, false)
         return AppResult.Error(nonCriticalError)

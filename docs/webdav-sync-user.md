@@ -101,6 +101,11 @@ Enable **Automatic sync every X minutes** to sync periodically in the background
 ### Sync on Note Close
 Enable **Sync when closing notes** to automatically sync the notebook you were editing when you close it. This ensures your latest changes are uploaded immediately. Only that one notebook is synced (not a full sync), and if a full or scheduled sync is already running it is skipped to avoid overlap.
 
+### Upload Only
+Enable **Upload only (skip remote changes)** to push your local changes to the server without ever downloading. This is useful when this device is the "source of truth" and you don't want changes from other devices coming back to it.
+
+It is safe: it **never modifies your local notebooks** and **never overwrites a newer copy on the server**. Notebooks that are newer on the server are simply left as they are on this device (they are not downloaded). Deletions from other devices are also not applied while upload-only is on.
+
 ## Sync Status Badges
 
 Each notebook cover in the library shows a small icon in the top-right corner reflecting its sync status:
@@ -273,6 +278,6 @@ For developers interested in how sync works internally, see:
 
 ---
 
-**Version**: 1.2
-**Last Updated**: 2026-07-19 — added Sync Status Badges section, clarified non-destructive force
-operations and sync-on-close behavior.
+**Version**: 1.3
+**Last Updated**: 2026-07-19 — documented the Upload Only option (now trustworthy); added Sync
+Status Badges section, clarified non-destructive force operations and sync-on-close behavior.

@@ -118,8 +118,13 @@ class NotebookReconciliationService @Inject constructor(
 
             NotebookAction.Download -> notebookSyncService.downloadNotebook(notebookId, client)
 
-            NotebookAction.SkipUploadOnly ->
-                AppResult.Error(DomainError.SyncUploadOnlySkip(localNotebook.title))
+            NotebookAction.SkipUploadOnly -> {
+                // Upload-only mode: remote is newer but we never pull. This is a planned no-op, not
+                // an error -- we leave local and the sync-state row untouched (the notebook simply
+                // isn't up to date with the server, by the user's choice) (6a/6b).
+                log.i(TAG, "↑ Upload-only: leaving newer server copy of ${localNotebook.title}")
+                AppResult.Success(Unit)
+            }
 
             NotebookAction.Skip -> {
                 log.i(TAG, "= No changes, skipping ${localNotebook.title}")

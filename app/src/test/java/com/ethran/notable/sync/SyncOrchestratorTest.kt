@@ -55,7 +55,7 @@ class SyncOrchestratorTest {
     }
 
     @Test
-    fun finalizeSyncResult_uploadOnlySkip_returns_success() {
+    fun finalizeSyncResult_noError_returns_success() {
         val reporter = FakeReporter()
         val summary = SyncSummary(
             notebooksSynced = 2,
@@ -64,14 +64,25 @@ class SyncOrchestratorTest {
             duration = 200L
         )
 
-        val result = finalizeSyncResult(
-            reporter,
-            summary,
-            DomainError.SyncUploadOnlySkip("Notes")
-        )
+        val result = finalizeSyncResult(reporter, summary, nonCriticalError = null)
 
         assertTrue(result is AppResult.Success)
         assertTrue(reporter.state.value is SyncState.Success)
         assertEquals(summary, (reporter.state.value as SyncState.Success).summary)
+    }
+
+    @Test
+    fun finalizeSyncResult_withError_reports_failure() {
+        val reporter = FakeReporter()
+        val summary = SyncSummary(1, 0, 0, 50L)
+
+        val result = finalizeSyncResult(
+            reporter,
+            summary,
+            DomainError.NetworkError("upload failed")
+        )
+
+        assertTrue(result is AppResult.Error)
+        assertTrue(reporter.state.value is SyncState.Error)
     }
 }

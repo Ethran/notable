@@ -533,6 +533,34 @@ function:
 
 The badge is rendered as a corner icon on the notebook cover in the library.
 
+### 5.10 Reconciliation decision & incremental change detection
+
+Per-notebook reconciliation is split into a **pure decision** and an **I/O executor**:
+
+- `NotebookSyncPlanner.decide(...)` (pure, unit-tested in `NotebookSyncPlannerTest`) takes the local
+  `updatedAt`, the stored sync-state anchor (`localUpdatedAtAtSync` + `remoteEtag`), and the remote
+  manifest facts, and returns a `NotebookAction`: `Upload(ifMatch)`, `Download`, `Skip`, or
+  `SkipUploadOnly`.
+- `NotebookReconciliationService.reconcileNotebook(...)` does the I/O and runs the action.
+
+**One request for the remote set.** The orchestrator issues a single `PROPFIND` of
+`/notable/notebooks/` and shares the id set with both reconciliation (existence is a set lookup, not
+a per-notebook `HEAD`) and new-notebook discovery.
+
+**Conditional fetch.** When a notebook already has a stored `remoteEtag`, reconciliation fetches its
+manifest with `If-None-Match`. A `304 Not Modified` (bodyless) means the remote is exactly what we
+last synced, so the decision reduces to "did local change?" — no manifest body, no clock math. Only
+when the remote actually changed (or there is no stored ETag) is a full manifest read done. This
+dropped the per-notebook cost from three round-trips (clock-skew `HEAD` + existence `HEAD` + full
+manifest `GET`) to one conditional `GET`. Preflight (clock skew, wifi) runs once per sync, not per
+notebook.
+
+**Upload-only mode.** When `uploadOnly` is set, `decide` returns `SkipUploadOnly` for any notebook
+where the remote is newer, and the orchestrator skips the whole "apply remote deletions" and
+"download new" steps. The result: local data is never modified and a newer server copy is never
+overwritten (uploads still carry `If-Match`). A `SkipUploadOnly` is a **planned no-op returning
+`Success`**, not an error — it leaves the local notebook and its sync-state row untouched.
+
 ---
 
 ## 6) Security Model
@@ -575,17 +603,14 @@ DomainError.SyncClockSkew(seconds)       // device clock differs from server by 
 DomainError.SyncWifiRequired             // wifiOnly set but not on an unmetered network
 DomainError.SyncInProgress               // another sync already holds the mutex
 DomainError.SyncConflict                 // If-Match precondition failed (HTTP 412)
-DomainError.SyncUploadOnlySkip(title)    // upload-only run had nothing to upload for a notebook
 DomainError.SyncError(message, recoverable)  // generic server/logic failure
 DomainError.DatabaseError(message)       // local Room failure
 DomainError.NotFound(resource)           // e.g. notebook row missing
 ```
 
-`SyncUploadOnlySkip` is an *expected* outcome modelled (for now) as an error and laundered back to
-`Success` by `isOnlyUploadSkip()` / `finalizeSyncResult`. This errors-as-control-flow shape is a
-known wart, slated to be removed when upload-only is re-derived as a planned action (see the
-improvement plan, Phase 6). Multiple per-notebook errors are aggregated into `MultipleErrors` via
-`ErrorAccumulator`.
+Multiple per-notebook errors are aggregated into `MultipleErrors` via `ErrorAccumulator`.
+Upload-only "remote is newer, don't pull" is **not** an error — it is a planned no-op
+(`NotebookAction.SkipUploadOnly`) returned as `Success` by the reconciler (see section 5.10).
 
 ### 7.2 Concurrency Control
 
@@ -688,7 +713,8 @@ Potential enhancements beyond the current implementation, roughly ordered by imp
 
 ---
 
-**Version**: 1.6
-**Last Updated**: 2026-07-19 — synced with code after Phases 1–4 (commit-marker ordering,
-tri-state `exists()`, `notebook_sync_state` table + badges, mutex on single-notebook sync,
-non-destructive force ops, shared `OkHttpClient`, `DomainError`/`AppResult` throughout).
+**Version**: 1.7
+**Last Updated**: 2026-07-19 — Phases 1–6: added §5.10 (pure reconciliation planner, one shared
+PROPFIND + `If-None-Match` incremental change detection, upload-only as a planned no-op) and removed
+the `SyncUploadOnlySkip` errors-as-control-flow wart. Earlier 1.6: commit-marker ordering, tri-state
+`exists()`, `notebook_sync_state` table + badges, non-destructive force ops, shared `OkHttpClient`.
