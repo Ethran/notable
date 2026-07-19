@@ -4,9 +4,10 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.sync.serializers.NotebookSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.ErrorAccumulator
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.onError
-import com.ethran.notable.utils.plus
+import com.ethran.notable.utils.onFailure
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,48 +18,47 @@ class NotebookReconciliationService @Inject constructor(
     private val notebookSyncService: NotebookSyncService,
     private val reporter: SyncProgressReporter
 ) {
-    private val logger = SyncLogger
+    private val log = SyncLogger
 
     suspend fun syncExistingNotebooks(
-        webdavClient: WebDAVClient,
+        client: WebDAVClient,
         uploadOnly: Boolean
     ): AppResult<Set<String>, DomainError> {
         val localNotebooks = appRepository.bookRepository.getAll()
         val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
         val total = localNotebooks.size
-        var persistentError: DomainError? = null
+        val errors = ErrorAccumulator()
 
         localNotebooks.forEachIndexed { i, notebook ->
             reporter.beginItem(index = i + 1, total = total, name = notebook.title)
             // Individual notebook sync failures are non-fatal for the whole process
-            syncNotebook(notebook.id, webdavClient, uploadOnly).onError { error ->
-                persistentError = persistentError?.let { it + error } ?: error
-            }
+            syncNotebook(notebook.id, client, uploadOnly).onError { errors.add(it) }
         }
         reporter.endItem()
 
-        return if (persistentError != null) AppResult.Error(persistentError)
-        else AppResult.Success(preDownloadNotebookIds)
+        return errors.asResult(preDownloadNotebookIds)
     }
 
     suspend fun syncNotebook(
         notebookId: String,
-        webdavClient: WebDAVClient,
+        client: WebDAVClient,
         uploadOnly: Boolean
     ): AppResult<Unit, DomainError> {
-        logger.i(TAG, "Syncing notebook: $notebookId")
+        log.i(TAG, "Syncing notebook: $notebookId")
 
         syncPreflightService.checkWifiConstraint().onError { return AppResult.Error(it) }
-        syncPreflightService.checkClockSkew(webdavClient).onError { return AppResult.Error(it) }
+        syncPreflightService.checkClockSkew(client).onError { return AppResult.Error(it) }
 
         val localNotebook = appRepository.bookRepository.getById(notebookId)
             ?: return AppResult.Error(DomainError.NotFound("Notebook $notebookId"))
 
         val remotePath = SyncPaths.manifestFile(notebookId)
-        val remoteExists = webdavClient.exists(remotePath)
+        // If we cannot determine whether the remote manifest exists (e.g. transient network
+        // error), abort this notebook rather than fall through to an unguarded upload (P2).
+        val remoteExists = client.exists(remotePath).onFailure { return AppResult.Error(it) }
 
         return if (remoteExists) {
-            webdavClient.getFileWithMetadata(remotePath).flatMap { remoteManifest ->
+            client.getFileWithMetadata(remotePath).flatMap { remoteManifest ->
                 val remoteEtag = remoteManifest.etag
                     ?: return@flatMap AppResult.Error(DomainError.SyncError("Missing ETag for $remotePath"))
 
@@ -70,7 +70,7 @@ class NotebookReconciliationService @Inject constructor(
                 when {
                     remoteUpdatedAt == null -> notebookSyncService.uploadNotebook(
                         localNotebook,
-                        webdavClient,
+                        client,
                         manifestIfMatch = remoteEtag
                     )
 
@@ -80,19 +80,19 @@ class NotebookReconciliationService @Inject constructor(
                         } else {
                             notebookSyncService.downloadNotebook(
                                 notebookId,
-                                webdavClient
+                                client
                             )
                         }
                     }
 
                     diffMs > TIMESTAMP_TOLERANCE_MS -> notebookSyncService.uploadNotebook(
                         localNotebook,
-                        webdavClient,
+                        client,
                         manifestIfMatch = remoteEtag
                     )
 
                     else -> {
-                        logger.i(
+                        log.i(
                             TAG,
                             "= No changes (within tolerance), skipping ${localNotebook.title}"
                         )
@@ -101,7 +101,7 @@ class NotebookReconciliationService @Inject constructor(
                 }
             }
         } else {
-            notebookSyncService.uploadNotebook(localNotebook, webdavClient)
+            notebookSyncService.uploadNotebook(localNotebook, client)
         }
     }
 

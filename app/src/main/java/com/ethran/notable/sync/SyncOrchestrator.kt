@@ -2,19 +2,19 @@ package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
-import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
+import com.ethran.notable.utils.getOrElse
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -31,23 +31,24 @@ class SyncOrchestrator @Inject constructor(
     private val notebookReconciliationService: NotebookReconciliationService,
     private val webDavClientFactory: WebDavClientFactoryPort,
     private val reporter: SyncProgressReporter,
+    @param:ApplicationScope private val appScope: CoroutineScope,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
-    private val logger = SyncLogger
+    private val log = SyncLogger
 
     /**
      * Performs a full synchronization of all folders and notebooks.
      */
     suspend fun syncAllNotebooks(): AppResult<Unit, DomainError> = withContext(ioDispatcher) {
         if (!syncMutex.tryLock()) {
-            logger.w(TAG, "Sync already in progress, skipping")
+            log.w(TAG, "Sync already in progress, skipping")
             return@withContext AppResult.Error(DomainError.SyncInProgress)
         }
 
         val startTime = System.currentTimeMillis()
 
         try {
-            logger.i(TAG, "Starting full sync...")
+            log.i(TAG, "Starting full sync...")
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
 
             val settings = kvProxy.getSyncSettings()
@@ -55,21 +56,15 @@ class SyncOrchestrator @Inject constructor(
             var nonCriticalError: DomainError? = null
 
             if (!settings.syncEnabled) {
-                val error = DomainError.SyncConfigError
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+                return@withContext failStep(DomainError.SyncConfigError)
             }
 
             if (settings.username.isBlank() || settings.password.isBlank()) {
-                val error = DomainError.SyncAuthError
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+                return@withContext failStep(DomainError.SyncAuthError)
             }
 
-
-            syncPreflightService.checkWifiConstraint().onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            syncPreflightService.checkWifiConstraint().onFailure {
+                return@withContext failStep(it)
             }
 
             val client = webDavClientFactory.create(
@@ -78,14 +73,12 @@ class SyncOrchestrator @Inject constructor(
                 settings.password
             )
 
-            syncPreflightService.checkClockSkew(client).onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            syncPreflightService.checkClockSkew(client).onFailure {
+                return@withContext failStep(it)
             }
 
-            syncPreflightService.ensureServerDirectories(client).onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            syncPreflightService.ensureServerDirectories(client).onFailure {
+                return@withContext failStep(it)
             }
 
             reporter.beginStep(
@@ -93,9 +86,8 @@ class SyncOrchestrator @Inject constructor(
                 PROGRESS_SYNCING_FOLDERS,
                 "Syncing folders..."
             )
-            folderSyncService.syncFolders(client, uploadOnly).onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            folderSyncService.syncFolders(client, uploadOnly).onFailure {
+                return@withContext failStep(it)
             }
 
             reporter.beginStep(
@@ -184,35 +176,46 @@ class SyncOrchestrator @Inject constructor(
         } finally {
             syncMutex.unlock()
         }
-    }.also {
-        if (it is AppResult.Success) {
-            delay(SUCCESS_STATE_AUTO_RESET_MS)
-            if (reporter.state.value is SyncState.Success) reporter.reset()
+    }.also { result ->
+        // Auto-reset the transient Success state after a delay, but off the caller's path so
+        // syncAllNotebooks() returns immediately instead of blocking for 3 s.
+        if (result is AppResult.Success) {
+            appScope.launch {
+                delay(SUCCESS_STATE_AUTO_RESET_MS)
+                if (reporter.state.value is SyncState.Success) reporter.reset()
+            }
         }
     }
 
     suspend fun syncNotebook(notebookId: String): AppResult<Unit, DomainError> =
         withContext(ioDispatcher) {
-            if (syncMutex.isLocked) return@withContext AppResult.Success(Unit)
-            val settings = kvProxy.getSyncSettings()
-            if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
+            // Actually hold the mutex for the whole operation. A bare isLocked check is
+            // check-then-act: it let a sync-on-close race a full/periodic sync (P4). Skip-if-busy
+            // is still the right behavior for a single-notebook sync, so a failed tryLock succeeds.
+            if (!syncMutex.tryLock()) return@withContext AppResult.Success(Unit)
+            try {
+                val settings = kvProxy.getSyncSettings()
+                if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
 
-            syncPreflightService.checkWifiConstraint().onSuccess {
-                if (settings.username.isBlank() || settings.password.isBlank()) {
-                    return@withContext AppResult.Error(DomainError.SyncAuthError)
+                syncPreflightService.checkWifiConstraint().onSuccess {
+                    if (settings.username.isBlank() || settings.password.isBlank()) {
+                        return@withContext AppResult.Error(DomainError.SyncAuthError)
+                    }
+                    val client = webDavClientFactory.create(
+                        settings.serverUrl,
+                        settings.username,
+                        settings.password
+                    )
+                    return@withContext notebookReconciliationService.syncNotebook(
+                        notebookId,
+                        client,
+                        settings.uploadOnly
+                    )
                 }
-                val client = webDavClientFactory.create(
-                    settings.serverUrl,
-                    settings.username,
-                    settings.password
-                )
-                return@withContext notebookReconciliationService.syncNotebook(
-                    notebookId,
-                    client,
-                    settings.uploadOnly
-                )
+                AppResult.Success(Unit)
+            } finally {
+                syncMutex.unlock()
             }
-            AppResult.Success(Unit)
         }
 
     suspend fun syncFromPageId(pageId: String) {
@@ -222,7 +225,7 @@ class SyncOrchestrator @Inject constructor(
             val page = appRepository.pageRepository.getById(pageId) ?: return
             page.notebookId?.let { syncNotebook(it) }
         } catch (e: Exception) {
-            logger.e(TAG, "Auto-sync failed: ${e.message}")
+            log.e(TAG, "Auto-sync failed: ${e.message}")
         }
     }
 
@@ -243,9 +246,11 @@ class SyncOrchestrator @Inject constructor(
                     )
 
                 val path = SyncPaths.notebookDir(notebookId)
-                if (client.exists(path)) {
+                // If existence can't be determined, skip the delete but still write the tombstone
+                // below; DELETE is idempotent and a full sync will reconcile any leftover.
+                if (client.exists(path).getOrElse { false }) {
                     client.delete(path).onError {
-                        logger.w(
+                        log.w(
                             TAG,
                             "Failed to delete remote notebook $notebookId: ${it.userMessage}"
                         )
@@ -281,6 +286,12 @@ class SyncOrchestrator @Inject constructor(
         } finally {
             syncMutex.unlock()
         }
+    }
+
+    /** Report [error] as the terminal state of the current sync and return it as a failure. */
+    private fun failStep(error: DomainError): AppResult<Unit, DomainError> {
+        reporter.finishError(error, false)
+        return AppResult.Error(error)
     }
 
     private suspend fun updateSyncedNotebookIds() {
@@ -321,34 +332,3 @@ internal fun finalizeSyncResult(
     reporter.finishSuccess(summary)
     return AppResult.Success(Unit)
 }
-
-@EntryPoint
-@InstallIn(SingletonComponent::class)
-interface SyncOrchestratorEntryPoint {
-    fun syncOrchestrator(): SyncOrchestrator
-    fun kvProxy(): KvProxy
-    fun snackDispatcher(): SnackDispatcher
-}
-
-sealed class SyncState {
-    data object Idle : SyncState()
-    data class Syncing(
-        val currentStep: SyncStep,
-        val stepProgress: Float,
-        val details: String,
-        val item: ItemProgress? = null
-    ) : SyncState()
-
-    data class Success(val summary: SyncSummary) : SyncState()
-    data class Error(val error: DomainError, val step: SyncStep, val canRetry: Boolean) :
-        SyncState()
-}
-
-data class ItemProgress(val index: Int, val total: Int, val name: String)
-enum class SyncStep { INITIALIZING, SYNCING_FOLDERS, APPLYING_DELETIONS, SYNCING_NOTEBOOKS, DOWNLOADING_NEW, UPLOADING_DELETIONS, FINALIZING }
-data class SyncSummary(
-    val notebooksSynced: Int,
-    val notebooksDownloaded: Int,
-    val notebooksDeleted: Int,
-    val duration: Long
-)

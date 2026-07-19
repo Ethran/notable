@@ -91,9 +91,11 @@ class SyncScheduler @Inject constructor(
 
         val uniqueName = "${SyncWorker.WORK_NAME}-immediate-${request.typeKey}-${request.identifier}"
 
+        // KEEP, not REPLACE: a sync already running for this unique name satisfies the request.
+        // REPLACE would cancel an in-flight worker mid-sync (e.g. app restarted during a sync). (P20)
         workManager.enqueueUniqueWork(
             uniqueName,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             syncWorkRequest
         )
 

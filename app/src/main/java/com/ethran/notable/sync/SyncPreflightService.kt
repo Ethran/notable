@@ -5,6 +5,7 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.onFailure
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -26,9 +27,8 @@ class SyncPreflightService @Inject constructor(
         }
     }
 
-    fun checkClockSkew(webdavClient: WebDAVClient): AppResult<Unit, DomainError> {
-        val serverTime = webdavClient.getServerTime()
-            ?: return AppResult.Error(DomainError.NetworkError("Could not retrieve server time"))
+    fun checkClockSkew(client: WebDAVClient): AppResult<Unit, DomainError> {
+        val serverTime = client.getServerTime().onFailure { return AppResult.Error(it) }
 
         val skewMs = System.currentTimeMillis() - serverTime
         return if (abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
@@ -38,15 +38,17 @@ class SyncPreflightService @Inject constructor(
         }
     }
 
-    fun ensureServerDirectories(webdavClient: WebDAVClient): AppResult<Unit, DomainError> {
-        if (!webdavClient.exists(SyncPaths.rootDir())) {
-            webdavClient.createCollection(SyncPaths.rootDir()).onError { return AppResult.Error(it) }
-        }
-        if (!webdavClient.exists(SyncPaths.notebooksDir())) {
-            webdavClient.createCollection(SyncPaths.notebooksDir()).onError { return AppResult.Error(it) }
-        }
-        if (!webdavClient.exists(SyncPaths.tombstonesDir())) {
-            webdavClient.createCollection(SyncPaths.tombstonesDir()).onError { return AppResult.Error(it) }
+    fun ensureServerDirectories(client: WebDAVClient): AppResult<Unit, DomainError> {
+        val dirs = listOf(
+            SyncPaths.rootDir(),
+            SyncPaths.notebooksDir(),
+            SyncPaths.tombstonesDir()
+        )
+        for (dir in dirs) {
+            val present = client.exists(dir).onFailure { return AppResult.Error(it) }
+            if (!present) {
+                client.createCollection(dir).onError { return AppResult.Error(it) }
+            }
         }
         return AppResult.Success(Unit)
     }

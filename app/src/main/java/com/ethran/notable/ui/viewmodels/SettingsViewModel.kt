@@ -19,7 +19,7 @@ import com.ethran.notable.sync.SyncProgressReporter
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
-import com.ethran.notable.sync.WebDAVClient
+import com.ethran.notable.sync.WebDavClientFactoryPort
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.AppResult
@@ -63,6 +63,7 @@ class SettingsViewModel @Inject constructor(
     private val syncOrchestrator: SyncOrchestrator,
     private val syncProgressReporter: SyncProgressReporter,
     private val syncScheduler: SyncScheduler,
+    private val webDavClientFactory: WebDavClientFactoryPort,
     private val snackDispatcher: SnackDispatcher,
     private val appEventBus: AppEventBus,
     @param:ApplicationScope private val appScope: CoroutineScope
@@ -207,7 +208,7 @@ class SettingsViewModel @Inject constructor(
                     kvProxy.getSyncSettings().password
                 }
 
-            val client = WebDAVClient(settings.serverUrl, settings.username, password)
+            val client = webDavClientFactory.create(settings.serverUrl, settings.username, password)
             val result = client.testConnection()
 
             withContext(Dispatchers.Main) {
