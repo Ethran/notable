@@ -235,6 +235,12 @@ class EditorViewModel @Inject constructor(
 
         // 3. Cleanup page resources
         page.disposeOldPage()
+
+        // 4. Sync-on-close. syncFromPageId honors the "Sync when closing notes" setting. Run on the
+        //    application scope so it survives this view's teardown. Downloading here is safe: the
+        //    editor is closing, so nothing will overwrite a newer remote copy (P18).
+        val closingPageId = currentPageId
+        appScope.launch { syncOrchestrator.syncFromPageId(closingPageId) }
     }
 
     fun createHistory(page: PageView): History = historyFactory.create(page)
@@ -604,9 +610,10 @@ class EditorViewModel @Inject constructor(
         if (newPageId != currentPageId) {
             // The View's LaunchedEffect will handle the full load once navigation syncs.
             Log.d("EditorView", "Page changed")
-            val oldPage = currentPageId
             _toolbarState.update { it.copy(pageId = newPageId) }
-            syncFromPageId(oldPage)
+            // Do NOT sync here: syncing the notebook that is open in the editor could download a
+            // newer remote copy and rewrite Room underneath the live in-memory state (P19).
+            // Sync is deferred to editor close (see onDispose).
         } else {
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
@@ -694,9 +701,5 @@ class EditorViewModel @Inject constructor(
         snackDispatcher.showOrUpdateSnack(
             SnackConf(text = message, duration = durationMs)
         )
-    }
-
-    suspend fun syncFromPageId(pageId: String) {
-        syncOrchestrator.syncFromPageId(pageId)
     }
 }
