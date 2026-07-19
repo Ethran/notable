@@ -81,6 +81,12 @@ class SyncOrchestrator @Inject constructor(
                 return@withContext failStep(it)
             }
 
+            // One PROPFIND for the whole remote notebook set, shared by reconciliation (existence
+            // checks) and new-notebook discovery -- replaces the per-notebook HEAD probes (5a/P13).
+            val remoteNotebookIds = client.listCollection(SyncPaths.notebooksDir())
+                .onFailure { return@withContext failStep(it) }
+                .toSet()
+
             reporter.beginStep(
                 SyncStep.SYNCING_FOLDERS,
                 PROGRESS_SYNCING_FOLDERS,
@@ -109,7 +115,7 @@ class SyncOrchestrator @Inject constructor(
             )
             val localIdsSnapshot = appRepository.bookRepository.getAll().map { it.id }.toSet()
             val preDownloadIds = when (
-                val syncResult = notebookReconciliationService.syncExistingNotebooks(client, uploadOnly)
+                val syncResult = notebookReconciliationService.syncExistingNotebooks(client, remoteNotebookIds, uploadOnly)
             ) {
                 is AppResult.Success -> syncResult.data
                 // Per-notebook failures are NON-CRITICAL: each failed notebook was marked ERROR
@@ -133,7 +139,8 @@ class SyncOrchestrator @Inject constructor(
                 notebookSyncService.downloadNewNotebooks(
                     client,
                     tombstonedIds,
-                    preDownloadIds
+                    preDownloadIds,
+                    remoteNotebookIds
                 ).onFailure { return@withContext failStep(it) }
             }
 
@@ -205,6 +212,11 @@ class SyncOrchestrator @Inject constructor(
                         settings.username,
                         settings.password
                     )
+                    // Preflight the clock once here: reconciliation no longer checks skew per
+                    // notebook (5c), so the single-notebook path must gate on it itself.
+                    syncPreflightService.checkClockSkew(client).onFailure {
+                        return@withContext AppResult.Error(it)
+                    }
                     return@withContext notebookReconciliationService.syncNotebook(
                         notebookId,
                         client,

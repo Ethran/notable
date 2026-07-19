@@ -127,38 +127,33 @@ class NotebookSyncService @Inject constructor(
     suspend fun downloadNewNotebooks(
         client: WebDAVClient,
         tombstonedIds: Set<String>,
-        preDownloadNotebookIds: Set<String>
+        preDownloadNotebookIds: Set<String>,
+        remoteNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
         log.i(TAG, "Checking server for new notebooks...")
-        val notebooksDirExists =
-            client.exists(SyncPaths.notebooksDir()).onFailure { return AppResult.Error(it) }
-        if (!notebooksDirExists) {
-            return AppResult.Success(0)
-        }
         // Notebooks we previously synced but are no longer local were deleted here; don't
         // re-download them (they get tombstoned by detectAndUploadLocalDeletions instead).
         val syncedIds = appRepository.notebookSyncStateRepository.getAllIds()
-        return client.listCollection(SyncPaths.notebooksDir()).flatMap { serverNotebookDirs ->
-            val newNotebookIds = serverNotebookDirs.map { it.trimEnd('/') }
-                .filter { it !in preDownloadNotebookIds }
-                .filter { it !in tombstonedIds }
-                .filter { it !in syncedIds }
+        // remoteNotebookIds is the single PROPFIND listing shared with reconciliation (5a).
+        val newNotebookIds = remoteNotebookIds
+            .filter { it !in preDownloadNotebookIds }
+            .filter { it !in tombstonedIds }
+            .filter { it !in syncedIds }
 
-            val errors = ErrorAccumulator()
-            if (newNotebookIds.isNotEmpty()) {
-                log.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
-                val total = newNotebookIds.size
-                newNotebookIds.forEachIndexed { i, notebookId ->
-                    reporter.beginItem(index = i + 1, total = total, name = notebookId, id = notebookId)
-                    downloadNotebook(notebookId, client).onError { errors.add(it) }
-                }
-                reporter.endItem()
-            } else {
-                log.i(TAG, "No new notebooks on server")
+        val errors = ErrorAccumulator()
+        if (newNotebookIds.isNotEmpty()) {
+            log.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
+            val total = newNotebookIds.size
+            newNotebookIds.forEachIndexed { i, notebookId ->
+                reporter.beginItem(index = i + 1, total = total, name = notebookId, id = notebookId)
+                downloadNotebook(notebookId, client).onError { errors.add(it) }
             }
-
-            errors.asResult(newNotebookIds.size)
+            reporter.endItem()
+        } else {
+            log.i(TAG, "No new notebooks on server")
         }
+
+        return errors.asResult(newNotebookIds.size)
     }
 
     /**
