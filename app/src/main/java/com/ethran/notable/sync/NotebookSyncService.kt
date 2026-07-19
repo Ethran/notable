@@ -165,33 +165,41 @@ class NotebookSyncService @Inject constructor(
         }.flatMap {
             client.createCollection(SyncPaths.backgroundsDir(notebookId))
         }.flatMap {
-            val manifestJson = NotebookSerializer.serializeManifest(notebook)
-            client.putFile(
-                SyncPaths.manifestFile(notebookId),
-                manifestJson.toByteArray(),
-                "application/json",
-                ifMatch = manifestIfMatch
-            )
-        }.flatMap {
+            // 1. Upload every page (and its images/backgrounds) FIRST.
             val pages = appRepository.pageRepository.getByIds(notebook.pageIds)
             val errors = ErrorAccumulator()
             for (page in pages) {
                 uploadPage(page, notebookId, client).onError { errors.add(it) }
             }
 
-            // Best-effort cleanup: if existence can't be determined, skip (a leftover tombstone is
-            // harmless and will be re-checked next sync).
-            val tombstonePath = SyncPaths.tombstone(notebookId)
-            if (client.exists(tombstonePath).getOrElse { false }) {
-                client.delete(tombstonePath).onSuccess {
-                    log.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
-                }.onError {
-                    log.w(TAG, "Failed to remove stale tombstone $notebookId: ${it.userMessage}")
+            // 2. If any page failed, do NOT publish the manifest. Leaving the old commit marker in
+            //    place keeps the notebook "not yet updated" for other devices and makes this device
+            //    re-upload on the next sync -- never a manifest pointing at missing/stale pages (P1).
+            if (errors.hasErrors) {
+                errors.asResult(Unit)
+            } else {
+                // 3. All pages are up: publish the manifest last. This is the atomic commit; the
+                //    If-Match guard rejects the PUT if the remote changed since we read it.
+                val manifestJson = NotebookSerializer.serializeManifest(notebook)
+                client.putFile(
+                    SyncPaths.manifestFile(notebookId),
+                    manifestJson.toByteArray(),
+                    "application/json",
+                    ifMatch = manifestIfMatch
+                ).onSuccess {
+                    // Only after a committed upload: drop any stale tombstone for a resurrected
+                    // notebook. Best-effort -- a leftover tombstone is re-checked next sync.
+                    val tombstonePath = SyncPaths.tombstone(notebookId)
+                    if (client.exists(tombstonePath).getOrElse { false }) {
+                        client.delete(tombstonePath).onSuccess {
+                            log.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
+                        }.onError {
+                            log.w(TAG, "Failed to remove stale tombstone $notebookId: ${it.userMessage}")
+                        }
+                    }
+                    log.i(TAG, "Uploaded: ${notebook.title}")
                 }
             }
-
-            log.i(TAG, "Uploaded: ${notebook.title}")
-            errors.asResult(Unit)
         }
     }
 
@@ -262,26 +270,40 @@ class NotebookSyncService @Inject constructor(
 
         log.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
 
-        // 3. Save to database (protect against Room Exceptions)
-        try {
-            val existingNotebook = appRepository.bookRepository.getById(notebookId)
-            if (existingNotebook != null) {
-                appRepository.bookRepository.updatePreservingTimestamp(notebook)
-            } else {
-                appRepository.bookRepository.createEmpty(notebook)
+        // 3. Ensure a notebook row exists so page foreign keys resolve, but do NOT advance its
+        //    commit timestamp yet. A brand-new notebook is inserted with an epoch-0 timestamp so a
+        //    partial download reads as "older than remote" and re-downloads next sync instead of
+        //    being skipped as in-sync (P1 download half). An existing notebook keeps its current
+        //    (older) timestamp untouched.
+        val isNew = appRepository.bookRepository.getById(notebookId) == null
+        if (isNew) {
+            try {
+                appRepository.bookRepository.createEmpty(notebook.copy(updatedAt = java.util.Date(0)))
+            } catch (e: Exception) {
+                return AppResult.Error(DomainError.DatabaseError("Failed to create notebook locally: ${e.message}"))
             }
-        } catch (e: Exception) {
-            return AppResult.Error(DomainError.DatabaseError("Failed to update/create notebook locally: ${e.message}"))
         }
 
-        // 4. Download pages and aggregate errors
+        // 4. Download and persist all pages.
         val errors = ErrorAccumulator()
         for (pageId in notebook.pageIds) {
             downloadPage(pageId, notebookId, client).onError { errors.add(it) }
         }
 
-        log.i(TAG, "Downloaded: ${notebook.title}")
-        return errors.asResult(Unit)
+        // 5. Commit: only when every page landed, write the notebook row with the real remote
+        //    timestamp. On any failure the notebook keeps its old/sentinel timestamp, so the next
+        //    sync retries the download rather than treating the hole as "in sync".
+        if (errors.hasErrors) {
+            log.w(TAG, "Download incomplete for ${notebook.title}; leaving timestamp stale to retry")
+            return errors.asResult(Unit)
+        }
+        return try {
+            appRepository.bookRepository.updatePreservingTimestamp(notebook)
+            log.i(TAG, "Downloaded: ${notebook.title}")
+            AppResult.Success(Unit)
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.DatabaseError("Failed to commit notebook $notebookId: ${e.message}"))
+        }
     }
 
     private suspend fun downloadPage(
@@ -345,24 +367,10 @@ class NotebookSyncService @Inject constructor(
             }
         }
 
-        // 5. Save to database (protect against Room Exceptions)
+        // 5. Persist the page atomically: delete-old + update + insert-new run in one transaction,
+        //    so a crash can't leave the page with old strokes gone and new ones not yet written (P5).
         try {
-            val existingPage = appRepository.pageRepository.getById(page.id)
-            if (existingPage != null) {
-                val pageWithData =
-                    appRepository.pageRepository.getWithDataById(page.id) ?: return AppResult.Error(
-                        DomainError.DatabaseError("Failed to fetch existing page data for page ID: ${page.id}")
-                    )
-                appRepository.strokeRepository.deleteAll(pageWithData.strokes.map { it.id })
-                appRepository.imageRepository.deleteAll(pageWithData.images.map { it.id })
-                appRepository.pageRepository.update(page)
-            } else {
-                appRepository.pageRepository.create(page)
-            }
-
-            appRepository.strokeRepository.create(strokes)
-            appRepository.imageRepository.create(updatedImages)
-
+            appRepository.replaceDownloadedPage(page, strokes, updatedImages)
         } catch (e: Exception) {
             errors.add(DomainError.DatabaseError("Failed to save page $pageId: ${e.message}"))
         }

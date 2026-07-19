@@ -1,12 +1,16 @@
 package com.ethran.notable.data
 
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import androidx.room.withTransaction
+import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.FolderRepository
+import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
@@ -27,8 +31,29 @@ class AppRepository @Inject constructor(
     val strokeRepository: StrokeRepository,
     val imageRepository: ImageRepository,
     val folderRepository: FolderRepository,
-    val kvProxy: KvProxy
+    val kvProxy: KvProxy,
+    private val db: AppDatabase
 ) {
+    /**
+     * Replace a downloaded page's content in a single transaction: an interrupted download can no
+     * longer leave a page with its old strokes deleted but new ones not yet inserted (sync P5).
+     * A null [pageRepository.getWithDataById] result means the page row is absent -> create it.
+     */
+    suspend fun replaceDownloadedPage(page: Page, strokes: List<Stroke>, images: List<Image>) {
+        db.withTransaction {
+            val existing = pageRepository.getWithDataById(page.id)
+            if (existing != null) {
+                strokeRepository.deleteAll(existing.strokes.map { it.id })
+                imageRepository.deleteAll(existing.images.map { it.id })
+                pageRepository.update(page)
+            } else {
+                pageRepository.create(page)
+            }
+            strokeRepository.create(strokes)
+            imageRepository.create(images)
+        }
+    }
+
     suspend fun getNextPageIdFromBookAndPageOrCreate(
         notebookId: String,
         pageId: String
