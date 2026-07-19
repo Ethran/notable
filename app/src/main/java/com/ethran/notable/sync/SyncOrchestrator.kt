@@ -4,10 +4,12 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.sync.serializers.NotebookSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.getOrElse
+import com.ethran.notable.utils.getOrNull
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
@@ -240,6 +242,38 @@ class SyncOrchestrator @Inject constructor(
         }
     }
 
+    /**
+     * Read-only check for the check-on-open hint (P22): is the server's copy of [notebookId] newer
+     * than ours? Uses the stored ETag for a cheap conditional GET (a 304 means "not newer"). Never
+     * mutates anything and never holds the sync mutex — it is a best-effort hint, so any error or
+     * ambiguity returns false.
+     */
+    suspend fun isRemoteNewer(notebookId: String): Boolean = withContext(ioDispatcher) {
+        val settings = kvProxy.getSyncSettings()
+        if (!settings.syncEnabled || settings.username.isBlank() || settings.password.isBlank()) {
+            return@withContext false
+        }
+        val local = appRepository.bookRepository.getById(notebookId) ?: return@withContext false
+        val client = webDavClientFactory.create(
+            settings.serverUrl, settings.username, settings.password
+        )
+        val manifestPath = SyncPaths.manifestFile(notebookId)
+        val storedEtag = appRepository.notebookSyncStateRepository.get(notebookId)?.remoteEtag
+
+        val remoteContent = if (storedEtag != null) {
+            // null == 304 (unchanged) OR error -> treat as "not newer".
+            client.getFileIfNoneMatch(manifestPath, storedEtag).getOrNull()?.content
+                ?: return@withContext false
+        } else {
+            client.getFileWithMetadata(manifestPath).getOrNull()?.content
+                ?: return@withContext false
+        }
+
+        val remoteUpdatedAt = NotebookSerializer.getManifestUpdatedAt(remoteContent.decodeToString())
+            ?: return@withContext false
+        remoteUpdatedAt.time - local.updatedAt.time > REMOTE_NEWER_TOLERANCE_MS
+    }
+
     suspend fun uploadDeletion(notebookId: String): AppResult<Unit, DomainError> =
         withContext(ioDispatcher) {
             val settings = kvProxy.getSyncSettings()
@@ -315,6 +349,7 @@ class SyncOrchestrator @Inject constructor(
         private const val PROGRESS_FINALIZING = 0.9f
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
         private const val TOMBSTONE_MAX_AGE_DAYS = 90L
+        private const val REMOTE_NEWER_TOLERANCE_MS = 1000L
         private val syncMutex = Mutex()
     }
 }

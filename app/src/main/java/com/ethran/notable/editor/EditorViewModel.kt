@@ -520,6 +520,24 @@ class EditorViewModel @Inject constructor(
                 backgroundPageNumber = bgPageNumber
             )
         }
+
+        // Check-on-open (P22): hint if the server has a newer version, so the user doesn't
+        // unknowingly edit a stale copy and manufacture an avoidable conflict. Best-effort and
+        // off the load path (a cheap conditional GET on the manifest).
+        val bookIdForCheck = bookId
+        if (bookIdForCheck != null) {
+            appScope.launch {
+                if (syncOrchestrator.isRemoteNewer(bookIdForCheck)) {
+                    snackDispatcher.showOrUpdateSnack(
+                        SnackConf(
+                            text = "A newer version of this notebook is on the server. " +
+                                    "Sync to get the latest before editing.",
+                            duration = 5000
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun saveToolbarState() {
