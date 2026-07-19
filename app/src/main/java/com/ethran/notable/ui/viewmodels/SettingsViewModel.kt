@@ -252,7 +252,10 @@ class SettingsViewModel @Inject constructor(
             val message = try {
                 when (val result = action()) {
                     is AppResult.Success -> successMessage
-                    is AppResult.Error -> "Sync failed: ${result.error.userMessage}"
+                    // "Sync already in progress" is an informational no-op, not a failure (8i-1).
+                    is AppResult.Error ->
+                        if (result.error is DomainError.SyncInProgress) "A sync is already running"
+                        else "Sync failed: ${result.error.userMessage}"
                 }
             } catch (e: Exception) {
                 "Sync failed: ${e.message ?: "Unknown"}"

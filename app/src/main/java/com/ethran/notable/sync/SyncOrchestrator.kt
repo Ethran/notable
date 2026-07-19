@@ -13,6 +13,7 @@ import com.ethran.notable.utils.getOrNull
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -174,6 +175,12 @@ class SyncOrchestrator @Inject constructor(
                 )
             }
 
+        } catch (e: CancellationException) {
+            // The worker was cancelled (e.g. schedule disabled mid-run). Don't leave the reporter
+            // stuck in Syncing/Error (which wedged the Sync-now button) -- reset to Idle and let the
+            // cancellation propagate normally (8h-1).
+            reporter.reset()
+            throw e
         } catch (e: Exception) {
             val error = DomainError.SyncError(
                 e.message ?: "Unexpected error during sync",

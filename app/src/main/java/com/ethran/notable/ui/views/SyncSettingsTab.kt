@@ -117,8 +117,8 @@ fun SyncSettings(
     }
     var showServerConfig by remember { mutableStateOf(!isConfigured) }
 
-    // 2. The Blocking Dialog
-    if (showWarningDialog) {
+    // 2. The Blocking Dialog — only warn before the user has opted in (sync disabled) (8i-2).
+    if (showWarningDialog && !state.syncSettings.syncEnabled) {
         AlertDialog(
             // Passing an empty lambda prevents dismissing by clicking outside the dialog
             onDismissRequest = { },
@@ -698,7 +698,7 @@ fun ManualSyncButton(
             Text(label, fontWeight = FontWeight.Bold)
         }
 
-        if (syncState is SyncState.Error && syncState.canRetry) {
+        if (syncState is SyncState.Error) {
             Button(
                 onClick = onManualSync,
                 enabled = syncSettings.syncEnabled && syncSettings.serverUrl.isNotEmpty(),
