@@ -98,13 +98,24 @@ Click **Sync Now** to manually trigger synchronization. This will:
 ### Automatic Sync
 Enable **Automatic sync every X minutes** to sync periodically in the background.
 
+### Sync on App Start
+Enable **Sync on app start** to run a sync automatically when Notable launches. Turn it off if you'd rather sync only manually or on a schedule.
+
 ### Sync on Note Close
 Enable **Sync when closing notes** to automatically sync the notebook you were editing when you close it. This ensures your latest changes are uploaded immediately. Only that one notebook is synced (not a full sync), and if a full or scheduled sync is already running it is skipped to avoid overlap.
 
-### Upload Only
-Enable **Upload only (skip remote changes)** to push your local changes to the server without ever downloading. This is useful when this device is the "source of truth" and you don't want changes from other devices coming back to it.
+### Check on Open
+Enable **Check for newer version when opening a notebook** to have Notable do a quick, read-only check when you open a notebook: if the server has a newer copy, it offers a **Sync now** button (see [Sync Status Badges](#sync-status-badges)). This never changes any data on its own — it just warns you before you edit a stale copy.
 
-It is safe: it **never modifies your local notebooks** and **never overwrites a newer copy on the server**. Notebooks that are newer on the server are simply left as they are on this device (they are not downloaded). Deletions from other devices are also not applied while upload-only is on.
+### Upload Only / Download Only
+These two modes are mutually exclusive — turning one on turns the other off.
+
+- **Upload only (skip remote changes)** pushes your local changes to the server without ever downloading. Useful when this device is the "source of truth". It **never modifies your local notebooks** and **never overwrites a newer copy on the server** — notebooks that are newer on the server are simply left alone (and shown with the "newer on server" badge). Deletions from other devices are not applied while upload-only is on.
+
+- **Download only (skip local changes)** is the mirror image: it pulls changes from the server without ever pushing. It **never modifies anything on the server** — your local edits stay on this device (their notebooks keep the "not synced" badge) and local deletions are not propagated. Useful for a read-only or "viewer" device.
+
+### Cancel a Running Sync
+While a sync is running, a **Cancel** button is available. Cancelling stops the current run promptly; you'll see a "Sync cancelled" message and can start a new sync at any time. Nothing is left half-applied — an interrupted upload leaves the previous complete version on the server, and an interrupted download re-runs on the next sync.
 
 ## Sync Status Badges
 
@@ -201,6 +212,21 @@ Click **Clear** to clear the log.
 4. Verify both devices are using the same server URL and credentials
 5. Check the server directly (via web interface) to see if files were uploaded
 
+### A Notebook Is Missing an Image or Background
+
+**Problem**: A synced notebook opens, but an image or page background is blank on another device.
+
+**Why**: If an image or background file can't be found on the server (for example it was never
+uploaded, or it's a PDF you linked from outside Notable's storage), Notable now treats that as
+**non-fatal**: the rest of the notebook still syncs normally instead of the whole notebook getting
+stuck and retried forever. The missing file is simply skipped and noted in the Sync Log.
+
+**Solutions**:
+1. On the device that *has* the file, open the affected notebook and make a small edit (or use
+   **Replace Server with Local Data**) so the media is re-uploaded, then sync the other device again.
+2. Linked external PDFs (chosen from outside Notable) are not synced by design — the file itself must
+   be present on each device.
+
 ### Very Slow Sync
 
 **Problem**: Sync takes a long time to complete
@@ -283,7 +309,9 @@ For developers interested in how sync works internally, see:
 
 ---
 
-**Version**: 1.4
-**Last Updated**: 2026-07-19 — added the "newer on server" badge and the open-notebook Sync-now
-prompt; documented the Upload Only option; added Sync Status Badges section and clarified
-non-destructive force operations and sync-on-close behavior.
+**Version**: 1.5
+**Last Updated**: 2026-07-19 — added Download Only mode, the Sync-on-app-start and Check-on-open
+toggles, the Cancel button, and a troubleshooting entry for missing images/backgrounds (now
+non-fatal). 1.4 added the "newer on server" badge and the open-notebook Sync-now prompt; documented
+the Upload Only option; added Sync Status Badges section and clarified non-destructive force
+operations and sync-on-close behavior.
