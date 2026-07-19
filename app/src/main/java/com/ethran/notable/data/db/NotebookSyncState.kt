@@ -83,4 +83,26 @@ class NotebookSyncStateRepository @Inject constructor(
             remoteEtag = remoteEtag,
         )
     )
+
+    /**
+     * Record that a notebook's last sync attempt failed, so the library shows the ERROR badge.
+     * Preserves the previous sync anchor ([localUpdatedAtAtSync], ETag, remote timestamp) if a row
+     * already existed, so a later successful sync still knows what was last committed. If no row
+     * existed, an epoch-0 anchor is used — the ERROR state is checked before the anchor, so the
+     * badge is correct either way.
+     */
+    suspend fun markError(notebookId: String, message: String?) {
+        val existing = dao.get(notebookId)
+        dao.upsert(
+            NotebookSyncState(
+                notebookId = notebookId,
+                state = SyncStateValue.ERROR,
+                lastSyncedAt = Date(),
+                localUpdatedAtAtSync = existing?.localUpdatedAtAtSync ?: Date(0),
+                remoteUpdatedAt = existing?.remoteUpdatedAt,
+                remoteEtag = existing?.remoteEtag,
+                lastError = message,
+            )
+        )
+    }
 }

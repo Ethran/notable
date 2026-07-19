@@ -99,9 +99,7 @@ class SyncOrchestrator @Inject constructor(
                 emptySet()
             } else {
                 notebookSyncService.applyRemoteDeletions(client, TOMBSTONE_MAX_AGE_DAYS)
-                    .onFailure { error ->
-                        return@withContext AppResult.Error(error)
-                    }
+                    .onFailure { return@withContext failStep(it) }
             }
 
             reporter.beginStep(
@@ -114,14 +112,13 @@ class SyncOrchestrator @Inject constructor(
                 val syncResult = notebookReconciliationService.syncExistingNotebooks(client, uploadOnly)
             ) {
                 is AppResult.Success -> syncResult.data
+                // Per-notebook failures are NON-CRITICAL: each failed notebook was marked ERROR
+                // (its badge shows it) and the run continues so the healthy notebooks still finalize.
+                // Aborting here previously left the reporter stuck in Syncing forever -- so every
+                // notebook's badge froze on SCHEDULED/SYNCING when one big notebook failed (P25).
                 is AppResult.Error -> {
-                    val error = syncResult.error
-                    if (uploadOnly && error.isOnlyUploadSkip()) {
-                        nonCriticalError = error
-                        localIdsSnapshot
-                    } else {
-                        return@withContext AppResult.Error(error)
-                    }
+                    nonCriticalError = syncResult.error
+                    localIdsSnapshot
                 }
             }
 
@@ -137,9 +134,7 @@ class SyncOrchestrator @Inject constructor(
                     client,
                     tombstonedIds,
                     preDownloadIds
-                ).onFailure { error ->
-                    return@withContext AppResult.Error(error)
-                }
+                ).onFailure { return@withContext failStep(it) }
             }
 
             reporter.beginStep(
@@ -149,9 +144,7 @@ class SyncOrchestrator @Inject constructor(
             )
             val deletedCount =
                 notebookSyncService.detectAndUploadLocalDeletions(client, preDownloadIds)
-                    .onFailure { error ->
-                        return@withContext AppResult.Error(error)
-                    }
+                    .onFailure { return@withContext failStep(it) }
 
 
             reporter.beginStep(SyncStep.FINALIZING, PROGRESS_FINALIZING, "Finalizing...")

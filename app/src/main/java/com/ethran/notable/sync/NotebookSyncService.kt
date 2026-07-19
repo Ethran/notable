@@ -160,7 +160,23 @@ class NotebookSyncService @Inject constructor(
         }
     }
 
+    /**
+     * Upload a notebook, recording an ERROR sync-state row on any failure so the library shows the
+     * ERROR badge (P25). A successful upload writes the SYNCED row inside [uploadNotebookInternal].
+     */
     suspend fun uploadNotebook(
+        notebook: Notebook,
+        client: WebDAVClient,
+        manifestIfMatch: String? = null
+    ): AppResult<Unit, DomainError> {
+        val result = uploadNotebookInternal(notebook, client, manifestIfMatch)
+        if (result is AppResult.Error) {
+            appRepository.notebookSyncStateRepository.markError(notebook.id, result.error.userMessage)
+        }
+        return result
+    }
+
+    private suspend fun uploadNotebookInternal(
         notebook: Notebook,
         client: WebDAVClient,
         manifestIfMatch: String? = null
@@ -269,7 +285,23 @@ class NotebookSyncService @Inject constructor(
         }
     }
 
+    /**
+     * Download a notebook, recording an ERROR sync-state row on any failure so the library shows
+     * the ERROR badge (P25). A successful download writes the SYNCED row inside
+     * [downloadNotebookInternal].
+     */
     suspend fun downloadNotebook(
+        notebookId: String,
+        client: WebDAVClient
+    ): AppResult<Unit, DomainError> {
+        val result = downloadNotebookInternal(notebookId, client)
+        if (result is AppResult.Error) {
+            appRepository.notebookSyncStateRepository.markError(notebookId, result.error.userMessage)
+        }
+        return result
+    }
+
+    private suspend fun downloadNotebookInternal(
         notebookId: String,
         client: WebDAVClient
     ): AppResult<Unit, DomainError> {
