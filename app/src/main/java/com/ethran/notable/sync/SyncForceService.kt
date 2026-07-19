@@ -5,9 +5,9 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.sync.serializers.FolderSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.ErrorAccumulator
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onSuccess
-import com.ethran.notable.utils.plus
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,7 +35,7 @@ class SyncForceService @Inject constructor(
             settings.password
         )
 
-        var persistentError: DomainError? = null
+        val errors = ErrorAccumulator()
 
         // 1. Clean server notebooks
         if (webdavClient.exists(SyncPaths.notebooksDir())) {
@@ -44,12 +44,12 @@ class SyncForceService @Inject constructor(
                 existingNotebooks.forEach { notebookDir ->
                     webdavClient.delete(SyncPaths.notebookDir(notebookDir)).onError { error ->
                         logger.w(TAG, "Failed to delete $notebookDir: ${error.userMessage}")
-                        persistentError = persistentError?.plus(error) ?: error
+                        errors.add(error)
                     }
                 }
             }.onError { error ->
                 logger.w(TAG, "Error listing server notebooks: ${error.userMessage}")
-                persistentError = persistentError?.plus(error) ?: error
+                errors.add(error)
             }
         }
 
@@ -65,9 +65,7 @@ class SyncForceService @Inject constructor(
                 SyncPaths.foldersFile(),
                 foldersJson.toByteArray(),
                 "application/json"
-            ).onError { error ->
-                persistentError = persistentError?.plus(error) ?: error
-            }
+            ).onError { errors.add(it) }
         }
 
         // 4. Upload notebooks
@@ -78,14 +76,12 @@ class SyncForceService @Inject constructor(
                 logger.i(TAG, "Uploaded: ${notebook.title}")
             }.onError { error ->
                 logger.e(TAG, "Failed to upload ${notebook.title}: ${error.userMessage}")
-                persistentError = persistentError?.plus(error) ?: error
+                errors.add(error)
             }
         }
 
-        return if (persistentError != null) AppResult.Error(persistentError)
-        else {
+        return errors.asResult(Unit).onSuccess {
             logger.i(TAG, "FORCE UPLOAD complete: ${notebooks.size} notebooks")
-            AppResult.Success(Unit)
         }
     }
 
@@ -102,7 +98,7 @@ class SyncForceService @Inject constructor(
             settings.password
         )
 
-        var persistentError: DomainError? = null
+        val errors = ErrorAccumulator()
 
         // 1. Delete local data
         try {
@@ -130,12 +126,9 @@ class SyncForceService @Inject constructor(
                     folders.forEach { appRepository.folderRepository.create(it) }
                     logger.i(TAG, "Downloaded ${folders.size} folders from server")
                 } catch (e: Exception) {
-                    val error = DomainError.SyncError("Failed to process folders: ${e.message}")
-                    persistentError = persistentError?.plus(error) ?: error
+                    errors.add(DomainError.SyncError("Failed to process folders: ${e.message}"))
                 }
-            }.onError { error ->
-                persistentError = persistentError?.plus(error) ?: error
-            }
+            }.onError { errors.add(it) }
         }
 
         // 3. Download notebooks
@@ -147,20 +140,16 @@ class SyncForceService @Inject constructor(
                     notebookSyncService.downloadNotebook(notebookId, webdavClient)
                         .onError { error ->
                             logger.e(TAG, "Failed to download $notebookDir: ${error.userMessage}")
-                            persistentError = persistentError?.plus(error) ?: error
+                            errors.add(error)
                         }
                 }
-            }.onError { error ->
-                persistentError = persistentError?.plus(error) ?: error
-            }
+            }.onError { errors.add(it) }
         } else {
             logger.w(TAG, "${SyncPaths.notebooksDir()} doesn't exist on server")
         }
 
-        return if (persistentError != null) AppResult.Error(persistentError)
-        else {
+        return errors.asResult(Unit).onSuccess {
             logger.i(TAG, "FORCE DOWNLOAD complete")
-            AppResult.Success(Unit)
         }
     }
 

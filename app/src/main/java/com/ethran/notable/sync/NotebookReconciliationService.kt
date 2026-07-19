@@ -4,9 +4,9 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.sync.serializers.NotebookSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.ErrorAccumulator
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.onError
-import com.ethran.notable.utils.plus
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,19 +26,16 @@ class NotebookReconciliationService @Inject constructor(
         val localNotebooks = appRepository.bookRepository.getAll()
         val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
         val total = localNotebooks.size
-        var persistentError: DomainError? = null
+        val errors = ErrorAccumulator()
 
         localNotebooks.forEachIndexed { i, notebook ->
             reporter.beginItem(index = i + 1, total = total, name = notebook.title)
             // Individual notebook sync failures are non-fatal for the whole process
-            syncNotebook(notebook.id, webdavClient, uploadOnly).onError { error ->
-                persistentError = persistentError?.let { it + error } ?: error
-            }
+            syncNotebook(notebook.id, webdavClient, uploadOnly).onError { errors.add(it) }
         }
         reporter.endItem()
 
-        return if (persistentError != null) AppResult.Error(persistentError)
-        else AppResult.Success(preDownloadNotebookIds)
+        return errors.asResult(preDownloadNotebookIds)
     }
 
     suspend fun syncNotebook(
