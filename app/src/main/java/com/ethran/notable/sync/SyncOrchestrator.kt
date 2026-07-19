@@ -164,7 +164,13 @@ class SyncOrchestrator @Inject constructor(
                 deletedCount,
                 System.currentTimeMillis() - startTime
             )
-            finalizeSyncResult(reporter, summary, nonCriticalError)
+            finalizeSyncResult(reporter, summary, nonCriticalError).onSuccess {
+                // Persist the last successful full-sync time so the settings "Last synced" line
+                // reflects background/periodic syncs too, not just manual ones (P8).
+                kvProxy.setSyncSettings(
+                    kvProxy.getSyncSettings().copy(lastSyncTime = System.currentTimeMillis())
+                )
+            }
 
         } catch (e: Exception) {
             val error = DomainError.SyncError(
