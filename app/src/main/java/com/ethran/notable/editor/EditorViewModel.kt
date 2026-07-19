@@ -528,11 +528,23 @@ class EditorViewModel @Inject constructor(
         if (bookIdForCheck != null) {
             appScope.launch {
                 if (syncOrchestrator.isRemoteNewer(bookIdForCheck)) {
+                    val snackId = "remote-newer-$bookIdForCheck"
                     snackDispatcher.showOrUpdateSnack(
                         SnackConf(
+                            id = snackId,
                             text = "A newer version of this notebook is on the server. " +
                                     "Sync to get the latest before editing.",
-                            duration = 5000
+                            duration = 8000,
+                            // "Sync now" closes the notebook first (to its pages list), then syncs.
+                            // Downloading into the open editor would clobber it (stale in-memory
+                            // state); syncing as it closes mirrors the safe sync-on-close path.
+                            actions = listOf(
+                                "Sync now" to {
+                                    snackDispatcher.removeSnack(snackId)
+                                    sendUiEvent(EditorUiEvent.NavigateToPages(bookIdForCheck))
+                                    appScope.launch { syncOrchestrator.syncNotebook(bookIdForCheck) }
+                                }
+                            )
                         )
                     )
                 }
