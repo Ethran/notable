@@ -286,6 +286,28 @@ class WebDAVClient(
         }
 
     /**
+     * List the raw child names of a collection (file names *with* extensions, decoded), excluding
+     * the collection's own entry. Unlike [listCollection] this does NOT filter to bare UUIDs, so it
+     * can see `{pageId}.json`, image, and background files — used for garbage collection.
+     * Returns an empty list when the collection does not exist (404).
+     */
+    fun listNames(path: String): AppResult<List<String>, DomainError> =
+        execute("PROPFIND", { propfindRequest(path, PROPFIND_ALLPROP) }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_NOT_FOUND -> AppResult.Success(emptyList())
+                response.isSuccessful -> {
+                    val selfName = path.trimEnd('/').substringAfterLast('/')
+                    val names = WebDavXml.parseHrefs(response.body.string())
+                        .map { Uri.decode(it.trimEnd('/').substringAfterLast('/')) }
+                        .filter { it.isNotEmpty() && it != selfName }
+                    AppResult.Success(names)
+                }
+
+                else -> AppResult.Error(DomainError.SyncError("PROPFIND failed: ${response.code}"))
+            }
+        }
+
+    /**
      * List resources in a collection with their last-modified timestamps.
      * Used for tombstone-based deletion tracking where we need the server's
      * own timestamp for conflict resolution.

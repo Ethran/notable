@@ -227,6 +227,9 @@ class NotebookSyncService @Inject constructor(
                         }
                     }
                     log.i(TAG, "Uploaded: ${notebook.title}")
+                    // Best-effort GC: remove remote page/image/background files no longer
+                    // referenced by the manifest we just committed (P11). Never fails the upload.
+                    garbageCollectRemote(notebook, client)
                 }.map { }
             }
         }
@@ -353,6 +356,8 @@ class NotebookSyncService @Inject constructor(
                 remoteUpdatedAt = notebook.updatedAt,
                 remoteEtag = remoteEtag,
             )
+            // Best-effort GC: delete local pages that are no longer in the downloaded manifest (P11).
+            pruneLocalOrphanPages(notebook)
             log.i(TAG, "Downloaded: ${notebook.title}")
             AppResult.Success(Unit)
         } catch (e: Exception) {
@@ -431,6 +436,60 @@ class NotebookSyncService @Inject constructor(
 
         // 6. Return aggregated result
         return errors.asResult(Unit)
+    }
+
+    /**
+     * Delete remote page/image/background files that the just-committed manifest no longer
+     * references. The manifest is authoritative (we just wrote it), so anything not referenced is a
+     * true orphan from a deleted or replaced page. Best-effort: every failure is logged, never fatal.
+     */
+    private suspend fun garbageCollectRemote(notebook: Notebook, client: WebDAVClient) {
+        val notebookId = notebook.id
+        val referencedPageFiles = notebook.pageIds.map { "$it.json" }.toSet()
+        val referencedImages = mutableSetOf<String>()
+        val referencedBackgrounds = mutableSetOf<String>()
+        for (pageId in notebook.pageIds) {
+            val data = appRepository.pageRepository.getWithDataById(pageId) ?: continue
+            data.images.forEach { image ->
+                if (!image.uri.isNullOrEmpty()) referencedImages.add(File(image.uri).name)
+            }
+            val page = data.page
+            if (page.backgroundType != "native" && page.background != "blank") {
+                referencedBackgrounds.add(File(page.background).name)
+            }
+        }
+        pruneRemoteDir(client, SyncPaths.pagesDir(notebookId), referencedPageFiles)
+        pruneRemoteDir(client, SyncPaths.imagesDir(notebookId), referencedImages)
+        pruneRemoteDir(client, SyncPaths.backgroundsDir(notebookId), referencedBackgrounds)
+    }
+
+    /** Delete entries of [dirPath] whose name is not in [keep]. Best-effort. */
+    private suspend fun pruneRemoteDir(
+        client: WebDAVClient,
+        dirPath: String,
+        keep: Set<String>
+    ) {
+        client.listNames(dirPath).onSuccess { names ->
+            for (name in names.filter { it !in keep }) {
+                client.delete("$dirPath/$name").onSuccess {
+                    log.i(TAG, "GC: removed orphan $dirPath/$name")
+                }.onError { log.w(TAG, "GC: failed to remove $name: ${it.userMessage}") }
+            }
+        }.onError { log.w(TAG, "GC: listing $dirPath failed: ${it.userMessage}") }
+    }
+
+    /** Delete local pages of [notebook] whose ids left the downloaded manifest. Best-effort. */
+    private suspend fun pruneLocalOrphanPages(notebook: Notebook) {
+        val keep = notebook.pageIds.toSet()
+        val localPageIds = appRepository.pageRepository.getPageIdsForNotebook(notebook.id)
+        for (orphan in localPageIds.filter { it !in keep }) {
+            try {
+                appRepository.pageRepository.delete(orphan)
+                log.i(TAG, "GC: removed local orphan page $orphan")
+            } catch (e: Exception) {
+                log.w(TAG, "GC: failed to delete local page $orphan: ${e.message}")
+            }
+        }
     }
 
     private fun extractFilename(uri: String): String = uri.substringAfterLast('/')
