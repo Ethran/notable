@@ -136,7 +136,6 @@ class SyncOrchestrator @Inject constructor(
                 notebookSyncService.downloadNewNotebooks(
                     client,
                     tombstonedIds,
-                    settings,
                     preDownloadIds
                 ).onFailure { error ->
                     return@withContext AppResult.Error(error)
@@ -149,14 +148,15 @@ class SyncOrchestrator @Inject constructor(
                 "Uploading deletions..."
             )
             val deletedCount =
-                notebookSyncService.detectAndUploadLocalDeletions(client, settings, preDownloadIds)
+                notebookSyncService.detectAndUploadLocalDeletions(client, preDownloadIds)
                     .onFailure { error ->
                         return@withContext AppResult.Error(error)
                     }
 
 
             reporter.beginStep(SyncStep.FINALIZING, PROGRESS_FINALIZING, "Finalizing...")
-            updateSyncedNotebookIds()
+            // No bulk finalize needed: each notebook's sync-state row is written at its own commit
+            // point (upload/download success), and deletions dropped their rows above.
 
             val summary = SyncSummary(
                 preDownloadIds.size,
@@ -259,9 +259,8 @@ class SyncOrchestrator @Inject constructor(
                 when (val tombstoneResult =
                     client.putFile(SyncPaths.tombstone(notebookId), ByteArray(0))) {
                     is AppResult.Success -> {
-                        kvProxy.setSyncSettings(
-                            settings.copy(syncedNotebookIds = settings.syncedNotebookIds - notebookId)
-                        )
+                        // Deletion propagated -- drop the sync-state row.
+                        appRepository.notebookSyncStateRepository.delete(notebookId)
                         AppResult.Success(Unit)
                     }
 
@@ -292,11 +291,6 @@ class SyncOrchestrator @Inject constructor(
     private fun failStep(error: DomainError): AppResult<Unit, DomainError> {
         reporter.finishError(error, false)
         return AppResult.Error(error)
-    }
-
-    private suspend fun updateSyncedNotebookIds() {
-        val currentIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
-        kvProxy.setSyncSettings(kvProxy.getSyncSettings().copy(syncedNotebookIds = currentIds))
     }
 
     companion object {

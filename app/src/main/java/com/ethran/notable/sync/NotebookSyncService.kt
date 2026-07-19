@@ -60,6 +60,9 @@ class NotebookSyncService @Inject constructor(
                     )
                     try {
                         appRepository.bookRepository.delete(notebookId)
+                        // Gone on both sides now -- drop the sync-state row so it is not later
+                        // mis-read as a local deletion to re-tombstone.
+                        appRepository.notebookSyncStateRepository.delete(notebookId)
                     } catch (e: Exception) {
                         log.e(TAG, "Failed to delete ${localNotebook.title}: ${e.message}")
                         errors.add(DomainError.DatabaseError("Failed to delete ${localNotebook.title}"))
@@ -83,12 +86,13 @@ class NotebookSyncService @Inject constructor(
         }
     }
 
-    fun detectAndUploadLocalDeletions(
-        client: WebDAVClient, settings: SyncSettings, preDownloadNotebookIds: Set<String>
+    suspend fun detectAndUploadLocalDeletions(
+        client: WebDAVClient, preDownloadNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
         log.i(TAG, "Detecting local deletions...")
-        val syncedNotebookIds = settings.syncedNotebookIds
-        val deletedLocally = syncedNotebookIds - preDownloadNotebookIds
+        // A notebook we recorded as synced but that is no longer local was deleted here.
+        val syncedIds = appRepository.notebookSyncStateRepository.getAllIds()
+        val deletedLocally = syncedIds - preDownloadNotebookIds
         val errors = ErrorAccumulator()
 
         if (deletedLocally.isNotEmpty()) {
@@ -105,6 +109,8 @@ class NotebookSyncService @Inject constructor(
                     SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream"
                 ).onSuccess {
                     log.i(TAG, "Tombstone uploaded for: $notebookId")
+                    // Deletion propagated -- drop the sync-state row so it is not detected again.
+                    appRepository.notebookSyncStateRepository.delete(notebookId)
                 }.onError { error ->
                     log.e(TAG, "Failed to upload tombstone for $notebookId: ${error.userMessage}")
                     errors.add(error)
@@ -120,7 +126,6 @@ class NotebookSyncService @Inject constructor(
     suspend fun downloadNewNotebooks(
         client: WebDAVClient,
         tombstonedIds: Set<String>,
-        settings: SyncSettings,
         preDownloadNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
         log.i(TAG, "Checking server for new notebooks...")
@@ -129,11 +134,14 @@ class NotebookSyncService @Inject constructor(
         if (!notebooksDirExists) {
             return AppResult.Success(0)
         }
+        // Notebooks we previously synced but are no longer local were deleted here; don't
+        // re-download them (they get tombstoned by detectAndUploadLocalDeletions instead).
+        val syncedIds = appRepository.notebookSyncStateRepository.getAllIds()
         return client.listCollection(SyncPaths.notebooksDir()).flatMap { serverNotebookDirs ->
             val newNotebookIds = serverNotebookDirs.map { it.trimEnd('/') }
                 .filter { it !in preDownloadNotebookIds }
                 .filter { it !in tombstonedIds }
-                .filter { it !in settings.syncedNotebookIds }
+                .filter { it !in syncedIds }
 
             val errors = ErrorAccumulator()
             if (newNotebookIds.isNotEmpty()) {
@@ -187,6 +195,14 @@ class NotebookSyncService @Inject constructor(
                     "application/json",
                     ifMatch = manifestIfMatch
                 ).onSuccess {
+                    // Commit point: record the notebook as synced. After upload, the remote's
+                    // updatedAt equals the manifest we just wrote (notebook.updatedAt).
+                    appRepository.notebookSyncStateRepository.markSynced(
+                        notebookId = notebookId,
+                        localUpdatedAt = notebook.updatedAt,
+                        remoteUpdatedAt = notebook.updatedAt,
+                        remoteEtag = null,
+                    )
                     // Only after a committed upload: drop any stale tombstone for a resurrected
                     // notebook. Best-effort -- a leftover tombstone is re-checked next sync.
                     val tombstonePath = SyncPaths.tombstone(notebookId)
@@ -299,6 +315,13 @@ class NotebookSyncService @Inject constructor(
         }
         return try {
             appRepository.bookRepository.updatePreservingTimestamp(notebook)
+            // Commit point: record the notebook as synced at the remote timestamp.
+            appRepository.notebookSyncStateRepository.markSynced(
+                notebookId = notebookId,
+                localUpdatedAt = notebook.updatedAt,
+                remoteUpdatedAt = notebook.updatedAt,
+                remoteEtag = null,
+            )
             log.i(TAG, "Downloaded: ${notebook.title}")
             AppResult.Success(Unit)
         } catch (e: Exception) {

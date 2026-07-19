@@ -52,6 +52,9 @@ interface NotebookSyncStateDao {
 
     @Query("DELETE FROM notebook_sync_state WHERE notebookId = :id")
     suspend fun delete(id: String)
+
+    @Query("DELETE FROM notebook_sync_state")
+    suspend fun deleteAll()
 }
 
 class NotebookSyncStateRepository @Inject constructor(
@@ -62,4 +65,22 @@ class NotebookSyncStateRepository @Inject constructor(
     fun getAllFlow(): Flow<List<NotebookSyncState>> = dao.getAllFlow()
     suspend fun upsert(state: NotebookSyncState) = dao.upsert(state)
     suspend fun delete(id: String) = dao.delete(id)
+    suspend fun deleteAll() = dao.deleteAll()
+
+    /** Record a notebook as successfully synced at [localUpdatedAt] / [remoteUpdatedAt]. */
+    suspend fun markSynced(
+        notebookId: String,
+        localUpdatedAt: Date,
+        remoteUpdatedAt: Date?,
+        remoteEtag: String?,
+    ) = dao.upsert(
+        NotebookSyncState(
+            notebookId = notebookId,
+            state = SyncStateValue.SYNCED,
+            lastSyncedAt = Date(),
+            localUpdatedAtAtSync = localUpdatedAt,
+            remoteUpdatedAt = remoteUpdatedAt,
+            remoteEtag = remoteEtag,
+        )
+    )
 }
