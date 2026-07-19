@@ -116,11 +116,16 @@ Each notebook cover in the library shows a small icon in the top-right corner re
 | ☁️✕ (cloud-off) | **Not synced** | You have local changes that have not been uploaded yet. |
 | 🕐 (clock) | **Scheduled** | A sync is running and this notebook is queued, waiting its turn. |
 | 🔄 (sync) | **Syncing** | This notebook is being uploaded or downloaded right now. |
+| ☁️⬇ (cloud-download) | **Newer on server** | A newer version exists on the server that wasn't downloaded (only appears in Upload-only mode). |
 | ⚠️ (alert) | **Error** | The last sync attempt for this notebook failed — check the Sync Log. |
 
 The badges are informational and update automatically. A notebook with no badge simply has no
 recorded sync state yet (for example, before your first sync after updating the app — run one sync
 and the badges populate).
+
+**Opening a notebook** also does a quick check: if the server has a newer version, a message appears
+offering a **Sync now** button. Syncing from there closes the notebook and updates it, so you don't
+accidentally edit an out-of-date copy and create a conflict.
 
 > **Tip:** After updating the app, the first sync repopulates all sync state from scratch, so
 > notebooks may briefly show "not synced" until that first sync completes.
@@ -278,6 +283,7 @@ For developers interested in how sync works internally, see:
 
 ---
 
-**Version**: 1.3
-**Last Updated**: 2026-07-19 — documented the Upload Only option (now trustworthy); added Sync
-Status Badges section, clarified non-destructive force operations and sync-on-close behavior.
+**Version**: 1.4
+**Last Updated**: 2026-07-19 — added the "newer on server" badge and the open-notebook Sync-now
+prompt; documented the Upload Only option; added Sync Status Badges section and clarified
+non-destructive force operations and sync-on-close behavior.
