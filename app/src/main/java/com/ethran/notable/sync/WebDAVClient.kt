@@ -1,5 +1,6 @@
 package com.ethran.notable.sync
 
+import android.net.Uri
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.logCallStack
@@ -293,7 +294,8 @@ class WebDAVClient(
                 if (response.isSuccessful) {
                     val hrefs = parseHrefsFromXml(response.body.string())
                     AppResult.Success(hrefs.filter { it != path && !it.endsWith("/$path") }
-                        .map { it.trimEnd('/').substringAfterLast('/') }.filter { isValidUuid(it) })
+                        .map { Uri.decode(it.trimEnd('/').substringAfterLast('/')) }
+                        .filter { isValidUuid(it) })
                 } else {
                     AppResult.Error(DomainError.SyncError("PROPFIND failed: ${response.code}"))
                 }
@@ -335,7 +337,7 @@ class WebDAVClient(
                     val entries = parseEntriesFromXml(response.body.string())
                     AppResult.Success(entries.filter { (href, _) -> href != path && !href.endsWith("/$path") }
                         .mapNotNull { (href, lastModified) ->
-                            val name = href.trimEnd('/').substringAfterLast('/')
+                            val name = Uri.decode(href.trimEnd('/').substringAfterLast('/'))
                             if (isValidUuid(name)) RemoteEntry(name, lastModified) else null
                         })
                 } else {
@@ -373,8 +375,12 @@ class WebDAVClient(
      */
     private fun buildUrl(path: String): String {
         val normalizedServer = serverUrl.trimEnd('/')
-        val normalizedPath = if (path.startsWith('/')) path else "/$path"
-        return normalizedServer + normalizedPath
+        // Percent-encode each path segment individually (keeping the '/' separators) so that
+        // image/background filenames with spaces or reserved characters produce valid URLs.
+        val encodedPath = path.trim('/').split('/')
+            .filter { it.isNotEmpty() }
+            .joinToString("/") { Uri.encode(it) }
+        return "$normalizedServer/$encodedPath"
     }
 
     /**
