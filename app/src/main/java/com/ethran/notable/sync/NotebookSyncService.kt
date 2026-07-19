@@ -199,15 +199,11 @@ class NotebookSyncService @Inject constructor(
                 errors.asResult(Unit)
             } else {
                 // 3. All pages are up: publish the manifest last. This is the atomic commit; the
-                //    If-Match guard rejects the PUT if the remote changed since we read it. Capture
-                //    the new ETag so next sync can do a cheap If-None-Match check (P26).
+                //    If-Match guard rejects the publish if the remote changed since we read it.
+                //    Capture the new ETag so next sync can do a cheap If-None-Match check (P26).
                 val manifestJson = NotebookSerializer.serializeManifest(notebook)
-                client.putFileReturningEtag(
-                    SyncPaths.manifestFile(notebookId),
-                    manifestJson.toByteArray(),
-                    "application/json",
-                    ifMatch = manifestIfMatch
-                ).onSuccess { newEtag ->
+                publishManifest(notebookId, manifestJson.toByteArray(), manifestIfMatch, client)
+                    .onSuccess { newEtag ->
                     // Commit point: record the notebook as synced. After upload, the remote's
                     // updatedAt equals the manifest we just wrote (notebook.updatedAt).
                     appRepository.notebookSyncStateRepository.markSynced(
@@ -231,6 +227,49 @@ class NotebookSyncService @Inject constructor(
                     // referenced by the manifest we just committed (P11). Never fails the upload.
                     garbageCollectRemote(notebook, client)
                 }.map { }
+            }
+        }
+    }
+
+    /**
+     * Publish the manifest atomically: PUT to a `.tmp` sibling (a full write that never touches the
+     * live commit marker), then MOVE it over `manifest.json`. This closes the only interruption
+     * window Phase 3 left open — a torn PUT of the manifest itself would otherwise leave a corrupt
+     * commit marker. Falls back to a direct guarded PUT when the server doesn't support MOVE.
+     *
+     * A 412 during MOVE is a genuine concurrency conflict and is propagated (not retried). The tmp
+     * file is cleaned up best-effort; if left behind (interrupted before MOVE) it is simply
+     * overwritten by the next upload.
+     *
+     * Returns the published manifest's ETag when known. The MOVE path can't reliably report the
+     * destination's post-move ETag, so it returns `null` there — self-correcting, since the next
+     * sync does one full GET and the skip path backfills the ETag.
+     */
+    private suspend fun publishManifest(
+        notebookId: String,
+        manifestBytes: ByteArray,
+        ifMatch: String?,
+        client: WebDAVClient
+    ): AppResult<String?, DomainError> {
+        val finalPath = SyncPaths.manifestFile(notebookId)
+        val tmpPath = "$finalPath.tmp"
+
+        client.putFile(tmpPath, manifestBytes, "application/json")
+            .onFailure { return AppResult.Error(it) }
+
+        return when (val moved = client.move(tmpPath, finalPath, ifMatchDestination = ifMatch)) {
+            is AppResult.Success -> AppResult.Success(null)
+            is AppResult.Error -> {
+                client.delete(tmpPath) // best-effort cleanup either way
+                if (moved.error is DomainError.SyncConflict) {
+                    // Destination changed under us -- a real conflict, do not fall back.
+                    moved
+                } else {
+                    // MOVE unsupported or transient: fall back to a direct guarded PUT (the manifest
+                    // is still written last, so ordering is preserved; only atomicity is lost).
+                    log.w(TAG, "MOVE publish failed (${moved.error.userMessage}); direct PUT fallback")
+                    client.putFileReturningEtag(finalPath, manifestBytes, "application/json", ifMatch)
+                }
             }
         }
     }

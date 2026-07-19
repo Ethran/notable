@@ -254,6 +254,48 @@ class WebDAVClient(
     }
 
     /**
+     * Move (rename) [from] to [to], overwriting the destination. On most servers this is atomic,
+     * which is what makes it safe as the final "publish" step for the manifest commit marker.
+     *
+     * When [ifMatchDestination] is given, an `If` header makes the server reject the move with 412
+     * if the destination's current ETag differs — preserving the optimistic-concurrency guard.
+     *
+     * Distinguishes three failures so the caller can react: [DomainError.SyncConflict] on 412 (a
+     * real concurrent change — do not retry blindly), a `recoverable` [DomainError.SyncError] on
+     * 405/501 (server doesn't support MOVE — caller may fall back to a direct PUT), and a plain
+     * error otherwise.
+     */
+    fun move(
+        from: String,
+        to: String,
+        ifMatchDestination: String? = null
+    ): AppResult<Unit, DomainError> =
+        execute("MOVE", {
+            val destUrl = buildUrl(to)
+            Request.Builder().url(buildUrl(from))
+                .method("MOVE", null)
+                .header("Authorization", credentials)
+                .header("Destination", destUrl)
+                .header("Overwrite", "T")
+                .apply { ifMatchDestination?.let { header("If", "<$destUrl> ([$it])") } }
+                .build()
+        }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_PRECON_FAILED ->
+                    AppResult.Error(DomainError.SyncConflict)
+
+                response.code == HttpURLConnection.HTTP_BAD_METHOD ||
+                        response.code == HttpURLConnection.HTTP_NOT_IMPLEMENTED ->
+                    AppResult.Error(
+                        DomainError.SyncError("MOVE unsupported: ${response.code}", recoverable = true)
+                    )
+
+                response.isSuccessful -> AppResult.Success(Unit)
+                else -> AppResult.Error(DomainError.SyncError("MOVE failed: ${response.code}"))
+            }
+        }
+
+    /**
      * Delete a resource from the WebDAV server.
      * A 404 is treated as success (the resource is already gone).
      */

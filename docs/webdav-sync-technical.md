@@ -162,8 +162,15 @@ device with the newer `updatedAt` wins the entire notebook (see section 5.6).
 carries `pageIds` and the `updatedAt` that drives all conflict resolution). Writing it last means
 an interrupted upload leaves the *old* manifest in place, so no other device downloads a
 half-written notebook. Any new page files uploaded before the interruption sit unreferenced until
-the origin device re-syncs and rewrites the manifest (harmless orphans; Phase 7 GC would sweep
-them).
+the origin device re-syncs and rewrites the manifest (harmless orphans; swept by GC, section 5.11).
+
+**The manifest is published atomically** (`publishManifest`): its bytes are PUT to a
+`manifest.json.tmp` sibling first (a full write that never touches the live commit marker), then
+`MOVE`d over `manifest.json`. On servers where MOVE is atomic this closes the last interruption
+window — a torn PUT of the manifest itself would otherwise leave a corrupt commit marker. If the
+server doesn't support MOVE (405/501) or the `If` header, it falls back to a direct guarded PUT
+(ordering preserved, only atomicity lost). A leftover `.tmp` from an interruption before the MOVE is
+harmless and overwritten by the next upload.
 
 ```
 uploadNotebook(notebook, manifestIfMatch?):
@@ -176,10 +183,12 @@ uploadNotebook(notebook, manifestIfMatch?):
      d. If page has a custom background (not native template):
         - If local file exists and not already on server → PUT to backgrounds/
   3. If ANY page failed → do NOT publish the manifest (leave old commit marker; retry next sync)
-  4. Otherwise PUT /notable/notebooks/{id}/manifest.json LAST, with If-Match (manifestIfMatch)
+  4. Otherwise publish the manifest LAST (atomic PUT .tmp + MOVE, guarded by If-Match on the
+     destination; falls back to direct PUT). A 412 is a real concurrency conflict and is propagated.
   5. On manifest success (commit point):
      a. markSynced() → write the notebook_sync_state row (SYNCED, at notebook.updatedAt)
      b. If a stale tombstone exists for this id (resurrected notebook) → DELETE it (best-effort)
+     c. Garbage-collect orphan remote files (section 5.11)
 ```
 
 ### 3.3 Per-Notebook Download
@@ -204,7 +213,8 @@ downloadNotebook(notebookId):
         @Transaction that deletes old strokes/images, upserts the page, and inserts the new
         strokes/images, so a crash cannot leave the page half-swapped (P5).
   4. Commit (only if every page landed): updatePreservingTimestamp() writes the notebook row with
-     the real remote timestamp, then markSynced() writes the notebook_sync_state row.
+     the real remote timestamp, then markSynced() writes the notebook_sync_state row, then
+     pruneLocalOrphanPages() deletes local pages that left the manifest (section 5.11).
      On any page failure, the timestamp is left stale and the row is NOT written → retry next sync.
 ```
 
@@ -529,7 +539,10 @@ function:
 - `SYNCING` — a sync is running and this is the exact notebook being transferred
   (`SyncState.Syncing.item.id == notebook.id`).
 - `SCHEDULED` — a sync is running but it is not yet this notebook's turn.
-- `ERROR` — the row's `state == ERROR`.
+- `REMOTE_AHEAD` — the server copy is newer but was not pulled (upload-only mode); a later local
+  edit supersedes this (the badge becomes "pending upload").
+- `ERROR` — the row's `state == ERROR`, written by `markError` when a transfer fails; cleared back to
+  `SYNCED` on the next successful commit.
 
 The badge is rendered as a corner icon on the notebook cover in the library.
 
@@ -559,7 +572,23 @@ notebook.
 where the remote is newer, and the orchestrator skips the whole "apply remote deletions" and
 "download new" steps. The result: local data is never modified and a newer server copy is never
 overwritten (uploads still carry `If-Match`). A `SkipUploadOnly` is a **planned no-op returning
-`Success`**, not an error — it leaves the local notebook and its sync-state row untouched.
+`Success`**, not an error; it records a `REMOTE_AHEAD` sync-state row so the notebook shows the
+"newer on server" badge instead of a misleading `SYNCED`.
+
+### 5.11 Garbage collection & check-on-open
+
+**Garbage collection (best-effort, never fatal).** After a committed *upload*, `garbageCollectRemote`
+deletes remote `pages/`, `images/`, and `backgrounds/` files that the just-written manifest no
+longer references (the manifest is authoritative). After a committed *download*,
+`pruneLocalOrphanPages` deletes local pages of the notebook whose ids left the manifest. Listing
+uses `WebDAVClient.listNames` (a raw child listing, since `listCollection` filters to bare UUIDs and
+can't see `{id}.json`/image/background files). Failures are logged and never abort the sync.
+
+**Check-on-open.** Opening a notebook triggers `SyncOrchestrator.isRemoteNewer` off the load path — a
+read-only conditional manifest `GET` (using the stored ETag; a 304 means "not newer"). If the server
+copy is newer, a snack suggests syncing before editing. This prevents the stale-open-then-edit case
+that manufactures last-writer-wins conflicts. It never mutates anything, never holds the sync mutex,
+and returns "not newer" on any error.
 
 ---
 
@@ -713,8 +742,9 @@ Potential enhancements beyond the current implementation, roughly ordered by imp
 
 ---
 
-**Version**: 1.7
-**Last Updated**: 2026-07-19 — Phases 1–6: added §5.10 (pure reconciliation planner, one shared
-PROPFIND + `If-None-Match` incremental change detection, upload-only as a planned no-op) and removed
-the `SyncUploadOnlySkip` errors-as-control-flow wart. Earlier 1.6: commit-marker ordering, tri-state
-`exists()`, `notebook_sync_state` table + badges, non-destructive force ops, shared `OkHttpClient`.
+**Version**: 1.8
+**Last Updated**: 2026-07-19 — Phase 7 (partial): atomic manifest publish (PUT `.tmp` + MOVE),
+garbage collection + check-on-open (§5.11), `REMOTE_AHEAD` badge for upload-only. 1.7 added §5.10
+(pure reconciliation planner, `If-None-Match` incremental change detection, upload-only as a planned
+no-op) and removed the `SyncUploadOnlySkip` wart. 1.6: commit-marker ordering, tri-state `exists()`,
+`notebook_sync_state` table + badges, non-destructive force ops, shared `OkHttpClient`.
