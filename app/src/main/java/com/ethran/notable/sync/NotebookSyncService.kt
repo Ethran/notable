@@ -367,24 +367,10 @@ class NotebookSyncService @Inject constructor(
             }
         }
 
-        // 5. Save to database (protect against Room Exceptions)
+        // 5. Persist the page atomically: delete-old + update + insert-new run in one transaction,
+        //    so a crash can't leave the page with old strokes gone and new ones not yet written (P5).
         try {
-            val existingPage = appRepository.pageRepository.getById(page.id)
-            if (existingPage != null) {
-                val pageWithData =
-                    appRepository.pageRepository.getWithDataById(page.id) ?: return AppResult.Error(
-                        DomainError.DatabaseError("Failed to fetch existing page data for page ID: ${page.id}")
-                    )
-                appRepository.strokeRepository.deleteAll(pageWithData.strokes.map { it.id })
-                appRepository.imageRepository.deleteAll(pageWithData.images.map { it.id })
-                appRepository.pageRepository.update(page)
-            } else {
-                appRepository.pageRepository.create(page)
-            }
-
-            appRepository.strokeRepository.create(strokes)
-            appRepository.imageRepository.create(updatedImages)
-
+            appRepository.replaceDownloadedPage(page, strokes, updatedImages)
         } catch (e: Exception) {
             errors.add(DomainError.DatabaseError("Failed to save page $pageId: ${e.message}"))
         }
