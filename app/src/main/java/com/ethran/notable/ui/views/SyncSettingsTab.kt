@@ -1,6 +1,7 @@
 package com.ethran.notable.ui.views
 
 import android.content.res.Configuration
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,9 +50,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -705,7 +709,12 @@ fun ManualSyncButton(
 
 @Composable
 private fun SyncProgressPanel(syncing: SyncState.Syncing) {
-    val stepProgress = syncing.item?.let { it.index.toFloat() / it.total.coerceAtLeast(1) } ?: 0f
+    // `beginItem(index, total)` is reported when an item *starts*, so use completed = index - 1;
+    // otherwise the last item shows 100% while it is still being transferred (and, if it then
+    // fails, the bar was misleadingly at 100%).
+    val stepProgress = syncing.item?.let {
+        (it.index - 1).coerceAtLeast(0).toFloat() / it.total.coerceAtLeast(1)
+    } ?: 0f
     val stepIndex = syncing.currentStep.ordinal + 1
     val totalSteps = SyncStep.entries.size
 
@@ -824,6 +833,9 @@ fun ForceOperationsSection(
 @Composable
 fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
     val recentLogs = remember(syncLogs) { syncLogs.takeLast(30) }
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val copiedMessage = stringResource(R.string.sync_log_copied)
 
     Column {
         Box(
@@ -859,13 +871,29 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        EInkActionButton(
-            text = stringResource(R.string.sync_clear_log),
-            onClick = onClearLog,
+        Row(
             modifier = Modifier.align(Alignment.End),
-            isSecondary = true,
-            fontSize = 10.sp
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Copy the FULL buffer (not just the visible 30) so users can paste it into a bug report.
+            EInkActionButton(
+                text = stringResource(R.string.sync_copy_log),
+                onClick = {
+                    val text = syncLogs.joinToString("\n") { "[${it.timestamp}] ${it.message}" }
+                    clipboardManager.setText(AnnotatedString(text))
+                    Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
+                },
+                enabled = syncLogs.isNotEmpty(),
+                isSecondary = true,
+                fontSize = 10.sp
+            )
+            EInkActionButton(
+                text = stringResource(R.string.sync_clear_log),
+                onClick = onClearLog,
+                isSecondary = true,
+                fontSize = 10.sp
+            )
+        }
     }
 }
 

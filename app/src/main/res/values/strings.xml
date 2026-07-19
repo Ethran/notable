@@ -141,6 +141,8 @@
     <string name="sync_synced">Synced</string>
     <string name="sync_failed">Failed</string>
     <string name="sync_clear_log">Clear Log</string>
+    <string name="sync_copy_log">Copy Log</string>
+    <string name="sync_log_copied">Log copied to clipboard</string>
     <string name="sync_retry_button">Retry</string>
     <string name="sync_status_syncing">Syncing…</string>
 
