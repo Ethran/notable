@@ -26,8 +26,8 @@ class SyncPreflightService @Inject constructor(
         }
     }
 
-    fun checkClockSkew(webdavClient: WebDAVClient): AppResult<Unit, DomainError> {
-        val serverTime = webdavClient.getServerTime()
+    fun checkClockSkew(client: WebDAVClient): AppResult<Unit, DomainError> {
+        val serverTime = client.getServerTime()
             ?: return AppResult.Error(DomainError.NetworkError("Could not retrieve server time"))
 
         val skewMs = System.currentTimeMillis() - serverTime
@@ -38,15 +38,15 @@ class SyncPreflightService @Inject constructor(
         }
     }
 
-    fun ensureServerDirectories(webdavClient: WebDAVClient): AppResult<Unit, DomainError> {
-        if (!webdavClient.exists(SyncPaths.rootDir())) {
-            webdavClient.createCollection(SyncPaths.rootDir()).onError { return AppResult.Error(it) }
+    fun ensureServerDirectories(client: WebDAVClient): AppResult<Unit, DomainError> {
+        if (!client.exists(SyncPaths.rootDir())) {
+            client.createCollection(SyncPaths.rootDir()).onError { return AppResult.Error(it) }
         }
-        if (!webdavClient.exists(SyncPaths.notebooksDir())) {
-            webdavClient.createCollection(SyncPaths.notebooksDir()).onError { return AppResult.Error(it) }
+        if (!client.exists(SyncPaths.notebooksDir())) {
+            client.createCollection(SyncPaths.notebooksDir()).onError { return AppResult.Error(it) }
         }
-        if (!webdavClient.exists(SyncPaths.tombstonesDir())) {
-            webdavClient.createCollection(SyncPaths.tombstonesDir()).onError { return AppResult.Error(it) }
+        if (!client.exists(SyncPaths.tombstonesDir())) {
+            client.createCollection(SyncPaths.tombstonesDir()).onError { return AppResult.Error(it) }
         }
         return AppResult.Success(Unit)
     }

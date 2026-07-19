@@ -15,17 +15,18 @@ class FolderSyncService @Inject constructor(
     private val appRepository: AppRepository,
 ) {
     private val folderSerializer = FolderSerializer
+    private val log = SyncLogger
 
     suspend fun syncFolders(
-        webdavClient: WebDAVClient,
+        client: WebDAVClient,
         uploadOnly: Boolean
     ): AppResult<Unit, DomainError> {
-        SyncLogger.i(TAG, "Syncing folders...")
+        log.i(TAG, "Syncing folders...")
         val localFolders = appRepository.folderRepository.getAll()
         val remotePath = SyncPaths.foldersFile()
 
-        if (webdavClient.exists(remotePath)) {
-            return webdavClient.getFileWithMetadata(remotePath).flatMap { remoteFile ->
+        if (client.exists(remotePath)) {
+            return client.getFileWithMetadata(remotePath).flatMap { remoteFile ->
                 val remoteEtag = remoteFile.etag
                     ?: return@flatMap AppResult.Error(DomainError.SyncError("Missing ETag for $remotePath"))
 
@@ -56,7 +57,7 @@ class FolderSyncService @Inject constructor(
                 }
 
                 val updatedFoldersJson = folderSerializer.serializeFolders(mergedFolders)
-                webdavClient.putFile(
+                client.putFile(
                     remotePath,
                     updatedFoldersJson.toByteArray(),
                     "application/json",
@@ -66,7 +67,7 @@ class FolderSyncService @Inject constructor(
         } else {
             if (localFolders.isNotEmpty()) {
                 val foldersJson = folderSerializer.serializeFolders(localFolders)
-                return webdavClient.putFile(remotePath, foldersJson.toByteArray(), "application/json")
+                return client.putFile(remotePath, foldersJson.toByteArray(), "application/json")
             }
         }
         return AppResult.Success(Unit)

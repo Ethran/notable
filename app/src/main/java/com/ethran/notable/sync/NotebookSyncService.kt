@@ -22,44 +22,44 @@ class NotebookSyncService @Inject constructor(
     private val appRepository: AppRepository,
     private val reporter: SyncProgressReporter
 ) {
-    private val sLog = SyncLogger
+    private val log = SyncLogger
 
     suspend fun applyRemoteDeletions(
-        webdavClient: WebDAVClient,
+        client: WebDAVClient,
         maxAgeDays: Long
     ): AppResult<Set<String>, DomainError> {
-        sLog.i(TAG, "Applying remote deletions...")
+        log.i(TAG, "Applying remote deletions...")
         val tombstonesPath = SyncPaths.tombstonesDir()
 
-        if (!webdavClient.exists(tombstonesPath)) return AppResult.Success(emptySet())
+        if (!client.exists(tombstonesPath)) return AppResult.Success(emptySet())
 
-        return webdavClient.listCollectionWithMetadata(tombstonesPath).flatMap { tombstones ->
+        return client.listCollectionWithMetadata(tombstonesPath).flatMap { tombstones ->
             val tombstonedIds = tombstones.map { it.name }.toSet()
             val errors = ErrorAccumulator()
 
             if (tombstones.isNotEmpty()) {
-                sLog.i(TAG, "Server has ${tombstones.size} tombstone(s)")
+                log.i(TAG, "Server has ${tombstones.size} tombstone(s)")
                 for (tombstone in tombstones) {
                     val notebookId = tombstone.name
                     val deletedAt = tombstone.lastModified
                     val localNotebook = appRepository.bookRepository.getById(notebookId) ?: continue
 
                     if (deletedAt != null && localNotebook.updatedAt.after(deletedAt)) {
-                        sLog.i(
+                        log.i(
                             TAG,
                             "↻ Resurrecting '${localNotebook.title}' (modified after server deletion)"
                         )
                         continue
                     }
 
-                    sLog.i(
+                    log.i(
                         TAG,
                         "Deleting locally (tombstone on server): ${localNotebook.title}"
                     )
                     try {
                         appRepository.bookRepository.delete(notebookId)
                     } catch (e: Exception) {
-                        sLog.e(TAG, "Failed to delete ${localNotebook.title}: ${e.message}")
+                        log.e(TAG, "Failed to delete ${localNotebook.title}: ${e.message}")
                         errors.add(DomainError.DatabaseError("Failed to delete ${localNotebook.title}"))
                     }
                 }
@@ -69,10 +69,10 @@ class NotebookSyncService @Inject constructor(
             val stale =
                 tombstones.filter { it.lastModified != null && it.lastModified.before(cutoff) }
             if (stale.isNotEmpty()) {
-                sLog.i(TAG, "Pruning ${stale.size} stale tombstone(s) older than $maxAgeDays days")
+                log.i(TAG, "Pruning ${stale.size} stale tombstone(s) older than $maxAgeDays days")
                 for (entry in stale) {
-                    webdavClient.delete(SyncPaths.tombstone(entry.name)).onError {
-                        sLog.w(TAG, "Failed to prune tombstone ${entry.name}: ${it.userMessage}")
+                    client.delete(SyncPaths.tombstone(entry.name)).onError {
+                        log.w(TAG, "Failed to prune tombstone ${entry.name}: ${it.userMessage}")
                     }
                 }
             }
@@ -82,48 +82,48 @@ class NotebookSyncService @Inject constructor(
     }
 
     fun detectAndUploadLocalDeletions(
-        webdavClient: WebDAVClient, settings: SyncSettings, preDownloadNotebookIds: Set<String>
+        client: WebDAVClient, settings: SyncSettings, preDownloadNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
-        sLog.i(TAG, "Detecting local deletions...")
+        log.i(TAG, "Detecting local deletions...")
         val syncedNotebookIds = settings.syncedNotebookIds
         val deletedLocally = syncedNotebookIds - preDownloadNotebookIds
         val errors = ErrorAccumulator()
 
         if (deletedLocally.isNotEmpty()) {
-            sLog.i(TAG, "Detected ${deletedLocally.size} local deletion(s)")
+            log.i(TAG, "Detected ${deletedLocally.size} local deletion(s)")
             for (notebookId in deletedLocally) {
                 val notebookPath = SyncPaths.notebookDir(notebookId)
-                if (webdavClient.exists(notebookPath)) {
-                    sLog.i(TAG, "Deleting from server: $notebookId")
-                    webdavClient.delete(notebookPath).onError { errors.add(it) }
+                if (client.exists(notebookPath)) {
+                    log.i(TAG, "Deleting from server: $notebookId")
+                    client.delete(notebookPath).onError { errors.add(it) }
                 }
-                webdavClient.putFile(
+                client.putFile(
                     SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream"
                 ).onSuccess {
-                    sLog.i(TAG, "Tombstone uploaded for: $notebookId")
+                    log.i(TAG, "Tombstone uploaded for: $notebookId")
                 }.onError { error ->
-                    sLog.e(TAG, "Failed to upload tombstone for $notebookId: ${error.userMessage}")
+                    log.e(TAG, "Failed to upload tombstone for $notebookId: ${error.userMessage}")
                     errors.add(error)
                 }
             }
         } else {
-            sLog.i(TAG, "No local deletions detected")
+            log.i(TAG, "No local deletions detected")
         }
 
         return errors.asResult(deletedLocally.size)
     }
 
     suspend fun downloadNewNotebooks(
-        webdavClient: WebDAVClient,
+        client: WebDAVClient,
         tombstonedIds: Set<String>,
         settings: SyncSettings,
         preDownloadNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
-        sLog.i(TAG, "Checking server for new notebooks...")
-        if (!webdavClient.exists(SyncPaths.notebooksDir())) {
+        log.i(TAG, "Checking server for new notebooks...")
+        if (!client.exists(SyncPaths.notebooksDir())) {
             return AppResult.Success(0)
         }
-        return webdavClient.listCollection(SyncPaths.notebooksDir()).flatMap { serverNotebookDirs ->
+        return client.listCollection(SyncPaths.notebooksDir()).flatMap { serverNotebookDirs ->
             val newNotebookIds = serverNotebookDirs.map { it.trimEnd('/') }
                 .filter { it !in preDownloadNotebookIds }
                 .filter { it !in tombstonedIds }
@@ -131,15 +131,15 @@ class NotebookSyncService @Inject constructor(
 
             val errors = ErrorAccumulator()
             if (newNotebookIds.isNotEmpty()) {
-                sLog.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
+                log.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
                 val total = newNotebookIds.size
                 newNotebookIds.forEachIndexed { i, notebookId ->
                     reporter.beginItem(index = i + 1, total = total, name = notebookId)
-                    downloadNotebook(notebookId, webdavClient).onError { errors.add(it) }
+                    downloadNotebook(notebookId, client).onError { errors.add(it) }
                 }
                 reporter.endItem()
             } else {
-                sLog.i(TAG, "No new notebooks on server")
+                log.i(TAG, "No new notebooks on server")
             }
 
             errors.asResult(newNotebookIds.size)
@@ -148,19 +148,19 @@ class NotebookSyncService @Inject constructor(
 
     suspend fun uploadNotebook(
         notebook: Notebook,
-        webdavClient: WebDAVClient,
+        client: WebDAVClient,
         manifestIfMatch: String? = null
     ): AppResult<Unit, DomainError> {
         val notebookId = notebook.id
-        sLog.i(TAG, "Uploading: ${notebook.title} (${notebook.pageIds.size} pages)")
+        log.i(TAG, "Uploading: ${notebook.title} (${notebook.pageIds.size} pages)")
 
-        return webdavClient.ensureParentDirectories(SyncPaths.pagesDir(notebookId) + "/").flatMap {
-            webdavClient.createCollection(SyncPaths.imagesDir(notebookId))
+        return client.ensureParentDirectories(SyncPaths.pagesDir(notebookId) + "/").flatMap {
+            client.createCollection(SyncPaths.imagesDir(notebookId))
         }.flatMap {
-            webdavClient.createCollection(SyncPaths.backgroundsDir(notebookId))
+            client.createCollection(SyncPaths.backgroundsDir(notebookId))
         }.flatMap {
             val manifestJson = NotebookSerializer.serializeManifest(notebook)
-            webdavClient.putFile(
+            client.putFile(
                 SyncPaths.manifestFile(notebookId),
                 manifestJson.toByteArray(),
                 "application/json",
@@ -170,17 +170,17 @@ class NotebookSyncService @Inject constructor(
             val pages = appRepository.pageRepository.getByIds(notebook.pageIds)
             val errors = ErrorAccumulator()
             for (page in pages) {
-                uploadPage(page, notebookId, webdavClient).onError { errors.add(it) }
+                uploadPage(page, notebookId, client).onError { errors.add(it) }
             }
 
             val tombstonePath = SyncPaths.tombstone(notebookId)
-            if (webdavClient.exists(tombstonePath)) {
-                webdavClient.delete(tombstonePath).onSuccess {
-                    sLog.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
+            if (client.exists(tombstonePath)) {
+                client.delete(tombstonePath).onSuccess {
+                    log.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
                 }
             }
 
-            sLog.i(TAG, "Uploaded: ${notebook.title}")
+            log.i(TAG, "Uploaded: ${notebook.title}")
             errors.asResult(Unit)
         }
     }
@@ -188,7 +188,7 @@ class NotebookSyncService @Inject constructor(
     private suspend fun uploadPage(
         page: Page,
         notebookId: String,
-        webdavClient: WebDAVClient
+        client: WebDAVClient
     ): AppResult<Unit, DomainError> {
         val pageWithData =
             appRepository.pageRepository.getWithDataById(page.id) ?: return AppResult.Error(
@@ -197,7 +197,7 @@ class NotebookSyncService @Inject constructor(
         val pageJson = NotebookSerializer.serializePage(
             page, pageWithData.strokes, pageWithData.images
         )
-        return webdavClient.putFile(
+        return client.putFile(
             SyncPaths.pageFile(notebookId, page.id), pageJson.toByteArray(), "application/json"
         ).flatMap {
             val errors = ErrorAccumulator()
@@ -206,14 +206,14 @@ class NotebookSyncService @Inject constructor(
                     val localFile = File(image.uri)
                     if (localFile.exists()) {
                         val remotePath = SyncPaths.imageFile(notebookId, localFile.name)
-                        if (!webdavClient.exists(remotePath)) {
-                            webdavClient.putFile(remotePath, localFile, detectMimeType(localFile))
+                        if (!client.exists(remotePath)) {
+                            client.putFile(remotePath, localFile, detectMimeType(localFile))
                                 .onSuccess {
-                                    sLog.i(TAG, "Uploaded image: ${localFile.name}")
+                                    log.i(TAG, "Uploaded image: ${localFile.name}")
                                 }.onError { errors.add(it) }
                         }
                     } else {
-                        sLog.w(TAG, "Image file not found: ${image.uri}")
+                        log.w(TAG, "Image file not found: ${image.uri}")
                     }
                 }
             }
@@ -222,9 +222,9 @@ class NotebookSyncService @Inject constructor(
                 val bgFile = File(ensureBackgroundsFolder(), page.background)
                 if (bgFile.exists()) {
                     val remotePath = SyncPaths.backgroundFile(notebookId, bgFile.name)
-                    if (!webdavClient.exists(remotePath)) {
-                        webdavClient.putFile(remotePath, bgFile, detectMimeType(bgFile)).onSuccess {
-                            sLog.i(TAG, "Uploaded background: ${bgFile.name}")
+                    if (!client.exists(remotePath)) {
+                        client.putFile(remotePath, bgFile, detectMimeType(bgFile)).onSuccess {
+                            log.i(TAG, "Uploaded background: ${bgFile.name}")
                         }.onError { errors.add(it) }
                     }
                 }
@@ -236,12 +236,12 @@ class NotebookSyncService @Inject constructor(
 
     suspend fun downloadNotebook(
         notebookId: String,
-        webdavClient: WebDAVClient
+        client: WebDAVClient
     ): AppResult<Unit, DomainError> {
-        sLog.i(TAG, "Downloading notebook ID: $notebookId")
+        log.i(TAG, "Downloading notebook ID: $notebookId")
 
         // 1. Fetch manifest file (Early Return on error)
-        val manifestBytes = webdavClient.getFile(SyncPaths.manifestFile(notebookId))
+        val manifestBytes = client.getFile(SyncPaths.manifestFile(notebookId))
             .onFailure { return AppResult.Error(it) }
 
         // 2. Deserialize manifest (Early Return on corrupted JSON)
@@ -249,7 +249,7 @@ class NotebookSyncService @Inject constructor(
         val notebook = NotebookSerializer.deserializeManifest(manifestJson)
             .onFailure { return AppResult.Error(it) }
 
-        sLog.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
+        log.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
 
         // 3. Save to database (protect against Room Exceptions)
         try {
@@ -266,21 +266,21 @@ class NotebookSyncService @Inject constructor(
         // 4. Download pages and aggregate errors
         val errors = ErrorAccumulator()
         for (pageId in notebook.pageIds) {
-            downloadPage(pageId, notebookId, webdavClient).onError { errors.add(it) }
+            downloadPage(pageId, notebookId, client).onError { errors.add(it) }
         }
 
-        sLog.i(TAG, "Downloaded: ${notebook.title}")
+        log.i(TAG, "Downloaded: ${notebook.title}")
         return errors.asResult(Unit)
     }
 
     private suspend fun downloadPage(
         pageId: String,
         notebookId: String,
-        webdavClient: WebDAVClient
+        client: WebDAVClient
     ): AppResult<Unit, DomainError> {
 
         // 1. Fetch JSON file (Early Return on error)
-        val pageBytes = webdavClient.getFile(SyncPaths.pageFile(notebookId, pageId))
+        val pageBytes = client.getFile(SyncPaths.pageFile(notebookId, pageId))
             .onFailure { return AppResult.Error(it) }
 
         // 2. Deserialize (Early Return on corrupted JSON)
@@ -297,14 +297,14 @@ class NotebookSyncService @Inject constructor(
                 val localFile = File(ensureImagesFolder(), filename)
 
                 if (!localFile.exists()) {
-                    webdavClient.getFile(
+                    client.getFile(
                         SyncPaths.imageFile(notebookId, filename),
                         localFile
                     ).onSuccess {
-                        sLog.i(TAG, "Downloaded image: $filename")
+                        log.i(TAG, "Downloaded image: $filename")
                     }
                         .onError { error ->
-                            sLog.e(TAG, "Failed to download image $filename: ${error.userMessage}")
+                            log.e(TAG, "Failed to download image $filename: ${error.userMessage}")
                             // Image download error doesn't interrupt the whole page sync,
                             // but is aggregated to notify the UI.
                             errors.add(error)
@@ -322,13 +322,13 @@ class NotebookSyncService @Inject constructor(
             val localFile = File(ensureBackgroundsFolder(), filename)
 
             if (!localFile.exists()) {
-                webdavClient.getFile(
+                client.getFile(
                     SyncPaths.backgroundFile(notebookId, filename),
                     localFile
                 ).onSuccess {
-                    sLog.i(TAG, "Downloaded background: $filename")
+                    log.i(TAG, "Downloaded background: $filename")
                 }.onError { error ->
-                    sLog.e(TAG, "Failed to download background $filename: ${error.userMessage}")
+                    log.e(TAG, "Failed to download background $filename: ${error.userMessage}")
                     errors.add(error)
                 }
             }

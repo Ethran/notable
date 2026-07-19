@@ -20,16 +20,16 @@ class SyncForceService @Inject constructor(
     private val webDavClientFactory: WebDavClientFactoryPort
 ) {
     private val folderSerializer = FolderSerializer
-    private val logger = SyncLogger
+    private val log = SyncLogger
 
     suspend fun forceUploadAll(): AppResult<Unit, DomainError> {
-        logger.i(TAG, "FORCE UPLOAD: Replacing server with local data")
+        log.i(TAG, "FORCE UPLOAD: Replacing server with local data")
         val settings = kvProxy.getSyncSettings()
         if (settings.username.isBlank() || settings.password.isBlank()) {
             return AppResult.Error(DomainError.SyncAuthError)
         }
 
-        val webdavClient = webDavClientFactory.create(
+        val client = webDavClientFactory.create(
             settings.serverUrl,
             settings.username,
             settings.password
@@ -38,30 +38,30 @@ class SyncForceService @Inject constructor(
         val errors = ErrorAccumulator()
 
         // 1. Clean server notebooks
-        if (webdavClient.exists(SyncPaths.notebooksDir())) {
-            webdavClient.listCollection(SyncPaths.notebooksDir()).onSuccess { existingNotebooks ->
-                logger.i(TAG, "Deleting ${existingNotebooks.size} existing notebooks from server")
+        if (client.exists(SyncPaths.notebooksDir())) {
+            client.listCollection(SyncPaths.notebooksDir()).onSuccess { existingNotebooks ->
+                log.i(TAG, "Deleting ${existingNotebooks.size} existing notebooks from server")
                 existingNotebooks.forEach { notebookDir ->
-                    webdavClient.delete(SyncPaths.notebookDir(notebookDir)).onError { error ->
-                        logger.w(TAG, "Failed to delete $notebookDir: ${error.userMessage}")
+                    client.delete(SyncPaths.notebookDir(notebookDir)).onError { error ->
+                        log.w(TAG, "Failed to delete $notebookDir: ${error.userMessage}")
                         errors.add(error)
                     }
                 }
             }.onError { error ->
-                logger.w(TAG, "Error listing server notebooks: ${error.userMessage}")
+                log.w(TAG, "Error listing server notebooks: ${error.userMessage}")
                 errors.add(error)
             }
         }
 
         // 2. Ensure directories
-        syncPreflightService.ensureServerDirectories(webdavClient)
+        syncPreflightService.ensureServerDirectories(client)
             .onError { return AppResult.Error(it) }
 
         // 3. Upload folders
         val folders = appRepository.folderRepository.getAll()
         if (folders.isNotEmpty()) {
             val foldersJson = folderSerializer.serializeFolders(folders)
-            webdavClient.putFile(
+            client.putFile(
                 SyncPaths.foldersFile(),
                 foldersJson.toByteArray(),
                 "application/json"
@@ -70,29 +70,29 @@ class SyncForceService @Inject constructor(
 
         // 4. Upload notebooks
         val notebooks = appRepository.bookRepository.getAll()
-        logger.i(TAG, "Uploading ${notebooks.size} local notebooks...")
+        log.i(TAG, "Uploading ${notebooks.size} local notebooks...")
         notebooks.forEach { notebook ->
-            notebookSyncService.uploadNotebook(notebook, webdavClient).onSuccess {
-                logger.i(TAG, "Uploaded: ${notebook.title}")
+            notebookSyncService.uploadNotebook(notebook, client).onSuccess {
+                log.i(TAG, "Uploaded: ${notebook.title}")
             }.onError { error ->
-                logger.e(TAG, "Failed to upload ${notebook.title}: ${error.userMessage}")
+                log.e(TAG, "Failed to upload ${notebook.title}: ${error.userMessage}")
                 errors.add(error)
             }
         }
 
         return errors.asResult(Unit).onSuccess {
-            logger.i(TAG, "FORCE UPLOAD complete: ${notebooks.size} notebooks")
+            log.i(TAG, "FORCE UPLOAD complete: ${notebooks.size} notebooks")
         }
     }
 
     suspend fun forceDownloadAll(): AppResult<Unit, DomainError> {
-        logger.i(TAG, "FORCE DOWNLOAD: Replacing local with server data")
+        log.i(TAG, "FORCE DOWNLOAD: Replacing local with server data")
         val settings = kvProxy.getSyncSettings()
         if (settings.username.isBlank() || settings.password.isBlank()) {
             return AppResult.Error(DomainError.SyncAuthError)
         }
 
-        val webdavClient = webDavClientFactory.create(
+        val client = webDavClientFactory.create(
             settings.serverUrl,
             settings.username,
             settings.password
@@ -108,7 +108,7 @@ class SyncForceService @Inject constructor(
             val localNotebooks = appRepository.bookRepository.getAll()
             localNotebooks.forEach { appRepository.bookRepository.delete(it.id) }
 
-            logger.i(
+            log.i(
                 TAG,
                 "Deleted ${localFolders.size} folders and ${localNotebooks.size} local notebooks"
             )
@@ -118,13 +118,13 @@ class SyncForceService @Inject constructor(
         }
 
         // 2. Download folders
-        if (webdavClient.exists(SyncPaths.foldersFile())) {
-            webdavClient.getFile(SyncPaths.foldersFile()).onSuccess { foldersBytes ->
+        if (client.exists(SyncPaths.foldersFile())) {
+            client.getFile(SyncPaths.foldersFile()).onSuccess { foldersBytes ->
                 val foldersJson = foldersBytes.decodeToString()
                 try {
                     val folders = folderSerializer.deserializeFolders(foldersJson)
                     folders.forEach { appRepository.folderRepository.create(it) }
-                    logger.i(TAG, "Downloaded ${folders.size} folders from server")
+                    log.i(TAG, "Downloaded ${folders.size} folders from server")
                 } catch (e: Exception) {
                     errors.add(DomainError.SyncError("Failed to process folders: ${e.message}"))
                 }
@@ -132,24 +132,24 @@ class SyncForceService @Inject constructor(
         }
 
         // 3. Download notebooks
-        if (webdavClient.exists(SyncPaths.notebooksDir())) {
-            webdavClient.listCollection(SyncPaths.notebooksDir()).onSuccess { notebookDirs ->
-                logger.i(TAG, "Found ${notebookDirs.size} notebook(s) on server")
+        if (client.exists(SyncPaths.notebooksDir())) {
+            client.listCollection(SyncPaths.notebooksDir()).onSuccess { notebookDirs ->
+                log.i(TAG, "Found ${notebookDirs.size} notebook(s) on server")
                 notebookDirs.forEach { notebookDir ->
                     val notebookId = notebookDir.trimEnd('/')
-                    notebookSyncService.downloadNotebook(notebookId, webdavClient)
+                    notebookSyncService.downloadNotebook(notebookId, client)
                         .onError { error ->
-                            logger.e(TAG, "Failed to download $notebookDir: ${error.userMessage}")
+                            log.e(TAG, "Failed to download $notebookDir: ${error.userMessage}")
                             errors.add(error)
                         }
                 }
             }.onError { errors.add(it) }
         } else {
-            logger.w(TAG, "${SyncPaths.notebooksDir()} doesn't exist on server")
+            log.w(TAG, "${SyncPaths.notebooksDir()} doesn't exist on server")
         }
 
         return errors.asResult(Unit).onSuccess {
-            logger.i(TAG, "FORCE DOWNLOAD complete")
+            log.i(TAG, "FORCE DOWNLOAD complete")
         }
     }
 

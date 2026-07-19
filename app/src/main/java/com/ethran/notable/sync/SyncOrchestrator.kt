@@ -33,21 +33,21 @@ class SyncOrchestrator @Inject constructor(
     @param:ApplicationScope private val appScope: CoroutineScope,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
-    private val logger = SyncLogger
+    private val log = SyncLogger
 
     /**
      * Performs a full synchronization of all folders and notebooks.
      */
     suspend fun syncAllNotebooks(): AppResult<Unit, DomainError> = withContext(ioDispatcher) {
         if (!syncMutex.tryLock()) {
-            logger.w(TAG, "Sync already in progress, skipping")
+            log.w(TAG, "Sync already in progress, skipping")
             return@withContext AppResult.Error(DomainError.SyncInProgress)
         }
 
         val startTime = System.currentTimeMillis()
 
         try {
-            logger.i(TAG, "Starting full sync...")
+            log.i(TAG, "Starting full sync...")
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
 
             val settings = kvProxy.getSyncSettings()
@@ -217,7 +217,7 @@ class SyncOrchestrator @Inject constructor(
             val page = appRepository.pageRepository.getById(pageId) ?: return
             page.notebookId?.let { syncNotebook(it) }
         } catch (e: Exception) {
-            logger.e(TAG, "Auto-sync failed: ${e.message}")
+            log.e(TAG, "Auto-sync failed: ${e.message}")
         }
     }
 
@@ -240,7 +240,7 @@ class SyncOrchestrator @Inject constructor(
                 val path = SyncPaths.notebookDir(notebookId)
                 if (client.exists(path)) {
                     client.delete(path).onError {
-                        logger.w(
+                        log.w(
                             TAG,
                             "Failed to delete remote notebook $notebookId: ${it.userMessage}"
                         )
