@@ -28,6 +28,17 @@ while focused services handle preflight checks, folder sync, notebook reconcilia
 and force operations. WebDAV client creation is abstracted behind
 `WebDavClientFactoryPort` (`SyncPorts.kt`) to reduce direct infrastructure coupling.
 
+Two invariants make the transfer layer trustworthy:
+
+1. **Commit-marker ordering** — on upload the `manifest.json` is written *last* (after all pages);
+   on download the local notebook timestamp is committed *last* (after all pages land). If the
+   commit marker is present, everything it references is present. An interrupted sync therefore
+   leaves both sides either fully old or fully new, never a half-written mix.
+2. **Persisted per-notebook sync state** — a dedicated Room table `notebook_sync_state` records,
+   per notebook, when a complete round-trip last committed. Badges, local-deletion detection, and
+   the "already in sync" skip decision all read this one table (it replaced the former
+   `SyncSettings.syncedNotebookIds` set). See section 5.9.
+
 ---
 
 ## 2) Component Overview
@@ -53,12 +64,17 @@ All sync code lives in `com.ethran.notable.sync`. The components and their respo
 | [`SyncOrchestrator.kt`](../app/src/main/java/com/ethran/notable/sync/SyncOrchestrator.kt)                           | Core orchestrator. Full sync flow, per-notebook trigger, deletion upload. Holds the shared `syncMutex` (companion object) for process-wide concurrency control. Delegates progress/state reporting to `SyncProgressReporter`. |
 | [`SyncPreflightService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPreflightService.kt)                   | Pre-sync checks and server directory bootstrap (`/notable`, `/notebooks`, `/deletions`).                                                                           |
 | [`FolderSyncService.kt`](../app/src/main/java/com/ethran/notable/sync/FolderSyncService.kt)                         | Folder hierarchy sync (folders.json merge + upsert).                                                                                                               |
-| [`NotebookReconciliationService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookReconciliationService.kt) | Per-notebook conflict decision (upload/download/no-op) based on manifest timestamps. Reports per-item progress via `SyncProgressReporter.beginItem`/`endItem`.     |
-| [`NotebookSyncService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSyncService.kt)                     | Per-notebook upload/download execution. Reports per-item progress via `SyncProgressReporter.beginItem`/`endItem` when downloading new notebooks.                   |
+| [`NotebookReconciliationService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookReconciliationService.kt) | Per-notebook conflict decision (upload/download/no-op) based on manifest timestamps. Reports per-item progress via `SyncProgressReporter.beginItem`/`endItem` (passing the notebook `id`). On an "already in sync" skip it refreshes the notebook's `notebook_sync_state` row. |
+| [`NotebookSyncService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSyncService.kt)                     | Per-notebook upload/download execution (pages-before-manifest ordering), remote-deletion application, local-deletion detection, new-notebook discovery. Writes `notebook_sync_state` rows at commit points. |
 | [`SyncProgressReporter.kt`](../app/src/main/java/com/ethran/notable/sync/SyncProgressReporter.kt)                   | `@Singleton` owner of the `SyncState` `StateFlow`. Interface + `SyncProgressReporterImpl` + Hilt `@Binds` module + `SyncProgressReporterEntryPoint`. Write-side API: `beginStep`, `beginItem`, `endItem`, `finishSuccess`, `finishError`, `reset`. Read-side: `state`. Consumers inject `SyncProgressReporter` rather than touching `SyncOrchestrator` for state. |
-| [`SyncForceService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncForceService.kt)                           | Force upload/download flows (full side replacement) used by settings actions.                                                                                      |
-| [`SyncPorts.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPorts.kt)                                         | DI port/adapter for WebDAV client creation (`WebDavClientFactoryPort`).                                                                                            |
-| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt)                                   | HTTP/WebDAV operations. PROPFIND XML parsing. Connection testing. File uploads/downloads and metadata (ETag) support. `If-Match`-guarded uploads for optimistic concurrency. |
+| [`SyncState.kt`](../app/src/main/java/com/ethran/notable/sync/SyncState.kt)                                         | The `SyncState` sealed class, `ItemProgress`, `SyncStep` enum, and `SyncSummary` data model rendered by the sync UI.                                               |
+| [`SyncForceService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncForceService.kt)                           | Force upload/download flows (full side replacement) used by settings actions. Non-destructive: force-download verifies the server has content before wiping local; force-upload uploads before deleting server extras. |
+| [`SyncPorts.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPorts.kt)                                         | DI port/adapter for WebDAV client creation (`WebDavClientFactoryPort`) plus the shared singleton `OkHttpClient` (`SyncHttpModule`) — one connection pool for all sync operations. |
+| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt)                                   | HTTP/WebDAV operations built on a shared `OkHttpClient`. Connection testing, file uploads/downloads and metadata (ETag) support, `If-Match`-guarded uploads for optimistic concurrency, tri-state `exists()`. All methods funnel through one private `execute()` helper. |
+| [`WebDavXml.kt`](../app/src/main/java/com/ethran/notable/sync/WebDavXml.kt)                                         | PROPFIND XML parsing (`parseHrefs`, `parseEntries`) and UUID validation, split out of `WebDAVClient`.                                                              |
+| [`SyncPaths.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPaths.kt)                                         | Centralized server path construction (root, notebooks, deletions, per-notebook manifest/pages/images/backgrounds, tombstones).                                     |
+| [`NotebookSyncState.kt`](../app/src/main/java/com/ethran/notable/data/db/NotebookSyncState.kt)                     | Room entity + DAO + repository for the `notebook_sync_state` table: per-notebook commit bookkeeping (state, `lastSyncedAt`, `localUpdatedAtAtSync`, `remoteEtag`, `remoteUpdatedAt`). No foreign key to `Notebook` (must outlive local deletion). |
+| [`NotebookSyncStatusStore.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSyncStatusStore.kt)             | Derives `Flow<Map<notebookId, SyncBadge>>` for the library cover badges by combining the notebook list, the `notebook_sync_state` table, and the live `SyncState`. Nothing extra is stored — the badge is a pure function of those three sources. |
 | [`NotebookSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/NotebookSerializer.kt)           | Serializes/deserializes notebooks, pages, strokes, and images to/from JSON. Stroke points are embedded as base64-encoded [SB1 binary](database-structure.md) data. |
 | [`FolderSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/FolderSerializer.kt)               | Serializes/deserializes the folder hierarchy to/from `folders.json`.                                                                                               |
 | [`SyncWorker.kt`](../app/src/main/java/com/ethran/notable/sync/SyncWorker.kt)                                       | `CoroutineWorker` for WorkManager integration. Checks connectivity and credentials before delegating to `SyncOrchestrator`.                                        |
@@ -78,52 +94,63 @@ operations on a single device (see section 7.2 for multi-device concurrency).
 
 ```
 1. INITIALIZE
-   ├── Load SyncSettings and credentials
-   ├── Construct WebDAVClient
+   ├── Acquire the process-wide sync mutex (tryLock; SYNC_IN_PROGRESS if already held)
+   ├── Load SyncSettings; abort if sync disabled (CONFIG) or credentials blank (AUTH)
+   ├── checkWifiConstraint (if wifiOnly and not on unmetered → WIFI_REQUIRED)
+   ├── Construct WebDAVClient (shared OkHttpClient)
+   ├── checkClockSkew (HEAD, read Date header; >30s → CLOCK_SKEW)
    └── Ensure /notable/, /notable/notebooks/, /notable/deletions/ exist on server (MKCOL)
 
 2. SYNC FOLDERS
    ├── GET /notable/folders.json (if exists) + capture ETag
    ├── Merge: for each folder, keep the version with the later updatedAt
-   ├── Upsert merged folders into local Room database
+   ├── Upsert merged folders into local Room database (skipped when upload-only)
    └── PUT /notable/folders.json with If-Match (captured ETag)
 
-3. APPLY REMOTE DELETIONS
+3. APPLY REMOTE DELETIONS  (skipped entirely when upload-only)
    ├── PROPFIND /notable/deletions/ (Depth 1) → list of tombstone files with lastModified
    ├── For each tombstone (filename = deleted notebook UUID):
    │   ├── If local notebook was modified AFTER the tombstone's lastModified → SKIP (resurrection)
-   │   └── Otherwise → delete local notebook
+   │   └── Otherwise → delete local notebook AND its notebook_sync_state row
+   ├── Prune tombstones older than 90 days (TOMBSTONE_MAX_AGE_DAYS)
    └── Return tombstonedIds set for use in later steps
 
 4. SYNC EXISTING LOCAL NOTEBOOKS
-   ├── Snapshot local notebook IDs (the "pre-download set")
-   └── For each local notebook:
-       ├── HEAD /notable/notebooks/{id}/manifest.json
+   ├── Snapshot local notebook IDs (the "pre-download set", returned for later steps)
+   └── For each local notebook (per-item progress carries the notebook id):
+       ├── HEAD /notable/notebooks/{id}/manifest.json  (tri-state: present / absent / error)
+       │   └── On "error" (network/unexpected status) → abort THIS notebook, never upload blind
        ├── If remote exists:
        │   ├── GET manifest.json + capture ETag, parse updatedAt
        │   ├── Compare timestamps (with ±1s tolerance):
-       │   │   ├── Local newer → upload notebook manifest with If-Match (captured ETag)
-       │   │   ├── Remote newer → download notebook
-       │   │   └── Within tolerance → skip
-       │   ├── If server changed between GET and PUT, server returns 412 and sync reports CONFLICT
-       │   └── (end comparison)
-       └── If remote doesn't exist → upload notebook
+       │   │   ├── Local newer → upload notebook (manifest PUT with If-Match = captured ETag)
+       │   │   ├── Remote newer → download notebook (upload-only: skip → SyncUploadOnlySkip)
+       │   │   └── Within tolerance → skip, but refresh the notebook_sync_state row (SYNCED)
+       │   └── If server changed between GET and PUT, server returns 412 and sync reports CONFLICT
+       └── If remote doesn't exist → upload notebook (no If-Match)
 
-5. DOWNLOAD NEW NOTEBOOKS FROM SERVER
+5. DOWNLOAD NEW NOTEBOOKS FROM SERVER  (skipped entirely when upload-only)
    ├── PROPFIND /notable/notebooks/ (Depth 1) → list of notebook directory UUIDs
-   ├── Filter out: already-local, already-deleted, previously-synced-then-locally-deleted
+   ├── Filter out: already-local (pre-download set), tombstoned, and IDs still present in
+   │   notebook_sync_state (previously synced then locally deleted — do not resurrect)
    └── For each new notebook ID → download notebook
 
 6. DETECT AND UPLOAD LOCAL DELETIONS
-   ├── Compare syncedNotebookIds (from last sync) against pre-download snapshot
-   ├── Missing IDs = locally deleted notebooks
-   ├── For each: DELETE /notable/notebooks/{id}/ on server
-   └── PUT zero-byte file to /notable/deletions/{id} (tombstone for other devices)
+   ├── deletedLocally = notebook_sync_state IDs − pre-download snapshot
+   ├── For each: if present on server, DELETE /notable/notebooks/{id}/
+   ├── PUT zero-byte file to /notable/deletions/{id} (tombstone for other devices)
+   └── On tombstone success → drop the notebook_sync_state row
 
 7. FINALIZE
-   ├── Update syncedNotebookIds = current set of all local notebook IDs
-   └── Persist to SyncSettings
+   ├── No bulk finalize: each notebook's sync-state row was written at its own commit point,
+   │   and deletions dropped their rows in step 6.
+   └── On overall success, persist SyncSettings.lastSyncTime = now
 ```
+
+Per-notebook success/failure is isolated: a single notebook error is accumulated (via
+`ErrorAccumulator`) and reported, but does not abort the remaining notebooks. Only top-level step
+failures (preflight, directory bootstrap, folder sync, a hard error from a whole step) abort the
+run via early return.
 
 ### 3.2 Per-Notebook Upload
 
@@ -131,57 +158,75 @@ Conflict detection is at the **notebook level** (manifest `updatedAt`). Individu
 uploaded as separate files, but if two devices have edited different pages of the same notebook, the
 device with the newer `updatedAt` wins the entire notebook (see section 5.6).
 
+**Ordering is deliberate: pages first, manifest last.** The manifest is the commit marker (it
+carries `pageIds` and the `updatedAt` that drives all conflict resolution). Writing it last means
+an interrupted upload leaves the *old* manifest in place, so no other device downloads a
+half-written notebook. Any new page files uploaded before the interruption sit unreferenced until
+the origin device re-syncs and rewrites the manifest (harmless orphans; Phase 7 GC would sweep
+them).
+
 ```
-uploadNotebook(notebook):
-  1. MKCOL /notable/notebooks/{id}/pages/
-  2. MKCOL /notable/notebooks/{id}/images/
-  3. MKCOL /notable/notebooks/{id}/backgrounds/
-  4. PUT /notable/notebooks/{id}/manifest.json  (serialized notebook metadata)
-  5. For each page:
+uploadNotebook(notebook, manifestIfMatch?):
+  1. MKCOL /notable/notebooks/{id}/pages/, images/, backgrounds/
+  2. For each page (uploaded FIRST):
      a. Serialize page JSON (strokes embedded as base64-encoded SB1 binary)
      b. PUT /notable/notebooks/{id}/pages/{pageId}.json
      c. For each image on the page:
         - If local file exists and not already on server → PUT to images/
      d. If page has a custom background (not native template):
         - If local file exists and not already on server → PUT to backgrounds/
+  3. If ANY page failed → do NOT publish the manifest (leave old commit marker; retry next sync)
+  4. Otherwise PUT /notable/notebooks/{id}/manifest.json LAST, with If-Match (manifestIfMatch)
+  5. On manifest success (commit point):
+     a. markSynced() → write the notebook_sync_state row (SYNCED, at notebook.updatedAt)
+     b. If a stale tombstone exists for this id (resurrected notebook) → DELETE it (best-effort)
 ```
 
 ### 3.3 Per-Notebook Download
 
+**Ordering is deliberate: pages first, notebook-timestamp commit last.** If a page fails, the
+local notebook keeps its old (or sentinel) timestamp, so the next sync sees "remote newer" and
+re-downloads rather than treating the hole as "in sync". A brand-new notebook is first inserted
+with an epoch-0 (`Date(0)`) timestamp so a partial download reads as older-than-remote.
+
 ```
 downloadNotebook(notebookId):
   1. GET /notable/notebooks/{id}/manifest.json → parse to Notebook
-  2. Upsert Notebook into local Room database (preserving remote timestamp)
-  3. For each pageId in manifest.pageIds:
+  2. If the notebook is new locally → createEmpty() with updatedAt = Date(0) (sentinel).
+     Existing notebooks keep their current (older) timestamp untouched for now.
+  3. For each pageId in manifest.pageIds → downloadPage():
      a. GET /notable/notebooks/{id}/pages/{pageId}.json → parse to (Page, Strokes, Images)
-     b. For each image referenced:
+     b. For each image referenced (only if not already present locally):
         - GET from images/ → save to local /Documents/notabledb/images/
         - Update image URI to local absolute path
-     c. If custom background:
-        - GET from backgrounds/ → save to local backgrounds folder
-     d. If page already exists locally:
-        - Delete old strokes and images from Room
-        - Update page
-     e. If page is new:
-        - Create page in Room
-     f. Insert strokes and images
+     c. If custom background (not present locally): GET from backgrounds/ → save locally
+     d. Persist the page ATOMICALLY via AppRepository.replaceDownloadedPage() — a single Room
+        @Transaction that deletes old strokes/images, upserts the page, and inserts the new
+        strokes/images, so a crash cannot leave the page half-swapped (P5).
+  4. Commit (only if every page landed): updatePreservingTimestamp() writes the notebook row with
+     the real remote timestamp, then markSynced() writes the notebook_sync_state row.
+     On any page failure, the timestamp is left stale and the row is NOT written → retry next sync.
 ```
 
 ### 3.4 Single-Notebook Sync (`syncNotebook`)
 
 Used for sync-on-close (triggered when the user closes the editor). Follows the same
 timestamp-comparison logic as step 4 of the full sync, but operates on a single notebook without the
-full deletion/discovery flow.
+full deletion/discovery flow. It **holds the same process-wide mutex** (`tryLock`): if a full or
+periodic sync is already running, the single-notebook sync returns `Success` immediately (skip — the
+running sync will cover it) rather than racing it. It runs its own preflight (wifi + clock skew)
+before reconciling the one notebook.
 
 ### 3.5 Deletion Propagation (`uploadDeletion`)
 
 When a notebook is deleted locally, a targeted operation can immediately propagate the deletion to
 the server without running a full sync:
 
-1. DELETE the notebook's directory from server.
+1. If the notebook's directory exists on the server, DELETE it (existence-check errors are ignored
+   here — DELETE is idempotent and a full sync reconciles any leftover).
 2. PUT a zero-byte file to `/notable/deletions/{id}` (the server's own `lastModified` on this file
    serves as the deletion timestamp for other devices' conflict resolution).
-3. Remove notebook ID from `syncedNotebookIds`.
+3. On tombstone success, drop the notebook's `notebook_sync_state` row.
 
 ---
 
@@ -402,17 +447,18 @@ Folders use a simpler per-folder last-writer-wins merge:
 ### 5.6 Local Deletion Detection
 
 Detecting that a notebook was deleted locally (as opposed to never existing) requires comparing the
-current set of local notebook IDs against the set from the last successful sync (`syncedNotebookIds`
-in SyncSettings):
+current set of local notebook IDs against the set of notebooks previously recorded as synced. That
+record now lives in the `notebook_sync_state` table (it used to be `syncedNotebookIds` inside the
+`SyncSettings` blob):
 
 ```
-locallyDeleted = syncedNotebookIds - currentLocalNotebookIds
+locallyDeleted = notebook_sync_state IDs - currentLocalNotebookIds
 ```
 
 This comparison uses a **pre-download snapshot** of local notebook IDs -- taken before downloading
 new notebooks from the server. This is critical: without it, a newly downloaded notebook would
-appear "new" in the current set and would not be in `syncedNotebookIds`, causing it to be
-misidentified as a local deletion.
+appear "new" in the current set and, not yet having a sync-state row, could be misidentified as a
+local deletion.
 
 ### 5.7 Known Limitations
 
@@ -454,6 +500,39 @@ comparison is irrelevant -- the user is choosing which side wins wholesale.
 succeeds but skew exceeds the threshold, a warning is displayed telling the user how many seconds
 their clock differs from the server.
 
+### 5.9 Per-Notebook Sync State (`notebook_sync_state`)
+
+A dedicated Room table (schema v35, keyed by notebook id, **no** foreign key to `Notebook`) is the
+single source of truth for per-notebook sync bookkeeping. It is written **only at commit points**:
+
+| Column | Meaning |
+|--------|---------|
+| `notebookId` | Primary key. |
+| `state` | `SYNCED` or `ERROR` (`SyncStateValue`). |
+| `lastSyncedAt` | Wall-clock time the row was last written. |
+| `localUpdatedAtAtSync` | The local `Notebook.updatedAt` captured at the last committed sync — the anchor for "has this notebook been edited since it was synced?". |
+| `remoteUpdatedAt` | The remote manifest `updatedAt` at last sync. |
+| `remoteEtag` | Reserved for ETag-based change detection (currently written as `null`; Phase 5). |
+
+It has no foreign key so the row survives local deletion of the notebook — the next sync still needs
+to see "was synced, now gone" to propagate a tombstone. The table replaced the former
+`SyncSettings.syncedNotebookIds` set; there was **no migration** — the first sync after upgrade
+simply repopulates it.
+
+**Badges.** `NotebookSyncStatusStore` derives a `Flow<Map<notebookId, SyncBadge>>` by combining the
+notebook list, this table, and the live `SyncState`. It stores nothing extra; the badge is a pure
+function:
+
+- `SYNCED` — a row exists and `notebook.updatedAt` is within 1s of `localUpdatedAtAtSync`.
+- `NOT_SYNCED` — no row, or the notebook was edited since its last committed sync (and no sync is
+  running).
+- `SYNCING` — a sync is running and this is the exact notebook being transferred
+  (`SyncState.Syncing.item.id == notebook.id`).
+- `SCHEDULED` — a sync is running but it is not yet this notebook's turn.
+- `ERROR` — the row's `state == ERROR`.
+
+The badge is rendered as a corner icon on the notebook cover in the library.
+
 ---
 
 ## 6) Security Model
@@ -484,17 +563,29 @@ attempts to decrypt and returns an empty password on decryption failure. This pr
 
 ### 7.1 Error Types
 
+Sync uses the app-wide `AppResult<D, DomainError>` result type (see
+[result-and-error-handling.md](result-and-error-handling.md)) rather than a sync-specific enum. The
+relevant `DomainError` variants (`utils/AppResult.kt`):
+
 ```kotlin
-enum class SyncError {
-    NETWORK_ERROR,      // IOException - connection failed, timeout, DNS resolution
-    AUTH_ERROR,         // Credentials missing or invalid
-    CONFIG_ERROR,       // Settings missing or sync disabled
-    CLOCK_SKEW,         // Device clock differs from server by >30s (see 5.8)
-    SYNC_IN_PROGRESS,   // Another sync is already running (mutex held)
-    CONFLICT,           // ETag precondition failed (HTTP 412)
-    UNKNOWN_ERROR       // Catch-all for unexpected exceptions
-}
+DomainError.NetworkError(message)        // IOException / thrown exception during a request
+DomainError.SyncAuthError                // credentials missing or rejected (401)
+DomainError.SyncConfigError              // sync disabled / not configured
+DomainError.SyncClockSkew(seconds)       // device clock differs from server by >30s (see 5.8)
+DomainError.SyncWifiRequired             // wifiOnly set but not on an unmetered network
+DomainError.SyncInProgress               // another sync already holds the mutex
+DomainError.SyncConflict                 // If-Match precondition failed (HTTP 412)
+DomainError.SyncUploadOnlySkip(title)    // upload-only run had nothing to upload for a notebook
+DomainError.SyncError(message, recoverable)  // generic server/logic failure
+DomainError.DatabaseError(message)       // local Room failure
+DomainError.NotFound(resource)           // e.g. notebook row missing
 ```
+
+`SyncUploadOnlySkip` is an *expected* outcome modelled (for now) as an error and laundered back to
+`Success` by `isOnlyUploadSkip()` / `finalizeSyncResult`. This errors-as-control-flow shape is a
+known wart, slated to be removed when upload-only is re-derived as a planned action (see the
+improvement plan, Phase 6). Multiple per-notebook errors are aggregated into `MultipleErrors` via
+`ErrorAccumulator`.
 
 ### 7.2 Concurrency Control
 
@@ -520,13 +611,17 @@ Failures are isolated at the notebook level:
 
 `SyncWorker` (WorkManager) implements retry with the following policy:
 
-- **Network unavailable**: Return `Result.retry()` (WorkManager will back off and retry).
-- **Sync already in progress**: Return `Result.success()` (not an error -- another sync is handling
-  it).
-- **Network error during sync**: Retry up to 3 attempts, then fail.
-- **Non-retryable sync errors** (`AUTH_ERROR`, `CONFIG_ERROR`, `CLOCK_SKEW`, `WIFI_REQUIRED`, `CONFLICT`): Return
-  `Result.success()` to avoid useless retry loops.
-- **Other/unknown errors**: Retry up to 3 attempts, then fail.
+- **Network unavailable** (pre-check): Return `Result.retry()` (WorkManager will back off and retry).
+- **`SyncInProgress`**: Return `Result.success()` with `success=false` payload (not a hard failure --
+  another sync is handling it).
+- **`NetworkError` during sync**: `Result.retry()` up to 3 attempts (`MAX_RETRY_ATTEMPTS`), then
+  `Result.failure()`.
+- **Non-retryable sync errors** (`SyncAuthError`, `SyncConfigError`, `SyncClockSkew`,
+  `SyncWifiRequired`, `SyncConflict`): Return `Result.failure()` immediately (no retry loop).
+- **Other/unknown errors**: `Result.retry()` up to 3 attempts *if the error is `recoverable`*, else
+  `Result.failure()`.
+- Disabled sync / wifi-only-not-met / blank credentials are detected before dispatch and return
+  `Result.success()` with a `skipped` payload.
 - WorkManager's exponential backoff handles retry timing.
 
 ### 7.5 WebDAV Idempotency
@@ -548,10 +643,11 @@ Idle → Syncing(step, stepProgress, details, item?) → Success(summary) → Id
                                                   → Error(error, step, canRetry)
 ```
 
-- `Syncing` includes a `SyncStep` enum, a float `stepProgress` (0.0–1.0) for the current step, a `details` string, and an optional `item: ItemProgress?` (`index`, `total`, `name`) set by services that loop over notebooks (`NotebookReconciliationService`, `NotebookSyncService`).
+- `Syncing` includes a `SyncStep` enum (`INITIALIZING`, `SYNCING_FOLDERS`, `APPLYING_DELETIONS`, `SYNCING_NOTEBOOKS`, `DOWNLOADING_NEW`, `UPLOADING_DELETIONS`, `FINALIZING`), a float `stepProgress` (0.0–1.0), a `details` string, and an optional `item: ItemProgress?` (`index`, `total`, `name`, and the notebook `id`) set by services that loop over notebooks (`NotebookReconciliationService`, `NotebookSyncService`). The `id` lets `NotebookSyncStatusStore` mark exactly the notebook currently in transfer as `SYNCING` while the rest of the queue shows `SCHEDULED`.
 - `SyncState` is owned by `SyncProgressReporter` (Hilt `@Singleton`). `SyncSettingsTab` renders it via `SyncProgressPanel`, using helpers `SyncStep.displayName()`, `overallProgressOf(Syncing)`, and `stepBandEnd(SyncStep)` to map per-step progress onto an overall bar.
-- `Success` auto-resets to `Idle` after 3 seconds.
+- `Success` auto-resets to `Idle` after 3 seconds, launched off the caller's path so `syncAllNotebooks()` returns immediately.
 - `Error` persists until the next sync attempt.
+- On a successful full sync the orchestrator persists `SyncSettings.lastSyncTime`, so the settings "Last synced" line reflects background and periodic syncs, not just manual ones.
 
 ---
 
@@ -592,5 +688,7 @@ Potential enhancements beyond the current implementation, roughly ordered by imp
 
 ---
 
-**Version**: 1.5
-**Last Updated**: 2026-04-18
+**Version**: 1.6
+**Last Updated**: 2026-07-19 — synced with code after Phases 1–4 (commit-marker ordering,
+tri-state `exists()`, `notebook_sync_state` table + badges, mutex on single-notebook sync,
+non-destructive force ops, shared `OkHttpClient`, `DomainError`/`AppResult` throughout).

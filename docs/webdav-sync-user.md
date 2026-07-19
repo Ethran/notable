@@ -99,7 +99,26 @@ Click **Sync Now** to manually trigger synchronization. This will:
 Enable **Automatic sync every X minutes** to sync periodically in the background.
 
 ### Sync on Note Close
-Enable **Sync when closing notes** to automatically sync whenever you close a page. This ensures your latest changes are uploaded immediately.
+Enable **Sync when closing notes** to automatically sync the notebook you were editing when you close it. This ensures your latest changes are uploaded immediately. Only that one notebook is synced (not a full sync), and if a full or scheduled sync is already running it is skipped to avoid overlap.
+
+## Sync Status Badges
+
+Each notebook cover in the library shows a small icon in the top-right corner reflecting its sync status:
+
+| Icon | Status | Meaning |
+|------|--------|---------|
+| ☁️✓ (cloud-check) | **Synced** | This notebook matches the last successful sync. |
+| ☁️✕ (cloud-off) | **Not synced** | You have local changes that have not been uploaded yet. |
+| 🕐 (clock) | **Scheduled** | A sync is running and this notebook is queued, waiting its turn. |
+| 🔄 (sync) | **Syncing** | This notebook is being uploaded or downloaded right now. |
+| ⚠️ (alert) | **Error** | The last sync attempt for this notebook failed — check the Sync Log. |
+
+The badges are informational and update automatically. A notebook with no badge simply has no
+recorded sync state yet (for example, before your first sync after updating the app — run one sync
+and the badges populate).
+
+> **Tip:** After updating the app, the first sync repopulates all sync state from scratch, so
+> notebooks may briefly show "not synced" until that first sync completes.
 
 ## Advanced Features
 
@@ -107,11 +126,11 @@ Enable **Sync when closing notes** to automatically sync whenever you close a pa
 
 Located under **CAUTION: Replacement Operations**:
 
-- **Replace Server with Local Data**: Deletes everything on the server and uploads all local notebooks. Use this if the server has incorrect data.
+- **Replace Server with Local Data**: Uploads all local notebooks, then deletes any server notebooks that no longer exist locally, so the server ends up matching your device. Uploads are safe upserts — the server is not wiped before your local copy is confirmed up.
 
-- **Replace Local with Server Data**: Deletes all local notebooks and downloads everything from the server. Use this if your local data is corrupted.
+- **Replace Local with Server Data**: Downloads everything from the server, replacing your local notebooks. As a safety check, this **refuses to wipe your local data if the server is unreachable or has no notebooks** — so a failed connection can no longer erase your device.
 
-**Warning**: These operations are destructive and cannot be undone! Make sure you know which copy of your data is correct before using these.
+**Warning**: These operations replace one side wholesale and cannot be undone! Make sure you know which copy of your data is correct before using these.
 
 ## Conflict Resolution
 
@@ -254,5 +273,6 @@ For developers interested in how sync works internally, see:
 
 ---
 
-**Version**: 1.1
-**Last Updated**: 2026-03-06
+**Version**: 1.2
+**Last Updated**: 2026-07-19 — added Sync Status Badges section, clarified non-destructive force
+operations and sync-on-close behavior.
