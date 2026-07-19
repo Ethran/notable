@@ -165,33 +165,41 @@ class NotebookSyncService @Inject constructor(
         }.flatMap {
             client.createCollection(SyncPaths.backgroundsDir(notebookId))
         }.flatMap {
-            val manifestJson = NotebookSerializer.serializeManifest(notebook)
-            client.putFile(
-                SyncPaths.manifestFile(notebookId),
-                manifestJson.toByteArray(),
-                "application/json",
-                ifMatch = manifestIfMatch
-            )
-        }.flatMap {
+            // 1. Upload every page (and its images/backgrounds) FIRST.
             val pages = appRepository.pageRepository.getByIds(notebook.pageIds)
             val errors = ErrorAccumulator()
             for (page in pages) {
                 uploadPage(page, notebookId, client).onError { errors.add(it) }
             }
 
-            // Best-effort cleanup: if existence can't be determined, skip (a leftover tombstone is
-            // harmless and will be re-checked next sync).
-            val tombstonePath = SyncPaths.tombstone(notebookId)
-            if (client.exists(tombstonePath).getOrElse { false }) {
-                client.delete(tombstonePath).onSuccess {
-                    log.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
-                }.onError {
-                    log.w(TAG, "Failed to remove stale tombstone $notebookId: ${it.userMessage}")
+            // 2. If any page failed, do NOT publish the manifest. Leaving the old commit marker in
+            //    place keeps the notebook "not yet updated" for other devices and makes this device
+            //    re-upload on the next sync -- never a manifest pointing at missing/stale pages (P1).
+            if (errors.hasErrors) {
+                errors.asResult(Unit)
+            } else {
+                // 3. All pages are up: publish the manifest last. This is the atomic commit; the
+                //    If-Match guard rejects the PUT if the remote changed since we read it.
+                val manifestJson = NotebookSerializer.serializeManifest(notebook)
+                client.putFile(
+                    SyncPaths.manifestFile(notebookId),
+                    manifestJson.toByteArray(),
+                    "application/json",
+                    ifMatch = manifestIfMatch
+                ).onSuccess {
+                    // Only after a committed upload: drop any stale tombstone for a resurrected
+                    // notebook. Best-effort -- a leftover tombstone is re-checked next sync.
+                    val tombstonePath = SyncPaths.tombstone(notebookId)
+                    if (client.exists(tombstonePath).getOrElse { false }) {
+                        client.delete(tombstonePath).onSuccess {
+                            log.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
+                        }.onError {
+                            log.w(TAG, "Failed to remove stale tombstone $notebookId: ${it.userMessage}")
+                        }
+                    }
+                    log.i(TAG, "Uploaded: ${notebook.title}")
                 }
             }
-
-            log.i(TAG, "Uploaded: ${notebook.title}")
-            errors.asResult(Unit)
         }
     }
 
