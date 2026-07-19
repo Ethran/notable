@@ -6,6 +6,7 @@ import com.ethran.notable.sync.serializers.FolderSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.ErrorAccumulator
+import com.ethran.notable.utils.getOrElse
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onSuccess
 import javax.inject.Inject
@@ -38,7 +39,7 @@ class SyncForceService @Inject constructor(
         val errors = ErrorAccumulator()
 
         // 1. Clean server notebooks
-        if (client.exists(SyncPaths.notebooksDir())) {
+        if (client.exists(SyncPaths.notebooksDir()).onError { errors.add(it) }.getOrElse { false }) {
             client.listCollection(SyncPaths.notebooksDir()).onSuccess { existingNotebooks ->
                 log.i(TAG, "Deleting ${existingNotebooks.size} existing notebooks from server")
                 existingNotebooks.forEach { notebookDir ->
@@ -118,7 +119,7 @@ class SyncForceService @Inject constructor(
         }
 
         // 2. Download folders
-        if (client.exists(SyncPaths.foldersFile())) {
+        if (client.exists(SyncPaths.foldersFile()).onError { errors.add(it) }.getOrElse { false }) {
             client.getFile(SyncPaths.foldersFile()).onSuccess { foldersBytes ->
                 val foldersJson = foldersBytes.decodeToString()
                 try {
@@ -132,7 +133,7 @@ class SyncForceService @Inject constructor(
         }
 
         // 3. Download notebooks
-        if (client.exists(SyncPaths.notebooksDir())) {
+        if (client.exists(SyncPaths.notebooksDir()).onError { errors.add(it) }.getOrElse { false }) {
             client.listCollection(SyncPaths.notebooksDir()).onSuccess { notebookDirs ->
                 log.i(TAG, "Found ${notebookDirs.size} notebook(s) on server")
                 notebookDirs.forEach { notebookDir ->

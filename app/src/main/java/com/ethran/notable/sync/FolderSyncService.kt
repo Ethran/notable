@@ -7,6 +7,7 @@ import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.map
+import com.ethran.notable.utils.onFailure
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +26,8 @@ class FolderSyncService @Inject constructor(
         val localFolders = appRepository.folderRepository.getAll()
         val remotePath = SyncPaths.foldersFile()
 
-        if (client.exists(remotePath)) {
+        val remoteExists = client.exists(remotePath).onFailure { return AppResult.Error(it) }
+        if (remoteExists) {
             return client.getFileWithMetadata(remotePath).flatMap { remoteFile ->
                 val remoteEtag = remoteFile.etag
                     ?: return@flatMap AppResult.Error(DomainError.SyncError("Missing ETag for $remotePath"))

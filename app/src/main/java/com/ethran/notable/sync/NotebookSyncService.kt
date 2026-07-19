@@ -10,6 +10,7 @@ import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.ErrorAccumulator
 import com.ethran.notable.utils.flatMap
+import com.ethran.notable.utils.getOrElse
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
@@ -31,7 +32,8 @@ class NotebookSyncService @Inject constructor(
         log.i(TAG, "Applying remote deletions...")
         val tombstonesPath = SyncPaths.tombstonesDir()
 
-        if (!client.exists(tombstonesPath)) return AppResult.Success(emptySet())
+        val tombstonesExist = client.exists(tombstonesPath).onFailure { return AppResult.Error(it) }
+        if (!tombstonesExist) return AppResult.Success(emptySet())
 
         return client.listCollectionWithMetadata(tombstonesPath).flatMap { tombstones ->
             val tombstonedIds = tombstones.map { it.name }.toSet()
@@ -93,7 +95,9 @@ class NotebookSyncService @Inject constructor(
             log.i(TAG, "Detected ${deletedLocally.size} local deletion(s)")
             for (notebookId in deletedLocally) {
                 val notebookPath = SyncPaths.notebookDir(notebookId)
-                if (client.exists(notebookPath)) {
+                // Unknown existence is recorded but does not stop the tombstone PUT below.
+                val onServer = client.exists(notebookPath).onError { errors.add(it) }.getOrElse { false }
+                if (onServer) {
                     log.i(TAG, "Deleting from server: $notebookId")
                     client.delete(notebookPath).onError { errors.add(it) }
                 }
@@ -120,7 +124,9 @@ class NotebookSyncService @Inject constructor(
         preDownloadNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
         log.i(TAG, "Checking server for new notebooks...")
-        if (!client.exists(SyncPaths.notebooksDir())) {
+        val notebooksDirExists =
+            client.exists(SyncPaths.notebooksDir()).onFailure { return AppResult.Error(it) }
+        if (!notebooksDirExists) {
             return AppResult.Success(0)
         }
         return client.listCollection(SyncPaths.notebooksDir()).flatMap { serverNotebookDirs ->
@@ -173,8 +179,10 @@ class NotebookSyncService @Inject constructor(
                 uploadPage(page, notebookId, client).onError { errors.add(it) }
             }
 
+            // Best-effort cleanup: if existence can't be determined, skip (a leftover tombstone is
+            // harmless and will be re-checked next sync).
             val tombstonePath = SyncPaths.tombstone(notebookId)
-            if (client.exists(tombstonePath)) {
+            if (client.exists(tombstonePath).getOrElse { false }) {
                 client.delete(tombstonePath).onSuccess {
                     log.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
                 }
@@ -206,7 +214,8 @@ class NotebookSyncService @Inject constructor(
                     val localFile = File(image.uri)
                     if (localFile.exists()) {
                         val remotePath = SyncPaths.imageFile(notebookId, localFile.name)
-                        if (!client.exists(remotePath)) {
+                        // Unknown existence -> upload anyway; PUT is idempotent.
+                        if (!client.exists(remotePath).getOrElse { false }) {
                             client.putFile(remotePath, localFile, detectMimeType(localFile))
                                 .onSuccess {
                                     log.i(TAG, "Uploaded image: ${localFile.name}")
@@ -222,7 +231,7 @@ class NotebookSyncService @Inject constructor(
                 val bgFile = File(ensureBackgroundsFolder(), page.background)
                 if (bgFile.exists()) {
                     val remotePath = SyncPaths.backgroundFile(notebookId, bgFile.name)
-                    if (!client.exists(remotePath)) {
+                    if (!client.exists(remotePath).getOrElse { false }) {
                         client.putFile(remotePath, bgFile, detectMimeType(bgFile)).onSuccess {
                             log.i(TAG, "Uploaded background: ${bgFile.name}")
                         }.onError { errors.add(it) }

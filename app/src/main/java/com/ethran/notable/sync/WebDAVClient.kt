@@ -5,6 +5,7 @@ import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.map
 import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
 import io.shipbook.shipbooksdk.Log
 import okhttp3.Credentials
@@ -105,24 +106,23 @@ class WebDAVClient(
     }
 
     /**
-     * Check if a resource exists on the server.
-     * @param path Resource path relative to server URL
-     * @return true if resource exists
+     * Check whether a resource exists on the server.
+     *
+     * Tri-state: `Success(true)` when present, `Success(false)` on a 404, and `Error` when the
+     * check could not be completed (network failure or an unexpected status). Callers must NOT
+     * treat "could not determine" as "absent" -- doing so previously let a transient network error
+     * trigger an unguarded upload over a possibly-newer remote (P2).
      */
-    fun exists(path: String): Boolean {
-        return try {
-            val url = buildUrl(path)
-            val request =
-                Request.Builder().url(url).head().header("Authorization", credentials).build()
-
-            client.newCall(request).execute().use { response ->
-                response.code == HttpURLConnection.HTTP_OK
+    fun exists(path: String): AppResult<Boolean, DomainError> =
+        execute("HEAD", {
+            Request.Builder().url(buildUrl(path)).head().header("Authorization", credentials).build()
+        }) { response ->
+            when {
+                response.isSuccessful -> AppResult.Success(true)
+                response.code == HttpURLConnection.HTTP_NOT_FOUND -> AppResult.Success(false)
+                else -> AppResult.Error(DomainError.SyncError("HEAD failed: ${response.code}"))
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "exists($path) check failed: ${e.message}")
-            false
         }
-    }
 
     /**
      * Create a WebDAV collection (directory).
@@ -270,7 +270,8 @@ class WebDAVClient(
         var currentPath = ""
         for (i in 0 until segments.size - 1) {
             currentPath += "/" + segments[i]
-            if (!exists(currentPath)) {
+            val present = exists(currentPath).onFailure { return AppResult.Error(it) }
+            if (!present) {
                 createCollection(currentPath).onError { return AppResult.Error(it) }
             }
         }

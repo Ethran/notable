@@ -7,6 +7,7 @@ import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.ErrorAccumulator
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.onFailure
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -52,7 +53,9 @@ class NotebookReconciliationService @Inject constructor(
             ?: return AppResult.Error(DomainError.NotFound("Notebook $notebookId"))
 
         val remotePath = SyncPaths.manifestFile(notebookId)
-        val remoteExists = client.exists(remotePath)
+        // If we cannot determine whether the remote manifest exists (e.g. transient network
+        // error), abort this notebook rather than fall through to an unguarded upload (P2).
+        val remoteExists = client.exists(remotePath).onFailure { return AppResult.Error(it) }
 
         return if (remoteExists) {
             client.getFileWithMetadata(remotePath).flatMap { remoteManifest ->

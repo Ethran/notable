@@ -5,6 +5,7 @@ import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.onError
+import com.ethran.notable.utils.onFailure
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,14 +40,16 @@ class SyncPreflightService @Inject constructor(
     }
 
     fun ensureServerDirectories(client: WebDAVClient): AppResult<Unit, DomainError> {
-        if (!client.exists(SyncPaths.rootDir())) {
-            client.createCollection(SyncPaths.rootDir()).onError { return AppResult.Error(it) }
-        }
-        if (!client.exists(SyncPaths.notebooksDir())) {
-            client.createCollection(SyncPaths.notebooksDir()).onError { return AppResult.Error(it) }
-        }
-        if (!client.exists(SyncPaths.tombstonesDir())) {
-            client.createCollection(SyncPaths.tombstonesDir()).onError { return AppResult.Error(it) }
+        val dirs = listOf(
+            SyncPaths.rootDir(),
+            SyncPaths.notebooksDir(),
+            SyncPaths.tombstonesDir()
+        )
+        for (dir in dirs) {
+            val present = client.exists(dir).onFailure { return AppResult.Error(it) }
+            if (!present) {
+                client.createCollection(dir).onError { return AppResult.Error(it) }
+            }
         }
         return AppResult.Success(Unit)
     }

@@ -7,6 +7,7 @@ import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
+import com.ethran.notable.utils.getOrElse
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
@@ -238,7 +239,9 @@ class SyncOrchestrator @Inject constructor(
                     )
 
                 val path = SyncPaths.notebookDir(notebookId)
-                if (client.exists(path)) {
+                // If existence can't be determined, skip the delete but still write the tombstone
+                // below; DELETE is idempotent and a full sync will reconcile any leftover.
+                if (client.exists(path).getOrElse { false }) {
                     client.delete(path).onError {
                         log.w(
                             TAG,
