@@ -28,6 +28,7 @@ import com.ethran.notable.utils.isLatestVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -68,6 +69,8 @@ class SettingsViewModel @Inject constructor(
     private val appEventBus: AppEventBus,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
+
+    private var runningSyncJob: Job? = null
 
     // We use the GlobalAppSettings object directly.
     val settings: AppSettings
@@ -239,12 +242,20 @@ class SettingsViewModel @Inject constructor(
         ) { syncOrchestrator.forceDownloadAll() }
     }
 
+    /** Cancel a running manual sync (this VM's job) and any WorkManager sync (8h-2). */
+    fun onCancelSync() {
+        runningSyncJob?.cancel()
+        syncScheduler.cancelRunningSync()
+        syncProgressReporter.reset()
+        snackDispatcher.showOrUpdateSnack(SnackConf(text = "Sync cancelled", duration = 2000))
+    }
+
     private fun runSyncWithSnack(
         textDuring: String,
         successMessage: String,
         action: suspend () -> AppResult<Unit, DomainError>
     ) {
-        appScope.launch {
+        runningSyncJob = appScope.launch {
             val snackId = java.util.UUID.randomUUID().toString()
             snackDispatcher.showOrUpdateSnack(
                 SnackConf(id = snackId, text = textDuring, duration = null)

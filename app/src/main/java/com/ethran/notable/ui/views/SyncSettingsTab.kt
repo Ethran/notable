@@ -90,6 +90,7 @@ data class SyncSettingsCallbacks(
     val onSaveCredentials: () -> Unit = {},
     val onTestConnection: () -> Unit = {},
     val onManualSync: () -> Unit = {},
+    val onCancelSync: () -> Unit = {},
     val onClearSyncLogs: () -> Unit = {},
     val danger: SyncDangerCallbacks = SyncDangerCallbacks(),
 )
@@ -345,6 +346,16 @@ private fun SyncActionsSection(
             syncState = state.syncState,
             onManualSync = callbacks.onManualSync
         )
+
+        if (state.syncState is SyncState.Syncing) {
+            Spacer(modifier = Modifier.height(8.dp))
+            EInkActionButton(
+                text = stringResource(R.string.sync_cancel_button),
+                onClick = callbacks.onCancelSync,
+                modifier = Modifier.fillMaxWidth(),
+                isSecondary = true
+            )
+        }
 
         LastSyncInfo(lastSyncTime = state.syncSettings.lastSyncTime)
 

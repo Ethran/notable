@@ -29,6 +29,7 @@ import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.sync.SyncOrchestrator
+import com.ethran.notable.utils.AppResult
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -542,7 +543,21 @@ class EditorViewModel @Inject constructor(
                                 "Sync now" to {
                                     snackDispatcher.removeSnack(snackId)
                                     sendUiEvent(EditorUiEvent.NavigateToPages(bookIdForCheck))
-                                    appScope.launch { syncOrchestrator.syncNotebook(bookIdForCheck) }
+                                    appScope.launch {
+                                        val progressId = "sync-notebook-$bookIdForCheck"
+                                        snackDispatcher.showOrUpdateSnack(
+                                            SnackConf(id = progressId, text = "Syncing notebook…", duration = null)
+                                        )
+                                        val result = syncOrchestrator.syncNotebook(bookIdForCheck)
+                                        snackDispatcher.showOrUpdateSnack(
+                                            SnackConf(
+                                                id = progressId,
+                                                text = if (result is AppResult.Success) "Notebook synced"
+                                                else "Notebook sync failed",
+                                                duration = 3000
+                                            )
+                                        )
+                                    }
                                 }
                             )
                         )
