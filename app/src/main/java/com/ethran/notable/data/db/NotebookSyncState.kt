@@ -34,6 +34,9 @@ data class NotebookSyncState(
 object SyncStateValue {
     const val SYNCED = "SYNCED"
     const val ERROR = "ERROR"
+
+    /** Remote is newer than local, but it was not pulled (upload-only mode). */
+    const val REMOTE_AHEAD = "REMOTE_AHEAD"
 }
 
 @Dao
@@ -77,6 +80,27 @@ class NotebookSyncStateRepository @Inject constructor(
         NotebookSyncState(
             notebookId = notebookId,
             state = SyncStateValue.SYNCED,
+            lastSyncedAt = Date(),
+            localUpdatedAtAtSync = localUpdatedAt,
+            remoteUpdatedAt = remoteUpdatedAt,
+            remoteEtag = remoteEtag,
+        )
+    )
+
+    /**
+     * Record that the server copy is newer than local but was intentionally not pulled (upload-only
+     * mode). Anchored at the current [localUpdatedAt] so a later local edit flips the badge to
+     * "pending upload" rather than staying "remote ahead".
+     */
+    suspend fun markRemoteAhead(
+        notebookId: String,
+        localUpdatedAt: Date,
+        remoteUpdatedAt: Date?,
+        remoteEtag: String?,
+    ) = dao.upsert(
+        NotebookSyncState(
+            notebookId = notebookId,
+            state = SyncStateValue.REMOTE_AHEAD,
             lastSyncedAt = Date(),
             localUpdatedAtAtSync = localUpdatedAt,
             remoteUpdatedAt = remoteUpdatedAt,

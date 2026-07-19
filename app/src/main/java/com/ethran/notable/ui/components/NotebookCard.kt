@@ -15,6 +15,7 @@ import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Schedule
@@ -109,5 +110,6 @@ private fun SyncBadge.iconOrNull(): ImageVector? = when (this) {
     SyncBadge.NOT_SYNCED -> Icons.Default.CloudOff
     SyncBadge.SCHEDULED -> Icons.Default.Schedule
     SyncBadge.SYNCING -> Icons.Default.Sync
+    SyncBadge.REMOTE_AHEAD -> Icons.Default.CloudDownload
     SyncBadge.ERROR -> Icons.Default.ErrorOutline
 }

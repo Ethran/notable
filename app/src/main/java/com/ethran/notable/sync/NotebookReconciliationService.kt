@@ -120,9 +120,15 @@ class NotebookReconciliationService @Inject constructor(
 
             NotebookAction.SkipUploadOnly -> {
                 // Upload-only mode: remote is newer but we never pull. This is a planned no-op, not
-                // an error -- we leave local and the sync-state row untouched (the notebook simply
-                // isn't up to date with the server, by the user's choice) (6a/6b).
+                // an error (6a/6b). Record REMOTE_AHEAD so the library shows a "newer on server"
+                // badge instead of a misleading SYNCED.
                 log.i(TAG, "↑ Upload-only: leaving newer server copy of ${localNotebook.title}")
+                appRepository.notebookSyncStateRepository.markRemoteAhead(
+                    notebookId = notebookId,
+                    localUpdatedAt = localNotebook.updatedAt,
+                    remoteUpdatedAt = remote?.updatedAt?.let { Date(it) } ?: syncState?.remoteUpdatedAt,
+                    remoteEtag = if (remoteChanged) remote?.etag else storedEtag,
+                )
                 AppResult.Success(Unit)
             }
 

@@ -21,6 +21,9 @@ enum class SyncBadge {
     /** Local matches the last committed sync. */
     SYNCED,
 
+    /** Server has a newer version that was not pulled (upload-only mode). */
+    REMOTE_AHEAD,
+
     /** The last sync of this notebook failed. */
     ERROR,
 }
@@ -49,8 +52,10 @@ class NotebookSyncStatusStore @Inject constructor(
             val base = when {
                 row == null -> SyncBadge.NOT_SYNCED
                 row.state == SyncStateValue.ERROR -> SyncBadge.ERROR
-                // Local edited since its last committed sync -> pending upload.
+                // Local edited since its last committed sync -> pending upload (supersedes a stale
+                // REMOTE_AHEAD: once you edit locally, the badge is about your unsynced change).
                 nb.updatedAt.time - row.localUpdatedAtAtSync.time > TOLERANCE_MS -> SyncBadge.NOT_SYNCED
+                row.state == SyncStateValue.REMOTE_AHEAD -> SyncBadge.REMOTE_AHEAD
                 else -> SyncBadge.SYNCED
             }
             val badge = when {
