@@ -16,7 +16,9 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.cancelPendingScreenFreezeReset
 import com.ethran.notable.editor.utils.copyInput
+import com.ethran.notable.editor.utils.configureCalligraphyLiveAngle
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
+import com.ethran.notable.editor.utils.ERASER_INDICATOR_COLOR
 import com.ethran.notable.editor.utils.enableNativeEraser
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.editor.utils.handleDraw
@@ -94,9 +96,14 @@ class OnyxInputHandler(
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             if (touchHelper == null) return
             // Re-assert the native eraser indicator because setRawDrawingEnabled(true) (called
-            // on every resume) resets it to disabled internally. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
-            enableNativeEraser(touchHelper)
-            applyEraserIndicatorStyle()
+            // on every resume) resets it to disabled internally. The track style follows the active
+            // eraser type: the wide marker (style 8) for the pen/drag eraser, a dotted outline
+            // (DASH style 5) for the lasso/select eraser. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
+            enableNativeEraser(touchHelper, toolbarState.eraser)
+            // The eraser channel carries no colour of its own — the firmware paints the track with
+            // the global setStrokeColor. Set it here (width comes from the style's params, so this
+            // touches colour only, not thickness). This is the one thing we still set on begin.
+            touchHelper?.setStrokeColor(ERASER_INDICATOR_COLOR)
             isErasing = true
         }
 
@@ -125,9 +132,17 @@ class OnyxInputHandler(
         log.i("Update pen and stroke")
         when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
-                ?.setStrokeWidth(toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize * page.zoomLevel.value)
-                ?.setStrokeColor(toolbarState.penSettings[toolbarState.pen.penName]!!.color)
+            Mode.Draw, Mode.Line -> {
+                val scaledWidth = toolbarState.activePenSetting.strokeSize * page.zoomLevel.value
+                touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
+                    ?.setStrokeWidth(scaledWidth)
+                    ?.setStrokeColor(toolbarState.activePenSetting.color)
+                // Match the live square-pen nib angle to the dry render (+45°) so the calligraphy
+                // stroke doesn't rotate on pen-up. See docs/onyx-sdk/onyx-pen-styles-catalog.md.
+                if (toolbarState.pen == Pen.CALLIGRAPHY) {
+                    configureCalligraphyLiveAngle(angleDegrees = 45f, strokeWidth = scaledWidth)
+                }
+            }
 
             Mode.Erase -> applyEraserIndicatorStyle(penEraserColor = Color.GRAY)
 
@@ -174,9 +189,9 @@ class OnyxInputHandler(
         if (toolbarState.isDrawing) {
             touchHelper!!.setRawDrawingEnabled(true)
             // setRawDrawingEnabled(true) resets the framework stroke config to firmware defaults
-            // (brush channel on, eraser channel off). Re-assert the eraser channel and re-send the
-            // active pen style/width/color so the next stroke is rendered with the current tool.
-            enableNativeEraser(touchHelper)
+            // (brush channel on, eraser channel off). Re-assert the eraser channel (styled for the
+            // active eraser type) and re-send the active pen style so the next stroke uses the tool.
+            enableNativeEraser(touchHelper, toolbarState.eraser)
             updatePenAndStroke()
         } else {
             // A pending resetScreenFreeze resume would re-freeze the screen after we disable
@@ -257,8 +272,8 @@ class OnyxInputHandler(
                         handleDraw(
                             drawCanvas.page,
                             strokeHistoryBatch,
-                            toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize,
-                            toolbarState.penSettings[toolbarState.pen.penName]!!.color,
+                            toolbarState.activePenSetting.strokeSize,
+                            toolbarState.activePenSetting.color,
                             toolbarState.pen,
                             linePoints
                         )
@@ -292,6 +307,8 @@ class OnyxInputHandler(
                             scaledPoints,
                             history,
                             toolbarState.pen,
+                            toolbarState.activePenSetting.strokeSize,
+                            toolbarState.activePenSetting.color,
                             currentLastStrokeEndTime,
                             firstPointTime
                         )
@@ -301,8 +318,8 @@ class OnyxInputHandler(
                             handleDraw(
                                 drawCanvas.page,
                                 strokeHistoryBatch,
-                                toolbarState.penSettings[toolbarState.pen.penName]!!.strokeSize,
-                                toolbarState.penSettings[toolbarState.pen.penName]!!.color,
+                                toolbarState.activePenSetting.strokeSize,
+                                toolbarState.activePenSetting.color,
                                 toolbarState.pen,
                                 scaledPoints
                             )

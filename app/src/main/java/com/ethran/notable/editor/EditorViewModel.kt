@@ -1,8 +1,8 @@
 package com.ethran.notable.editor
 
 import android.content.Context
-import android.graphics.Color
 import android.net.Uri
+import androidx.compose.runtime.snapshotFlow
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,6 +21,7 @@ import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.SelectionState
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
@@ -82,15 +83,26 @@ data class ToolbarUiState(
 
     // Canvas / drawing
     val mode: Mode = Mode.Draw,
+    /** Base type of the active pen preset — what strokes persist and renderers key on. */
     val pen: Pen = Pen.BALLPEN,
+    /** The active [ToolbarPen] preset; identifies the pen button (two ballpen presets
+     * differ only here). */
+    val penPresetId: String = ToolbarPen.DEFAULT_PENS.first().id,
     val eraser: Eraser = Eraser.PEN,
-    // TODO: if it is an  emptyMap(), the DrawCanvas crashes, to be fixed.
+    /** Color/size per pen preset, keyed by preset id — a projection of
+     * AppSettings.toolbarPens kept in sync by the ViewModel (the preset is the source
+     * of truth). */
     val penSettings: Map<String, PenSetting> = DEFAULT_PEN_SETTINGS,
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
     val isDrawing: Boolean = true,
     val isQuickNavOpen: Boolean = false,
 ) {
+    /** The active preset's setting — what the drawing pipeline draws with. The fallback
+     * only triggers if the active preset was deleted mid-session. */
+    val activePenSetting: PenSetting
+        get() = penSettings[penPresetId] ?: PenSetting(5f, android.graphics.Color.BLACK)
+
     val isDrawingAllowed: Boolean
         get() = !isSelectionActive &&
                 !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
@@ -105,8 +117,8 @@ data class ToolbarUiState(
 sealed class ToolbarAction {
     object ToggleToolbar : ToolbarAction()
     data class ChangeMode(val mode: Mode) : ToolbarAction()
-    data class ChangePen(val pen: Pen) : ToolbarAction()
-    data class ChangePenSetting(val pen: Pen, val setting: PenSetting) : ToolbarAction()
+    data class ChangePen(val presetId: String) : ToolbarAction()
+    data class ChangePenSetting(val presetId: String, val setting: PenSetting) : ToolbarAction()
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
     object ToggleMenu : ToolbarAction()
     data class ToggleEraserManu(val isOpen: Boolean) : ToolbarAction()
@@ -182,6 +194,27 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch {
             ClipboardStore.content.collect { setHasClipboard(it != null) }
         }
+        // The pen presets in AppSettings are the source of truth for per-pen color/size;
+        // mirror them into ToolbarUiState.penSettings so the (non-Compose) drawing
+        // pipeline sees changes from any writer — StrokeMenu here, or the settings
+        // editor (step 6) while an editor is open. If the active preset was deleted,
+        // reselect the first surviving one: without this, drawing would continue with
+        // the stale base type and a hardcoded fallback setting, and no button would
+        // read selected.
+        viewModelScope.launch {
+            snapshotFlow { GlobalAppSettings.current.toolbarPens }
+                .collect { pens ->
+                    _toolbarState.update { state ->
+                        val active = pens.find { it.id == state.penPresetId }
+                            ?: pens.firstOrNull()
+                        state.copy(
+                            penSettings = pens.associate { it.id to it.setting() },
+                            pen = active?.pen ?: state.pen,
+                            penPresetId = active?.id ?: state.penPresetId,
+                        )
+                    }
+                }
+        }
     }
 
     // ---- One-Time Events (Channels) ----
@@ -212,13 +245,19 @@ class EditorViewModel @Inject constructor(
     fun initFromPersistedSettings() {
         if (!didInitSettings.compareAndSet(false, true)) return
         val settings = editorSettingCacheManager.getEditorSettings()
+        val pens = GlobalAppSettings.current.toolbarPens
+        // Restore the last-used preset; fall back to the first preset if it was deleted
+        // (or the cache predates presets and was discarded by its version gate).
+        val preset = pens.find { it.id == settings?.penPresetId } ?: pens.firstOrNull()
         _toolbarState.update {
             it.copy(
                 mode = settings?.mode ?: Mode.Draw,
-                pen = settings?.pen ?: Pen.BALLPEN,
+                pen = preset?.pen ?: Pen.BALLPEN,
+                penPresetId = preset?.id ?: it.penPresetId,
                 eraser = settings?.eraser ?: Eraser.PEN,
                 isToolbarOpen = settings?.isToolbarOpen ?: false,
-                penSettings = settings?.penSettings ?: DEFAULT_PEN_SETTINGS
+                penSettings = pens.associate { p -> p.id to p.setting() }
+                    .ifEmpty { DEFAULT_PEN_SETTINGS }
             )
         }
     }
@@ -265,8 +304,9 @@ class EditorViewModel @Inject constructor(
                 saveToolbarState()
             }
 
-            is ToolbarAction.ChangePen -> handlePenChange(action.pen)
-            is ToolbarAction.ChangePenSetting -> handlePenSettingChange(action.pen, action.setting)
+            is ToolbarAction.ChangePen -> handlePenChange(action.presetId)
+            is ToolbarAction.ChangePenSetting ->
+                handlePenSettingChange(action.presetId, action.setting)
             is ToolbarAction.ChangeEraser -> handleEraserChange(action.eraser)
             is ToolbarAction.ToggleMenu -> {
                 _toolbarState.update { it.copy(isMenuOpen = !it.isMenuOpen) }
@@ -319,13 +359,14 @@ class EditorViewModel @Inject constructor(
     // Toolbar Action Handlers (private)
     // --------------------------------------------------------
 
-    private fun handlePenChange(pen: Pen) {
+    private fun handlePenChange(presetId: String) {
+        val preset = GlobalAppSettings.current.toolbarPens.find { it.id == presetId } ?: return
         val state = _toolbarState.value
-        if (state.mode == Mode.Draw && state.pen == pen) {
+        if (state.mode == Mode.Draw && state.penPresetId == presetId) {
             _toolbarState.update { it.copy(isStrokeSelectionOpen = true) }
         } else {
             _toolbarState.update {
-                it.copy(pen = pen, mode = Mode.Draw)
+                it.copy(pen = preset.pen, penPresetId = presetId, mode = Mode.Draw)
             }
             saveToolbarState()
         }
@@ -341,11 +382,28 @@ class EditorViewModel @Inject constructor(
         saveToolbarState()
     }
 
-    private fun handlePenSettingChange(pen: Pen, setting: PenSetting) {
-        val newSettings = _toolbarState.value.penSettings.toMutableMap()
-        newSettings[pen.penName] = setting
-        _toolbarState.update { it.copy(penSettings = newSettings) }
-        saveToolbarState()
+    /**
+     * The preset is the setting: write it back to AppSettings. [ToolbarUiState.penSettings]
+     * is updated directly so the drawing pipeline never reads a stale value; the init-block
+     * snapshotFlow re-emits the same map (deduped by StateFlow equality) and exists for
+     * *other* writers (the settings editor). [GlobalAppSettings] is updated synchronously
+     * so rapid StrokeMenu slider changes stay ordered; only the DB write is async.
+     */
+    private fun handlePenSettingChange(presetId: String, setting: PenSetting) {
+        val settings = GlobalAppSettings.current
+        val updated = settings.copy(
+            toolbarPens = settings.toolbarPens.map {
+                if (it.id == presetId) it.copy(color = setting.color, size = setting.strokeSize)
+                else it
+            }
+        )
+        GlobalAppSettings.update(updated)
+        _toolbarState.update {
+            it.copy(penSettings = it.penSettings + (presetId to setting))
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            appRepository.kvProxy.setAppSettings(updated)
+        }
     }
 
     private fun handleCloseAllMenus() {
@@ -573,9 +631,8 @@ class EditorViewModel @Inject constructor(
             EditorSettingCacheManager.EditorSettings(
                 isToolbarOpen = currentState.isToolbarOpen,
                 mode = currentState.mode,
-                pen = currentState.pen,
+                penPresetId = currentState.penPresetId,
                 eraser = currentState.eraser,
-                penSettings = currentState.penSettings
             )
         )
     }
@@ -729,16 +786,9 @@ class EditorViewModel @Inject constructor(
     }
 
     companion object {
-        val DEFAULT_PEN_SETTINGS = mapOf(
-            Pen.BALLPEN.penName to PenSetting(5f, Color.BLACK),
-            Pen.REDBALLPEN.penName to PenSetting(5f, Color.RED),
-            Pen.BLUEBALLPEN.penName to PenSetting(5f, Color.BLUE),
-            Pen.GREENBALLPEN.penName to PenSetting(5f, Color.GREEN),
-            Pen.PENCIL.penName to PenSetting(5f, Color.BLACK),
-            Pen.BRUSH.penName to PenSetting(5f, Color.BLACK),
-            Pen.MARKER.penName to PenSetting(40f, Color.LTGRAY),
-            Pen.FOUNTAIN.penName to PenSetting(5f, Color.BLACK)
-        )
+        // Canonical values live in the default pen presets (ToolbarPen.DEFAULT_PENS) —
+        // one source of truth. These are fallbacks only; persisted user presets win.
+        val DEFAULT_PEN_SETTINGS = ToolbarPen.defaultPenSettings
     }
 
 

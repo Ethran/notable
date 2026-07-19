@@ -5,6 +5,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
@@ -19,6 +20,13 @@ enum class Eraser(val _name: String) {
 
 const val SCRIBBLE_TO_ERASE_GRACE_PERIOD_MS = 150L
 const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
+
+/**
+ * Width (px) of the pen-eraser swath: the diameter of the region [handleErase] actually deletes.
+ * Shared so the native side-button eraser indicator (see einkHelper.enableNativeEraser) is drawn
+ * at exactly the size it erases.
+ */
+const val ERASER_SWATH_WIDTH = 30f
 
 const val MINIMUM_SCRIBBLE_POINTS = 15
 
@@ -84,6 +92,8 @@ fun handleScribbleToErase(
     touchPoints: List<StrokePoint>,
     history: History,
     pen: Pen,
+    strokeSize: Float,
+    color: Int,
     currentLastStrokeEndTime: Long,
     firstPointTime: Long
 ): Rect? {
@@ -130,7 +140,29 @@ fun handleScribbleToErase(
     if (deletedStrokes.isNotEmpty()) {
         val deletedStrokeIds = deletedStrokes.map { it.id }
         page.removeStrokes(deletedStrokeIds)
-        history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
+
+        // Build the scribble as a real stroke (not added to the page — the net visible result is
+        // still "everything gone") so undo can bring it back. Two history blocks make undo staged:
+        //   undo #1 (top block)    → re-add the erased strokes AND the scribble
+        //   undo #2 (older block)  → remove the scribble again (leaving just the erased strokes)
+        // Pushed older-first because undo pops the most-recent block first.
+        val scribbleBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
+        scribbleBox.inset(-strokeSize, -strokeSize)
+        val scribbleStroke = Stroke(
+            size = strokeSize,
+            pen = pen,
+            pageId = page.currentPageId,
+            top = scribbleBox.top,
+            bottom = scribbleBox.bottom,
+            left = scribbleBox.left,
+            right = scribbleBox.right,
+            points = touchPoints,
+            color = color,
+            // Pressure is normalized to [0,1] at capture (TouchPoint.toStrokePoint).
+            maxPressure = MAX_PRESSURE_NORMALIZED
+        )
+        history.addOperationsToHistory(listOf(Operation.DeleteStroke(listOf(scribbleStroke.id))))
+        history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes + scribbleStroke)))
         // Return the erased region in SCREEN coordinates (mirrors handleErase). The caller
         // pushes this rect to the SurfaceView/EPD via commitErase, and the surface bitmap
         // (windowedBitmap) is in screen space — returning page coords here pushed the wrong
@@ -149,7 +181,7 @@ fun handleErase(
     page: PageView, history: History, points: List<SimplePointF>, eraser: Eraser
 ): Rect? {
     val paint = Paint().apply {
-        this.strokeWidth = 30f
+        this.strokeWidth = ERASER_SWATH_WIDTH
         this.style = Paint.Style.STROKE
         this.strokeCap = Paint.Cap.ROUND
         this.strokeJoin = Paint.Join.ROUND

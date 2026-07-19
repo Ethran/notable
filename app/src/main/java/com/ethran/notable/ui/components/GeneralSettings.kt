@@ -33,13 +33,6 @@ fun GeneralSettings(
             })
 
         SettingToggleRow(
-            label = stringResource(R.string.use_onyx_neotools_may_cause_crashes),
-            value = settings.neoTools,
-            onToggle = { isChecked ->
-                onSettingsChange(settings.copy(neoTools = isChecked))
-            })
-
-        SettingToggleRow(
             label = stringResource(R.string.enable_scribble_to_erase),
             value = settings.scribbleToEraseEnabled,
             onToggle = { isChecked ->
@@ -65,13 +58,6 @@ fun GeneralSettings(
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(continuousStrokeSlider = isChecked))
             })
-        SettingToggleRow(
-            label = stringResource(R.string.monochrome_mode) + " " + stringResource(R.string.work_in_progress),
-            value = settings.monochromeMode,
-            onToggle = { isChecked ->
-                onSettingsChange(settings.copy(monochromeMode = isChecked))
-            })
-
         SettingToggleRow(
             label = stringResource(R.string.rename_on_create),
             value = settings.renameOnCreate,

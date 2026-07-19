@@ -15,12 +15,10 @@
     <string name="small_squares_grid">W kratkę</string>
     <string name="hexagon_grid">W sześciokąty</string>
 
-    <string name="use_onyx_neotools_may_cause_crashes">Używaj Onyx NeoTools (może powodować awarie)</string>
     <string name="enable_scribble_to_erase">Zamaż aby usunąć</string>
     <string name="enable_smooth_scrolling">Włącz płynne przewijanie</string>
     <string name="continuous_zoom">Włącz płynne przybliżanie</string>
     <string name="continuous_stroke_slider">Płynny regulator grubości kreski</string>
-    <string name="monochrome_mode">Tryb czarno-biały</string>
     <string name="rename_on_create">Otwórz ustawienia notatknika przy tworzeniu nowego</string>
     <string name="paginate_pdf">Podziel strony przy eksporcie</string>
     <string name="preview_pdf_pagination">Podgląd podziału stron</string>
@@ -237,5 +235,50 @@
     <string name="sync_experimental_title">Funkcja eksperymentalna</string>
     <string name="sync_experimental_warning">Funkcja synchronizacji jest obecnie w fazie testów. Nie ma gwarancji jej stabilności i może ona prowadzić do utraty lub duplikacji danych.\n\nPrzed kontynuowaniem upewnij się, że masz lokalne kopie zapasowe swoich notatek.</string>
     <string name="sync_experimental_confirm">Rozumiem i akceptuję ryzyko</string>
+
+    <!-- Toolbar settings -->
+    <string name="settings_tab_toolbar_name">Pasek narzędzi</string>
+    <string name="toolbar_settings_section_scrollable">Sekcja przewijana</string>
+    <string name="toolbar_settings_section_pinned">Sekcja przypięta</string>
+    <string name="toolbar_settings_section_hidden">Ukryte</string>
+    <string name="toolbar_settings_drag_hint">Przytrzymaj wiersz i przeciągnij, aby zmienić kolejność lub przenieść między sekcjami</string>
+    <string name="toolbar_settings_add_pen">Dodaj pisak</string>
+    <string name="toolbar_settings_add_divider">Dodaj separator</string>
+    <string name="toolbar_settings_reset">Przywróć domyślne</string>
+    <string name="toolbar_settings_export">Eksportuj…</string>
+    <string name="toolbar_settings_import">Importuj…</string>
+    <string name="toolbar_settings_export_done">Wyeksportowano układ paska narzędzi</string>
+    <string name="toolbar_settings_export_failed">Eksport nie powiódł się: %1$s</string>
+    <string name="toolbar_settings_import_done">Zaimportowano układ paska narzędzi</string>
+    <string name="toolbar_settings_import_dropped">Zaimportowano układ paska narzędzi; pominięto nieznane elementy: %1$d</string>
+    <string name="toolbar_settings_import_failed">Import nie powiódł się: %1$s</string>
+    <string name="toolbar_settings_import_confirm_title">Zaimportować układ paska narzędzi?</string>
+    <string name="toolbar_settings_import_confirm_message">Zastąpi to obecny układ paska narzędzi i wszystkie pisaki. Tej operacji nie można cofnąć.</string>
+    <string name="toolbar_settings_pick_pen_type">Rodzaj pisaka</string>
+    <string name="toolbar_settings_edit_pen">Edytuj pisak</string>
+    <string name="toolbar_settings_delete">Usuń</string>
+    <string name="toolbar_settings_hide">Ukryj</string>
+    <string name="toolbar_settings_menu_locked">Przycisku menu nie można ukryć — to jedyny sposób na otwarcie menu paska narzędzi</string>
+    <string name="toolbar_settings_size">Rozmiar</string>
+    <string name="toolbar_settings_color">Kolor</string>
+
+    <string name="pen_name_ballpen">Długopis</string>
+    <string name="pen_name_pencil">Ołówek</string>
+    <string name="pen_name_brush">Pędzel</string>
+    <string name="pen_name_fountain">Pióro wieczne</string>
+    <string name="pen_name_marker">Zakreślacz</string>
+
+    <string name="toolbar_element_shape">Kształt</string>
+    <string name="toolbar_element_eraser">Gumka</string>
+    <string name="toolbar_element_select">Zaznaczanie lassem</string>
+    <string name="toolbar_element_image">Wstaw obraz</string>
+    <string name="toolbar_element_paste">Wklej</string>
+    <string name="toolbar_element_reset_view">Resetuj widok</string>
+    <string name="toolbar_element_undo">Cofnij</string>
+    <string name="toolbar_element_redo">Ponów</string>
+    <string name="toolbar_element_page_nav">Numer strony</string>
+    <string name="toolbar_element_home">Biblioteka</string>
+    <string name="toolbar_element_menu">Menu</string>
+    <string name="toolbar_element_divider">Separator</string>
 
 </resources>

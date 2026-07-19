@@ -164,7 +164,9 @@ class XoppFile @Inject constructor(
                 writer.write("\" width=\"")
                 writer.write((stroke.size * scaleFactor).toString())
 
-                if ((stroke.pen == Pen.FOUNTAIN) || (stroke.pen == Pen.BRUSH) || (stroke.pen == Pen.PENCIL)) {
+                if ((stroke.pen == Pen.FOUNTAIN) || (stroke.pen == Pen.BRUSH) || (stroke.pen == Pen.PENCIL) ||
+                    (stroke.pen == Pen.CHARCOAL) || (stroke.pen == Pen.CALLIGRAPHY)
+                ) {
                     stroke.points.forEach { point ->
                         writer.write(" ")
                         writer.write(

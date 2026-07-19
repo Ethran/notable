@@ -72,15 +72,7 @@ fun StrokeMenu(
                 .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
         ) {
 
-            val listOfColors = if (GlobalAppSettings.current.monochromeMode) listOf(
-                Color.Black,
-                Color.DarkGray,
-                Color.Gray,
-                Color.LightGray
-            )
-            else colorOptions
-
-            val widthOfPicker = (35 * listOfColors.size.coerceAtLeast(5))
+            val widthOfPicker = (35 * colorOptions.size.coerceAtLeast(5))
             val heightOfPicker = 40
 
             val isBottom =
@@ -101,7 +93,7 @@ fun StrokeMenu(
                 ColorPicker(
                     value = value,
                     onChange = onChange,
-                    colorOptions = listOfColors,
+                    colorOptions = colorOptions,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             } else {
@@ -109,7 +101,7 @@ fun StrokeMenu(
                 ColorPicker(
                     value = value,
                     onChange = onChange,
-                    colorOptions = listOfColors,
+                    colorOptions = colorOptions,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
 
@@ -138,7 +130,9 @@ fun ColumnScope.StrokeSizePicker(
     heightOfPicker: Int = 40
 ) {
 
-    if (!GlobalAppSettings.current.continuousStrokeSlider) {
+    // The slider needs at least two values to define a range; a single-size pen
+    // falls back to the button picker regardless of the setting.
+    if (!GlobalAppSettings.current.continuousStrokeSlider || sizeOptions.size < 2) {
         ThicknessPicker(
             value,
             onChange,
