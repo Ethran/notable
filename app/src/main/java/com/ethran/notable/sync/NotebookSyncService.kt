@@ -11,6 +11,7 @@ import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.ErrorAccumulator
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.getOrElse
+import com.ethran.notable.utils.map
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
@@ -203,21 +204,22 @@ class NotebookSyncService @Inject constructor(
                 errors.asResult(Unit)
             } else {
                 // 3. All pages are up: publish the manifest last. This is the atomic commit; the
-                //    If-Match guard rejects the PUT if the remote changed since we read it.
+                //    If-Match guard rejects the PUT if the remote changed since we read it. Capture
+                //    the new ETag so next sync can do a cheap If-None-Match check (P26).
                 val manifestJson = NotebookSerializer.serializeManifest(notebook)
-                client.putFile(
+                client.putFileReturningEtag(
                     SyncPaths.manifestFile(notebookId),
                     manifestJson.toByteArray(),
                     "application/json",
                     ifMatch = manifestIfMatch
-                ).onSuccess {
+                ).onSuccess { newEtag ->
                     // Commit point: record the notebook as synced. After upload, the remote's
                     // updatedAt equals the manifest we just wrote (notebook.updatedAt).
                     appRepository.notebookSyncStateRepository.markSynced(
                         notebookId = notebookId,
                         localUpdatedAt = notebook.updatedAt,
                         remoteUpdatedAt = notebook.updatedAt,
-                        remoteEtag = null,
+                        remoteEtag = newEtag,
                     )
                     // Only after a committed upload: drop any stale tombstone for a resurrected
                     // notebook. Best-effort -- a leftover tombstone is re-checked next sync.
@@ -230,7 +232,7 @@ class NotebookSyncService @Inject constructor(
                         }
                     }
                     log.i(TAG, "Uploaded: ${notebook.title}")
-                }
+                }.map { }
             }
         }
     }
@@ -307,12 +309,14 @@ class NotebookSyncService @Inject constructor(
     ): AppResult<Unit, DomainError> {
         log.i(TAG, "Downloading notebook ID: $notebookId")
 
-        // 1. Fetch manifest file (Early Return on error)
-        val manifestBytes = client.getFile(SyncPaths.manifestFile(notebookId))
+        // 1. Fetch manifest file with its ETag (Early Return on error). The ETag is stored at the
+        //    commit point so next sync can do a cheap If-None-Match check (P26).
+        val manifestFile = client.getFileWithMetadata(SyncPaths.manifestFile(notebookId))
             .onFailure { return AppResult.Error(it) }
+        val remoteEtag = manifestFile.etag
 
         // 2. Deserialize manifest (Early Return on corrupted JSON)
-        val manifestJson = manifestBytes.decodeToString()
+        val manifestJson = manifestFile.content.decodeToString()
         val notebook = NotebookSerializer.deserializeManifest(manifestJson)
             .onFailure { return AppResult.Error(it) }
 
@@ -352,7 +356,7 @@ class NotebookSyncService @Inject constructor(
                 notebookId = notebookId,
                 localUpdatedAt = notebook.updatedAt,
                 remoteUpdatedAt = notebook.updatedAt,
-                remoteEtag = null,
+                remoteEtag = remoteEtag,
             )
             log.i(TAG, "Downloaded: ${notebook.title}")
             AppResult.Success(Unit)

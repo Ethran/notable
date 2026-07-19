@@ -181,6 +181,34 @@ class WebDAVClient(
         return putFile(path, localFile.readBytes(), contentType, ifMatch)
     }
 
+    /**
+     * Upload a file and return the server's new ETag for it (from the PUT response `ETag` header),
+     * or `null` if the server did not send one. Used for the manifest so the notebook's stored ETag
+     * matches the just-published version, enabling cheap `If-None-Match` change detection next sync
+     * (P26). Returns [DomainError.SyncConflict] on a 412 like [putFile].
+     */
+    fun putFileReturningEtag(
+        path: String,
+        content: ByteArray,
+        contentType: String = "application/octet-stream",
+        ifMatch: String? = null
+    ): AppResult<String?, DomainError> =
+        execute("PUT", {
+            val requestBody = content.toRequestBody(contentType.toMediaType())
+            Request.Builder().url(buildUrl(path)).put(requestBody)
+                .header("Authorization", credentials)
+                .apply { ifMatch?.let { header("If-Match", it) } }
+                .build()
+        }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_PRECON_FAILED ->
+                    AppResult.Error(DomainError.SyncConflict)
+
+                response.isSuccessful -> AppResult.Success(response.header("ETag"))
+                else -> AppResult.Error(DomainError.SyncError("PUT failed: ${response.code}"))
+            }
+        }
+
     fun getFile(path: String): AppResult<ByteArray, DomainError> {
         return getFileWithMetadata(path).map { it.content }
     }
@@ -193,6 +221,28 @@ class WebDAVClient(
                 AppResult.Success(DownloadedFile(response.body.bytes(), response.header("ETag")))
             } else {
                 AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
+            }
+        }
+
+    /**
+     * Conditional GET: fetch a file only if its ETag differs from [etag].
+     * Returns `Success(null)` when the server replies `304 Not Modified` (the resource is unchanged
+     * since we stored [etag]) — a cheap, bodyless "no change" answer that avoids clock math (5a).
+     * Otherwise returns the fetched file with its current ETag.
+     */
+    fun getFileIfNoneMatch(path: String, etag: String): AppResult<DownloadedFile?, DomainError> =
+        execute("GET", {
+            Request.Builder().url(buildUrl(path)).get()
+                .header("Authorization", credentials)
+                .header("If-None-Match", etag)
+                .build()
+        }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_NOT_MODIFIED -> AppResult.Success(null)
+                response.isSuccessful ->
+                    AppResult.Success(DownloadedFile(response.body.bytes(), response.header("ETag")))
+
+                else -> AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
             }
         }
 
