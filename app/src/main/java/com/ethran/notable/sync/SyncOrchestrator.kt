@@ -189,26 +189,33 @@ class SyncOrchestrator @Inject constructor(
 
     suspend fun syncNotebook(notebookId: String): AppResult<Unit, DomainError> =
         withContext(ioDispatcher) {
-            if (syncMutex.isLocked) return@withContext AppResult.Success(Unit)
-            val settings = kvProxy.getSyncSettings()
-            if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
+            // Actually hold the mutex for the whole operation. A bare isLocked check is
+            // check-then-act: it let a sync-on-close race a full/periodic sync (P4). Skip-if-busy
+            // is still the right behavior for a single-notebook sync, so a failed tryLock succeeds.
+            if (!syncMutex.tryLock()) return@withContext AppResult.Success(Unit)
+            try {
+                val settings = kvProxy.getSyncSettings()
+                if (!settings.syncEnabled) return@withContext AppResult.Success(Unit)
 
-            syncPreflightService.checkWifiConstraint().onSuccess {
-                if (settings.username.isBlank() || settings.password.isBlank()) {
-                    return@withContext AppResult.Error(DomainError.SyncAuthError)
+                syncPreflightService.checkWifiConstraint().onSuccess {
+                    if (settings.username.isBlank() || settings.password.isBlank()) {
+                        return@withContext AppResult.Error(DomainError.SyncAuthError)
+                    }
+                    val client = webDavClientFactory.create(
+                        settings.serverUrl,
+                        settings.username,
+                        settings.password
+                    )
+                    return@withContext notebookReconciliationService.syncNotebook(
+                        notebookId,
+                        client,
+                        settings.uploadOnly
+                    )
                 }
-                val client = webDavClientFactory.create(
-                    settings.serverUrl,
-                    settings.username,
-                    settings.password
-                )
-                return@withContext notebookReconciliationService.syncNotebook(
-                    notebookId,
-                    client,
-                    settings.uploadOnly
-                )
+                AppResult.Success(Unit)
+            } finally {
+                syncMutex.unlock()
             }
-            AppResult.Success(Unit)
         }
 
     suspend fun syncFromPageId(pageId: String) {
