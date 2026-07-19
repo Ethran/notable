@@ -270,26 +270,40 @@ class NotebookSyncService @Inject constructor(
 
         log.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
 
-        // 3. Save to database (protect against Room Exceptions)
-        try {
-            val existingNotebook = appRepository.bookRepository.getById(notebookId)
-            if (existingNotebook != null) {
-                appRepository.bookRepository.updatePreservingTimestamp(notebook)
-            } else {
-                appRepository.bookRepository.createEmpty(notebook)
+        // 3. Ensure a notebook row exists so page foreign keys resolve, but do NOT advance its
+        //    commit timestamp yet. A brand-new notebook is inserted with an epoch-0 timestamp so a
+        //    partial download reads as "older than remote" and re-downloads next sync instead of
+        //    being skipped as in-sync (P1 download half). An existing notebook keeps its current
+        //    (older) timestamp untouched.
+        val isNew = appRepository.bookRepository.getById(notebookId) == null
+        if (isNew) {
+            try {
+                appRepository.bookRepository.createEmpty(notebook.copy(updatedAt = java.util.Date(0)))
+            } catch (e: Exception) {
+                return AppResult.Error(DomainError.DatabaseError("Failed to create notebook locally: ${e.message}"))
             }
-        } catch (e: Exception) {
-            return AppResult.Error(DomainError.DatabaseError("Failed to update/create notebook locally: ${e.message}"))
         }
 
-        // 4. Download pages and aggregate errors
+        // 4. Download and persist all pages.
         val errors = ErrorAccumulator()
         for (pageId in notebook.pageIds) {
             downloadPage(pageId, notebookId, client).onError { errors.add(it) }
         }
 
-        log.i(TAG, "Downloaded: ${notebook.title}")
-        return errors.asResult(Unit)
+        // 5. Commit: only when every page landed, write the notebook row with the real remote
+        //    timestamp. On any failure the notebook keeps its old/sentinel timestamp, so the next
+        //    sync retries the download rather than treating the hole as "in sync".
+        if (errors.hasErrors) {
+            log.w(TAG, "Download incomplete for ${notebook.title}; leaving timestamp stale to retry")
+            return errors.asResult(Unit)
+        }
+        return try {
+            appRepository.bookRepository.updatePreservingTimestamp(notebook)
+            log.i(TAG, "Downloaded: ${notebook.title}")
+            AppResult.Success(Unit)
+        } catch (e: Exception) {
+            AppResult.Error(DomainError.DatabaseError("Failed to commit notebook $notebookId: ${e.message}"))
+        }
     }
 
     private suspend fun downloadPage(
