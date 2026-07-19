@@ -185,6 +185,8 @@ class NotebookSyncService @Inject constructor(
             if (client.exists(tombstonePath).getOrElse { false }) {
                 client.delete(tombstonePath).onSuccess {
                     log.i(TAG, "Removed stale tombstone for resurrected notebook: $notebookId")
+                }.onError {
+                    log.w(TAG, "Failed to remove stale tombstone $notebookId: ${it.userMessage}")
                 }
             }
 

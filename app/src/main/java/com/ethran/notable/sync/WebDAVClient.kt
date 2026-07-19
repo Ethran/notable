@@ -3,6 +3,7 @@ package com.ethran.notable.sync
 import android.net.Uri
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
+import com.ethran.notable.utils.getOrNull
 import com.ethran.notable.utils.map
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
@@ -75,7 +76,8 @@ class WebDAVClient(
         }) { response ->
             when {
                 response.isSuccessful -> {
-                    val clockSkewMs = getServerTime()?.let { System.currentTimeMillis() - it }
+                    val clockSkewMs =
+                        getServerTime().getOrNull()?.let { System.currentTimeMillis() - it }
                     AppResult.Success(ConnectionTestResult(clockSkewMs = clockSkewMs))
                 }
 
@@ -85,25 +87,22 @@ class WebDAVClient(
         }
 
     /**
-     * Get the server's current time from the Date response header.
-     * Makes a HEAD request and parses the RFC 1123 Date header.
-     * @return Server time as epoch millis, or null if unavailable/unparseable
+     * Get the server's current time from the Date response header (RFC 1123).
+     * @return Server time as epoch millis on success, or an Error when the request failed or the
+     *         Date header was missing/unparseable.
      */
-    fun getServerTime(): Long? {
-        return try {
-            val request =
-                Request.Builder().url(serverUrl).head().header("Authorization", credentials).build()
-
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                val dateHeader = response.header("Date") ?: return@use null
-                parseHttpDate(dateHeader)
+    fun getServerTime(): AppResult<Long, DomainError> =
+        execute("Server time", {
+            Request.Builder().url(serverUrl).head().header("Authorization", credentials).build()
+        }) { response ->
+            if (!response.isSuccessful) {
+                AppResult.Error(DomainError.SyncError("Server time HEAD failed: ${response.code}"))
+            } else {
+                response.header("Date")?.let { parseHttpDate(it) }
+                    ?.let { AppResult.Success(it) }
+                    ?: AppResult.Error(DomainError.NetworkError("Missing or unparseable Date header"))
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to get server time: ${e.message}")
-            null
         }
-    }
 
     /**
      * Check whether a resource exists on the server.

@@ -28,8 +28,7 @@ class SyncPreflightService @Inject constructor(
     }
 
     fun checkClockSkew(client: WebDAVClient): AppResult<Unit, DomainError> {
-        val serverTime = client.getServerTime()
-            ?: return AppResult.Error(DomainError.NetworkError("Could not retrieve server time"))
+        val serverTime = client.getServerTime().onFailure { return AppResult.Error(it) }
 
         val skewMs = System.currentTimeMillis() - serverTime
         return if (abs(skewMs) > CLOCK_SKEW_THRESHOLD_MS) {
