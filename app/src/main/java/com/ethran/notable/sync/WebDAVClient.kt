@@ -22,7 +22,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.concurrent.TimeUnit
 
 /**
  * A remote WebDAV collection entry with its name and last-modified timestamp.
@@ -62,13 +61,11 @@ data class ConnectionTestResult(val clockSkewMs: Long? = null)
  * WebDAV client built on OkHttp for Notable sync operations.
  */
 class WebDAVClient(
-    private val serverUrl: String, username: String, password: String
+    private val serverUrl: String,
+    username: String,
+    password: String,
+    private val client: OkHttpClient
 ) {
-    private val client =
-        OkHttpClient.Builder().connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
-
     private val credentials = Credentials.basic(username, password)
 
     /**
@@ -460,11 +457,6 @@ class WebDAVClient(
 
     companion object {
         private const val TAG = "WebDAVClient"
-
-        // Timeout constants
-        private const val CONNECT_TIMEOUT_SECONDS = 30L
-        private const val READ_TIMEOUT_SECONDS = 60L
-        private const val WRITE_TIMEOUT_SECONDS = 60L
 
         // RFC 1123 date format used in HTTP Date headers
         private const val HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
