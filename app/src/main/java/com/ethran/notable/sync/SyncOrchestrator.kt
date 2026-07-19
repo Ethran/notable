@@ -4,16 +4,12 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
-import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -59,21 +55,15 @@ class SyncOrchestrator @Inject constructor(
             var nonCriticalError: DomainError? = null
 
             if (!settings.syncEnabled) {
-                val error = DomainError.SyncConfigError
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+                return@withContext failStep(DomainError.SyncConfigError)
             }
 
             if (settings.username.isBlank() || settings.password.isBlank()) {
-                val error = DomainError.SyncAuthError
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+                return@withContext failStep(DomainError.SyncAuthError)
             }
 
-
-            syncPreflightService.checkWifiConstraint().onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            syncPreflightService.checkWifiConstraint().onFailure {
+                return@withContext failStep(it)
             }
 
             val client = webDavClientFactory.create(
@@ -82,14 +72,12 @@ class SyncOrchestrator @Inject constructor(
                 settings.password
             )
 
-            syncPreflightService.checkClockSkew(client).onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            syncPreflightService.checkClockSkew(client).onFailure {
+                return@withContext failStep(it)
             }
 
-            syncPreflightService.ensureServerDirectories(client).onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            syncPreflightService.ensureServerDirectories(client).onFailure {
+                return@withContext failStep(it)
             }
 
             reporter.beginStep(
@@ -97,9 +85,8 @@ class SyncOrchestrator @Inject constructor(
                 PROGRESS_SYNCING_FOLDERS,
                 "Syncing folders..."
             )
-            folderSyncService.syncFolders(client, uploadOnly).onFailure { error ->
-                reporter.finishError(error, false)
-                return@withContext AppResult.Error(error)
+            folderSyncService.syncFolders(client, uploadOnly).onFailure {
+                return@withContext failStep(it)
             }
 
             reporter.beginStep(
@@ -291,6 +278,12 @@ class SyncOrchestrator @Inject constructor(
         }
     }
 
+    /** Report [error] as the terminal state of the current sync and return it as a failure. */
+    private fun failStep(error: DomainError): AppResult<Unit, DomainError> {
+        reporter.finishError(error, false)
+        return AppResult.Error(error)
+    }
+
     private suspend fun updateSyncedNotebookIds() {
         val currentIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
         kvProxy.setSyncSettings(kvProxy.getSyncSettings().copy(syncedNotebookIds = currentIds))
@@ -329,34 +322,3 @@ internal fun finalizeSyncResult(
     reporter.finishSuccess(summary)
     return AppResult.Success(Unit)
 }
-
-@EntryPoint
-@InstallIn(SingletonComponent::class)
-interface SyncOrchestratorEntryPoint {
-    fun syncOrchestrator(): SyncOrchestrator
-    fun kvProxy(): KvProxy
-    fun snackDispatcher(): SnackDispatcher
-}
-
-sealed class SyncState {
-    data object Idle : SyncState()
-    data class Syncing(
-        val currentStep: SyncStep,
-        val stepProgress: Float,
-        val details: String,
-        val item: ItemProgress? = null
-    ) : SyncState()
-
-    data class Success(val summary: SyncSummary) : SyncState()
-    data class Error(val error: DomainError, val step: SyncStep, val canRetry: Boolean) :
-        SyncState()
-}
-
-data class ItemProgress(val index: Int, val total: Int, val name: String)
-enum class SyncStep { INITIALIZING, SYNCING_FOLDERS, APPLYING_DELETIONS, SYNCING_NOTEBOOKS, DOWNLOADING_NEW, UPLOADING_DELETIONS, FINALIZING }
-data class SyncSummary(
-    val notebooksSynced: Int,
-    val notebooksDownloaded: Int,
-    val notebooksDeleted: Int,
-    val duration: Long
-)
