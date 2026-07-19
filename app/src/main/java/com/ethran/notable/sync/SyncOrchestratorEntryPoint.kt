@@ -1,7 +1,6 @@
 package com.ethran.notable.sync
 
 import com.ethran.notable.data.db.KvProxy
-import com.ethran.notable.ui.SnackDispatcher
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -15,5 +14,4 @@ import dagger.hilt.components.SingletonComponent
 interface SyncOrchestratorEntryPoint {
     fun syncOrchestrator(): SyncOrchestrator
     fun kvProxy(): KvProxy
-    fun snackDispatcher(): SnackDispatcher
 }
