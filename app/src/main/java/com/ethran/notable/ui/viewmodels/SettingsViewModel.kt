@@ -14,8 +14,8 @@ import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.sync.ConnectionTestResult
 import com.ethran.notable.sync.SyncLogger
-import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.sync.SyncProgressReporter
+import com.ethran.notable.sync.SyncRequest
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
@@ -28,7 +28,6 @@ import com.ethran.notable.utils.isLatestVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -61,7 +60,6 @@ data class SyncSettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val kvProxy: KvProxy,
-    private val syncOrchestrator: SyncOrchestrator,
     private val syncProgressReporter: SyncProgressReporter,
     private val syncScheduler: SyncScheduler,
     private val webDavClientFactory: WebDavClientFactoryPort,
@@ -69,8 +67,6 @@ class SettingsViewModel @Inject constructor(
     private val appEventBus: AppEventBus,
     @param:ApplicationScope private val appScope: CoroutineScope
 ) : ViewModel() {
-
-    private var runningSyncJob: Job? = null
 
     // We use the GlobalAppSettings object directly.
     val settings: AppSettings
@@ -230,72 +226,36 @@ class SettingsViewModel @Inject constructor(
 
     fun onConfirmForceUpload() {
         syncUiState = syncUiState.copy(showForceUploadConfirm = false)
-        runSyncWithSnack(
-            textDuring = "Force upload started...", successMessage = "Force upload complete"
-        ) { syncOrchestrator.forceUploadAll() }
+        syncScheduler.triggerImmediateSync(SyncRequest.ForceUpload)
     }
 
     fun onConfirmForceDownload() {
         syncUiState = syncUiState.copy(showForceDownloadConfirm = false)
-        runSyncWithSnack(
-            textDuring = "Force download started...", successMessage = "Force download complete"
-        ) { syncOrchestrator.forceDownloadAll() }
+        syncScheduler.triggerImmediateSync(SyncRequest.ForceDownload)
     }
 
-    /** Cancel a running manual sync (this VM's job) and any WorkManager sync (8h-2). */
+    /**
+     * Cancel any running sync. All triggers now go through WorkManager (9c), so cancelling the sync
+     * work covers manual, force, and background runs; the reporter is reset for immediate feedback,
+     * and the terminal "Sync cancelled" snack comes from [SyncWorkUiBridge] like every other outcome.
+     */
     fun onCancelSync() {
-        runningSyncJob?.cancel()
         syncScheduler.cancelRunningSync()
         syncProgressReporter.reset()
-        snackDispatcher.showOrUpdateSnack(SnackConf(text = "Sync cancelled", duration = 2000))
     }
-
-    private fun runSyncWithSnack(
-        textDuring: String,
-        successMessage: String,
-        action: suspend () -> AppResult<Unit, DomainError>
-    ) {
-        runningSyncJob = appScope.launch {
-            val snackId = java.util.UUID.randomUUID().toString()
-            snackDispatcher.showOrUpdateSnack(
-                SnackConf(id = snackId, text = textDuring, duration = null)
-            )
-            val message = try {
-                when (val result = action()) {
-                    is AppResult.Success -> successMessage
-                    // "Sync already in progress" is an informational no-op, not a failure (8i-1).
-                    is AppResult.Error ->
-                        if (result.error is DomainError.SyncInProgress) "A sync is already running"
-                        else "Sync failed: ${result.error.userMessage}"
-                }
-            } catch (e: Exception) {
-                "Sync failed: ${e.message ?: "Unknown"}"
-            }
-            snackDispatcher.showOrUpdateSnack(
-                SnackConf(id = snackId, text = message, duration = 3000)
-            )
-        }
-    }
-
 
     fun onClearSyncLogs() {
         SyncLogger.clear()
     }
 
+    /**
+     * Manual "Sync Now" goes through the same WorkManager funnel as every other trigger (9c), so it
+     * shares constraints/retry and surfaces exactly one terminal snack via [SyncWorkUiBridge]. Live
+     * progress still shows in the settings panel via [SyncProgressReporter]; `lastSyncTime` is
+     * persisted by the orchestrator on success (no longer written here — P27).
+     */
     fun onManualSync() {
-        runSyncWithSnack(
-            textDuring = "Sync initialized...", successMessage = "Sync completed successfully"
-        ) {
-            val result = syncOrchestrator.syncAllNotebooks()
-            if (result is AppResult.Success) {
-                // Save unix timestamp (ms since epoch). UI layer will format it for display.
-                updateSyncSettings(
-                    syncUiState.syncSettings.copy(lastSyncTime = System.currentTimeMillis()),
-                    saveToDb = true
-                )
-            }
-            result
-        }
+        syncScheduler.triggerImmediateSync(SyncRequest.SyncAll)
     }
 
     // ----------------- //
