@@ -29,7 +29,8 @@ class NotebookReconciliationService @Inject constructor(
     suspend fun syncExistingNotebooks(
         client: WebDAVClient,
         remoteNotebookIds: Set<String>,
-        uploadOnly: Boolean
+        uploadOnly: Boolean,
+        downloadOnly: Boolean
     ): AppResult<Set<String>, DomainError> {
         val localNotebooks = appRepository.bookRepository.getAll()
         val preDownloadNotebookIds = localNotebooks.map { it.id }.toSet()
@@ -39,8 +40,9 @@ class NotebookReconciliationService @Inject constructor(
         localNotebooks.forEachIndexed { i, notebook ->
             reporter.beginItem(index = i + 1, total = total, name = notebook.title, id = notebook.id)
             // Individual notebook sync failures are non-fatal for the whole process.
-            reconcileNotebook(notebook.id, client, remoteNotebookIds.contains(notebook.id), uploadOnly)
-                .onError { errors.add(it) }
+            reconcileNotebook(
+                notebook.id, client, remoteNotebookIds.contains(notebook.id), uploadOnly, downloadOnly
+            ).onError { errors.add(it) }
         }
         reporter.endItem()
 
@@ -54,28 +56,31 @@ class NotebookReconciliationService @Inject constructor(
     suspend fun syncNotebook(
         notebookId: String,
         client: WebDAVClient,
-        uploadOnly: Boolean
+        uploadOnly: Boolean,
+        downloadOnly: Boolean
     ): AppResult<Unit, DomainError> {
         log.i(TAG, "Syncing notebook: $notebookId")
         // If we cannot determine whether the remote manifest exists (e.g. transient network error),
         // abort this notebook rather than fall through to an unguarded upload (P2).
         val remotePresent = client.exists(SyncPaths.manifestFile(notebookId))
             .onFailure { return AppResult.Error(it) }
-        return reconcileNotebook(notebookId, client, remotePresent, uploadOnly)
+        return reconcileNotebook(notebookId, client, remotePresent, uploadOnly, downloadOnly)
     }
 
     private suspend fun reconcileNotebook(
         notebookId: String,
         client: WebDAVClient,
         remotePresent: Boolean,
-        uploadOnly: Boolean
+        uploadOnly: Boolean,
+        downloadOnly: Boolean
     ): AppResult<Unit, DomainError> {
         val localNotebook = appRepository.bookRepository.getById(notebookId)
             ?: return AppResult.Error(DomainError.NotFound("Notebook $notebookId"))
 
-        // Remote absent -> straight upload (new to the server), no If-Match.
+        // Remote absent -> straight upload (new to the server), no If-Match -- unless download-only.
         if (!remotePresent) {
-            return notebookSyncService.uploadNotebook(localNotebook, client)
+            return if (downloadOnly) AppResult.Success(Unit)
+            else notebookSyncService.uploadNotebook(localNotebook, client)
         }
 
         val syncState = appRepository.notebookSyncStateRepository.get(notebookId)
@@ -110,6 +115,7 @@ class NotebookReconciliationService @Inject constructor(
             remoteChanged = remoteChanged,
             remote = remote,
             uploadOnly = uploadOnly,
+            downloadOnly = downloadOnly,
         )
 
         return when (action) {
@@ -129,6 +135,14 @@ class NotebookReconciliationService @Inject constructor(
                     remoteUpdatedAt = remote?.updatedAt?.let { Date(it) } ?: syncState?.remoteUpdatedAt,
                     remoteEtag = if (remoteChanged) remote?.etag else storedEtag,
                 )
+                AppResult.Success(Unit)
+            }
+
+            NotebookAction.SkipDownloadOnly -> {
+                // Download-only mode: local is newer but we never push. Planned no-op; deliberately
+                // do NOT markSynced, so the notebook keeps its NOT_SYNCED badge (local changes are
+                // genuinely not on the server) (8g-2).
+                log.i(TAG, "↓ Download-only: not pushing local changes of ${localNotebook.title}")
                 AppResult.Success(Unit)
             }
 

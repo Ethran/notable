@@ -176,7 +176,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val settings = kvProxy.get().getSyncSettings()
-                if (settings.syncEnabled) {
+                if (settings.syncEnabled && settings.syncOnAppStart) {
                     Log.i(TAG, "Triggering one-time sync on app startup via WorkManager")
                     syncScheduler.get().triggerImmediateSync()
                 }

@@ -14,6 +14,12 @@ data class SyncSettings(
     val syncInterval: Int = 15, // minutes
     val lastSyncTime: Long? = null,
     val syncOnNoteClose: Boolean = true,
+    /** Run a full sync when the app starts. */
+    val syncOnAppStart: Boolean = true,
+    /** When opening a notebook, check whether the server has a newer version and hint the user. */
+    val checkOnOpen: Boolean = true,
     val wifiOnly: Boolean = false,
     val uploadOnly: Boolean = false,
+    /** Only pull from the server; never push local changes/deletions (mirror of [uploadOnly]). */
+    val downloadOnly: Boolean = false,
 )

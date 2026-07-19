@@ -56,6 +56,7 @@ class SyncOrchestrator @Inject constructor(
 
             val settings = kvProxy.getSyncSettings()
             val uploadOnly = settings.uploadOnly
+            val downloadOnly = settings.downloadOnly
             var nonCriticalError: DomainError? = null
 
             if (!settings.syncEnabled) {
@@ -95,7 +96,7 @@ class SyncOrchestrator @Inject constructor(
                 PROGRESS_SYNCING_FOLDERS,
                 "Syncing folders..."
             )
-            folderSyncService.syncFolders(client, uploadOnly).onFailure {
+            folderSyncService.syncFolders(client, uploadOnly, downloadOnly).onFailure {
                 return@withContext failStep(it)
             }
 
@@ -118,7 +119,7 @@ class SyncOrchestrator @Inject constructor(
             )
             val localIdsSnapshot = appRepository.bookRepository.getAll().map { it.id }.toSet()
             val preDownloadIds = when (
-                val syncResult = notebookReconciliationService.syncExistingNotebooks(client, remoteNotebookIds, uploadOnly)
+                val syncResult = notebookReconciliationService.syncExistingNotebooks(client, remoteNotebookIds, uploadOnly, downloadOnly)
             ) {
                 is AppResult.Success -> syncResult.data
                 // Per-notebook failures are NON-CRITICAL: each failed notebook was marked ERROR
@@ -152,9 +153,12 @@ class SyncOrchestrator @Inject constructor(
                 PROGRESS_UPLOADING_DELETIONS,
                 "Uploading deletions..."
             )
-            val deletedCount =
+            val deletedCount = if (downloadOnly) {
+                0 // download-only: never push local deletions to the server
+            } else {
                 notebookSyncService.detectAndUploadLocalDeletions(client, preDownloadIds)
                     .onFailure { return@withContext failStep(it) }
+            }
 
 
             reporter.beginStep(SyncStep.FINALIZING, PROGRESS_FINALIZING, "Finalizing...")
@@ -229,7 +233,8 @@ class SyncOrchestrator @Inject constructor(
                     return@withContext notebookReconciliationService.syncNotebook(
                         notebookId,
                         client,
-                        settings.uploadOnly
+                        settings.uploadOnly,
+                        settings.downloadOnly
                     )
                 }
                 AppResult.Success(Unit)
@@ -257,7 +262,9 @@ class SyncOrchestrator @Inject constructor(
      */
     suspend fun isRemoteNewer(notebookId: String): Boolean = withContext(ioDispatcher) {
         val settings = kvProxy.getSyncSettings()
-        if (!settings.syncEnabled || settings.username.isBlank() || settings.password.isBlank()) {
+        if (!settings.syncEnabled || !settings.checkOnOpen ||
+            settings.username.isBlank() || settings.password.isBlank()
+        ) {
             return@withContext false
         }
         val local = appRepository.bookRepository.getById(notebookId) ?: return@withContext false

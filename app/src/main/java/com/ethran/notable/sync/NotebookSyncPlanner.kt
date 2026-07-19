@@ -21,6 +21,9 @@ sealed interface NotebookAction {
 
     /** Remote is newer but we are in upload-only mode, so the download is intentionally skipped. */
     data object SkipUploadOnly : NotebookAction
+
+    /** Local is newer but we are in download-only mode, so the upload is intentionally skipped. */
+    data object SkipDownloadOnly : NotebookAction
 }
 
 /**
@@ -52,7 +55,30 @@ object NotebookSyncPlanner {
         /** The freshly fetched remote manifest facts; non-null iff [remoteChanged] is true. */
         remote: RemoteManifestInfo?,
         uploadOnly: Boolean,
+        /** Download-only: never push local changes (mirror of [uploadOnly]). */
+        downloadOnly: Boolean = false,
         toleranceMs: Long = TOLERANCE_MS,
+    ): NotebookAction {
+        val raw = rawDecide(
+            localUpdatedAt, syncedLocalUpdatedAt, storedEtag, remoteChanged, remote, toleranceMs
+        )
+        // Apply the one-directional mode: an UPLOAD is suppressed in download-only, a DOWNLOAD in
+        // upload-only. Skips stay skips.
+        return when {
+            uploadOnly && raw is NotebookAction.Download -> NotebookAction.SkipUploadOnly
+            downloadOnly && raw is NotebookAction.Upload -> NotebookAction.SkipDownloadOnly
+            else -> raw
+        }
+    }
+
+    /** The direction-agnostic decision: UPLOAD / DOWNLOAD / SKIP. */
+    private fun rawDecide(
+        localUpdatedAt: Long,
+        syncedLocalUpdatedAt: Long?,
+        storedEtag: String?,
+        remoteChanged: Boolean,
+        remote: RemoteManifestInfo?,
+        toleranceMs: Long,
     ): NotebookAction {
         if (!remoteChanged) {
             // Remote == our last committed sync. Decide purely on whether local moved since then.
@@ -67,9 +93,7 @@ object NotebookSyncPlanner {
         val diff = localUpdatedAt - remoteUpdatedAt
         return when {
             diff > toleranceMs -> NotebookAction.Upload(r.etag)      // local newer
-            diff < -toleranceMs ->                                    // remote newer
-                if (uploadOnly) NotebookAction.SkipUploadOnly else NotebookAction.Download
-
+            diff < -toleranceMs -> NotebookAction.Download           // remote newer
             else -> NotebookAction.Skip                              // within tolerance -> equal
         }
     }

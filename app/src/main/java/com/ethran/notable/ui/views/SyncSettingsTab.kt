@@ -280,14 +280,32 @@ private fun SyncBehaviorSection(
                 onToggle = { onUpdate(state.syncSettings.copy(syncOnNoteClose = it), true) }
             )
             SettingToggleRow(
+                label = stringResource(R.string.sync_on_app_start_label),
+                value = state.syncSettings.syncOnAppStart,
+                onToggle = { onUpdate(state.syncSettings.copy(syncOnAppStart = it), true) }
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.sync_check_on_open_label),
+                value = state.syncSettings.checkOnOpen,
+                onToggle = { onUpdate(state.syncSettings.copy(checkOnOpen = it), true) }
+            )
+            SettingToggleRow(
                 label = stringResource(R.string.sync_wifi_only_label),
                 value = state.syncSettings.wifiOnly,
                 onToggle = { onUpdate(state.syncSettings.copy(wifiOnly = it), true) }
             )
+            // Upload-only and download-only are mutually exclusive one-directional modes.
             SettingToggleRow(
                 label = stringResource(R.string.sync_upload_only_label),
                 value = state.syncSettings.uploadOnly,
-                onToggle = { onUpdate(state.syncSettings.copy(uploadOnly = it), true) }
+                onToggle = {
+                    onUpdate(
+                        state.syncSettings.copy(
+                            uploadOnly = it,
+                            downloadOnly = if (it) false else state.syncSettings.downloadOnly
+                        ), true
+                    )
+                }
             )
             if (state.syncSettings.uploadOnly) {
                 Text(
@@ -297,6 +315,18 @@ private fun SyncBehaviorSection(
                     modifier = Modifier.padding(top = 2.dp, bottom = 4.dp, start = 4.dp, end = 4.dp)
                 )
             }
+            SettingToggleRow(
+                label = stringResource(R.string.sync_download_only_label),
+                value = state.syncSettings.downloadOnly,
+                onToggle = {
+                    onUpdate(
+                        state.syncSettings.copy(
+                            downloadOnly = it,
+                            uploadOnly = if (it) false else state.syncSettings.uploadOnly
+                        ), true
+                    )
+                }
+            )
         }
     }
 }

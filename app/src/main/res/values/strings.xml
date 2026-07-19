@@ -129,6 +129,9 @@
     </plurals>
     <string name="sync_on_note_close_label">Sync when closing notes</string>
     <string name="sync_wifi_only_label">Sync on WiFi only (no mobile data)</string>
+    <string name="sync_on_app_start_label">Sync when the app starts</string>
+    <string name="sync_check_on_open_label">Check for a newer version when opening a notebook</string>
+    <string name="sync_download_only_label">Download only (never push local changes)</string>
     <string name="sync_upload_only_label">Upload only (skip remote changes)</string>
     <string name="sync_upload_only_hint">Pushes local changes to the server but never downloads. It never overwrites a newer copy on the server and never modifies your local notebooks — notebooks that are newer on the server are just left as they are on this device.</string>
     <string name="sync_interval_label">Sync interval</string>
