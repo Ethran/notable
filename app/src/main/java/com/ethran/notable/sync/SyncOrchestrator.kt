@@ -2,6 +2,7 @@ package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.AppResult
@@ -14,7 +15,9 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -31,6 +34,7 @@ class SyncOrchestrator @Inject constructor(
     private val notebookReconciliationService: NotebookReconciliationService,
     private val webDavClientFactory: WebDavClientFactoryPort,
     private val reporter: SyncProgressReporter,
+    @param:ApplicationScope private val appScope: CoroutineScope,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
     private val logger = SyncLogger
@@ -184,10 +188,14 @@ class SyncOrchestrator @Inject constructor(
         } finally {
             syncMutex.unlock()
         }
-    }.also {
-        if (it is AppResult.Success) {
-            delay(SUCCESS_STATE_AUTO_RESET_MS)
-            if (reporter.state.value is SyncState.Success) reporter.reset()
+    }.also { result ->
+        // Auto-reset the transient Success state after a delay, but off the caller's path so
+        // syncAllNotebooks() returns immediately instead of blocking for 3 s.
+        if (result is AppResult.Success) {
+            appScope.launch {
+                delay(SUCCESS_STATE_AUTO_RESET_MS)
+                if (reporter.state.value is SyncState.Success) reporter.reset()
+            }
         }
     }
 

@@ -3,7 +3,6 @@ package com.ethran.notable.sync
 import android.net.Uri
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
-import com.ethran.notable.utils.logCallStack
 import com.ethran.notable.utils.map
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onSuccess
@@ -19,10 +18,9 @@ import java.io.File
 import java.io.IOException
 import java.io.StringReader
 import java.net.HttpURLConnection
-import java.text.SimpleDateFormat
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * A remote WebDAV collection entry with its name and last-modified timestamp.
@@ -33,7 +31,6 @@ data class DownloadedFile(
     val content: ByteArray, val etag: String?
 ) {
     override fun equals(other: Any?): Boolean {
-        logCallStack("equals called")
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
 
@@ -46,7 +43,6 @@ data class DownloadedFile(
     }
 
     override fun hashCode(): Int {
-        logCallStack("hashCode called")
         var result = content.contentHashCode()
         result = 31 * result + (etag?.hashCode() ?: 0)
         return result
@@ -464,18 +460,16 @@ class WebDAVClient(
     companion object {
         private const val TAG = "WebDAVClient"
 
-        // RFC 1123 date format used in HTTP Date headers
-        private const val HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-
         /**
          * Parse an HTTP Date header (RFC 1123 format) to epoch millis.
+         * Uses the thread-safe [DateTimeFormatter.RFC_1123_DATE_TIME] singleton (safe to reuse
+         * across concurrent parses, unlike [java.text.SimpleDateFormat]).
          * @return Epoch millis or null if unparseable
          */
         fun parseHttpDate(dateHeader: String): Long? {
             return try {
-                val sdf = SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US)
-                sdf.timeZone = TimeZone.getTimeZone("GMT")
-                sdf.parse(dateHeader)?.time
+                ZonedDateTime.parse(dateHeader, DateTimeFormatter.RFC_1123_DATE_TIME)
+                    .toInstant().toEpochMilli()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse HTTP date: ${e.message}", e)
                 null
