@@ -78,6 +78,11 @@ class SyncScheduler @Inject constructor(
         workManager.cancelUniqueWork(SyncWorker.WORK_NAME)
     }
 
+    /** Cancel any sync work currently enqueued or running (explicit user "Cancel sync") (8h-2). */
+    fun cancelRunningSync() {
+        workManager.cancelAllWorkByTag(SyncWorker.SYNC_WORK_TAG)
+    }
+
     fun triggerImmediateSync(
         request: SyncRequest = SyncRequest.SyncAll
     ): UUID {

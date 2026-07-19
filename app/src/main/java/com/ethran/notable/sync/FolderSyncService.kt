@@ -20,7 +20,8 @@ class FolderSyncService @Inject constructor(
 
     suspend fun syncFolders(
         client: WebDAVClient,
-        uploadOnly: Boolean
+        uploadOnly: Boolean,
+        downloadOnly: Boolean = false
     ): AppResult<Unit, DomainError> {
         log.i(TAG, "Syncing folders...")
         val localFolders = appRepository.folderRepository.getAll()
@@ -58,16 +59,21 @@ class FolderSyncService @Inject constructor(
                     }
                 }
 
-                val updatedFoldersJson = folderSerializer.serializeFolders(mergedFolders)
-                client.putFile(
-                    remotePath,
-                    updatedFoldersJson.toByteArray(),
-                    "application/json",
-                    ifMatch = remoteEtag
-                )
+                // Download-only: apply the merge locally but never push folders.json.
+                if (downloadOnly) {
+                    AppResult.Success(Unit)
+                } else {
+                    val updatedFoldersJson = folderSerializer.serializeFolders(mergedFolders)
+                    client.putFile(
+                        remotePath,
+                        updatedFoldersJson.toByteArray(),
+                        "application/json",
+                        ifMatch = remoteEtag
+                    )
+                }
             }.map { }
         } else {
-            if (localFolders.isNotEmpty()) {
+            if (!downloadOnly && localFolders.isNotEmpty()) {
                 val foldersJson = folderSerializer.serializeFolders(localFolders)
                 return client.putFile(remotePath, foldersJson.toByteArray(), "application/json")
             }

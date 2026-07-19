@@ -8,6 +8,7 @@ import com.ethran.notable.data.db.FolderRepository
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.db.NotebookSyncStateRepository
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.Stroke
@@ -31,6 +32,7 @@ class AppRepository @Inject constructor(
     val strokeRepository: StrokeRepository,
     val imageRepository: ImageRepository,
     val folderRepository: FolderRepository,
+    val notebookSyncStateRepository: NotebookSyncStateRepository,
     val kvProxy: KvProxy,
     private val db: AppDatabase
 ) {

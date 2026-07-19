@@ -1,5 +1,6 @@
 package com.ethran.notable.sync
 
+import android.net.Uri
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
@@ -11,6 +12,7 @@ import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.ErrorAccumulator
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.getOrElse
+import com.ethran.notable.utils.map
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
@@ -60,6 +62,9 @@ class NotebookSyncService @Inject constructor(
                     )
                     try {
                         appRepository.bookRepository.delete(notebookId)
+                        // Gone on both sides now -- drop the sync-state row so it is not later
+                        // mis-read as a local deletion to re-tombstone.
+                        appRepository.notebookSyncStateRepository.delete(notebookId)
                     } catch (e: Exception) {
                         log.e(TAG, "Failed to delete ${localNotebook.title}: ${e.message}")
                         errors.add(DomainError.DatabaseError("Failed to delete ${localNotebook.title}"))
@@ -83,12 +88,13 @@ class NotebookSyncService @Inject constructor(
         }
     }
 
-    fun detectAndUploadLocalDeletions(
-        client: WebDAVClient, settings: SyncSettings, preDownloadNotebookIds: Set<String>
+    suspend fun detectAndUploadLocalDeletions(
+        client: WebDAVClient, preDownloadNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
         log.i(TAG, "Detecting local deletions...")
-        val syncedNotebookIds = settings.syncedNotebookIds
-        val deletedLocally = syncedNotebookIds - preDownloadNotebookIds
+        // A notebook we recorded as synced but that is no longer local was deleted here.
+        val syncedIds = appRepository.notebookSyncStateRepository.getAllIds()
+        val deletedLocally = syncedIds - preDownloadNotebookIds
         val errors = ErrorAccumulator()
 
         if (deletedLocally.isNotEmpty()) {
@@ -105,6 +111,8 @@ class NotebookSyncService @Inject constructor(
                     SyncPaths.tombstone(notebookId), ByteArray(0), "application/octet-stream"
                 ).onSuccess {
                     log.i(TAG, "Tombstone uploaded for: $notebookId")
+                    // Deletion propagated -- drop the sync-state row so it is not detected again.
+                    appRepository.notebookSyncStateRepository.delete(notebookId)
                 }.onError { error ->
                     log.e(TAG, "Failed to upload tombstone for $notebookId: ${error.userMessage}")
                     errors.add(error)
@@ -120,39 +128,52 @@ class NotebookSyncService @Inject constructor(
     suspend fun downloadNewNotebooks(
         client: WebDAVClient,
         tombstonedIds: Set<String>,
-        settings: SyncSettings,
-        preDownloadNotebookIds: Set<String>
+        preDownloadNotebookIds: Set<String>,
+        remoteNotebookIds: Set<String>
     ): AppResult<Int, DomainError> {
         log.i(TAG, "Checking server for new notebooks...")
-        val notebooksDirExists =
-            client.exists(SyncPaths.notebooksDir()).onFailure { return AppResult.Error(it) }
-        if (!notebooksDirExists) {
-            return AppResult.Success(0)
-        }
-        return client.listCollection(SyncPaths.notebooksDir()).flatMap { serverNotebookDirs ->
-            val newNotebookIds = serverNotebookDirs.map { it.trimEnd('/') }
-                .filter { it !in preDownloadNotebookIds }
-                .filter { it !in tombstonedIds }
-                .filter { it !in settings.syncedNotebookIds }
+        // Notebooks we previously synced but are no longer local were deleted here; don't
+        // re-download them (they get tombstoned by detectAndUploadLocalDeletions instead).
+        val syncedIds = appRepository.notebookSyncStateRepository.getAllIds()
+        // remoteNotebookIds is the single PROPFIND listing shared with reconciliation (5a).
+        val newNotebookIds = remoteNotebookIds
+            .filter { it !in preDownloadNotebookIds }
+            .filter { it !in tombstonedIds }
+            .filter { it !in syncedIds }
 
-            val errors = ErrorAccumulator()
-            if (newNotebookIds.isNotEmpty()) {
-                log.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
-                val total = newNotebookIds.size
-                newNotebookIds.forEachIndexed { i, notebookId ->
-                    reporter.beginItem(index = i + 1, total = total, name = notebookId)
-                    downloadNotebook(notebookId, client).onError { errors.add(it) }
-                }
-                reporter.endItem()
-            } else {
-                log.i(TAG, "No new notebooks on server")
+        val errors = ErrorAccumulator()
+        if (newNotebookIds.isNotEmpty()) {
+            log.i(TAG, "Found ${newNotebookIds.size} new notebook(s) on server")
+            val total = newNotebookIds.size
+            newNotebookIds.forEachIndexed { i, notebookId ->
+                reporter.beginItem(index = i + 1, total = total, name = notebookId, id = notebookId)
+                downloadNotebook(notebookId, client).onError { errors.add(it) }
             }
-
-            errors.asResult(newNotebookIds.size)
+            reporter.endItem()
+        } else {
+            log.i(TAG, "No new notebooks on server")
         }
+
+        return errors.asResult(newNotebookIds.size)
     }
 
+    /**
+     * Upload a notebook, recording an ERROR sync-state row on any failure so the library shows the
+     * ERROR badge (P25). A successful upload writes the SYNCED row inside [uploadNotebookInternal].
+     */
     suspend fun uploadNotebook(
+        notebook: Notebook,
+        client: WebDAVClient,
+        manifestIfMatch: String? = null
+    ): AppResult<Unit, DomainError> {
+        val result = uploadNotebookInternal(notebook, client, manifestIfMatch)
+        if (result is AppResult.Error) {
+            appRepository.notebookSyncStateRepository.markError(notebook.id, result.error.userMessage)
+        }
+        return result
+    }
+
+    private suspend fun uploadNotebookInternal(
         notebook: Notebook,
         client: WebDAVClient,
         manifestIfMatch: String? = null
@@ -179,14 +200,19 @@ class NotebookSyncService @Inject constructor(
                 errors.asResult(Unit)
             } else {
                 // 3. All pages are up: publish the manifest last. This is the atomic commit; the
-                //    If-Match guard rejects the PUT if the remote changed since we read it.
+                //    If-Match guard rejects the publish if the remote changed since we read it.
+                //    Capture the new ETag so next sync can do a cheap If-None-Match check (P26).
                 val manifestJson = NotebookSerializer.serializeManifest(notebook)
-                client.putFile(
-                    SyncPaths.manifestFile(notebookId),
-                    manifestJson.toByteArray(),
-                    "application/json",
-                    ifMatch = manifestIfMatch
-                ).onSuccess {
+                publishManifest(notebookId, manifestJson.toByteArray(), manifestIfMatch, client)
+                    .onSuccess { newEtag ->
+                    // Commit point: record the notebook as synced. After upload, the remote's
+                    // updatedAt equals the manifest we just wrote (notebook.updatedAt).
+                    appRepository.notebookSyncStateRepository.markSynced(
+                        notebookId = notebookId,
+                        localUpdatedAt = notebook.updatedAt,
+                        remoteUpdatedAt = notebook.updatedAt,
+                        remoteEtag = newEtag,
+                    )
                     // Only after a committed upload: drop any stale tombstone for a resurrected
                     // notebook. Best-effort -- a leftover tombstone is re-checked next sync.
                     val tombstonePath = SyncPaths.tombstone(notebookId)
@@ -198,6 +224,52 @@ class NotebookSyncService @Inject constructor(
                         }
                     }
                     log.i(TAG, "Uploaded: ${notebook.title}")
+                    // Best-effort GC: remove remote page/image/background files no longer
+                    // referenced by the manifest we just committed (P11). Never fails the upload.
+                    garbageCollectRemote(notebook, client)
+                }.map { }
+            }
+        }
+    }
+
+    /**
+     * Publish the manifest atomically: PUT to a `.tmp` sibling (a full write that never touches the
+     * live commit marker), then MOVE it over `manifest.json`. This closes the only interruption
+     * window Phase 3 left open — a torn PUT of the manifest itself would otherwise leave a corrupt
+     * commit marker. Falls back to a direct guarded PUT when the server doesn't support MOVE.
+     *
+     * A 412 during MOVE is a genuine concurrency conflict and is propagated (not retried). The tmp
+     * file is cleaned up best-effort; if left behind (interrupted before MOVE) it is simply
+     * overwritten by the next upload.
+     *
+     * Returns the published manifest's ETag when known. The MOVE path can't reliably report the
+     * destination's post-move ETag, so it returns `null` there — self-correcting, since the next
+     * sync does one full GET and the skip path backfills the ETag.
+     */
+    private suspend fun publishManifest(
+        notebookId: String,
+        manifestBytes: ByteArray,
+        ifMatch: String?,
+        client: WebDAVClient
+    ): AppResult<String?, DomainError> {
+        val finalPath = SyncPaths.manifestFile(notebookId)
+        val tmpPath = "$finalPath.tmp"
+
+        client.putFile(tmpPath, manifestBytes, "application/json")
+            .onFailure { return AppResult.Error(it) }
+
+        return when (val moved = client.move(tmpPath, finalPath, ifMatchDestination = ifMatch)) {
+            is AppResult.Success -> AppResult.Success(null)
+            is AppResult.Error -> {
+                client.delete(tmpPath) // best-effort cleanup either way
+                if (moved.error is DomainError.SyncConflict) {
+                    // Destination changed under us -- a real conflict, do not fall back.
+                    moved
+                } else {
+                    // MOVE unsupported or transient: fall back to a direct guarded PUT (the manifest
+                    // is still written last, so ordering is preserved; only atomicity is lost).
+                    log.w(TAG, "MOVE publish failed (${moved.error.userMessage}); direct PUT fallback")
+                    client.putFileReturningEtag(finalPath, manifestBytes, "application/json", ifMatch)
                 }
             }
         }
@@ -221,7 +293,9 @@ class NotebookSyncService @Inject constructor(
             val errors = ErrorAccumulator()
             for (image in pageWithData.images) {
                 if (!image.uri.isNullOrEmpty()) {
-                    val localFile = File(image.uri)
+                    // Normalize the URI: some rows store a `file://` scheme that File() can't resolve,
+                    // which silently skipped the upload and left a dangling reference (Phase 8c).
+                    val localFile = resolveLocalFile(image.uri)
                     if (localFile.exists()) {
                         val remotePath = SyncPaths.imageFile(notebookId, localFile.name)
                         // Unknown existence -> upload anyway; PUT is idempotent.
@@ -232,12 +306,18 @@ class NotebookSyncService @Inject constructor(
                                 }.onError { errors.add(it) }
                         }
                     } else {
-                        log.w(TAG, "Image file not found: ${image.uri}")
+                        // Dangling reference: the page references an image we can't find locally, so
+                        // it will 404 on every other device. Surface it (Phase 8e).
+                        log.w(TAG, "Image referenced by page but missing locally: ${image.uri}")
                     }
                 }
             }
 
-            if (page.backgroundType != "native" && page.background != "blank") {
+            // Linked external PDFs (absolute path outside managed storage) can't be synced -- skip
+            // (Phase 8d); the reference is left as-is and is non-fatal on download.
+            if (page.backgroundType != "native" && page.background != "blank" &&
+                !File(page.background).isAbsolute
+            ) {
                 val bgFile = File(ensureBackgroundsFolder(), page.background)
                 if (bgFile.exists()) {
                     val remotePath = SyncPaths.backgroundFile(notebookId, bgFile.name)
@@ -246,6 +326,8 @@ class NotebookSyncService @Inject constructor(
                             log.i(TAG, "Uploaded background: ${bgFile.name}")
                         }.onError { errors.add(it) }
                     }
+                } else {
+                    log.w(TAG, "Background referenced by page but missing locally: ${page.background}")
                 }
             }
 
@@ -253,18 +335,36 @@ class NotebookSyncService @Inject constructor(
         }
     }
 
+    /**
+     * Download a notebook, recording an ERROR sync-state row on any failure so the library shows
+     * the ERROR badge (P25). A successful download writes the SYNCED row inside
+     * [downloadNotebookInternal].
+     */
     suspend fun downloadNotebook(
+        notebookId: String,
+        client: WebDAVClient
+    ): AppResult<Unit, DomainError> {
+        val result = downloadNotebookInternal(notebookId, client)
+        if (result is AppResult.Error) {
+            appRepository.notebookSyncStateRepository.markError(notebookId, result.error.userMessage)
+        }
+        return result
+    }
+
+    private suspend fun downloadNotebookInternal(
         notebookId: String,
         client: WebDAVClient
     ): AppResult<Unit, DomainError> {
         log.i(TAG, "Downloading notebook ID: $notebookId")
 
-        // 1. Fetch manifest file (Early Return on error)
-        val manifestBytes = client.getFile(SyncPaths.manifestFile(notebookId))
+        // 1. Fetch manifest file with its ETag (Early Return on error). The ETag is stored at the
+        //    commit point so next sync can do a cheap If-None-Match check (P26).
+        val manifestFile = client.getFileWithMetadata(SyncPaths.manifestFile(notebookId))
             .onFailure { return AppResult.Error(it) }
+        val remoteEtag = manifestFile.etag
 
         // 2. Deserialize manifest (Early Return on corrupted JSON)
-        val manifestJson = manifestBytes.decodeToString()
+        val manifestJson = manifestFile.content.decodeToString()
         val notebook = NotebookSerializer.deserializeManifest(manifestJson)
             .onFailure { return AppResult.Error(it) }
 
@@ -286,8 +386,10 @@ class NotebookSyncService @Inject constructor(
 
         // 4. Download and persist all pages.
         val errors = ErrorAccumulator()
+        // Backgrounds are often shared across pages (e.g. a PDF); fetch each distinct one once.
+        val attemptedBackgrounds = mutableSetOf<String>()
         for (pageId in notebook.pageIds) {
-            downloadPage(pageId, notebookId, client).onError { errors.add(it) }
+            downloadPage(pageId, notebookId, client, attemptedBackgrounds).onError { errors.add(it) }
         }
 
         // 5. Commit: only when every page landed, write the notebook row with the real remote
@@ -299,6 +401,15 @@ class NotebookSyncService @Inject constructor(
         }
         return try {
             appRepository.bookRepository.updatePreservingTimestamp(notebook)
+            // Commit point: record the notebook as synced at the remote timestamp.
+            appRepository.notebookSyncStateRepository.markSynced(
+                notebookId = notebookId,
+                localUpdatedAt = notebook.updatedAt,
+                remoteUpdatedAt = notebook.updatedAt,
+                remoteEtag = remoteEtag,
+            )
+            // Best-effort GC: delete local pages that are no longer in the downloaded manifest (P11).
+            pruneLocalOrphanPages(notebook)
             log.i(TAG, "Downloaded: ${notebook.title}")
             AppResult.Success(Unit)
         } catch (e: Exception) {
@@ -309,7 +420,8 @@ class NotebookSyncService @Inject constructor(
     private suspend fun downloadPage(
         pageId: String,
         notebookId: String,
-        client: WebDAVClient
+        client: WebDAVClient,
+        attemptedBackgrounds: MutableSet<String>
     ): AppResult<Unit, DomainError> {
 
         // 1. Fetch JSON file (Early Return on error)
@@ -335,13 +447,7 @@ class NotebookSyncService @Inject constructor(
                         localFile
                     ).onSuccess {
                         log.i(TAG, "Downloaded image: $filename")
-                    }
-                        .onError { error ->
-                            log.e(TAG, "Failed to download image $filename: ${error.userMessage}")
-                            // Image download error doesn't interrupt the whole page sync,
-                            // but is aggregated to notify the UI.
-                            errors.add(error)
-                        }
+                    }.onError { error -> addMediaError(errors, "image $filename", error) }
                 }
                 image.copy(uri = localFile.absolutePath)
             } else {
@@ -349,20 +455,28 @@ class NotebookSyncService @Inject constructor(
             }
         }
 
-        // 4. Download page background
+        // 4. Download page background.
         if (page.backgroundType != "native" && page.background != "blank") {
             val filename = page.background
-            val localFile = File(ensureBackgroundsFolder(), filename)
-
-            if (!localFile.exists()) {
-                client.getFile(
-                    SyncPaths.backgroundFile(notebookId, filename),
-                    localFile
-                ).onSuccess {
-                    log.i(TAG, "Downloaded background: $filename")
-                }.onError { error ->
-                    log.e(TAG, "Failed to download background $filename: ${error.userMessage}")
-                    errors.add(error)
+            // Linked external PDFs live outside managed storage (absolute path); they can't be synced
+            // -- skip them entirely, and don't treat their absence as a failure (Phase 8d).
+            if (File(filename).isAbsolute) {
+                log.i(TAG, "Skipping external background (not in managed storage): $filename")
+            } else if (filename in attemptedBackgrounds) {
+                // A background shared by many pages is only fetched once per notebook (Phase 8a-3).
+            } else {
+                attemptedBackgrounds.add(filename)
+                val localFile = File(ensureBackgroundsFolder(), filename)
+                if (!localFile.exists()) {
+                    localFile.parentFile?.mkdirs()
+                    // Remote path uses the basename (flat), matching how upload stores it (Phase 8b).
+                    val remoteName = File(filename).name
+                    client.getFile(
+                        SyncPaths.backgroundFile(notebookId, remoteName),
+                        localFile
+                    ).onSuccess {
+                        log.i(TAG, "Downloaded background: $filename")
+                    }.onError { error -> addMediaError(errors, "background $filename", error) }
                 }
             }
         }
@@ -379,7 +493,80 @@ class NotebookSyncService @Inject constructor(
         return errors.asResult(Unit)
     }
 
+    /**
+     * Delete remote page/image/background files that the just-committed manifest no longer
+     * references. The manifest is authoritative (we just wrote it), so anything not referenced is a
+     * true orphan from a deleted or replaced page. Best-effort: every failure is logged, never fatal.
+     */
+    private suspend fun garbageCollectRemote(notebook: Notebook, client: WebDAVClient) {
+        val notebookId = notebook.id
+        val referencedPageFiles = notebook.pageIds.map { "$it.json" }.toSet()
+        val referencedImages = mutableSetOf<String>()
+        val referencedBackgrounds = mutableSetOf<String>()
+        for (pageId in notebook.pageIds) {
+            val data = appRepository.pageRepository.getWithDataById(pageId) ?: continue
+            data.images.forEach { image ->
+                if (!image.uri.isNullOrEmpty()) referencedImages.add(File(image.uri).name)
+            }
+            val page = data.page
+            if (page.backgroundType != "native" && page.background != "blank") {
+                referencedBackgrounds.add(File(page.background).name)
+            }
+        }
+        pruneRemoteDir(client, SyncPaths.pagesDir(notebookId), referencedPageFiles)
+        pruneRemoteDir(client, SyncPaths.imagesDir(notebookId), referencedImages)
+        pruneRemoteDir(client, SyncPaths.backgroundsDir(notebookId), referencedBackgrounds)
+    }
+
+    /** Delete entries of [dirPath] whose name is not in [keep]. Best-effort. */
+    private suspend fun pruneRemoteDir(
+        client: WebDAVClient,
+        dirPath: String,
+        keep: Set<String>
+    ) {
+        client.listNames(dirPath).onSuccess { names ->
+            for (name in names.filter { it !in keep }) {
+                client.delete("$dirPath/$name").onSuccess {
+                    log.i(TAG, "GC: removed orphan $dirPath/$name")
+                }.onError { log.w(TAG, "GC: failed to remove $name: ${it.userMessage}") }
+            }
+        }.onError { log.w(TAG, "GC: listing $dirPath failed: ${it.userMessage}") }
+    }
+
+    /** Delete local pages of [notebook] whose ids left the downloaded manifest. Best-effort. */
+    private suspend fun pruneLocalOrphanPages(notebook: Notebook) {
+        val keep = notebook.pageIds.toSet()
+        val localPageIds = appRepository.pageRepository.getPageIdsForNotebook(notebook.id)
+        for (orphan in localPageIds.filter { it !in keep }) {
+            try {
+                appRepository.pageRepository.delete(orphan)
+                log.i(TAG, "GC: removed local orphan page $orphan")
+            } catch (e: Exception) {
+                log.w(TAG, "GC: failed to delete local page $orphan: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Aggregate a media (image/background) download failure. A [DomainError.RemoteMissing] (404) is
+     * a *permanent* absence — log and skip it so one missing media file can't wedge the whole
+     * notebook download into an endless retry (Phase 8a-2). Transient errors are still aggregated so
+     * the notebook keeps its stale timestamp and retries next sync.
+     */
+    private fun addMediaError(errors: ErrorAccumulator, what: String, error: DomainError) {
+        if (error is DomainError.RemoteMissing) {
+            log.w(TAG, "Media missing on server, skipping $what")
+        } else {
+            log.e(TAG, "Failed to download $what: ${error.userMessage}")
+            errors.add(error)
+        }
+    }
+
     private fun extractFilename(uri: String): String = uri.substringAfterLast('/')
+
+    /** Resolve a stored media URI to a [File], tolerating a `file://` scheme (Phase 8c). */
+    private fun resolveLocalFile(uri: String): File =
+        if (uri.startsWith("file:")) File(Uri.parse(uri).path ?: uri) else File(uri)
 
     private fun detectMimeType(file: File): String = when (file.extension.lowercase()) {
         "jpg", "jpeg" -> "image/jpeg"

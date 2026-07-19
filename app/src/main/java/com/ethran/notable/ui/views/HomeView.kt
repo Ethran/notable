@@ -57,6 +57,7 @@ import com.ethran.notable.editor.ui.Topbar
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.NavigationDestination
+import com.ethran.notable.sync.SyncBadge
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
@@ -218,6 +219,7 @@ fun LibraryContent(
                 syncScheduler = syncScheduler,
                 books = uiState.books,
                 isImporting = uiState.isImporting,
+                syncBadges = uiState.syncBadges,
                 onNavigateToEditor = onNavigateToEditor,
                 onDeleteEmptyBook = onDeleteEmptyBook,
                 onCreateNewNotebook = onCreateNewNotebook,
@@ -297,6 +299,7 @@ fun NotebookGrid(
     syncScheduler: SyncScheduler,
     books: List<Notebook>,
     isImporting: Boolean,
+    syncBadges: Map<String, SyncBadge>,
     onNavigateToEditor: (String, String) -> Unit,
     onDeleteEmptyBook: (String) -> Unit,
     onCreateNewNotebook: () -> Unit,
@@ -337,6 +340,7 @@ fun NotebookGrid(
                     title = book.title,
                     pageIds = book.pageIds,
                     openPageId = book.openPageId,
+                    syncBadge = syncBadges[book.id],
                     onOpen = { bookId, pageId -> onNavigateToEditor(pageId, bookId) },
                     onOpenSettings = { isSettingsOpen = true },
                     onPreviewMissing = onPreviewMissing

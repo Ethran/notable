@@ -6,6 +6,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.ethran.notable.R
 import com.ethran.notable.sync.SyncWorker
+import com.ethran.notable.utils.DomainError
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.transform
@@ -46,6 +47,9 @@ class SyncWorkUiBridge @Inject constructor(
             }
         }
 
+    // SyncWorker writes DomainError.javaClass.simpleName into OUTPUT_KEY_ERROR.
+    private val SYNC_IN_PROGRESS_ERROR = DomainError.SyncInProgress::class.simpleName
+
     private fun trimHandledIds(maxSize: Int = 64) {
         if (handledIds.size <= maxSize) return
         val iterator = handledIds.iterator()
@@ -65,6 +69,9 @@ class SyncWorkUiBridge @Inject constructor(
             skipped -> SnackEvent(R.string.sync_skipped)
             success -> SnackEvent(R.string.sync_completed_successfully)
             info.state == WorkInfo.State.CANCELLED -> SnackEvent(R.string.sync_cancelled)
+            // "Sync already in progress" is informational (another run is handling it), not a
+            // failure -- e.g. a manual Sync Now landing while a periodic sync runs (8i-1 / 9c).
+            errorMsg == SYNC_IN_PROGRESS_ERROR -> SnackEvent(R.string.sync_already_running)
             errorMsg != null -> SnackEvent(R.string.sync_failed_message, errorMsg)
             else -> SnackEvent(R.string.sync_finished)
         }

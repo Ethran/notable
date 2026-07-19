@@ -101,18 +101,6 @@ class AppResultTest {
     }
 
     @Test
-    fun isOnlyUploadSkip_detects_pure_upload_skip_groups() {
-        val skipA = DomainError.SyncUploadOnlySkip("nb-A")
-        val skipB = DomainError.SyncUploadOnlySkip("nb-B")
-        assertTrue(skipA.isOnlyUploadSkip())
-        assertTrue((skipA + skipB).isOnlyUploadSkip())
-
-        val mixed = skipA + DomainError.NetworkError("offline")
-        assertTrue(!mixed.isOnlyUploadSkip())
-        assertTrue(!DomainError.NetworkError("offline").isOnlyUploadSkip())
-    }
-
-    @Test
     fun extendMessage_appends_only_when_extra_is_non_blank() {
         val err = DomainError.NotFound("notebook")
         assertEquals("notebook was not found.", err.extendMessage(""))

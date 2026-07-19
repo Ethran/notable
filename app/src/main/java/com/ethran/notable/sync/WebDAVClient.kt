@@ -181,6 +181,34 @@ class WebDAVClient(
         return putFile(path, localFile.readBytes(), contentType, ifMatch)
     }
 
+    /**
+     * Upload a file and return the server's new ETag for it (from the PUT response `ETag` header),
+     * or `null` if the server did not send one. Used for the manifest so the notebook's stored ETag
+     * matches the just-published version, enabling cheap `If-None-Match` change detection next sync
+     * (P26). Returns [DomainError.SyncConflict] on a 412 like [putFile].
+     */
+    fun putFileReturningEtag(
+        path: String,
+        content: ByteArray,
+        contentType: String = "application/octet-stream",
+        ifMatch: String? = null
+    ): AppResult<String?, DomainError> =
+        execute("PUT", {
+            val requestBody = content.toRequestBody(contentType.toMediaType())
+            Request.Builder().url(buildUrl(path)).put(requestBody)
+                .header("Authorization", credentials)
+                .apply { ifMatch?.let { header("If-Match", it) } }
+                .build()
+        }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_PRECON_FAILED ->
+                    AppResult.Error(DomainError.SyncConflict)
+
+                response.isSuccessful -> AppResult.Success(response.header("ETag"))
+                else -> AppResult.Error(DomainError.SyncError("PUT failed: ${response.code}"))
+            }
+        }
+
     fun getFile(path: String): AppResult<ByteArray, DomainError> {
         return getFileWithMetadata(path).map { it.content }
     }
@@ -189,10 +217,36 @@ class WebDAVClient(
         execute("GET", {
             Request.Builder().url(buildUrl(path)).get().header("Authorization", credentials).build()
         }) { response ->
-            if (response.isSuccessful) {
-                AppResult.Success(DownloadedFile(response.body.bytes(), response.header("ETag")))
-            } else {
-                AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
+            when {
+                response.isSuccessful ->
+                    AppResult.Success(DownloadedFile(response.body.bytes(), response.header("ETag")))
+
+                response.code == HttpURLConnection.HTTP_NOT_FOUND ->
+                    AppResult.Error(DomainError.RemoteMissing(path))
+
+                else -> AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
+            }
+        }
+
+    /**
+     * Conditional GET: fetch a file only if its ETag differs from [etag].
+     * Returns `Success(null)` when the server replies `304 Not Modified` (the resource is unchanged
+     * since we stored [etag]) — a cheap, bodyless "no change" answer that avoids clock math (5a).
+     * Otherwise returns the fetched file with its current ETag.
+     */
+    fun getFileIfNoneMatch(path: String, etag: String): AppResult<DownloadedFile?, DomainError> =
+        execute("GET", {
+            Request.Builder().url(buildUrl(path)).get()
+                .header("Authorization", credentials)
+                .header("If-None-Match", etag)
+                .build()
+        }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_NOT_MODIFIED -> AppResult.Success(null)
+                response.isSuccessful ->
+                    AppResult.Success(DownloadedFile(response.body.bytes(), response.header("ETag")))
+
+                else -> AppResult.Error(DomainError.SyncError("GET failed: ${response.code}"))
             }
         }
 
@@ -202,6 +256,48 @@ class WebDAVClient(
             localFile.writeBytes(content)
         }.map { }
     }
+
+    /**
+     * Move (rename) [from] to [to], overwriting the destination. On most servers this is atomic,
+     * which is what makes it safe as the final "publish" step for the manifest commit marker.
+     *
+     * When [ifMatchDestination] is given, an `If` header makes the server reject the move with 412
+     * if the destination's current ETag differs — preserving the optimistic-concurrency guard.
+     *
+     * Distinguishes three failures so the caller can react: [DomainError.SyncConflict] on 412 (a
+     * real concurrent change — do not retry blindly), a `recoverable` [DomainError.SyncError] on
+     * 405/501 (server doesn't support MOVE — caller may fall back to a direct PUT), and a plain
+     * error otherwise.
+     */
+    fun move(
+        from: String,
+        to: String,
+        ifMatchDestination: String? = null
+    ): AppResult<Unit, DomainError> =
+        execute("MOVE", {
+            val destUrl = buildUrl(to)
+            Request.Builder().url(buildUrl(from))
+                .method("MOVE", null)
+                .header("Authorization", credentials)
+                .header("Destination", destUrl)
+                .header("Overwrite", "T")
+                .apply { ifMatchDestination?.let { header("If", "<$destUrl> ([$it])") } }
+                .build()
+        }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_PRECON_FAILED ->
+                    AppResult.Error(DomainError.SyncConflict)
+
+                response.code == HttpURLConnection.HTTP_BAD_METHOD ||
+                        response.code == HttpURLConnection.HTTP_NOT_IMPLEMENTED ->
+                    AppResult.Error(
+                        DomainError.SyncError("MOVE unsupported: ${response.code}", recoverable = true)
+                    )
+
+                response.isSuccessful -> AppResult.Success(Unit)
+                else -> AppResult.Error(DomainError.SyncError("MOVE failed: ${response.code}"))
+            }
+        }
 
     /**
      * Delete a resource from the WebDAV server.
@@ -232,6 +328,28 @@ class WebDAVClient(
                     .filter { WebDavXml.isValidUuid(it) })
             } else {
                 AppResult.Error(DomainError.SyncError("PROPFIND failed: ${response.code}"))
+            }
+        }
+
+    /**
+     * List the raw child names of a collection (file names *with* extensions, decoded), excluding
+     * the collection's own entry. Unlike [listCollection] this does NOT filter to bare UUIDs, so it
+     * can see `{pageId}.json`, image, and background files — used for garbage collection.
+     * Returns an empty list when the collection does not exist (404).
+     */
+    fun listNames(path: String): AppResult<List<String>, DomainError> =
+        execute("PROPFIND", { propfindRequest(path, PROPFIND_ALLPROP) }) { response ->
+            when {
+                response.code == HttpURLConnection.HTTP_NOT_FOUND -> AppResult.Success(emptyList())
+                response.isSuccessful -> {
+                    val selfName = path.trimEnd('/').substringAfterLast('/')
+                    val names = WebDavXml.parseHrefs(response.body.string())
+                        .map { Uri.decode(it.trimEnd('/').substringAfterLast('/')) }
+                        .filter { it.isNotEmpty() && it != selfName }
+                    AppResult.Success(names)
+                }
+
+                else -> AppResult.Error(DomainError.SyncError("PROPFIND failed: ${response.code}"))
             }
         }
 

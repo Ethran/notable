@@ -53,10 +53,14 @@ sealed class DomainError(
     data object SyncWifiRequired : DomainError("WiFi connection required for sync.")
     data object SyncInProgress : DomainError("Sync already in progress.")
     data object SyncConflict : DomainError("Conflict detected during sync.")
-    data class SyncUploadOnlySkip(val notebookTitle: String) : DomainError(
-        "Remote changes detected for '$notebookTitle'. Upload-only is enabled.",
-        recoverable = true
-    )
+
+    /**
+     * A resource was not found on the server (HTTP 404) — a *permanent* absence, as opposed to a
+     * transient [NetworkError]. Lets callers treat missing media as skippable instead of retrying it
+     * forever. Not recoverable (retrying a 404 won't help).
+     */
+    data class RemoteMissing(val path: String) :
+        DomainError("Not found on server: $path", recoverable = false)
 
     data class SyncError(
         val message: String,
@@ -67,15 +71,6 @@ sealed class DomainError(
     data class MultipleErrors(val errors: List<DomainError>) : DomainError(
         userMessage = errors.joinToString(separator = "\n") { "• ${it.userMessage}" }
     )
-
-    /**
-     * Checks if this error (or all errors in MultipleErrors) are SyncUploadOnlySkip.
-     */
-    fun isOnlyUploadSkip(): Boolean = when (this) {
-        is SyncUploadOnlySkip -> true
-        is MultipleErrors -> errors.all { it is SyncUploadOnlySkip }
-        else -> false
-    }
 }
 
 /**

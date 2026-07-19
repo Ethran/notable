@@ -75,6 +75,9 @@ interface PageDao {
     @Query("SELECT * FROM page WHERE notebookId is null AND parentFolderId is :folderId")
     fun getSinglePagesInFolder(folderId: String? = null): LiveData<List<Page>>
 
+    @Query("SELECT id FROM page WHERE notebookId = :notebookId")
+    suspend fun getPageIdsForNotebook(notebookId: String): List<String>
+
     @Insert
     suspend fun create(page: Page): Long
 
@@ -112,6 +115,10 @@ class PageRepository @Inject constructor(
 
     suspend fun getByIds(ids: List<String>): List<Page> {
         return db.getByIds(ids)
+    }
+
+    suspend fun getPageIdsForNotebook(notebookId: String): List<String> {
+        return db.getPageIdsForNotebook(notebookId)
     }
     suspend fun getWithDataById(pageId: String): PageWithData? {
         val data = db.getPageWithDataById(pageId)

@@ -77,9 +77,7 @@ class SyncForceService @Inject constructor(
             }
         }.onError { errors.add(it) }
 
-        // 5. Record all local notebooks as synced (only on full success).
-        if (!errors.hasErrors) markAllLocalSynced()
-
+        // Sync-state rows are written per notebook by uploadNotebook on each committed upload.
         return errors.asResult(Unit).onSuccess {
             log.i(TAG, "FORCE UPLOAD complete: ${notebooks.size} notebooks")
         }
@@ -118,13 +116,15 @@ class SyncForceService @Inject constructor(
             )
         }
 
-        // 2. Now safe to clear local data.
+        // 2. Now safe to clear local data (including the sync-state table -- we are replacing the
+        //    whole local set, so old rows must not linger and be mis-read as deletions).
         try {
             val localFolders = appRepository.folderRepository.getAll()
             localFolders.forEach { appRepository.folderRepository.delete(it.id) }
 
             val localNotebooks = appRepository.bookRepository.getAll()
             localNotebooks.forEach { appRepository.bookRepository.delete(it.id) }
+            appRepository.notebookSyncStateRepository.deleteAll()
 
             log.i(
                 TAG,
@@ -160,18 +160,10 @@ class SyncForceService @Inject constructor(
                 }
         }
 
-        // 5. Record downloaded notebooks as synced (only on full success).
-        if (!errors.hasErrors) markAllLocalSynced()
-
+        // Sync-state rows are written per notebook by downloadNotebook on each committed download.
         return errors.asResult(Unit).onSuccess {
             log.i(TAG, "FORCE DOWNLOAD complete")
         }
-    }
-
-    /** Record the current local notebook set as the last successfully synced set. */
-    private suspend fun markAllLocalSynced() {
-        val ids = appRepository.bookRepository.getAll().map { it.id }.toSet()
-        kvProxy.setSyncSettings(kvProxy.getSyncSettings().copy(syncedNotebookIds = ids))
     }
 
     companion object {

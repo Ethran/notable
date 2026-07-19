@@ -115,6 +115,7 @@ fun SettingsView(
             onSaveCredentials = viewModel::onSaveCredentials,
             onTestConnection = viewModel::onTestConnection,
             onManualSync = viewModel::onManualSync,
+            onCancelSync = viewModel::onCancelSync,
             onClearSyncLogs = viewModel::onClearSyncLogs,
             danger = SyncDangerCallbacks(
                 onForceUploadRequested = viewModel::onForceUploadRequested,

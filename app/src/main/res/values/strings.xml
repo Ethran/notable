@@ -129,7 +129,11 @@
     </plurals>
     <string name="sync_on_note_close_label">Sync when closing notes</string>
     <string name="sync_wifi_only_label">Sync on WiFi only (no mobile data)</string>
+    <string name="sync_on_app_start_label">Sync when the app starts</string>
+    <string name="sync_check_on_open_label">Check for a newer version when opening a notebook</string>
+    <string name="sync_download_only_label">Download only (never push local changes)</string>
     <string name="sync_upload_only_label">Upload only (skip remote changes)</string>
+    <string name="sync_upload_only_hint">Pushes local changes to the server but never downloads. It never overwrites a newer copy on the server and never modifies your local notebooks — notebooks that are newer on the server are just left as they are on this device.</string>
     <string name="sync_interval_label">Sync interval</string>
     <string name="sync_interval_value">%1$dm</string>
 
@@ -141,7 +145,10 @@
     <string name="sync_synced">Synced</string>
     <string name="sync_failed">Failed</string>
     <string name="sync_clear_log">Clear Log</string>
+    <string name="sync_copy_log">Copy Log</string>
+    <string name="sync_log_copied">Log copied to clipboard</string>
     <string name="sync_retry_button">Retry</string>
+    <string name="sync_cancel_button">Cancel sync</string>
     <string name="sync_status_syncing">Syncing…</string>
 
     <!-- Sync Status Messages -->
@@ -151,6 +158,7 @@
     <string name="sync_completed_successfully">Sync completed successfully</string>
     <string name="sync_failed_message">Sync failed: %1$s</string>
     <string name="sync_skipped">Sync skipped</string>
+    <string name="sync_already_running">A sync is already running</string>
     <string name="sync_cancelled">Sync cancelled</string>
     <string name="sync_finished">Sync finished</string>
     <string name="sync_last_synced">Last sync: %1$s</string>

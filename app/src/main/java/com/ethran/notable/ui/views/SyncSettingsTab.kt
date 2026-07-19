@@ -1,6 +1,7 @@
 package com.ethran.notable.ui.views
 
 import android.content.res.Configuration
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,9 +50,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +90,7 @@ data class SyncSettingsCallbacks(
     val onSaveCredentials: () -> Unit = {},
     val onTestConnection: () -> Unit = {},
     val onManualSync: () -> Unit = {},
+    val onCancelSync: () -> Unit = {},
     val onClearSyncLogs: () -> Unit = {},
     val danger: SyncDangerCallbacks = SyncDangerCallbacks(),
 )
@@ -113,8 +118,8 @@ fun SyncSettings(
     }
     var showServerConfig by remember { mutableStateOf(!isConfigured) }
 
-    // 2. The Blocking Dialog
-    if (showWarningDialog) {
+    // 2. The Blocking Dialog — only warn before the user has opted in (sync disabled) (8i-2).
+    if (showWarningDialog && !state.syncSettings.syncEnabled) {
         AlertDialog(
             // Passing an empty lambda prevents dismissing by clicking outside the dialog
             onDismissRequest = { },
@@ -276,14 +281,52 @@ private fun SyncBehaviorSection(
                 onToggle = { onUpdate(state.syncSettings.copy(syncOnNoteClose = it), true) }
             )
             SettingToggleRow(
+                label = stringResource(R.string.sync_on_app_start_label),
+                value = state.syncSettings.syncOnAppStart,
+                onToggle = { onUpdate(state.syncSettings.copy(syncOnAppStart = it), true) }
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.sync_check_on_open_label),
+                value = state.syncSettings.checkOnOpen,
+                onToggle = { onUpdate(state.syncSettings.copy(checkOnOpen = it), true) }
+            )
+            SettingToggleRow(
                 label = stringResource(R.string.sync_wifi_only_label),
                 value = state.syncSettings.wifiOnly,
                 onToggle = { onUpdate(state.syncSettings.copy(wifiOnly = it), true) }
             )
+            // Upload-only and download-only are mutually exclusive one-directional modes.
             SettingToggleRow(
                 label = stringResource(R.string.sync_upload_only_label),
                 value = state.syncSettings.uploadOnly,
-                onToggle = { onUpdate(state.syncSettings.copy(uploadOnly = it), true) }
+                onToggle = {
+                    onUpdate(
+                        state.syncSettings.copy(
+                            uploadOnly = it,
+                            downloadOnly = if (it) false else state.syncSettings.downloadOnly
+                        ), true
+                    )
+                }
+            )
+            if (state.syncSettings.uploadOnly) {
+                Text(
+                    text = stringResource(R.string.sync_upload_only_hint),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp, start = 4.dp, end = 4.dp)
+                )
+            }
+            SettingToggleRow(
+                label = stringResource(R.string.sync_download_only_label),
+                value = state.syncSettings.downloadOnly,
+                onToggle = {
+                    onUpdate(
+                        state.syncSettings.copy(
+                            downloadOnly = it,
+                            uploadOnly = if (it) false else state.syncSettings.uploadOnly
+                        ), true
+                    )
+                }
             )
         }
     }
@@ -303,6 +346,16 @@ private fun SyncActionsSection(
             syncState = state.syncState,
             onManualSync = callbacks.onManualSync
         )
+
+        if (state.syncState is SyncState.Syncing) {
+            Spacer(modifier = Modifier.height(8.dp))
+            EInkActionButton(
+                text = stringResource(R.string.sync_cancel_button),
+                onClick = callbacks.onCancelSync,
+                modifier = Modifier.fillMaxWidth(),
+                isSecondary = true
+            )
+        }
 
         LastSyncInfo(lastSyncTime = state.syncSettings.lastSyncTime)
 
@@ -686,7 +739,7 @@ fun ManualSyncButton(
             Text(label, fontWeight = FontWeight.Bold)
         }
 
-        if (syncState is SyncState.Error && syncState.canRetry) {
+        if (syncState is SyncState.Error) {
             Button(
                 onClick = onManualSync,
                 enabled = syncSettings.syncEnabled && syncSettings.serverUrl.isNotEmpty(),
@@ -705,7 +758,12 @@ fun ManualSyncButton(
 
 @Composable
 private fun SyncProgressPanel(syncing: SyncState.Syncing) {
-    val stepProgress = syncing.item?.let { it.index.toFloat() / it.total.coerceAtLeast(1) } ?: 0f
+    // `beginItem(index, total)` is reported when an item *starts*, so use completed = index - 1;
+    // otherwise the last item shows 100% while it is still being transferred (and, if it then
+    // fails, the bar was misleadingly at 100%).
+    val stepProgress = syncing.item?.let {
+        (it.index - 1).coerceAtLeast(0).toFloat() / it.total.coerceAtLeast(1)
+    } ?: 0f
     val stepIndex = syncing.currentStep.ordinal + 1
     val totalSteps = SyncStep.entries.size
 
@@ -824,6 +882,9 @@ fun ForceOperationsSection(
 @Composable
 fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
     val recentLogs = remember(syncLogs) { syncLogs.takeLast(30) }
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val copiedMessage = stringResource(R.string.sync_log_copied)
 
     Column {
         Box(
@@ -859,13 +920,29 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        EInkActionButton(
-            text = stringResource(R.string.sync_clear_log),
-            onClick = onClearLog,
+        Row(
             modifier = Modifier.align(Alignment.End),
-            isSecondary = true,
-            fontSize = 10.sp
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Copy the FULL buffer (not just the visible 30) so users can paste it into a bug report.
+            EInkActionButton(
+                text = stringResource(R.string.sync_copy_log),
+                onClick = {
+                    val text = syncLogs.joinToString("\n") { "[${it.timestamp}] ${it.message}" }
+                    clipboardManager.setText(AnnotatedString(text))
+                    Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
+                },
+                enabled = syncLogs.isNotEmpty(),
+                isSecondary = true,
+                fontSize = 10.sp
+            )
+            EInkActionButton(
+                text = stringResource(R.string.sync_clear_log),
+                onClick = onClearLog,
+                isSecondary = true,
+                fontSize = 10.sp
+            )
+        }
     }
 }
 

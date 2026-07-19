@@ -19,7 +19,7 @@ interface SyncProgressReporter {
     val state: StateFlow<SyncState>
 
     fun beginStep(step: SyncStep, stepProgress: Float, details: String)
-    fun beginItem(index: Int, total: Int, name: String)
+    fun beginItem(index: Int, total: Int, name: String, id: String? = null)
     fun endItem()
     fun finishSuccess(summary: SyncSummary)
     fun finishError(error: DomainError, canRetry: Boolean)
@@ -43,10 +43,10 @@ class SyncProgressReporterImpl @Inject constructor(
         )
     }
 
-    override fun beginItem(index: Int, total: Int, name: String) {
+    override fun beginItem(index: Int, total: Int, name: String, id: String?) {
         _state.update { current ->
             when (current) {
-                is SyncState.Syncing -> current.copy(item = ItemProgress(index, total, name))
+                is SyncState.Syncing -> current.copy(item = ItemProgress(index, total, name, id))
                 else -> current
             }
         }

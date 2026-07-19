@@ -4,13 +4,16 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.sync.serializers.NotebookSerializer
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.getOrElse
+import com.ethran.notable.utils.getOrNull
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -53,6 +56,7 @@ class SyncOrchestrator @Inject constructor(
 
             val settings = kvProxy.getSyncSettings()
             val uploadOnly = settings.uploadOnly
+            val downloadOnly = settings.downloadOnly
             var nonCriticalError: DomainError? = null
 
             if (!settings.syncEnabled) {
@@ -81,12 +85,18 @@ class SyncOrchestrator @Inject constructor(
                 return@withContext failStep(it)
             }
 
+            // One PROPFIND for the whole remote notebook set, shared by reconciliation (existence
+            // checks) and new-notebook discovery -- replaces the per-notebook HEAD probes (5a/P13).
+            val remoteNotebookIds = client.listCollection(SyncPaths.notebooksDir())
+                .onFailure { return@withContext failStep(it) }
+                .toSet()
+
             reporter.beginStep(
                 SyncStep.SYNCING_FOLDERS,
                 PROGRESS_SYNCING_FOLDERS,
                 "Syncing folders..."
             )
-            folderSyncService.syncFolders(client, uploadOnly).onFailure {
+            folderSyncService.syncFolders(client, uploadOnly, downloadOnly).onFailure {
                 return@withContext failStep(it)
             }
 
@@ -99,9 +109,7 @@ class SyncOrchestrator @Inject constructor(
                 emptySet()
             } else {
                 notebookSyncService.applyRemoteDeletions(client, TOMBSTONE_MAX_AGE_DAYS)
-                    .onFailure { error ->
-                        return@withContext AppResult.Error(error)
-                    }
+                    .onFailure { return@withContext failStep(it) }
             }
 
             reporter.beginStep(
@@ -111,17 +119,16 @@ class SyncOrchestrator @Inject constructor(
             )
             val localIdsSnapshot = appRepository.bookRepository.getAll().map { it.id }.toSet()
             val preDownloadIds = when (
-                val syncResult = notebookReconciliationService.syncExistingNotebooks(client, uploadOnly)
+                val syncResult = notebookReconciliationService.syncExistingNotebooks(client, remoteNotebookIds, uploadOnly, downloadOnly)
             ) {
                 is AppResult.Success -> syncResult.data
+                // Per-notebook failures are NON-CRITICAL: each failed notebook was marked ERROR
+                // (its badge shows it) and the run continues so the healthy notebooks still finalize.
+                // Aborting here previously left the reporter stuck in Syncing forever -- so every
+                // notebook's badge froze on SCHEDULED/SYNCING when one big notebook failed (P25).
                 is AppResult.Error -> {
-                    val error = syncResult.error
-                    if (uploadOnly && error.isOnlyUploadSkip()) {
-                        nonCriticalError = error
-                        localIdsSnapshot
-                    } else {
-                        return@withContext AppResult.Error(error)
-                    }
+                    nonCriticalError = syncResult.error
+                    localIdsSnapshot
                 }
             }
 
@@ -136,11 +143,9 @@ class SyncOrchestrator @Inject constructor(
                 notebookSyncService.downloadNewNotebooks(
                     client,
                     tombstonedIds,
-                    settings,
-                    preDownloadIds
-                ).onFailure { error ->
-                    return@withContext AppResult.Error(error)
-                }
+                    preDownloadIds,
+                    remoteNotebookIds
+                ).onFailure { return@withContext failStep(it) }
             }
 
             reporter.beginStep(
@@ -148,15 +153,17 @@ class SyncOrchestrator @Inject constructor(
                 PROGRESS_UPLOADING_DELETIONS,
                 "Uploading deletions..."
             )
-            val deletedCount =
-                notebookSyncService.detectAndUploadLocalDeletions(client, settings, preDownloadIds)
-                    .onFailure { error ->
-                        return@withContext AppResult.Error(error)
-                    }
+            val deletedCount = if (downloadOnly) {
+                0 // download-only: never push local deletions to the server
+            } else {
+                notebookSyncService.detectAndUploadLocalDeletions(client, preDownloadIds)
+                    .onFailure { return@withContext failStep(it) }
+            }
 
 
             reporter.beginStep(SyncStep.FINALIZING, PROGRESS_FINALIZING, "Finalizing...")
-            updateSyncedNotebookIds()
+            // No bulk finalize needed: each notebook's sync-state row is written at its own commit
+            // point (upload/download success), and deletions dropped their rows above.
 
             val summary = SyncSummary(
                 preDownloadIds.size,
@@ -164,8 +171,20 @@ class SyncOrchestrator @Inject constructor(
                 deletedCount,
                 System.currentTimeMillis() - startTime
             )
-            finalizeSyncResult(reporter, summary, nonCriticalError)
+            finalizeSyncResult(reporter, summary, nonCriticalError).onSuccess {
+                // Persist the last successful full-sync time so the settings "Last synced" line
+                // reflects background/periodic syncs too, not just manual ones (P8).
+                kvProxy.setSyncSettings(
+                    kvProxy.getSyncSettings().copy(lastSyncTime = System.currentTimeMillis())
+                )
+            }
 
+        } catch (e: CancellationException) {
+            // The worker was cancelled (e.g. schedule disabled mid-run). Don't leave the reporter
+            // stuck in Syncing/Error (which wedged the Sync-now button) -- reset to Idle and let the
+            // cancellation propagate normally (8h-1).
+            reporter.reset()
+            throw e
         } catch (e: Exception) {
             val error = DomainError.SyncError(
                 e.message ?: "Unexpected error during sync",
@@ -206,10 +225,16 @@ class SyncOrchestrator @Inject constructor(
                         settings.username,
                         settings.password
                     )
+                    // Preflight the clock once here: reconciliation no longer checks skew per
+                    // notebook (5c), so the single-notebook path must gate on it itself.
+                    syncPreflightService.checkClockSkew(client).onFailure {
+                        return@withContext AppResult.Error(it)
+                    }
                     return@withContext notebookReconciliationService.syncNotebook(
                         notebookId,
                         client,
-                        settings.uploadOnly
+                        settings.uploadOnly,
+                        settings.downloadOnly
                     )
                 }
                 AppResult.Success(Unit)
@@ -227,6 +252,40 @@ class SyncOrchestrator @Inject constructor(
         } catch (e: Exception) {
             log.e(TAG, "Auto-sync failed: ${e.message}")
         }
+    }
+
+    /**
+     * Read-only check for the check-on-open hint (P22): is the server's copy of [notebookId] newer
+     * than ours? Uses the stored ETag for a cheap conditional GET (a 304 means "not newer"). Never
+     * mutates anything and never holds the sync mutex — it is a best-effort hint, so any error or
+     * ambiguity returns false.
+     */
+    suspend fun isRemoteNewer(notebookId: String): Boolean = withContext(ioDispatcher) {
+        val settings = kvProxy.getSyncSettings()
+        if (!settings.syncEnabled || !settings.checkOnOpen ||
+            settings.username.isBlank() || settings.password.isBlank()
+        ) {
+            return@withContext false
+        }
+        val local = appRepository.bookRepository.getById(notebookId) ?: return@withContext false
+        val client = webDavClientFactory.create(
+            settings.serverUrl, settings.username, settings.password
+        )
+        val manifestPath = SyncPaths.manifestFile(notebookId)
+        val storedEtag = appRepository.notebookSyncStateRepository.get(notebookId)?.remoteEtag
+
+        val remoteContent = if (storedEtag != null) {
+            // null == 304 (unchanged) OR error -> treat as "not newer".
+            client.getFileIfNoneMatch(manifestPath, storedEtag).getOrNull()?.content
+                ?: return@withContext false
+        } else {
+            client.getFileWithMetadata(manifestPath).getOrNull()?.content
+                ?: return@withContext false
+        }
+
+        val remoteUpdatedAt = NotebookSerializer.getManifestUpdatedAt(remoteContent.decodeToString())
+            ?: return@withContext false
+        remoteUpdatedAt.time - local.updatedAt.time > REMOTE_NEWER_TOLERANCE_MS
     }
 
     suspend fun uploadDeletion(notebookId: String): AppResult<Unit, DomainError> =
@@ -259,9 +318,8 @@ class SyncOrchestrator @Inject constructor(
                 when (val tombstoneResult =
                     client.putFile(SyncPaths.tombstone(notebookId), ByteArray(0))) {
                     is AppResult.Success -> {
-                        kvProxy.setSyncSettings(
-                            settings.copy(syncedNotebookIds = settings.syncedNotebookIds - notebookId)
-                        )
+                        // Deletion propagated -- drop the sync-state row.
+                        appRepository.notebookSyncStateRepository.delete(notebookId)
                         AppResult.Success(Unit)
                     }
 
@@ -294,11 +352,6 @@ class SyncOrchestrator @Inject constructor(
         return AppResult.Error(error)
     }
 
-    private suspend fun updateSyncedNotebookIds() {
-        val currentIds = appRepository.bookRepository.getAll().map { it.id }.toSet()
-        kvProxy.setSyncSettings(kvProxy.getSyncSettings().copy(syncedNotebookIds = currentIds))
-    }
-
     companion object {
         private const val TAG = "SyncOrchestrator"
         private const val PROGRESS_INITIALIZING = 0.0f
@@ -310,6 +363,7 @@ class SyncOrchestrator @Inject constructor(
         private const val PROGRESS_FINALIZING = 0.9f
         private const val SUCCESS_STATE_AUTO_RESET_MS = 3000L
         private const val TOMBSTONE_MAX_AGE_DAYS = 90L
+        private const val REMOTE_NEWER_TOLERANCE_MS = 1000L
         private val syncMutex = Mutex()
     }
 }
@@ -319,11 +373,8 @@ internal fun finalizeSyncResult(
     summary: SyncSummary,
     nonCriticalError: DomainError?
 ): AppResult<Unit, DomainError> {
-    if (nonCriticalError != null && nonCriticalError.isOnlyUploadSkip()) {
-        reporter.finishSuccess(summary)
-        return AppResult.Success(Unit)
-    }
-
+    // Upload-only skips are ordinary planned no-ops now (6b), so the only thing that reaches here
+    // as a nonCriticalError is a genuine per-notebook failure.
     if (nonCriticalError != null) {
         reporter.finishError(nonCriticalError, false)
         return AppResult.Error(nonCriticalError)
