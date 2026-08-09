@@ -54,6 +54,22 @@ where found — respect them and add to them:
 **When you discover a new ordering hazard, write it as a comment at the call site explaining
 *why*, not just *what*.** That is the house style (§3).
 
+### Limit rects: the firmware clips the *preview*, not the *stroke*
+
+`setLimitRect` accepts a `List<Rect>` and the firmware genuinely enforces **per-region** clipping
+— multiple writing regions work, and the gaps between them reject ink. Pen, eraser (a separate
+firmware channel) and lasso all respect them.
+
+**But a stroke dragged from one region to another arrives as a single
+`onRawDrawingTouchPointListReceived` callback whose point list spans both regions.** It *renders*
+with a gap, because the live preview is clipped per-region — yet one undo removes the whole thing.
+
+So any code that assigns a stroke to a region by hit-testing only `points.first()` is wrong: the
+far-side points come with it. Partition the point list instead.
+
+Verified on BOOX Go 10.3, firmware `2026-05-12_4.2-rel`. This is firmware-dependent and is not
+documented in the Onyx SDK — re-verify after firmware updates.
+
 ### Guard Onyx-only paths
 
 `DeviceCompat.isOnyxDevice` gates SDK use (8 call sites). `TouchHelper.create` is wrapped in
@@ -168,6 +184,12 @@ expectation to honour manually; there is no automated gate to catch you.
 - **Avoid `!!`** — the existing `touchHelper!!` uses are all guarded by an early
   `if (touchHelper == null) return`. Keep that pattern; don't introduce unguarded ones.
 - **Don't block the main or GL thread with I/O.** On e-ink a stall is immediately visible as ink lag.
+- **Page geometry keys off two mutable global `var`s.** `SCREEN_WIDTH`/`SCREEN_HEIGHT`
+  (`MainActivity.kt:70`, set from `displayMetrics`) determine page size
+  (`PageContentRenderer.kt:135`), background render width, export bounds, and the
+  `calculateZoomLevel` snap targets. **Zoom 1.0 therefore means "page fits the full device screen
+  width"** — a page is authored at device width, not viewport width. Anything rendering into a
+  region smaller than the screen must account for this rather than assuming viewport == screen.
 
 ---
 
@@ -175,12 +197,16 @@ expectation to honour manually; there is no automated gate to catch you.
 
 Base repo is [Ethran/notable](https://github.com/Ethran/notable) (GPL-3.0).
 
-- **`dev2` is the live integration branch** (~28 commits ahead of `main`). Branch from and rebase
-  against it; `main` lags.
+- **Pick your base by area.** `dev2` is ~28 commits ahead of `main` but carries **sync/ETag/cache
+  work only** — `main...dev2` touches no file under `editor/canvas`, `editor/drawing`, or
+  `PageView.kt`. For editor/canvas/drawing work, base on `main`. For sync work, base on `dev2`.
 - Small, single-concern PRs with descriptive titles. Architectural changes ship with a doc in
   `docs/`.
 - External contributions are genuinely accepted (scribble-to-erase came from @niknal357).
 - AI assistance is expected — `.github/copilot-instructions.md` exists — but **disclose it**.
 - Check issue **#211** (maintainer's refactor plan) before touching `DrawCanvas`,
-  `OnyxInputHandler`, or `PageView`. Item 1 plans to split Onyx and generic drawing paths, and
-  will collide with edits there.
+  `OnyxInputHandler`, or `PageView`. Item 1 splits the Onyx and generic drawing paths. Note it has
+  **no linked branch or PR and has been untouched since 2026-02-10** — it is a stale tracking
+  issue over work done incrementally on `main` (`160805c` extracted the `StrokeRenderer` seam,
+  `ecb263c` moved scroll to a canvas transform). Coordinate by posting intent on the issue, and
+  rebase often; there is no branch to sync with.
