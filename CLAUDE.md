@@ -176,7 +176,19 @@ A whole suite can look green while asserting nothing. So:
 - Assert against **literal values**, never against another framework object
 - Include an explicit sanity test that the constructor populates fields
 
-**2. `androidTest` method names cannot contain spaces.** `minSdk 29` is below API 30, so D8
+**2. Constructing a `PageView` in a test leaks a background coroutine.** `PageView.init` launches
+work inside `coroutineScope.launch(Dispatchers.IO)`. A failure there is an **uncaught coroutine
+exception**, not a test failure — instrumentation attributes it to whichever test happens to be
+running when it fires, so it shows up as a failure in an unrelated class while the offending test
+passes in isolation. Two rules when building one:
+
+- Give it a scope with a `CoroutineExceptionHandler`, and cancel that scope in `@After`
+- Stub `getCachedBitmap` to return `null`. `mockk(relaxed = true)` returns a *mock Bitmap* rather
+  than null, which sends `init` down the cached-bitmap branch into
+  `Canvas(mockBitmap)` → `IllegalStateException: Immutable bitmap passed to Canvas constructor`.
+  Production is unaffected: `PageDataManager.getCachedBitmap` already filters on `isMutable`.
+
+**3. `androidTest` method names cannot contain spaces.** `minSdk 29` is below API 30, so D8
 rejects backtick-quoted names with spaces:
 
 ```
