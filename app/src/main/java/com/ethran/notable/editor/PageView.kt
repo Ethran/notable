@@ -9,7 +9,6 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
-import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -121,7 +120,7 @@ class PageView(
 
     // Owns scroll, zoom, and the screen<->page transforms. Pairs with PageRenderer: the renderer
     // owns *where* pixels land, the viewport owns *which part of the page* they represent.
-    private val viewport = ViewportState(pageDataManager) { currentPageId }
+    private val viewport = ViewportState(pageDataManager, viewWidth, viewHeight) { currentPageId }
 
     // scroll is observed by ui, represents top left corner
     var scroll: Offset
@@ -599,12 +598,7 @@ class PageView(
     }
 
 
-    // internal rather than private so PageViewZoomTest can characterise the snapping and
-    // clamping rules directly. Driving it through simpleUpdateZoom would drag in
-    // applyZoomAndRedraw's bitmap allocation and canvas work, making the test heavy and flaky
-    // for no gain — the logic under test is pure.
-    @VisibleForTesting
-    internal fun calculateZoomLevel(
+    private fun calculateZoomLevel(
         scaleDelta: Float,
         currentZoom: Float,
     ): Float = viewport.calculateZoomLevel(scaleDelta, currentZoom)
@@ -834,6 +828,9 @@ class PageView(
             log.d("Updating dimensions: $newWidth x $newHeight")
             viewWidth = newWidth
             viewHeight = newHeight
+            // Zoom snapping is derived from the viewport's aspect ratio, so the viewport has to
+            // learn its new size before anything recomputes a snap target.
+            viewport.resize(newWidth, newHeight)
             updateCanvasDimensions()
         }
     }

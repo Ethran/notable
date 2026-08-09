@@ -51,7 +51,8 @@ class ViewportStateTest {
         every { dataManager.getPageZoom(any()) } answers { zoomStore[firstArg()] ?: 1f }
     }
 
-    private fun viewportOn(pageId: String) = ViewportState(dataManager) { pageId }
+    // Dimensions are irrelevant to scroll ownership; zoom snapping is covered by ViewportZoomTest.
+    private fun viewportOn(pageId: String) = ViewportState(dataManager, 1000, 800) { pageId }
 
     // ---------------------------------------------------------------- the point of the change
 

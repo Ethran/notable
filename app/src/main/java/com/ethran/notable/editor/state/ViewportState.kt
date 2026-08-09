@@ -2,8 +2,6 @@ package com.ethran.notable.editor.state
 
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
-import com.ethran.notable.SCREEN_HEIGHT
-import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.utils.div
@@ -27,21 +25,43 @@ import kotlin.math.abs
  * [com.ethran.notable.editor.drawing.PageRenderer]: the renderer owns *where* pixels land, this
  * owns *which part of the page* they represent.
  *
- * ### Scroll is not stored here (yet)
+ * ### The viewport is per-view, not per-page
  *
- * [scroll] deliberately still delegates to [PageDataManager], keyed by page id — the same
- * indirection `PageView` had. This class is currently an owner of that *delegation*, not of the
- * state itself, which keeps the extraction a pure move with no behaviour change.
+ * [scroll], [zoomLevel] and the viewport dimensions are held here, so two views of the *same* page
+ * scroll and zoom independently — which is the point of being able to open a document twice.
  *
- * The consequence is that two views of the *same* page share a scroll offset and zoom, because
- * both key off one page id. Two views of *different* pages are already independent. Making the
- * viewport genuinely per-view is a follow-up, and is a design change rather than a refactor.
+ * [PageDataManager] remains the *persistence* layer: writes are mirrored into it so `setScrollInDb`
+ * can reach the database, the scroll indicator can read the current position, and reopening a page
+ * restores where you were. It is no longer the live source of truth.
  */
 class ViewportState(
     private val pageDataManager: PageDataManager,
+    width: Int,
+    height: Int,
     private val currentPageId: () -> String,
 ) {
     private val log = ShipBook.getLogger("ViewportState")
+
+    /**
+     * Size of the region this viewport covers, in screen pixels.
+     *
+     * Owned here rather than read from the `SCREEN_WIDTH` / `SCREEN_HEIGHT` globals, because a
+     * viewport is not necessarily the whole display — and will not be once the editor supports a
+     * split view.
+     */
+    var width: Int = width
+        private set
+
+    var height: Int = height
+        private set
+
+    /** Adopt a new viewport size. Idempotent; returns true if the dimensions actually changed. */
+    fun resize(newWidth: Int, newHeight: Int): Boolean {
+        if (newWidth == width && newHeight == height) return false
+        width = newWidth
+        height = newHeight
+        return true
+    }
 
     /**
      * Top-left corner of the view, in page coordinates.
@@ -108,28 +128,30 @@ class ViewportState(
     /**
      * The next zoom level for a pinch of [scaleDelta] from [currentZoom].
      *
-     * **Derives its snap targets from the device, not from this viewport.** `SCREEN_WIDTH` and
-     * `SCREEN_HEIGHT` are process-wide globals describing the display, so the targets describe the
-     * panel rather than the region being zoomed. That is harmless while a page fills the screen and
-     * wrong for anything narrower. Left as-is here so this extraction stays a pure move;
-     * characterised in `PageViewZoomTest` so changing it later is deliberate and visible.
+     * Snapping toggles between 1.0 and the **viewport's** aspect ratio. This previously used
+     * `SCREEN_WIDTH` / `SCREEN_HEIGHT` — process-wide globals describing the *display* — so the
+     * targets described the panel rather than the region being zoomed. Harmless while a viewport
+     * fills the screen, meaningless for anything narrower, which a split view would be.
+     *
+     * For a full-screen viewport the two are equivalent apart from chrome (the editor area
+     * excludes the toolbar), so single-view behaviour is materially unchanged.
      */
     fun calculateZoomLevel(
         scaleDelta: Float,
         currentZoom: Float,
     ): Float {
         // TODO: Better snapping logic
-        val portraitRatio = SCREEN_WIDTH.toFloat() / SCREEN_HEIGHT
+        val viewportRatio = width.toFloat() / height
 
         return if (!GlobalAppSettings.current.continuousZoom) {
-            // Discrete zoom mode - snap to either 1.0 or screen ratio.
+            // Discrete zoom mode - snap to either 1.0 or the viewport ratio.
             // scaleDelta is a growth ratio minus 1 (see PointerTracker.pinchRatio),
             // so it is negative when pinching in (zoom out) and positive when
             // spreading (zoom in); split on 0, not 1.
             if (scaleDelta <= 0f) {
-                if (SCREEN_HEIGHT > SCREEN_WIDTH) portraitRatio else 1.0f
+                if (height > width) viewportRatio else 1.0f
             } else {
-                if (SCREEN_HEIGHT > SCREEN_WIDTH) 1.0f else portraitRatio
+                if (height > width) 1.0f else viewportRatio
             }
         } else {
             // Continuous zoom: scaleDelta is the per-frame growth ratio minus 1,
@@ -140,10 +162,10 @@ class ViewportState(
                 (currentZoom * (1f + scaleDelta * ZOOM_SENSITIVITY)).coerceIn(MIN_ZOOM, MAX_ZOOM)
 
             // Snap to either 1.0 or screen ratio depending on which is closer
-            val snapTarget = if (abs(newZoom - 1.0f) < abs(newZoom - portraitRatio)) {
+            val snapTarget = if (abs(newZoom - 1.0f) < abs(newZoom - viewportRatio)) {
                 1.0f
             } else {
-                portraitRatio
+                viewportRatio
             }
 
             if (abs(newZoom - snapTarget) < ZOOM_SNAP_THRESHOLD) {
