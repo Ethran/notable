@@ -6,10 +6,14 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.ui.SnackState
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -26,8 +30,8 @@ import org.junit.runner.RunWith
  *
  * The function is pure (it reads only its arguments), but it is an instance method, so a PageView
  * has to be built. That is cheap: PageView's init block does all of its real work inside
- * `coroutineScope.launch(Dispatchers.IO)`, so construction returns immediately and a relaxed
- * PageDataManager mock is enough. Nothing here touches the database.
+ * `coroutineScope.launch(Dispatchers.IO)`, so construction returns immediately. Nothing here
+ * touches the database. See setUp for why that background coroutine must be isolated.
  *
  * Instrumented rather than unit-tested because android.graphics.Rect is a no-op stub on the JVM
  * unit-test classpath — see GeometryExtensionsTest and CLAUDE.md.
@@ -41,19 +45,40 @@ class PageViewViewportTest {
     }
 
     private lateinit var page: PageView
+    private lateinit var scope: CoroutineScope
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
+
+        val dataManager = mockk<PageDataManager>(relaxed = true)
+        // A relaxed mock returns a *mock Bitmap* rather than null, which would send init down
+        // the cached-bitmap branch and blow up in Canvas(). Force the uncached path.
+        every { dataManager.getCachedBitmap(any()) } returns null
+
+        // PageView.init launches work on Dispatchers.IO that we neither need nor control here.
+        // Without a handler, a failure there is an *uncaught* coroutine exception that the
+        // instrumentation attributes to whichever test happens to be running when it fires —
+        // producing failures in unrelated classes. Swallow it and cancel the scope in tearDown
+        // so this fixture cannot leak into the rest of the suite.
+        scope = CoroutineScope(
+            SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ -> }
+        )
+
         page = PageView(
             context = context,
-            coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            pageDataManager = mockk<PageDataManager>(relaxed = true),
+            coroutineScope = scope,
+            pageDataManager = dataManager,
             initialPageId = "characterisation-test-page",
             viewWidth = SCREEN_W,
             viewHeight = SCREEN_H,
             snackManager = SnackState(),
         )
+    }
+
+    @After
+    fun tearDown() {
+        scope.cancel()
     }
 
     private fun shift(dx: Int, dy: Int) =

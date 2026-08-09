@@ -11,10 +11,13 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.gestures.MAX_ZOOM
 import com.ethran.notable.gestures.MIN_ZOOM
 import com.ethran.notable.ui.SnackState
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -59,6 +62,7 @@ class PageViewZoomTest {
     }
 
     private lateinit var page: PageView
+    private lateinit var scope: CoroutineScope
     private var originalWidth = 0
     private var originalHeight = 0
 
@@ -66,10 +70,24 @@ class PageViewZoomTest {
     fun setUp() {
         originalWidth = SCREEN_WIDTH
         originalHeight = SCREEN_HEIGHT
+
+        val dataManager = mockk<PageDataManager>(relaxed = true)
+        // A relaxed mock returns a *mock Bitmap* rather than null, which would send init down the
+        // cached-bitmap branch and blow up in Canvas(). Force the uncached path.
+        every { dataManager.getCachedBitmap(any()) } returns null
+
+        // PageView.init launches work on Dispatchers.IO that we neither need nor control. Without
+        // a handler, a failure there is an *uncaught* coroutine exception that instrumentation
+        // attributes to whichever test happens to be running when it fires — producing failures in
+        // unrelated classes. Swallow it, and cancel the scope below.
+        scope = CoroutineScope(
+            SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ -> }
+        )
+
         page = PageView(
             context = ApplicationProvider.getApplicationContext<Context>(),
-            coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            pageDataManager = mockk<PageDataManager>(relaxed = true),
+            coroutineScope = scope,
+            pageDataManager = dataManager,
             initialPageId = "characterisation-test-page",
             viewWidth = LANDSCAPE_W,
             viewHeight = LANDSCAPE_H,
@@ -79,6 +97,7 @@ class PageViewZoomTest {
 
     @After
     fun tearDown() {
+        scope.cancel()
         // SCREEN_WIDTH/SCREEN_HEIGHT are process-wide mutable vars; leaving them altered would
         // corrupt any test that runs afterwards in the same process.
         SCREEN_WIDTH = originalWidth
