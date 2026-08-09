@@ -9,6 +9,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -617,7 +618,12 @@ class PageView(
     }
 
 
-    private fun calculateZoomLevel(
+    // internal rather than private so PageViewZoomTest can characterise the snapping and
+    // clamping rules directly. Driving it through simpleUpdateZoom would drag in
+    // applyZoomAndRedraw's bitmap allocation and canvas work, making the test heavy and flaky
+    // for no gain — the logic under test is pure.
+    @VisibleForTesting
+    internal fun calculateZoomLevel(
         scaleDelta: Float,
         currentZoom: Float,
     ): Float {
