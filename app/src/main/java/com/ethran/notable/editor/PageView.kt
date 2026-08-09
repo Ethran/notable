@@ -30,6 +30,7 @@ import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.canvas.CanvasEventBus.drawingInProgress
 import com.ethran.notable.editor.canvas.CanvasEventBus.waitForDrawing
+import com.ethran.notable.editor.drawing.PageRenderer
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
 import com.ethran.notable.editor.utils.div
@@ -93,18 +94,17 @@ class PageView(
 
     private var loadingJob: Job? = null
 
-    @Volatile
-    var windowedBitmap = createBitmap(viewWidth, viewHeight)
-        private set
+    // Owns the window buffer: the screen-sized bitmap, the canvas wrapping it, and the spare
+    // buffer reused when scrolling. PageView still decides *what* to draw; PageRenderer owns
+    // *where* it lands. Keeping that line sharp is what allows the buffer to become per-pane
+    // later without dragging page data along with it.
+    private val renderer = PageRenderer(viewWidth, viewHeight)
 
-    @Volatile
-    var windowedCanvas = Canvas(windowedBitmap)
-        private set
+    val windowedBitmap: Bitmap
+        get() = renderer.bitmap
 
-    // Spare screen-sized buffer reused by updateScroll to avoid allocating a new
-    // bitmap on every scroll event. Ping-ponged with windowedBitmap; recreated only
-    // when the canvas size/config changes (zoom, dimension change, page switch).
-    private var scrollBackBuffer: Bitmap? = null
+    val windowedCanvas: Canvas
+        get() = renderer.canvas
 
     //    var strokes = listOf<Stroke>()
     var strokes: List<Stroke>
@@ -188,8 +188,7 @@ class PageView(
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
             pageDataManager.getCachedBitmap(currentPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
-                windowedBitmap = cached
-                windowedCanvas = Canvas(windowedBitmap)
+                renderer.adopt(cached)
             } ?: run {
                 log.i("PageView.init: creating new bitmap")
                 recreateCanvas()
@@ -234,8 +233,7 @@ class PageView(
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
             pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
-                windowedBitmap = cached
-                windowedCanvas = Canvas(windowedBitmap)
+                renderer.adopt(cached)
                 // Check if we have correct size of canvas
                 if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
                     updateCanvasDimensions()
@@ -258,8 +256,10 @@ class PageView(
     }
 
     private fun recreateCanvas() {
-        windowedBitmap = createBitmap(viewWidth, viewHeight)
-        windowedCanvas = Canvas(windowedBitmap)
+        // resize() is a no-op when the dimensions already match, so recreate() unconditionally to
+        // preserve the original behaviour: this always allocated a fresh buffer.
+        renderer.resize(viewWidth, viewHeight)
+        renderer.recreate()
         loadInitialBitmap()
     }
 
@@ -555,15 +555,7 @@ class PageView(
         movement: IntOffset,
         screenW: Int,
         screenH: Int
-    ): Rect {
-        val dx = -movement.x
-        val dy = -movement.y
-        val left = max(0, dx)
-        val top = max(0, dy)
-        val right = min(screenW, dx + screenW)
-        val bottom = min(screenH, dy + screenH)
-        return Rect(left, top, right, bottom)
-    }
+    ): Rect = renderer.alreadyDrawnRectAfterShift(movement, screenW, screenH)
 
     suspend fun updateScroll(dragDelta: Offset) {
 //        log.d("Update scroll, dragDelta: $dragDelta, scroll: $scroll, zoomLevel.value: $zoomLevel.value")
@@ -592,26 +584,12 @@ class PageView(
 
         val width = windowedBitmap.width
         val height = windowedBitmap.height
-        // Shift the existing bitmap content into the spare buffer, reusing it across
-        // scroll events. Recreate the spare only if it doesn't match current geometry.
-        val shiftedBitmap = scrollBackBuffer?.takeIf {
-            it.width == width && it.height == height && it.config == windowedBitmap.config
-        } ?: createBitmap(width, height, windowedBitmap.config!!)
-        val shiftedCanvas = Canvas(shiftedBitmap)
-        shiftedCanvas.drawColor(Color.RED) //for debugging.
-        shiftedCanvas.drawBitmap(windowedBitmap, -movement.x, -movement.y, null)
 
-        // Swap in the shifted bitmap; the old live buffer becomes the next spare.
-        scrollBackBuffer = windowedBitmap
-        windowedBitmap = shiftedBitmap
-        windowedCanvas.setBitmap(windowedBitmap)
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        // Shift the window, reusing the spare buffer; returns the region that still holds valid
+        // content, so only the newly exposed strip needs redrawing.
+        val alreadyDrawn = renderer.shift(movement, zoomLevel.value)
 
-        redrawOutsideRect(
-            alreadyDrawnRectAfterShift(movement.toIntOffset(), width, height),
-            width,
-            height
-        )
+        redrawOutsideRect(alreadyDrawn, width, height)
 
 //        persistBitmapDebounced()
         saveToPersistLayer()
@@ -695,9 +673,8 @@ class PageView(
 
         // Swap in the new zoomed bitmap
 //        windowedBitmap.recycle() -- It causes race condition with init from persistent layer
-        windowedBitmap = zoomedBitmap
-        windowedCanvas.setBitmap(windowedBitmap)
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        renderer.swapBitmap(zoomedBitmap)
+        renderer.scaleCanvas(zoomLevel.value)
 
 
         // Redraw everything at new zoom level
@@ -778,11 +755,10 @@ class PageView(
         scroll = Offset(newScrollX, newScrollY)
 
         // Swap in the new bitmap and update zoom on the windowed canvas
-        windowedBitmap = scaledBitmap
-        windowedCanvas.setBitmap(windowedBitmap)
+        renderer.swapBitmap(scaledBitmap)
 
         zoomLevel.value = newZoom
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        renderer.scaleCanvas(zoomLevel.value)
 
         if (scaleFactor < 1f) redrawOutsideRect(dstRect.toRect(), screenW, screenH)
 
