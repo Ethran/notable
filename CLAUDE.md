@@ -161,6 +161,31 @@ instance instead of the object.
 - Versions: `compileSdk 37`, `minSdk 29`, `targetSdk 35`, AGP 9.2.1, Kotlin 2.4.10.
   Onyx SDK: base 1.8.5.2 · device 1.3.5.2 · pen 1.5.4.1 (dependabot-managed as the `onyx-sdk` group).
 
+### Two traps when writing tests
+
+**1. `android.graphics.*` does not work in JVM unit tests.** Despite `app/build.gradle` comments
+saying *"Robolectric drives android.* APIs in JVM unit tests"* and `--add-opens` jvmArgs added for
+it, **Robolectric is not a dependency**. On the unit-test classpath `Rect(1, 2, 3, 4)` does not
+throw — it silently produces a rect with every field `0`.
+
+The dangerous consequence: an assertion comparing two framework objects
+(`assertEquals(expectedRect, actualRect)`) **passes vacuously**, because both sides are all-zero.
+A whole suite can look green while asserting nothing. So:
+
+- Put tests needing real `android.graphics` types in `androidTest`, not `test`
+- Assert against **literal values**, never against another framework object
+- Include an explicit sanity test that the constructor populates fields
+
+**2. `androidTest` method names cannot contain spaces.** `minSdk 29` is below API 30, so D8
+rejects backtick-quoted names with spaces:
+
+```
+D8: Space characters in SimpleName 'my test name' are not allowed prior to DEX version 040
+```
+
+Backtick names are fine in `app/src/test` but **must be camelCase in `app/src/androidTest`** —
+which is why every existing instrumented test is camelCase.
+
 ### Room migrations
 
 Any `@Entity` change requires **all** of: DB version bump, a migration in `AppDatabase.kt`, a new
