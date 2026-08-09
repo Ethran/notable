@@ -22,7 +22,6 @@ import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.BackgroundType
@@ -33,6 +32,7 @@ import com.ethran.notable.editor.canvas.CanvasEventBus.waitForDrawing
 import com.ethran.notable.editor.drawing.PageRenderer
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
+import com.ethran.notable.editor.state.ViewportState
 import com.ethran.notable.editor.utils.div
 import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.loadHQPagePreview
@@ -41,10 +41,6 @@ import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
-import com.ethran.notable.gestures.MAX_ZOOM
-import com.ethran.notable.gestures.MIN_ZOOM
-import com.ethran.notable.gestures.ZOOM_SENSITIVITY
-import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.utils.onError
@@ -56,7 +52,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -124,19 +119,23 @@ class PageView(
         get() = pageDataManager.getCurrentPageId()
 
 
+    // Owns scroll, zoom, and the screen<->page transforms. Pairs with PageRenderer: the renderer
+    // owns *where* pixels land, the viewport owns *which part of the page* they represent.
+    private val viewport = ViewportState(pageDataManager) { currentPageId }
+
     // scroll is observed by ui, represents top left corner
     var scroll: Offset
-        get() = pageDataManager.getPageScroll(currentPageId)
-        set(value) = pageDataManager.setPageScroll(currentPageId, value)
-
+        get() = viewport.scroll
+        set(value) {
+            viewport.scroll = value
+        }
 
     val isTransformationAllowed: Boolean
-        get() = pageDataManager.isTransformationAllowedForCurrentPage()
-
+        get() = viewport.isTransformationAllowed
 
     // we need to observe zoom level, to adjust strokes size.
-    val zoomLevel: MutableStateFlow<Float> =
-        MutableStateFlow(pageDataManager.getPageZoom(currentPageId))
+    val zoomLevel: MutableStateFlow<Float>
+        get() = viewport.zoomLevel
 
     var height: Int
         get() = pageDataManager.getPageHeight(currentPageId) ?: viewHeight
@@ -604,44 +603,7 @@ class PageView(
     internal fun calculateZoomLevel(
         scaleDelta: Float,
         currentZoom: Float,
-    ): Float {
-        // TODO: Better snapping logic
-        val portraitRatio = SCREEN_WIDTH.toFloat() / SCREEN_HEIGHT
-
-        return if (!GlobalAppSettings.current.continuousZoom) {
-            // Discrete zoom mode - snap to either 1.0 or screen ratio.
-            // scaleDelta is a growth ratio minus 1 (see PointerTracker.pinchRatio),
-            // so it is negative when pinching in (zoom out) and positive when
-            // spreading (zoom in); split on 0, not 1.
-            if (scaleDelta <= 0f) {
-                if (SCREEN_HEIGHT > SCREEN_WIDTH) portraitRatio else 1.0f
-            } else {
-                if (SCREEN_HEIGHT > SCREEN_WIDTH) 1.0f else portraitRatio
-            }
-        } else {
-            // Continuous zoom: scaleDelta is the per-frame growth ratio minus 1,
-            // so the zoom scales multiplicatively. ZOOM_SENSITIVITY damps how
-            // hard the pinch drives the zoom (< 1 zooms more gently than the
-            // fingers spread).
-            val newZoom =
-                (currentZoom * (1f + scaleDelta * ZOOM_SENSITIVITY)).coerceIn(MIN_ZOOM, MAX_ZOOM)
-
-            // Snap to either 1.0 or screen ratio depending on which is closer
-            val snapTarget = if (abs(newZoom - 1.0f) < abs(newZoom - portraitRatio)) {
-                1.0f
-            } else {
-                portraitRatio
-            }
-
-            if (abs(newZoom - snapTarget) < ZOOM_SNAP_THRESHOLD) {
-                log.d("Zoom snap to $snapTarget")
-                snapTarget
-            } else {
-                log.d("Left zoom as is. $newZoom")
-                newZoom
-            }
-        }
-    }
+    ): Float = viewport.calculateZoomLevel(scaleDelta, currentZoom)
 
     suspend fun simpleUpdateZoom(scaleDelta: Float) {
         log.d("Simple Zoom updated, $scaleDelta")
@@ -896,17 +858,11 @@ class PageView(
         return point / zoomLevel.value
     }
 
-    private fun removeScroll(rect: Rect): Rect {
-        return rect - scroll
-    }
+    private fun removeScroll(rect: Rect): Rect = viewport.removeScroll(rect)
 
-    fun toScreenCoordinates(rect: Rect): Rect {
-        return (rect - scroll) * zoomLevel.value
-    }
+    fun toScreenCoordinates(rect: Rect): Rect = viewport.toScreenCoordinates(rect)
 
-    private fun toPageCoordinates(rect: Rect): Rect {
-        return rect / zoomLevel.value + scroll
-    }
+    private fun toPageCoordinates(rect: Rect): Rect = viewport.toPageCoordinates(rect)
 
     private suspend fun waitForDrawingWithSnack() {
         if (drawingInProgress.isLocked) {
