@@ -184,7 +184,9 @@ class PageView(
             if(currentPageId.isEmpty())
                 log.e("Current page id is empty")
 
-            zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
+            // Scroll is now held by the viewport rather than read through PageDataManager on every
+            // access, so a page switch has to adopt the persisted position explicitly.
+            viewport.reloadFromPersistence()
             pageDataManager.getCachedBitmap(currentPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
                 renderer.adopt(cached)
@@ -229,7 +231,9 @@ class PageView(
         coroutineScope.launch(Dispatchers.IO) {
             pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
             pageDataManager.setPage(newPageId)
-            zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
+            // Scroll is now held by the viewport rather than read through PageDataManager on every
+            // access, so a page switch has to adopt the persisted position explicitly.
+            viewport.reloadFromPersistence()
             pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
                 renderer.adopt(cached)

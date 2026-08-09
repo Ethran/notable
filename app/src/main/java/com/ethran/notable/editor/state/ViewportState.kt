@@ -43,14 +43,46 @@ class ViewportState(
 ) {
     private val log = ShipBook.getLogger("ViewportState")
 
-    /** Top-left corner of the view, in page coordinates. */
-    var scroll: Offset
-        get() = pageDataManager.getPageScroll(currentPageId())
-        set(value) = pageDataManager.setPageScroll(currentPageId(), value)
+    /**
+     * Top-left corner of the view, in page coordinates.
+     *
+     * **Owned here, not in [PageDataManager].** Each viewport scrolls independently, so two views
+     * of the same page no longer share a position — which is the point: two views of one document
+     * exist precisely to look at two places in it.
+     *
+     * Writes are mirrored into [PageDataManager] because it remains the *persistence* layer: it is
+     * what `setScrollInDb` writes to the database, what the scroll indicator reads, and what
+     * restores position when a page is reopened. It is simply no longer the live source of truth.
+     *
+     * Identical writes are skipped so that adopting a persisted value in [reloadFromPersistence]
+     * does not materialise a map entry that `getPageScroll` deliberately avoids creating on read.
+     */
+    var scroll: Offset = pageDataManager.getPageScroll(currentPageId())
+        set(value) {
+            if (field == value) return
+            field = value
+            pageDataManager.setPageScroll(currentPageId(), value)
+        }
 
-    /** Observed by the UI so stroke widths can track the zoom. */
+    /**
+     * Observed by the UI so stroke widths can track the zoom. Already per-instance, and written
+     * back to [PageDataManager] by `CanvasObserverRegistry` for the same persistence reason.
+     */
     val zoomLevel: MutableStateFlow<Float> =
         MutableStateFlow(pageDataManager.getPageZoom(currentPageId()))
+
+    /**
+     * Adopt the persisted viewport for whichever page this view now shows.
+     *
+     * Must be called after the page behind the view changes. Previously unnecessary for [scroll],
+     * which read through to [PageDataManager] on every access and so followed the page implicitly;
+     * now that the value is held here, a page switch has to reload it explicitly.
+     */
+    fun reloadFromPersistence() {
+        val pageId = currentPageId()
+        scroll = pageDataManager.getPageScroll(pageId)
+        zoomLevel.value = pageDataManager.getPageZoom(pageId)
+    }
 
     val isTransformationAllowed: Boolean
         get() = pageDataManager.isTransformationAllowedForCurrentPage()
