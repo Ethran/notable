@@ -203,10 +203,10 @@ class PageView(
 
 
     init {
-        // App-level emitters (navigator, quick-nav, settings dialogs) have no view in hand and
-        // mean "the editor on screen". With one editor that is whichever PageView exists; when
-        // panes arrive this becomes the active pane.
-        CanvasEventBus.active = events
+        // CanvasEventBus.active is NOT assigned here. App-level emitters mean "the pane on screen",
+        // which is a question about focus, not about construction — assigning it here was correct
+        // for one view and silently wrong for two, pinning it to whichever PageView happened to be
+        // built last. PaneGroup owns it now and republishes it on every focus change.
 
         coroutineScope.launch(Dispatchers.IO) {
             // set page, and retrieve page data from db

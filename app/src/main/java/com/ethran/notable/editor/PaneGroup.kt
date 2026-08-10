@@ -3,6 +3,7 @@ package com.ethran.notable.editor
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.ethran.notable.editor.canvas.CanvasEventBus
 
 /**
  * The panes on screen, and which of them input and the toolbar act on.
@@ -15,6 +16,12 @@ import androidx.compose.runtime.setValue
  */
 class PaneGroup(val panes: List<Pane>) {
 
+    var active: Pane by mutableStateOf(panes.first())
+        private set
+
+    // Declared after [active] deliberately: init blocks and property initialisers run in
+    // declaration order, so publishing the bus above this point would read an uninitialised
+    // delegate.
     init {
         // Two views of one document cannot be made coherent: each pane owns its own window bitmap
         // and its own History, so a stroke committed by one leaves the other's bitmap stale and an
@@ -24,16 +31,29 @@ class PaneGroup(val panes: List<Pane>) {
         require(ids.distinct().size == ids.size) {
             "Panes must show distinct pages, got $ids"
         }
+        publishActiveBus()
     }
-
-    var active: Pane by mutableStateOf(panes.first())
-        private set
 
     /** Direct input and the toolbar at [pane]. Ignores panes that are not part of this group. */
     fun focus(pane: Pane): Boolean {
         if (pane !in panes || pane === active) return false
         active = pane
+        publishActiveBus()
         return true
+    }
+
+    /**
+     * Point [CanvasEventBus.active] at the focused pane's bus.
+     *
+     * This belongs to focus, not to view construction. `PageView.init` used to assign it, which was
+     * correct for one view and silently wrong for two: each new `PageView` overwrote it, so it
+     * ended up pinned to whichever pane was *constructed last* and never moved again. Every
+     * app-level emitter that has no view in hand — resume refresh, the background selector,
+     * quick-nav scrubbing, `restoreCanvas` — was therefore addressing the second pane no matter
+     * which one the user was writing in.
+     */
+    private fun publishActiveBus() {
+        CanvasEventBus.active = active.events
     }
 
     /** The pane containing a surface coordinate, or null for the gutter or chrome. */
