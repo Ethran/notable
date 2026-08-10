@@ -21,20 +21,6 @@ import kotlin.system.measureTimeMillis
 object CanvasEventBus {
 
     /**
-     * The view that app-level code means when it says "the editor".
-     *
-     * The navigator, quick-nav and the settings dialogs have no view in hand but still need to
-     * reach the one on screen. Code that *does* hold a page should address `page.events` instead —
-     * going through here would send the signal to whichever view happens to be active, which is
-     * only coincidentally the right one.
-     *
-     * Assigned when an editor view is created. Defaults to a detached bus so emitting before any
-     * editor exists is a no-op rather than a crash.
-     */
-    @Volatile
-    var active: PaneEventBus = PaneEventBus()
-
-    /**
      * Guards stroke commits. Global because raw drawing is global: the Onyx firmware has one
      * raw-draw state for the whole panel, so two views cannot be mid-commit independently.
      */

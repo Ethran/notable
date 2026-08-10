@@ -319,6 +319,8 @@ fun EditorView(
 
         DisposableEffect(Unit) {
             onDispose {
+                // Nothing should address panes that are gone.
+                PaneRegistry.clear()
                 viewModel.onDispose(page)
             }
         }

@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  *
  * Code holding a page addresses its own bus directly (`page.events`). Code that has no view in
  * hand — the navigator, quick-nav, the settings dialogs — means "whichever view is on screen", and
- * addresses [CanvasEventBus.active].
+ * addresses `PaneRegistry`.
  */
 class PaneEventBus {
 

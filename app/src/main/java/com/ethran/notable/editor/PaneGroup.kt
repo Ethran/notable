@@ -3,7 +3,6 @@ package com.ethran.notable.editor
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.ethran.notable.editor.canvas.CanvasEventBus
 
 /**
  * The panes on screen, and which of them input and the toolbar act on.
@@ -36,7 +35,7 @@ class PaneGroup(initialPanes: List<Pane>) {
     // delegate.
     init {
         requireShowDistinctPages(initialPanes)
-        publishActiveBus()
+        publishPanes()
     }
 
     /**
@@ -52,7 +51,7 @@ class PaneGroup(initialPanes: List<Pane>) {
         requireShowDistinctPages(newPanes)
         panes = newPanes
         if (active !in newPanes) active = newPanes.first()
-        publishActiveBus()
+        publishPanes()
     }
 
     /**
@@ -73,22 +72,20 @@ class PaneGroup(initialPanes: List<Pane>) {
     fun focus(pane: Pane): Boolean {
         if (pane !in panes || pane === active) return false
         active = pane
-        publishActiveBus()
+        publishPanes()
         return true
     }
 
     /**
-     * Point [CanvasEventBus.active] at the focused pane's bus.
+     * Publish the panes for code that has no pane in hand — see [PaneRegistry].
      *
-     * This belongs to focus, not to view construction. `PageView.init` used to assign it, which was
-     * correct for one view and silently wrong for two: each new `PageView` overwrote it, so it
-     * ended up pinned to whichever pane was *constructed last* and never moved again. Every
-     * app-level emitter that has no view in hand — resume refresh, the background selector,
-     * quick-nav scrubbing, `restoreCanvas` — was therefore addressing the second pane no matter
-     * which one the user was writing in.
+     * This belongs to the pane set and to focus, not to view construction. `PageView.init` used to
+     * assign the old single pointer, which was correct for one view and silently wrong for two:
+     * each new `PageView` overwrote it, so it ended up pinned to whichever pane was *constructed
+     * last* and never moved again.
      */
-    private fun publishActiveBus() {
-        CanvasEventBus.active = active.events
+    private fun publishPanes() {
+        PaneRegistry.publish(panes, active)
     }
 
     /** The pane containing a surface coordinate, or null for the gutter or chrome. */

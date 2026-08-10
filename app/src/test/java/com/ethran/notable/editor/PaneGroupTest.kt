@@ -1,6 +1,5 @@
 package com.ethran.notable.editor
 
-import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.canvas.PaneEventBus
 import com.ethran.notable.editor.state.History
 import io.mockk.every
@@ -16,10 +15,10 @@ import org.junit.Test
 /**
  * Focus behaviour of [PaneGroup], and the bus it publishes for app-level emitters.
  *
- * `CanvasEventBus.active` was previously assigned in `PageView.init`, so with two panes it ended up
- * pinned to whichever view was *constructed last* and never followed focus. Every app-level emitter
- * that has no view in hand — resume refresh, the background selector, quick-nav scrubbing — was
- * addressing the wrong pane. These tests pin the corrected ownership.
+ * The app-level pane pointer was previously assigned in `PageView.init`, so with two panes it ended
+ * up pinned to whichever view was *constructed last* and never followed focus. Every app-level
+ * emitter that has no view in hand — resume refresh, the background selector, quick-nav scrubbing —
+ * was addressing the wrong pane. These tests pin the corrected ownership, now via [PaneRegistry].
  *
  * No `android.graphics` types are asserted on here. Per CLAUDE.md they are all-zero stubs on the
  * unit-test classpath, so comparing two of them passes vacuously; [Pane.screenRect] is left alone.
@@ -43,8 +42,8 @@ class PaneGroupTest {
     fun setUp() {
         paneOne = pane("page-one")
         paneTwo = pane("page-two")
-        // Detached default, so a leaked assignment from another test cannot pass this one.
-        CanvasEventBus.active = PaneEventBus()
+        // Cleared, so a publish leaked from another test cannot pass this one.
+        PaneRegistry.clear()
     }
 
     @Test
@@ -67,8 +66,8 @@ class PaneGroupTest {
     @Test
     fun `construction publishes the first pane's bus`() {
         val group = PaneGroup(listOf(paneOne, paneTwo))
-        assertSame(group.active.events, CanvasEventBus.active)
-        assertSame(paneOne.events, CanvasEventBus.active)
+        assertSame(group.active.events, PaneRegistry.focused)
+        assertSame(paneOne.events, PaneRegistry.focused)
     }
 
     @Test
@@ -78,9 +77,9 @@ class PaneGroupTest {
         assertTrue(group.focus(paneTwo))
 
         assertSame(paneTwo, group.active)
-        assertSame(paneTwo.events, CanvasEventBus.active)
+        assertSame(paneTwo.events, PaneRegistry.focused)
         // The regression this guards: the bus staying on the other pane after focus moved.
-        assertNotSame(paneOne.events, CanvasEventBus.active)
+        assertNotSame(paneOne.events, PaneRegistry.focused)
     }
 
     @Test
@@ -90,7 +89,7 @@ class PaneGroupTest {
         assertFalse(group.focus(paneOne))
 
         assertSame(paneOne, group.active)
-        assertSame(paneOne.events, CanvasEventBus.active)
+        assertSame(paneOne.events, PaneRegistry.focused)
     }
 
     @Test
@@ -101,7 +100,7 @@ class PaneGroupTest {
         assertFalse(group.focus(stranger))
 
         assertSame(paneOne, group.active)
-        assertSame(paneOne.events, CanvasEventBus.active)
+        assertSame(paneOne.events, PaneRegistry.focused)
     }
 
     @Test
@@ -112,7 +111,7 @@ class PaneGroupTest {
 
         assertEquals(listOf(paneOne, paneTwo), group.panes)
         assertSame(paneOne, group.active)
-        assertSame(paneOne.events, CanvasEventBus.active)
+        assertSame(paneOne.events, PaneRegistry.focused)
     }
 
     @Test
@@ -125,7 +124,7 @@ class PaneGroupTest {
         group.updatePanes(listOf(paneOne))
 
         assertSame(paneOne, group.active)
-        assertSame(paneOne.events, CanvasEventBus.active)
+        assertSame(paneOne.events, PaneRegistry.focused)
     }
 
     @Test
@@ -181,6 +180,6 @@ class PaneGroupTest {
     fun `a single pane is active and publishes its own bus`() {
         val group = PaneGroup(listOf(paneOne))
         assertSame(paneOne, group.active)
-        assertSame(paneOne.events, CanvasEventBus.active)
+        assertSame(paneOne.events, PaneRegistry.focused)
     }
 }

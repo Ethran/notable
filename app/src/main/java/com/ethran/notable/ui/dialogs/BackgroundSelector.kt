@@ -79,7 +79,7 @@ import com.ethran.notable.R
 import com.ethran.notable.data.copyBackgroundToDatabase
 import com.ethran.notable.data.ensureBackgroundsFolder
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.drawing.drawDottedBg
 import com.ethran.notable.editor.drawing.drawHexedBg
 import com.ethran.notable.editor.drawing.drawLinedBg
@@ -162,7 +162,7 @@ fun BackgroundSelector(
 
                     log.i("PickVisualMedia: copied -> ${copiedFile.absolutePath}")
                     onChange(currentType.key, copiedFile.toString())
-                    scope.launch { CanvasEventBus.active.refreshUi.emit(Unit) }
+                    scope.launch { PaneRegistry.focused.refreshUi.emit(Unit) }
                     pageBackground = copiedFile.toString()
                     log.d("PickVisualMedia: UI updated, pageBackground=$pageBackground, type=${currentType.key}")
 
@@ -189,7 +189,7 @@ fun BackgroundSelector(
             try {
                 val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
                 onChange(currentType.key, copiedFile.toString())
-                scope.launch { CanvasEventBus.active.refreshUi.emit(Unit) }
+                scope.launch { PaneRegistry.focused.refreshUi.emit(Unit) }
                 pageBackground = copiedFile.toString()
                 pageBackgroundType = currentType
                 log.i("PDF was received and copied, it is now at:${copiedFile.toUri()}")

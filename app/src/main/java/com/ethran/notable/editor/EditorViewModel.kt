@@ -15,6 +15,7 @@ import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
@@ -425,7 +426,7 @@ class EditorViewModel @Inject constructor(
         }
         updateDrawingState()
         viewModelScope.launch {
-            CanvasEventBus.active.refreshUi.emit(Unit)
+            PaneRegistry.focused.refreshUi.emit(Unit)
         }
     }
 
@@ -868,7 +869,7 @@ class EditorViewModel @Inject constructor(
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
             snackDispatcher.showOrUpdateSnack(snack)
-            CanvasEventBus.active.restoreCanvas.emit(Unit)
+            PaneRegistry.focused.restoreCanvas.emit(Unit)
             return
         }
 

@@ -9,7 +9,7 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.canvas.PaneEventBus
 import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackConf
@@ -97,7 +97,7 @@ class QuickNavViewModel(
      * state after a reopen — so a page chosen for one pane could load into the other. The picker
      * re-points this on every composition.
      */
-    var targetBus: () -> PaneEventBus = { CanvasEventBus.active },
+    var targetBus: () -> PaneEventBus = { PaneRegistry.focused },
 ) : ViewModel() {
     private val pageRepository = appRepository.pageRepository
     private val bookRepository = appRepository.bookRepository
@@ -118,17 +118,44 @@ class QuickNavViewModel(
      * A notebook may be open in at most one pane (ROADMAP §8), and no two panes may show the same
      * page. Rather than resolve a collision after the fact, the picker does not offer one.
      */
-    data class PaneExclusion(val notebookId: String?, val pageId: String?) {
-        fun allows(page: Page): Boolean {
-            if (pageId != null && page.id == pageId) return false
+    data class PaneExclusion(
+        /** A notebook another pane holds. Opening it here would break one-notebook-per-pane. */
+        val occupiedNotebookId: String? = null,
+        /** A page another pane holds. */
+        val occupiedPageId: String? = null,
+        /** What the target pane already shows. Offering it back would do nothing. */
+        val targetPageId: String? = null,
+        val targetNotebookId: String? = null,
+    ) {
+        /**
+         * Whether [page] is worth offering as a destination.
+         *
+         * The target pane's *notebook* is deliberately not excluded here, only its current page:
+         * jumping to another page of the notebook you are already in is a perfectly good move, and
+         * it is what the favourites row is for.
+         */
+        fun allowsPage(page: Page): Boolean {
+            if (page.id == occupiedPageId || page.id == targetPageId) return false
             // Loose pages have no notebook, so they collide by page id only.
-            if (notebookId != null && page.notebookId == notebookId) return false
+            if (occupiedNotebookId != null && page.notebookId == occupiedNotebookId) return false
             return true
         }
 
+        /**
+         * Whether [notebookId] is worth offering.
+         *
+         * Excludes the target pane's own notebook as well as another pane's. Opening a notebook
+         * lands on its last-opened page, and `updateOpenedPage` records that on every page change —
+         * so for the notebook you are already in, that page is the one you are already on. It
+         * produced a "tried to change to the same page" warning for an action the picker should
+         * never have offered.
+         */
+        fun allowsNotebook(notebookId: String): Boolean =
+            notebookId != occupiedNotebookId && notebookId != targetNotebookId
+
         companion object {
             /** Nothing excluded — a single pane, or a caller outside the editor. */
-            val NONE = PaneExclusion(null, null)
+            val NONE = PaneExclusion()
         }
     }
 
@@ -150,7 +177,15 @@ class QuickNavViewModel(
             // the same notebook could be opened in both panes.
             val excludedNotebookId = excludePageId
                 ?.let { runCatching { pageRepository.getById(it)?.notebookId }.getOrNull() }
-            val exclusion = PaneExclusion(excludedNotebookId, excludePageId)
+            // The context page is what the target pane currently shows, so it doubles as the
+            // "would be a no-op" half of the exclusion. For a pane that does not exist yet the two
+            // halves coincide, which is harmless.
+            val exclusion = PaneExclusion(
+                occupiedNotebookId = excludedNotebookId,
+                occupiedPageId = excludePageId,
+                targetPageId = currentPageId,
+                targetNotebookId = page?.notebookId,
+            )
             this@QuickNavViewModel.exclusion = exclusion
 
             // Read favorites from your database/preferences
@@ -159,19 +194,19 @@ class QuickNavViewModel(
             val isFavorite = favorites.contains(currentPageId)
 
             val favoritePagesDb = appRepository.pageRepository.getByIds(favorites)
-                .filter(exclusion::allows)
+                .filter(exclusion::allowsPage)
 
             // A notebook already open in another pane is not offered (ROADMAP §8), and neither is
             // one with no pages to open.
             val selectableBooks = runCatching { bookRepository.getAll() }.getOrDefault(emptyList())
-                .filter { it.id != exclusion.notebookId && it.pageIds.isNotEmpty() }
+                .filter { exclusion.allowsNotebook(it.id) && it.pageIds.isNotEmpty() }
                 .sortedBy { it.title.lowercase() }
 
             // Capped: this is a horizontal row on a fixed-height sheet, not a browser. The library
             // is the tool for a long list — see ROADMAP §6.
             val quickPagesDb = runCatching { pageRepository.getAllSinglePages() }
                 .getOrDefault(emptyList())
-                .filter(exclusion::allows)
+                .filter(exclusion::allowsPage)
                 .take(QUICK_PAGE_LIMIT)
 
             _uiState.update { state ->
@@ -244,7 +279,7 @@ class QuickNavViewModel(
 
             // Re-fetch the rich page objects for the ShowPagesRow
             val updatedFavoritePages = appRepository.pageRepository.getByIds(newFavorites)
-                .filter(exclusion::allows)
+                .filter(exclusion::allowsPage)
             _uiState.update { it.copy(favoritePages = updatedFavoritePages) }
         }
     }

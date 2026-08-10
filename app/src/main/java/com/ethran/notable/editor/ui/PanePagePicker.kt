@@ -71,7 +71,7 @@ private enum class PickerTarget { ThisPane, OtherPane, NewPane }
  * Reuses [QuickNavContent] rather than duplicating a picker, but hosts it *inside* the editor,
  * where the panes are in scope. The app-level `QuickNav` sits above the NavHost so it can be
  * reached from the library; it therefore cannot see [PaneGroup] and addresses the editor only
- * through `CanvasEventBus.active`. That is enough to reach the focused pane and not enough to aim
+ * through `PaneRegistry.focused`. That is enough to reach the focused pane and not enough to aim
  * at the other one.
  *
  * Two things follow from hosting it here:

@@ -38,6 +38,7 @@ import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.io.ExportEngine
@@ -236,9 +237,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onRestart() {
         super.onRestart()
-        // redraw after device sleep
+        // Redraw after device sleep. Every pane: waking is a property of the panel, not of one
+        // document, and addressing a single pane left the other blank until something else forced
+        // it to repaint.
         this.lifecycleScope.launch {
-            CanvasEventBus.active.reinitSignal.emit(Unit)
+            PaneRegistry.all.forEach { it.reinitSignal.emit(Unit) }
         }
     }
 
@@ -246,7 +249,7 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
-            CanvasEventBus.active.refreshUi.emit(Unit)
+            PaneRegistry.all.forEach { it.refreshUi.emit(Unit) }
         }
     }
 

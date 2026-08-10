@@ -17,7 +17,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.utils.imageBounds
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
@@ -73,10 +73,10 @@ fun drawImage(
         // Convert to software-backed bitmap
         val softwareBitmap = imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
 
-        // drawImage has no page in scope, so it addresses the active view — which reproduces
-        // the previous global behaviour exactly. Once panes exist this should take the owning
-        // view's bus as a parameter, or drawing an inactive pane will reset the wrong one.
-        CanvasEventBus.active.addImageByUri.value = null
+        // Addressed by the image's own page rather than by focus. Drawing into an inactive pane
+        // would otherwise clear the *focused* pane's pending image — the hazard the previous
+        // comment here predicted once panes existed.
+        PaneRegistry.showing(image.pageId).forEach { it.addImageByUri.value = null }
 
         val rectOnImage = Rect(0, 0, imageBitmap.width, imageBitmap.height)
         val rectOnCanvas = Rect(

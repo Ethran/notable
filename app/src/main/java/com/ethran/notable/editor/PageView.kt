@@ -102,7 +102,7 @@ class PageView(
      *
      * Previously these lived on the global [CanvasEventBus], so a second editor view would have
      * reacted to every signal meant for the first. Code holding a page emits here; code that has
-     * no view in hand addresses [CanvasEventBus.active].
+     * no view in hand addresses [PaneRegistry].
      */
     val events = PaneEventBus()
 
@@ -203,10 +203,10 @@ class PageView(
 
 
     init {
-        // CanvasEventBus.active is NOT assigned here. App-level emitters mean "the pane on screen",
-        // which is a question about focus, not about construction — assigning it here was correct
-        // for one view and silently wrong for two, pinning it to whichever PageView happened to be
-        // built last. PaneGroup owns it now and republishes it on every focus change.
+        // No app-level pane pointer is assigned here. Which pane app-level emitters mean is a
+        // question about focus, not about construction — assigning it here was correct for one view
+        // and silently wrong for two, pinning it to whichever PageView happened to be built last.
+        // PaneGroup publishes the panes to PaneRegistry instead, on every focus and pane change.
 
         coroutineScope.launch(Dispatchers.IO) {
             // set page, and retrieve page data from db

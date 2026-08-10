@@ -59,38 +59,39 @@ class CanvasObserverRegistry(
     private val observerJob = SupervisorJob(coroutineScope.coroutineContext[Job])
     private val observerScope = CoroutineScope(coroutineScope.coroutineContext + observerJob)
 
-    companion object {
-        /**
-         * Live observer jobs, keyed by the page they serve.
-         *
-         * Was a single `activeObserverJob`, cancelled by whichever registry registered next. That
-         * guaranteed one live observer set — correct when there could only be one editor view, and
-         * wrong the moment there are two: registering the second pane cancelled the first pane's
-         * observers, so its signal bus dropped to zero subscribers and undo hung there forever
-         * while the other pane worked.
-         *
-         * Keyed by page id, so a leaked registry for the *same* page is still cancelled — which is
-         * what the guard was for — without touching another pane's.
-         */
-        private val activeObserverJobs = mutableMapOf<String, Job>()
-    }
-
     /**
      * Stop this pane's observers.
      *
-     * Needed because a pane can now go away without the canvas going with it — closing a split
-     * removes a pane from a `DrawCanvas` that carries on living. Previously the only way to drop
-     * observers was to destroy the whole canvas, which cost the surface.
+     * Needed because a pane can go away without the canvas going with it — closing a split removes
+     * a pane from a `DrawCanvas` that carries on living.
      */
     fun cancelAll() {
         if (!registered) return
         registered = false
-        val pageKey = page.currentPageId
-        // Only clear the map entry if it is still ours: a later registry for the same page owns it.
-        if (activeObserverJobs[pageKey] === observerJob) activeObserverJobs.remove(pageKey)
         observerJob.cancel()
     }
 
+    /**
+     * Start this pane's observers.
+     *
+     * ### There is deliberately no global registry of live observer jobs
+     *
+     * There were two, and both were wrong. First a single `activeObserverJob` cancelled by whoever
+     * registered next — correct with one editor view, and wrong the moment there were two, since
+     * registering the second pane killed the first pane's observers. Then a map keyed by *page id*,
+     * which looked right and was not: the key is captured when a registry starts, but a pane's page
+     * changes underneath it. A pane that registered on page A and later moved to page B still owned
+     * the entry for A, so opening a *different* pane on A cancelled the still-live first pane.
+     *
+     * That is exactly what a device trace caught: after an unsplit, the surviving pane emitted
+     * `forceUpdate` with nothing subscribed, the emit was dropped (a zero-buffer `MutableSharedFlow`
+     * — CLAUDE.md failure mode 2), and the page came up blank.
+     *
+     * The guard existed to stop a registry leaking when the canvas was rebuilt. The canvas is no
+     * longer rebuilt, and `DrawCanvas.syncPanes` owns one registry per *pane*, creating and
+     * cancelling them as the pane set changes. Ownership by the thing whose lifetime it actually
+     * follows needs no global index — and cannot cancel a pane that is still on screen.
+     */
     fun registerAll() {
         // Guard against double registration on the same instance.
         if (registered) {
@@ -98,11 +99,6 @@ class CanvasObserverRegistry(
             return
         }
         registered = true
-        // Cancel observers from a prior (possibly leaked) registry for THIS page, so refreshes
-        // aren't doubled — but leave other panes' observers alone.
-        val pageKey = page.currentPageId
-        activeObserverJobs.remove(pageKey)?.cancel()
-        activeObserverJobs[pageKey] = observerJob
         // NOTE: Be careful with the dispatchers, choose them wisely.
 
         ImageHandler(drawCanvas.context, page, viewModel, coroutineScope).observeImageUri()

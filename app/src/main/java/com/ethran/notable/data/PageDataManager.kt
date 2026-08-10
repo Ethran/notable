@@ -22,7 +22,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.utils.saveHQPagePreview
 import com.ethran.notable.editor.utils.savePageThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
@@ -1234,8 +1234,13 @@ class PageDataManager @Inject constructor(
                 log.i("Background file(s) changed, invalidating pages: $pageIds")
                 for (pageId in pageIds) {
                     invalidateBackground(pageId)
-                    if (pageId == currentPage) {
-                        CanvasEventBus.active.forceUpdate.emit(null)
+                    // Addressed by page, not by focus. This used to ask whether the changed page
+                    // was the app-wide "current" one and then refresh whichever pane happened to
+                    // be focused — so a background change to the page in the *other* pane either
+                    // did nothing or repainted the wrong one.
+                    val showing = PaneRegistry.showing(pageId)
+                    showing.forEach { it.forceUpdate.emit(null) }
+                    if (showing.isNotEmpty()) {
                         appEventBus.tryEmit(
                             AppEvent.ActionHint("Background file changed", 4000)
                         )
