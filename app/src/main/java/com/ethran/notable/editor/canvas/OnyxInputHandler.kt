@@ -52,8 +52,12 @@ class OnyxInputHandler(
 ) {
     // Derived from the active pane rather than captured at construction: a stroke routed to
     // another pane changes which page, history and stroke batch these refer to.
-    private val page: PageView get() = page
-    private val history: History get() = drawCanvas.history
+    //
+    // Reached via activePane rather than drawCanvas.page/history on purpose — going through the
+    // shorthand once produced `get() = page`, a property returning itself, which is a
+    // StackOverflowError on the first pen stroke.
+    private val page: PageView get() = drawCanvas.activePane.page
+    private val history: History get() = drawCanvas.activePane.history
     private val strokeHistoryBatch: MutableList<String> get() = drawCanvas.activePane.strokeHistoryBatch
 
     var isErasing: Boolean = false
