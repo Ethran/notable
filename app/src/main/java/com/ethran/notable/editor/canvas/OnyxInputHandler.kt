@@ -47,12 +47,15 @@ import kotlin.math.min
 
 class OnyxInputHandler(
     private val drawCanvas: DrawCanvas,
-    private val page: PageView,
     private val viewModel: EditorViewModel,
-    private val history: History,
     private val coroutineScope: CoroutineScope,
-    private val strokeHistoryBatch: MutableList<String>,
 ) {
+    // Derived from the active pane rather than captured at construction: a stroke routed to
+    // another pane changes which page, history and stroke batch these refer to.
+    private val page: PageView get() = page
+    private val history: History get() = drawCanvas.history
+    private val strokeHistoryBatch: MutableList<String> get() = drawCanvas.activePane.strokeHistoryBatch
+
     var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
     private val log = ShipBook.getLogger("DrawCanvas")
@@ -227,6 +230,17 @@ class OnyxInputHandler(
     }
     private fun onRawDrawingList(plist: TouchPointList) {
         if (touchHelper == null) return
+
+        // The firmware clips the live preview per limit rect but does NOT split the stroke: a drag
+        // crossing panes arrives as one callback spanning both regions. Resolve the owning pane
+        // from the first point and drop everything outside it. See routeStrokeToPane.
+        val routed = routeStrokeToPane(plist.points, drawCanvas.panes, { it.x }, { it.y }) ?: return
+        drawCanvas.focusPane(routed.pane)
+        val pane = routed.pane
+        val page = pane.page
+        val origin = pane.origin
+        val points = routed.points
+
         val currentLastStrokeEndTime = lastStrokeEndTime
         lastStrokeEndTime = System.currentTimeMillis()
         val startTime = System.currentTimeMillis()
@@ -236,10 +250,10 @@ class OnyxInputHandler(
             Mode.Select -> {
                 thread {
                     val points =
-                        copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+                        copyInputToSimplePointF(points, page.scroll, page.zoomLevel.value, origin)
                     handleSelect(
                         scope = coroutineScope,
-                        page = drawCanvas.page,
+                        page = page,
                         viewModel = viewModel,
                         points = points
                     )
@@ -263,14 +277,15 @@ class OnyxInputHandler(
 
 
                         val (startPoint, endPoint) = getModifiedStrokeEndpoints(
-                            plist.points,
+                            points,
                             page.scroll,
-                            page.zoomLevel.value
+                            page.zoomLevel.value,
+                            origin,
                         )
                         val linePoints = transformToLine(startPoint, endPoint)
 
                         handleDraw(
-                            drawCanvas.page,
+                            page,
                             strokeHistoryBatch,
                             toolbarState.activePenSetting.strokeSize,
                             toolbarState.activePenSetting.color,
@@ -300,8 +315,8 @@ class OnyxInputHandler(
                         log.d("lock obtained in ${lock - startTime} ms")
 
                         val scaledPoints =
-                            copyInput(plist.points, page.scroll, page.zoomLevel.value)
-                        val firstPointTime = plist.points.first().timestamp
+                            copyInput(points, page.scroll, page.zoomLevel.value, origin)
+                        val firstPointTime = points.first().timestamp
                         val erasedByScribbleDirtyRect = handleScribbleToErase(
                             page,
                             scaledPoints,
@@ -316,7 +331,7 @@ class OnyxInputHandler(
                             log.d("Drawing...")
                             // draw the stroke
                             handleDraw(
-                                drawCanvas.page,
+                                page,
                                 strokeHistoryBatch,
                                 toolbarState.activePenSetting.strokeSize,
                                 toolbarState.activePenSetting.color,
@@ -332,7 +347,7 @@ class OnyxInputHandler(
                             // See docs/onyx-sdk/onyx-scribble-to-erase.md.
                             val padding = 10
                             val trackBox =
-                                calculateBoundingBox(plist.points) { Pair(it.x, it.y) }.toRect()
+                                calculateBoundingBox(points) { Pair(it.x, it.y) }.toRect()
                             val dirty = Rect(
                                 trackBox.left - padding,
                                 trackBox.top - padding,
@@ -357,10 +372,16 @@ class OnyxInputHandler(
         isErasing = false
 
         if (plist == null) return
-        val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+        // Erasing routes exactly like drawing: the eraser runs on a separate firmware channel but
+        // respects the same limit rects, and a cross-pane drag arrives as one callback.
+        val routed = routeStrokeToPane(plist.points, drawCanvas.panes, { it.x }, { it.y }) ?: return
+        drawCanvas.focusPane(routed.pane)
+        val page = routed.pane.page
+        val points =
+            copyInputToSimplePointF(routed.points, page.scroll, page.zoomLevel.value, routed.pane.origin)
 
         val padding = 10
-        val boundingBox = (calculateBoundingBox(plist.points) { Pair(it.x, it.y) }).toRect()
+        val boundingBox = (calculateBoundingBox(points) { Pair(it.x, it.y) }).toRect()
         val strokeArea = Rect(
             boundingBox.left - padding,
             boundingBox.top - padding,
@@ -368,7 +389,7 @@ class OnyxInputHandler(
             boundingBox.bottom + padding
         )
         val zoneEffected = handleErase(
-            drawCanvas.page,
+            page,
             history,
             points,
             eraser = toolbarState.eraser

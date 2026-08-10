@@ -1,6 +1,7 @@
 package com.ethran.notable.editor
 
 import android.graphics.Rect
+import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.editor.canvas.PaneEventBus
 import com.ethran.notable.editor.state.History
 
@@ -31,6 +32,13 @@ class Pane(
      */
     var screenRect: Rect = Rect()
         private set
+
+    /**
+     * Top-left of this pane on the shared surface. Raw firmware points arrive in surface
+     * coordinates, so this must be subtracted before converting them to page coordinates.
+     */
+    val origin: Offset
+        get() = Offset(screenRect.left.toFloat(), screenRect.top.toFloat())
 
     /** Signals scoped to this pane. Shorthand for `page.events`. */
     val events: PaneEventBus

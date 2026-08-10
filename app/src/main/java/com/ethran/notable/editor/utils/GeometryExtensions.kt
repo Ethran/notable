@@ -82,10 +82,21 @@ private val rawInputMaxPressure: Float by lazy {
     if (max > 0f) max else 1f
 }
 
-fun TouchPoint.toStrokePoint(scroll: Offset, scale: Float): StrokePoint {
+/**
+ * Converts a raw firmware point to page coordinates.
+ *
+ * [origin] is the top-left of the pane the stroke belongs to, in surface coordinates. Raw points
+ * arrive in surface coordinates, so a pane that does not start at the surface origin must have it
+ * subtracted before scaling. Defaults to zero, which is the single-pane case.
+ */
+fun TouchPoint.toStrokePoint(
+    scroll: Offset,
+    scale: Float,
+    origin: Offset = Offset.Zero,
+): StrokePoint {
     return StrokePoint(
-        x = x / scale + scroll.x,
-        y = y / scale + scroll.y,
+        x = (x - origin.x) / scale + scroll.x,
+        y = (y - origin.y) / scale + scroll.y,
         pressure = (pressure / rawInputMaxPressure).coerceIn(0f, 1f),
         tiltX = tiltX,
         tiltY = tiltY,

@@ -13,7 +13,12 @@ import com.onyx.android.sdk.data.note.TouchPoint
 // StrokePointConverter.DT_MAX_VALUE_INT.
 private const val DT_MAX_VALUE_MS = 65534L
 
-fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List<StrokePoint> {
+fun copyInput(
+    touchPoints: List<TouchPoint>,
+    scroll: Offset,
+    scale: Float,
+    origin: Offset = Offset.Zero,
+): List<StrokePoint> {
     if (touchPoints.isEmpty()) return emptyList()
     // Capture per-point delta time (ms relative to the first point) into StrokePoint.dt so
     // it can be persisted. The firmware stamps each TouchPoint with an absolute timestamp;
@@ -23,7 +28,7 @@ fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List
     val baseTime = touchPoints.first().timestamp
     return touchPoints.map {
         val deltaMs = (it.timestamp - baseTime).coerceIn(0L, DT_MAX_VALUE_MS)
-        it.toStrokePoint(scroll, scale).copy(dt = deltaMs.toUShort())
+        it.toStrokePoint(scroll, scale, origin).copy(dt = deltaMs.toUShort())
     }
 }
 
@@ -31,12 +36,13 @@ fun copyInput(touchPoints: List<TouchPoint>, scroll: Offset, scale: Float): List
 fun copyInputToSimplePointF(
     touchPoints: List<TouchPoint>,
     scroll: Offset,
-    scale: Float
+    scale: Float,
+    origin: Offset = Offset.Zero,
 ): List<SimplePointF> {
     val points = touchPoints.map {
         SimplePointF(
-            x = it.x / scale + scroll.x,
-            y = (it.y / scale + scroll.y),
+            x = (it.x - origin.x) / scale + scroll.x,
+            y = ((it.y - origin.y) / scale + scroll.y),
         )
     }
     return points

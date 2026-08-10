@@ -49,6 +49,16 @@ class DrawCanvas(
     val history: History
         get() = activePane.history
 
+    /**
+     * Direct subsequent input at [pane]. Called when a stroke is routed, so the pane you last
+     * wrote in becomes the one the toolbar and history act on.
+     */
+    fun focusPane(pane: Pane) {
+        if (pane !in panes || pane === activePane) return
+        log.d("Active pane changed")
+        activePane = pane
+    }
+
     private fun isStylusOrEraser(toolType: Int): Boolean =
         toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
 
@@ -106,8 +116,7 @@ class DrawCanvas(
     }
 
 
-    val inputHandler =
-        OnyxInputHandler(this, page, viewModel, history, coroutineScope, activePane.strokeHistoryBatch)
+    val inputHandler = OnyxInputHandler(this, viewModel, coroutineScope)
     val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
 
 
