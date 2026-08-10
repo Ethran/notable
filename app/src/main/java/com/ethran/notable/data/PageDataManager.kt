@@ -213,9 +213,45 @@ class PageDataManager @Inject constructor(
         entry.lastAccessSeq = ++accessSeq
     }
 
-    /** A page is pinned (never evicted) while it is the current page or has an active load. */
+    /**
+     * Pages currently open in a view.
+     *
+     * [currentPage] names only the *foreground* page, so with more than one editor view the others
+     * would be evictable while still on screen — their strokes would vanish from under them under
+     * memory pressure. Views pin themselves via [pinPage] / [unpinPage].
+     *
+     * A concurrent set so [isPinnedLocked] can read it while holding [lock] without taking a second
+     * lock, and so views can pin and unpin without contending on the cache monitor.
+     */
+    /** One pin per open view; more than a few means a pin was not released. */
+    private val MAX_EXPECTED_PINNED_PAGES = 4
+
+    private val pinnedPages: MutableSet<String> =
+        java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
+    /** Pin [pageId] against eviction while a view is showing it. Idempotent. */
+    fun pinPage(pageId: String) {
+        if (pageId.isEmpty()) return
+        pinnedPages.add(pageId)
+        // A pin is released from the view's dispose path. If that is ever missed the page becomes
+        // permanently unevictable, which is invisible until memory runs out — so make the leak
+        // audible instead. There is one pin per open view, and views are few.
+        if (pinnedPages.size > MAX_EXPECTED_PINNED_PAGES) {
+            log.w("Pinned pages = ${pinnedPages.size} ($pinnedPages) — likely a leaked pin")
+        }
+    }
+
+    /** Release a pin taken by [pinPage]. Idempotent. */
+    fun unpinPage(pageId: String) {
+        pinnedPages.remove(pageId)
+    }
+
+    /**
+     * A page is pinned (never evicted) while it is open in a view, is the current page, or has an
+     * active load.
+     */
     private fun isPinnedLocked(pageId: String, entry: PageCacheEntry): Boolean =
-        pageId == currentPage || entry.loadJob?.isActive == true
+        pageId == currentPage || pageId in pinnedPages || entry.loadJob?.isActive == true
 
     /** Distinct background bitmaps, counted once (dedup pool) — the background budget line. */
     private fun backgroundBytesLocked(): Long =

@@ -299,6 +299,7 @@ class PageView(
     fun disposeOldPage() {
         log.d("Dispose old page")
         pageDataManager.onExit(currentPageId, windowedBitmap, coroutineScope)
+        openPage.close()
         cleanJob()
     }
 

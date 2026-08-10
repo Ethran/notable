@@ -81,6 +81,9 @@ class OpenPage(
 
     /** Load the page record and its position. Call after construction and after [changeTo]. */
     suspend fun load() {
+        // Pin before loading: an unpinned page is evictable, and the foreground pin covers only
+        // one view. Without this the inactive pane's strokes are dropped under memory pressure.
+        pageDataManager.pinPage(pageId)
         val loaded = pageDataManager.getPageRecord(pageId)
         entity = loaded
         if (loaded == null) {
@@ -96,10 +99,16 @@ class OpenPage(
     /** Point this view at a different page and reload the record. */
     suspend fun changeTo(newPageId: String) {
         if (newPageId == pageId && entity != null) return
+        pageDataManager.unpinPage(pageId)
         pageId = newPageId
         entity = null
         pageNumber = -1
         load()
+    }
+
+    /** Release this view's pin. Call when the view goes away, or its page stays resident forever. */
+    fun close() {
+        pageDataManager.unpinPage(pageId)
     }
 
     /** Re-read the record without changing which page this is — after an edit to its metadata. */
