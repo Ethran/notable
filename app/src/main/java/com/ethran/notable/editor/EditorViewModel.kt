@@ -577,6 +577,29 @@ class EditorViewModel @Inject constructor(
     fun onActivePaneChanged(isSecondary: Boolean, pageId: String) {
         activePaneIsSecondary = isSecondary
         activePanePageId = pageId
+        viewModelScope.launch(Dispatchers.IO) { syncToActivePane(pageId) }
+    }
+
+    /**
+     * Point the toolbar and page navigation at the pane the user is looking at.
+     *
+     * [bookId] was set once from the editor's route and never moved, so next/previous page always
+     * walked *that* notebook and delivered the result to whichever pane had focus. A device trace
+     * caught the consequence: after splitting, turning a page in the second pane walked the first
+     * pane's notebook into it — the same notebook open twice, which ROADMAP §8 forbids and
+     * `PaneGroup` cannot catch, because it only checks page identity at the moment panes change.
+     *
+     * The notebook is resolved from the page record rather than from the pane's own
+     * `OpenPage.notebookId`, which is null until that view's load finishes — acting on it during
+     * that window would pick the wrong notebook just as silently.
+     */
+    private suspend fun syncToActivePane(pageId: String) {
+        // Deliberately the same path the route takes, with no route notebook to offer: both derive
+        // the notebook from the page record, so focusing a pane and opening the editor cannot
+        // disagree about which notebook is in play. Also re-points the background controls, which
+        // should act on the pane in focus for the same reason.
+        runCatching { loadToolbarState(routeBookId = null, pageId = pageId) }
+            .onFailure { log.w("Could not sync the toolbar to page $pageId", it) }
     }
 
     private fun handleToggleSplit() {
@@ -648,9 +671,8 @@ class EditorViewModel @Inject constructor(
     /**
      * Loads context data for the toolbar (page number, background info, etc.)
      */
-    suspend fun loadToolbarState(bookId: String?, pageId: String) {
-        log.v("loadBookData: bookId=$bookId, pageId=$pageId")
-        this.bookId = bookId
+    suspend fun loadToolbarState(routeBookId: String?, pageId: String) {
+        log.v("loadBookData: routeBookId=$routeBookId, pageId=$pageId")
 
         val page = appRepository.pageRepository.getById(pageId)
 
@@ -661,9 +683,19 @@ class EditorViewModel @Inject constructor(
                     duration = 3000
                 )
             )
-            fixNotebook(bookId, pageId)
+            fixNotebook(routeBookId, pageId)
             return
         }
+
+        // The page record is what says which notebook this is; the route only says which one the
+        // editor was *opened* on. Assigning the route's value here fought the per-pane one:
+        // focusing a pane updates toolbarState.pageId, which reaches the navigator, which changes
+        // `initialPageId`, which re-runs this — putting the route's notebook back a moment after
+        // focus had moved. Turning a page in a pane holding a quick page then walked the *other*
+        // pane's notebook into it.
+        val bookId = page.notebookId
+        this.bookId = bookId
+
         val book = bookId?.let { appRepository.bookRepository.getById(it) }
 
         val pageIndex = book?.getPageIndex(pageId) ?: 0

@@ -266,10 +266,28 @@ class PageView(
     fun changePage(newPageId: String, reason: String = "unspecified") {
         val oldId = currentPageId
         val view = Integer.toHexString(System.identityHashCode(this))
-        log.d("changePage Entry [$reason] view=$view: $oldId -> $newPageId")
+
+        // Already here: do nothing.
+        //
+        // Two paths reach this for a single selection. The per-pane bus observer loads the page,
+        // and for the active pane it then moves toolbarState.pageId, which trips EditorView's
+        // snapshotFlow into loading it a second time. A device trace caught it: the second call
+        // ran onExit against the page it was concurrently loading, and swapped the window bitmap
+        // (94759677 -> 21055053) 75ms after the first load finished — throwing away a buffer the
+        // canvas may already have blitted from.
+        //
+        // Guarding here rather than at either call site because neither is wrong to ask: the bus
+        // observer is how a picked page loads, and the snapshotFlow is how next/previous page
+        // loads, which emits nothing on the bus. Reloading the page you are already on is what has
+        // no meaning. Forcing a genuine reload is `reloadFromDb`.
+        if (newPageId == oldId) {
+            log.d("changePage [$reason] view=$view: already on $newPageId, skipping")
+            return
+        }
+
+        log.d("changePage [$reason] view=$view: $oldId -> $newPageId")
 
         coroutineScope.launch(Dispatchers.IO) {
-            log.d("changePage Begin [$reason] view=$view: onExit($oldId)")
             pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
             pageDataManager.setPage(newPageId)
             openPage.changeTo(newPageId)
@@ -288,7 +306,7 @@ class PageView(
                 cacheBitmapIfOwned(newPageId)
             }
 
-            log.d("changePage Bitmap [$reason] view=$view: bitmap=${windowedBitmap.hashCode()}, ID: $currentPageId")
+            log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
 
             // Refresh UI without waiting for drawing.
             // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
@@ -296,7 +314,7 @@ class PageView(
             //  but there might be still bugs with it.
             CanvasEventBus.refreshUiImmediately.emit(Unit)
             loadPage()
-            log.d("changePage Done [$reason] view=$view: loaded $currentPageId")
+            log.d("Page loaded ($currentPageId)")
         }
     }
 
