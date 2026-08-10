@@ -53,8 +53,14 @@ interface PanePagePickerEntryPoint {
     fun appRepository(): AppRepository
 }
 
-/** Which pane a selection loads into. */
-private enum class PickerTarget { ThisPane, OtherPane }
+/**
+ * Which pane a selection loads into.
+ *
+ * [OtherPane] means an existing second pane; [NewPane] means one that does not exist yet, so
+ * choosing a page creates the split. They are distinct because the destination differs — a bus
+ * emit versus creating the pane — not merely the label.
+ */
+private enum class PickerTarget { ThisPane, OtherPane, NewPane }
 
 /**
  * The in-editor page picker, opened from the page counter.
@@ -81,6 +87,9 @@ fun PanePagePicker(
     paneGroup: PaneGroup,
     onClose: () -> Unit,
     goToFolder: (String?) -> Unit,
+    /** Opened from the split control: default to aiming at a pane that does not exist yet. */
+    forNewPane: Boolean = false,
+    onCreatePane: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val entryPoint = remember(context) {
@@ -88,16 +97,26 @@ fun PanePagePicker(
     }
     val appRepository = remember(entryPoint) { entryPoint.appRepository() }
 
-    var target by remember { mutableStateOf(PickerTarget.ThisPane) }
-
     val activePane = paneGroup.active
     val otherPane: Pane? = paneGroup.other(activePane)
 
-    // Falls back to the active pane when there is only one, so the single-pane case needs no
-    // special handling anywhere below.
-    val targetPane = if (target == PickerTarget.OtherPane && otherPane != null) otherPane
-    else activePane
-    val nonTargetPane = paneGroup.other(targetPane)
+    // The second option offered: an existing pane if there is one, otherwise creating it.
+    val secondOption = if (otherPane != null) PickerTarget.OtherPane else PickerTarget.NewPane
+
+    var target by remember {
+        mutableStateOf(if (forNewPane) PickerTarget.NewPane else PickerTarget.ThisPane)
+    }
+
+    // Null for NewPane — there is no pane to aim at yet, which is what suppresses the scrubber.
+    val targetPane: Pane? = when (target) {
+        PickerTarget.ThisPane -> activePane
+        PickerTarget.OtherPane -> otherPane
+        PickerTarget.NewPane -> null
+    }
+
+    // What the target may not open. For a new pane that is the active pane's notebook, since the
+    // new one must be a different notebook; for an existing target it is the pane opposite it.
+    val nonTargetPane = targetPane?.let { paneGroup.other(it) } ?: activePane
 
     val viewModel: QuickNavViewModel = viewModel(
         key = "pane-page-picker",
@@ -116,15 +135,16 @@ fun PanePagePicker(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Reload when the aimed-at pane changes, or when its page does.
-    val targetPageId = targetPane.pageId
+    // Reload when the aimed-at pane changes, or when its page does. For a new pane there is no
+    // target page, so the active pane's supplies the breadcrumb context.
+    val contextPageId = targetPane?.pageId ?: activePane.pageId
     val exclusion = QuickNavViewModel.PaneExclusion(
         notebookId = nonTargetPane?.notebookId,
         pageId = nonTargetPane?.pageId,
     )
-    LaunchedEffect(targetPageId, exclusion) {
-        log.d("Picker aimed at page $targetPageId, excluding $exclusion")
-        viewModel.loadPageData(targetPageId, exclusion)
+    LaunchedEffect(contextPageId, exclusion) {
+        log.d("Picker aimed at $target (page $contextPageId), excluding $exclusion")
+        viewModel.loadPageData(contextPageId, exclusion)
     }
 
     QuickNavContent(
@@ -151,31 +171,41 @@ fun PanePagePicker(
         // wired to nothing.
         onReturnClick = {},
         showReturn = false,
+        // The scrubber walks the *target pane's own* notebook. A pane that does not exist yet has
+        // no notebook, and the only one in scope — the active pane's — is precisely the notebook
+        // the new pane may not open, so every position on it would be an illegal choice.
+        showScrubber = targetPane != null,
         goToPage = { pageId ->
-            viewModel.onPageSelected(pageId)
+            if (target == PickerTarget.NewPane) onCreatePane(pageId)
+            else viewModel.onPageSelected(pageId)
             onClose()
         },
-        header = if (otherPane != null) {
-            {
-                PaneTargetSelector(
-                    selected = target,
-                    onSelect = { target = it },
-                )
-            }
-        } else null,
+        header = {
+            PaneTargetSelector(
+                selected = target,
+                secondOption = secondOption,
+                onSelect = { target = it },
+            )
+        },
     )
 }
 
-/** The bus for the pane [target] names, resolved against the current focus. */
+/**
+ * The bus for the pane [target] names, resolved against the current focus.
+ *
+ * [PickerTarget.NewPane] has no bus — a selection there creates a pane instead of emitting to one —
+ * so it falls back to the active pane's rather than returning null for a case that cannot occur.
+ */
 private fun resolveTargetBus(paneGroup: PaneGroup, target: PickerTarget) =
     when (target) {
-        PickerTarget.ThisPane -> paneGroup.active
+        PickerTarget.ThisPane, PickerTarget.NewPane -> paneGroup.active
         PickerTarget.OtherPane -> paneGroup.other(paneGroup.active) ?: paneGroup.active
     }.events
 
 @Composable
 private fun PaneTargetSelector(
     selected: PickerTarget,
+    secondOption: PickerTarget,
     onSelect: (PickerTarget) -> Unit,
 ) {
     Row(
@@ -195,9 +225,12 @@ private fun PaneTargetSelector(
         )
         Spacer(Modifier.width(6.dp))
         TargetChip(
-            label = stringResource(R.string.page_picker_other_pane),
-            isSelected = selected == PickerTarget.OtherPane,
-            onSelect = { onSelect(PickerTarget.OtherPane) },
+            label = stringResource(
+                if (secondOption == PickerTarget.NewPane) R.string.page_picker_new_pane
+                else R.string.page_picker_other_pane
+            ),
+            isSelected = selected == secondOption,
+            onSelect = { onSelect(secondOption) },
         )
     }
 }

@@ -104,6 +104,10 @@
     <string name="page_picker_target">Open in</string>
     <string name="page_picker_this_pane">This pane</string>
     <string name="page_picker_other_pane">Other pane</string>
+    <string name="page_picker_new_pane">New pane</string>
+    <string name="split_view_open">Split view</string>
+    <string name="split_view_close">Close split</string>
+    <string name="toolbar_element_split">Split view</string>
     <string name="observe_pdf">Observe PDF</string>
     <string name="current_page">Current Page</string>
     <string name="toolbar_scribble_to_erase_two_lined_short">Scribble\nto Erase</string>

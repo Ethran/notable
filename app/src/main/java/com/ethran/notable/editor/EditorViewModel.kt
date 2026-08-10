@@ -99,6 +99,13 @@ data class ToolbarUiState(
     val isQuickNavOpen: Boolean = false,
     /** The in-editor, pane-aware page picker opened from the page counter. */
     val isPagePickerOpen: Boolean = false,
+    /**
+     * The picker was opened to fill a pane that does not exist yet, so a selection creates the
+     * split rather than changing an existing pane's page.
+     */
+    val isPagePickerForNewPane: Boolean = false,
+    /** Whether a second pane is on screen. */
+    val isSplit: Boolean = false,
 ) {
     /** The active preset's setting — what the drawing pipeline draws with. The fallback
      * only triggers if the active preset was deleted mid-session. */
@@ -149,8 +156,19 @@ sealed class ToolbarAction {
     /**
      * Open or close the in-editor page picker. Distinct from [NavigateToPages], which leaves the
      * editor entirely for the full-screen grid and takes both panes with it.
+     *
+     * [forNewPane] opens it to fill a pane that does not exist yet — the split entry point.
      */
-    data class SetPagePickerOpen(val isOpen: Boolean) : ToolbarAction()
+    data class SetPagePickerOpen(
+        val isOpen: Boolean,
+        val forNewPane: Boolean = false,
+    ) : ToolbarAction()
+
+    /**
+     * Split into two panes, or return to one. Splitting opens the picker rather than guessing a
+     * page: which note goes beside this one is the whole point of the action.
+     */
+    object ToggleSplit : ToolbarAction()
 }
 
 
@@ -362,11 +380,18 @@ class EditorViewModel @Inject constructor(
             }
 
             is ToolbarAction.SetPagePickerOpen -> {
-                _toolbarState.update { it.copy(isPagePickerOpen = action.isOpen) }
+                _toolbarState.update {
+                    it.copy(
+                        isPagePickerOpen = action.isOpen,
+                        isPagePickerForNewPane = action.isOpen && action.forNewPane,
+                    )
+                }
                 // Raw drawing is global to the panel, so the pen has to be stood down while the
                 // picker is up or strokes land on the page behind it.
                 updateDrawingState()
             }
+
+            ToolbarAction.ToggleSplit -> handleToggleSplit()
         }
     }
 
@@ -517,6 +542,78 @@ class EditorViewModel @Inject constructor(
             val parentFolder = page?.getParentFolder(appRepository.bookRepository)
             sendUiEvent(EditorUiEvent.NavigateToLibrary(parentFolder))
         }
+    }
+
+    // --------------------------------------------------------
+    // Split view
+    // --------------------------------------------------------
+
+    /**
+     * The page shown in the second pane, or null for a single pane.
+     *
+     * The *primary* pane's page is not held here — it stays owned by the editor's own `PageView`,
+     * which survives a split so that splitting does not tear down the page being written in. Only
+     * the second pane is created and destroyed.
+     */
+    private val _secondaryPageId = MutableStateFlow<String?>(null)
+    val secondaryPageId: StateFlow<String?> = _secondaryPageId.asStateFlow()
+
+    /**
+     * A page the surviving pane must adopt after an unsplit, or null.
+     *
+     * A StateFlow rather than a signal: a zero-buffer `MutableSharedFlow` emit is dropped when
+     * nothing is subscribed, which here would silently leave the user on the wrong page (see
+     * CLAUDE.md, multi-pane failure mode 2). The view clears it via [onPrimaryPageAdopted] once
+     * the load is under way.
+     */
+    private val _pageToAdoptIntoPrimary = MutableStateFlow<String?>(null)
+    val pageToAdoptIntoPrimary: StateFlow<String?> = _pageToAdoptIntoPrimary.asStateFlow()
+
+    // Which pane the user is looking at. Pushed from the view, because focus lives in PaneGroup and
+    // the ViewModel has no panes in hand.
+    private var activePaneIsSecondary = false
+    private var activePanePageId: String? = null
+
+    fun onActivePaneChanged(isSecondary: Boolean, pageId: String) {
+        activePaneIsSecondary = isSecondary
+        activePanePageId = pageId
+    }
+
+    private fun handleToggleSplit() {
+        if (_secondaryPageId.value != null) {
+            closeSplit()
+        } else {
+            // Which note goes beside this one is the point of the action, so ask rather than guess.
+            onToolbarAction(ToolbarAction.SetPagePickerOpen(isOpen = true, forNewPane = true))
+        }
+    }
+
+    /** Create the second pane showing [pageId]. */
+    fun openSecondPane(pageId: String) {
+        log.i("Opening second pane on $pageId")
+        _secondaryPageId.value = pageId
+        _toolbarState.update { it.copy(isSplit = true) }
+    }
+
+    /**
+     * Return to a single pane, keeping the one the user is looking at.
+     *
+     * When the active pane is the second one, the page it shows is handed to the surviving primary
+     * pane — closing the split must not also discard what the user was working on. The primary
+     * `PageView` changes page rather than being rebuilt, so its buffer and history survive.
+     */
+    fun closeSplit() {
+        val adopt = activePanePageId?.takeIf { activePaneIsSecondary }
+        log.i("Closing split, ${adopt?.let { "adopting $it" } ?: "keeping the primary page"}")
+        if (adopt != null) _pageToAdoptIntoPrimary.value = adopt
+        _secondaryPageId.value = null
+        _toolbarState.update { it.copy(isSplit = false) }
+        activePaneIsSecondary = false
+    }
+
+    /** The view has started loading the adopted page; clear it so it is not applied twice. */
+    fun onPrimaryPageAdopted() {
+        _pageToAdoptIntoPrimary.value = null
     }
 
     private fun handleNavigateToPages() {

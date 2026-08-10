@@ -10,7 +10,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -38,52 +37,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 
 private val log = ShipBook.getLogger("EditorView")
-
-/** Show a second pane side by side. Temporary switch while the split is being built out. */
-private const val DUAL_PANE_PREVIEW = true
-
-/**
- * The pane layout for one editor session, settled before anything is built.
- *
- * [secondPageId] is null when there is no second pane: a loose page, the last page of a notebook,
- * or the preview switched off. Two panes on one document are not supported — see [PaneGroup].
- */
-private data class PaneLayout(val secondPageId: String?)
-
-/**
- * Resolves the layout once per (notebook, page), returning null while the lookup is in flight.
- *
- * Deliberately resolved up front. Composing a single-pane canvas and rebuilding it once the second
- * page arrived left observer registries bound to the discarded canvas, so the live pane's signal
- * bus had no subscribers and undo hung on a commit handshake nobody answered.
- */
-@Composable
-private fun resolvePaneLayout(
-    viewModel: EditorViewModel,
-    bookId: String?,
-    initialPageId: String,
-): PaneLayout? {
-    val layout by produceState<PaneLayout?>(null, bookId, initialPageId) {
-        value = when {
-            !DUAL_PANE_PREVIEW -> {
-                log.i("Single pane: dual pane off")
-                PaneLayout(null)
-            }
-            bookId == null -> {
-                log.i("Single pane: not in a notebook")
-                PaneLayout(null)
-            }
-            else -> {
-                val next = viewModel.pageDataManager.getNextPageId(bookId, initialPageId)
-                    ?.takeIf { it != initialPageId }
-                if (next == null) log.i("Single pane: no page after $initialPageId in $bookId")
-                else log.i("Second pane will open $next")
-                PaneLayout(next)
-            }
-        }
-    }
-    return layout
-}
 
 object EditorDestination : NavigationDestination {
     override val route = "editor"
@@ -138,20 +91,16 @@ fun EditorView(
         val height = convertDpToPixel(this.maxHeight, context).toInt()
         val width = convertDpToPixel(this.maxWidth, context).toInt()
 
-        // Resolve the pane layout BEFORE building anything.
-        //
-        // Everything below — pages, panes, the control tower, the canvas — is constructed from
-        // this, so it must be settled first. Building a single-pane canvas and rebuilding it when
-        // the second page arrived left registries attached to the discarded canvas, and the live
-        // pane's signal bus with zero subscribers.
-        val resolved = resolvePaneLayout(viewModel, bookId, initialPageId)
-        if (resolved == null) {
-            // Still resolving. One frame at most, and drawing nothing beats drawing a layout
-            // that is about to change underneath the canvas.
-            return@BoxWithConstraints
-        }
+        // The second pane is user-controlled: the editor opens single-pane and splits when asked.
+        // It used to auto-open the next page in the same notebook, which ROADMAP §8 now forbids —
+        // a notebook may be open in at most one pane.
+        val secondaryPageId by viewModel.secondaryPageId.collectAsStateWithLifecycle()
 
-        // Here we load initial page into the memory
+        // Here we load initial page into the memory.
+        //
+        // Deliberately not keyed on the split: the primary pane survives splitting and unsplitting,
+        // so the page being written in is never torn down and rebuilt. Only the second pane is
+        // created and destroyed.
         val page = remember {
             PageView(
                 context = context,
@@ -166,39 +115,64 @@ fun EditorView(
 
         val history = remember(page) { viewModel.createHistory(page) }
 
-        // One pane today. DrawCanvas takes a list so a second needs no restructuring; all panes
-        // share one surface because the Onyx firmware allows a single raw-drawing owner.
+        // All panes share one surface because the Onyx firmware allows a single raw-drawing owner.
         val pane = remember(page, history) { Pane(page, history) }
 
         // Second pane, shown side by side. Fixed 50/50 with no draggable divider yet — the
         // divider is a separate change, and landing geometry and routing first keeps the number of
-        // things that can be wrong small. Flip DUAL_PANE_PREVIEW to return to a single pane.
+        // things that can be wrong small.
         //
-        // Opens the page after this one. Two views of the *same* document are not supported —
-        // each pane owns its own bitmap and History, so they cannot be kept coherent — and
-        // PaneGroup rejects that outright. It must not use the shared window-bitmap cache, which
-        // is keyed by page id and would hand both views the same Bitmap.
-        val secondPane = resolved.secondPageId?.let { secondId ->
+        // Two views of the *same* document are not supported — each pane owns its own bitmap and
+        // History, so they cannot be kept coherent — and PaneGroup rejects that outright. It must
+        // not use the shared window-bitmap cache, which is keyed by page id and would hand both
+        // views the same Bitmap.
+        val secondPane = secondaryPageId?.let { secondId ->
             remember(secondId) {
-            val secondPage = PageView(
-                context = context,
-                coroutineScope = scope,
-                pageDataManager = viewModel.pageDataManager,
-                initialPageId = secondId,
-                viewWidth = width / 2,
-                viewHeight = height,
-                snackManager = snackManager,
-                useSharedBitmapCache = false,
-            )
-            Pane(secondPage, viewModel.createHistory(secondPage))
+                val secondPage = PageView(
+                    context = context,
+                    coroutineScope = scope,
+                    pageDataManager = viewModel.pageDataManager,
+                    initialPageId = secondId,
+                    viewWidth = width / 2,
+                    viewHeight = height,
+                    snackManager = snackManager,
+                    useSharedBitmapCache = false,
+                )
+                Pane(secondPage, viewModel.createHistory(secondPage))
             }
+        }
+
+        // Hands the second pane's window bitmap back and releases its page pin. Without this the
+        // page it showed stays pinned against eviction for the life of the editor — the primary
+        // pane's disposal below covers only itself.
+        DisposableEffect(secondPane) {
+            onDispose { secondPane?.page?.disposeOldPage() }
         }
 
         val paneGroup = remember(pane, secondPane) { PaneGroup(listOfNotNull(pane, secondPane)) }
 
+        // Focus lives in PaneGroup; the ViewModel needs it to decide which pane an unsplit keeps.
+        LaunchedEffect(paneGroup, paneGroup.active) {
+            viewModel.onActivePaneChanged(
+                isSecondary = paneGroup.active !== pane,
+                pageId = paneGroup.active.pageId,
+            )
+        }
 
+        // After an unsplit that kept the second pane's page, the surviving primary pane adopts it.
+        val pageToAdopt by viewModel.pageToAdoptIntoPrimary.collectAsStateWithLifecycle()
+        LaunchedEffect(pageToAdopt) {
+            pageToAdopt?.let { adopted ->
+                page.changePage(adopted, reason = "unsplit-adopt")
+                viewModel.onPrimaryPageAdopted()
+            }
+        }
 
-        val editorControlTower = remember {
+        // Keyed on paneGroup. Previously this had no keys at all, so it captured the first
+        // PaneGroup permanently — correct only while the pane set could never change. Splitting
+        // makes it change, and a stale control tower would keep its per-pane changePage observers
+        // pointed at the discarded group.
+        val editorControlTower = remember(paneGroup) {
             EditorControlTower(
                 scope = scope,
                 paneGroup = paneGroup,
@@ -242,8 +216,12 @@ fun EditorView(
             }
         }
 
-        // Collect Canvas Commands from ViewModel
-        LaunchedEffect(Unit) {
+        // Collect Canvas Commands from ViewModel.
+        //
+        // Keyed on the control tower, not Unit: it is rebuilt when the pane set changes, and a
+        // collector started against the old one would drive undo, redo and paste on the discarded
+        // PaneGroup — silently acting on the wrong pane.
+        LaunchedEffect(editorControlTower) {
             viewModel.canvasCommands.collect { command ->
                 when (command) {
                     CanvasCommand.Undo -> editorControlTower.undo()
@@ -335,14 +313,25 @@ fun EditorView(
 
         InkaTheme {
             EditorGestureReceiver(actions = editorControlTower)
-            // Built exactly once. The pane layout is resolved before this composes, so the canvas
-            // is never torn down and rebuilt — rebuilding it stranded observer registries on the
-            // discarded instance, leaving the live pane's signal bus with zero subscribers, and
-            // undo then hung forever on a commit handshake nobody answered.
-            EditorSurface(
-                viewModel = viewModel,
-                paneGroup = paneGroup,
-            )
+            // Rebuilt when the pane set changes, and only then.
+            //
+            // EditorSurface creates DrawCanvas in an AndroidView factory, which runs once and
+            // captures paneGroup with no update path — so a changed pane set has to discard the
+            // canvas rather than update it. key() is what makes that coherent: the old canvas is
+            // disposed, unregistering its observers, before the new one registers. Rebuilding it
+            // *without* that ordering is what previously stranded registries on a discarded
+            // instance and left the live pane's bus with zero subscribers, hanging undo on a
+            // commit handshake nobody answered.
+            //
+            // Splitting re-arms raw drawing as a result. That is legitimate here — the limit rects
+            // genuinely change — but it is an EPD re-arm, so it clears the panel and completes
+            // asynchronously. Verify on device that the repaint lands after it.
+            key(paneGroup) {
+                EditorSurface(
+                    viewModel = viewModel,
+                    paneGroup = paneGroup,
+                )
+            }
             SelectedBitmap(
                 context = context, controlTower = editorControlTower
             )
@@ -364,9 +353,11 @@ fun EditorView(
             if (toolbarState.isPagePickerOpen) {
                 PanePagePicker(
                     paneGroup = paneGroup,
+                    forNewPane = toolbarState.isPagePickerForNewPane,
                     onClose = {
                         viewModel.onToolbarAction(ToolbarAction.SetPagePickerOpen(false))
                     },
+                    onCreatePane = viewModel::openSecondPane,
                     goToFolder = goToLibrary,
                 )
             }

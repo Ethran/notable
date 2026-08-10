@@ -979,6 +979,7 @@ private fun elementNameRes(id: ToolbarElementId): Int = when (id) {
     ToolbarElementId.UNDO -> R.string.toolbar_element_undo
     ToolbarElementId.REDO -> R.string.toolbar_element_redo
     ToolbarElementId.PAGE_NAV -> R.string.toolbar_element_page_nav
+    ToolbarElementId.SPLIT -> R.string.toolbar_element_split
     ToolbarElementId.HOME -> R.string.toolbar_element_home
     ToolbarElementId.MENU -> R.string.toolbar_element_menu
     ToolbarElementId.DIVIDER -> R.string.toolbar_element_divider

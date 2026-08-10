@@ -81,6 +81,18 @@ private fun ToolbarMenuContent(
             onAction(ToolbarAction.ToggleMenu)
         }
 
+        // Split view. Also a pinned toolbar button, but a user with a customised layout already
+        // persisted will not pick up a new default element — so the menu is the path that reaches
+        // everyone.
+        MenuItem(
+            stringResource(
+                if (uiState.isSplit) R.string.split_view_close else R.string.split_view_open
+            )
+        ) {
+            onAction(ToolbarAction.ToggleSplit)
+            onAction(ToolbarAction.ToggleMenu)
+        }
+
         // The full-screen page grid. It used to be what the page counter opened, but navigating
         // there replaces the whole editor and both panes; the counter now opens the in-editor
         // picker instead. The grid is still the right tool for reordering and bulk work, so it

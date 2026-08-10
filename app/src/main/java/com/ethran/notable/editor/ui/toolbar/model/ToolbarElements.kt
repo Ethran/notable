@@ -10,6 +10,7 @@ import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
+import compose.icons.feathericons.Columns
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.RefreshCcw
 
@@ -88,6 +89,16 @@ object ToolbarElements {
             contentDescription = "page navigation",
             visibleWhen = { state, _ -> state.notebookId != null },
             kind = CustomKind.PAGE_NAV,
+        ),
+        // Splitting opens the page picker rather than toggling straight into two panes: which note
+        // goes beside this one is the point of the action. Closing needs no prompt, so the same
+        // button toggles back.
+        ActionElement(
+            id = ToolbarElementId.SPLIT,
+            icon = IconRef.Vector(FeatherIcons.Columns),
+            contentDescription = "split view",
+            selectedWhen = { state -> state.isSplit },
+            action = ToolbarAction.ToggleSplit,
         ),
         ActionElement(
             id = ToolbarElementId.HOME,

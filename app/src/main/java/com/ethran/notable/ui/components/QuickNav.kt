@@ -125,6 +125,7 @@ fun QuickNavContent(
     goToPage: (String) -> Unit,
     header: (@Composable () -> Unit)? = null,
     showReturn: Boolean = true,
+    showScrubber: Boolean = true,
 ) {
     Column(
         Modifier
@@ -178,7 +179,7 @@ fun QuickNavContent(
             }
 
             // Scrubber block only renders if we have a valid book
-            if (uiState.bookPageCount >= 2) {
+            if (showScrubber && uiState.bookPageCount >= 2) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth()) {
