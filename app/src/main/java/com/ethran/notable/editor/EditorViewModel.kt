@@ -649,8 +649,12 @@ class EditorViewModel @Inject constructor(
     }
 
     /** The view has started loading the adopted page; clear it so it is not applied twice. */
-    fun onPrimaryPageAdopted() {
+    fun onPrimaryPageAdopted(pageId: String) {
         _pageToAdoptIntoPrimary.value = null
+        // The surviving pane changed page without going through changePage on this ViewModel, so
+        // nothing else re-points the toolbar at it — the counter would go on describing the page
+        // that pane held before the unsplit.
+        viewModelScope.launch(Dispatchers.IO) { syncToActivePane(pageId) }
     }
 
     private fun handleNavigateToPages() {

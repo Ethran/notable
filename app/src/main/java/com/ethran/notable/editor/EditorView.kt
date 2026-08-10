@@ -73,10 +73,15 @@ fun EditorView(
     val snackManager = LocalSnackContext.current
     val scope = rememberCoroutineScope()
 
-    // Single point of entry for loading book data based on the pageId from Navigation
-    // Should not be used for regular page switching
-    LaunchedEffect(initialPageId) {
-        log.v("EditorView: pageId changed to $initialPageId, loading data")
+    // Seeds the editor from the route, once per session.
+    //
+    // Deliberately keyed on Unit rather than on initialPageId: the route is an input at the start
+    // and an output thereafter. Re-running this whenever the route's page changed meant every page
+    // turn reloaded the toolbar from the *route's* notebook, which is how a correct per-pane value
+    // was overwritten milliseconds after being set. Page changes update the toolbar where they
+    // happen; see updateOpenedPage and syncToActivePane.
+    LaunchedEffect(Unit) {
+        log.v("EditorView: seeding from route, pageId=$initialPageId")
         viewModel.loadToolbarState(bookId, initialPageId)
     }
 
@@ -171,7 +176,7 @@ fun EditorView(
         LaunchedEffect(pageToAdopt) {
             pageToAdopt?.let { adopted ->
                 page.changePage(adopted, reason = "unsplit-adopt")
-                viewModel.onPrimaryPageAdopted()
+                viewModel.onPrimaryPageAdopted(adopted)
             }
         }
 
