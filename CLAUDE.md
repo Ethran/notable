@@ -188,7 +188,17 @@ passes in isolation. Two rules when building one:
   `Canvas(mockBitmap)` → `IllegalStateException: Immutable bitmap passed to Canvas constructor`.
   Production is unaffected: `PageDataManager.getCachedBitmap` already filters on `isMutable`.
 
-**3. `androidTest` method names cannot contain spaces.** `minSdk 29` is below API 30, so D8
+**3. The pen path cannot be tested at all — only used.** `OnyxInputHandler` needs a live
+`TouchHelper` and real firmware pen input, so no unit or instrumented test reaches any of it:
+stroke handling, erasing, lasso, pen styles. The same applies to anything downstream of a raw-draw
+callback.
+
+A green suite therefore says **nothing** about that code. A property that returned itself
+(`get() = page`) once shipped through a full green run and crashed with `StackOverflowError` on the
+first stroke. Changes here are verified by drawing on a device, or not at all — and "tests pass" is
+not evidence for this file.
+
+**4. `androidTest` method names cannot contain spaces.** `minSdk 29` is below API 30, so D8
 rejects backtick-quoted names with spaces:
 
 ```
