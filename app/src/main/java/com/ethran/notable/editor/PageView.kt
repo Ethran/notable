@@ -81,14 +81,6 @@ class PageView(
     var viewWidth: Int,
     var viewHeight: Int,
     val snackManager: SnackState,
-    /**
-     * Whether this view may use the shared window-bitmap cache.
-     *
-     * The cache is keyed by page id, so two views of the *same* page would be handed the same
-     * Bitmap object and render into each other's pixels. Only one view of a page may use it; any
-     * other must own its buffer. Keyed-by-view caching would be the real fix.
-     */
-    private val useSharedBitmapCache: Boolean = true,
 ) {
     // TODO: unify width height variable
 
@@ -296,10 +288,10 @@ class PageView(
             viewport.reloadFromPersistence()
             sharedCachedBitmap(newPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
+                // No size fix-up needed: the cache only returns a bitmap rendered at this view's
+                // dimensions. It used to hand back any size and leave this to recreate the canvas,
+                // which came up blank because the redraw was issued before the strokes had loaded.
                 renderer.adopt(cached)
-                // Check if we have correct size of canvas
-                if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
-                    updateCanvasDimensions()
             } ?: run {
                 log.i("PageView.changePage: creating new bitmap")
                 recreateCanvas()
@@ -319,12 +311,20 @@ class PageView(
     }
 
     /** The shared cached bitmap for [pageId], or null if this view must not use it. */
+    /**
+     * A cached bitmap for [pageId] at *this view's* size, or null.
+     *
+     * Every view may use the cache now. The opt-out this replaced existed because the cache is
+     * keyed by page id, so two views of one page would have been handed the same mutable Bitmap and
+     * drawn into each other's pixels. Panes must show distinct pages — `PaneGroup` rejects anything
+     * else — so at most one view can ever ask for a given entry, and the size check keeps a
+     * half-width rendering from being adopted by a full-width pane.
+     */
     private fun sharedCachedBitmap(pageId: String) =
-        if (useSharedBitmapCache) pageDataManager.getCachedBitmap(pageId) else null
+        pageDataManager.getCachedBitmap(pageId, viewWidth, viewHeight)
 
-    /** Publish to the shared cache only if this view owns it, or views would clobber each other. */
     private fun cacheBitmapIfOwned(pageId: String) {
-        if (useSharedBitmapCache) pageDataManager.cacheBitmap(pageId, windowedBitmap)
+        pageDataManager.cacheBitmap(pageId, windowedBitmap)
     }
 
     private fun recreateCanvas() {

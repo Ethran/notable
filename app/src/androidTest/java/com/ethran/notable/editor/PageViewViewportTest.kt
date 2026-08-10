@@ -54,7 +54,7 @@ class PageViewViewportTest {
         val dataManager = mockk<PageDataManager>(relaxed = true)
         // A relaxed mock returns a *mock Bitmap* rather than null, which would send init down
         // the cached-bitmap branch and blow up in Canvas(). Force the uncached path.
-        every { dataManager.getCachedBitmap(any()) } returns null
+        every { dataManager.getCachedBitmap(any(), any(), any()) } returns null
 
         // PageView.init launches work on Dispatchers.IO that we neither need nor control here.
         // Without a handler, a failure there is an *uncaught* coroutine exception that the

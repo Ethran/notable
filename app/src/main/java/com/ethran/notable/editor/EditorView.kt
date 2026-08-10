@@ -127,9 +127,7 @@ fun EditorView(
         // things that can be wrong small.
         //
         // Two views of the *same* document are not supported — each pane owns its own bitmap and
-        // History, so they cannot be kept coherent — and PaneGroup rejects that outright. It must
-        // not use the shared window-bitmap cache, which is keyed by page id and would hand both
-        // views the same Bitmap.
+        // History, so they cannot be kept coherent — and PaneGroup rejects that outright.
         val secondPane = secondaryPageId?.let { secondId ->
             remember(secondId) {
                 val secondPage = PageView(
@@ -140,7 +138,6 @@ fun EditorView(
                     viewWidth = width / 2,
                     viewHeight = height,
                     snackManager = snackManager,
-                    useSharedBitmapCache = false,
                 )
                 Pane(secondPage, viewModel.createHistory(secondPage))
             }
