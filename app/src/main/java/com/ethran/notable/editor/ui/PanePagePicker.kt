@@ -118,10 +118,6 @@ fun PanePagePicker(
         PickerTarget.NewPane -> null
     }
 
-    // What the target may not open. For a new pane that is the active pane's notebook, since the
-    // new one must be a different notebook; for an existing target it is the pane opposite it.
-    val nonTargetPane = targetPane?.let { paneGroup.other(it) } ?: activePane
-
     val viewModel: QuickNavViewModel = viewModel(
         key = "pane-page-picker",
         factory = object : ViewModelProvider.Factory {
@@ -149,12 +145,14 @@ fun PanePagePicker(
     // Reload when the aimed-at pane changes, or when its page does. For a new pane there is no
     // target page, so the active pane's supplies the breadcrumb context.
     val contextPageId = targetPane?.pageId ?: activePane.pageId
-    // Only the page id: the ViewModel resolves its notebook from the record, because
-    // `Pane.notebookId` is null until that pane's own load finishes.
-    val excludePageId = nonTargetPane?.pageId
-    LaunchedEffect(contextPageId, excludePageId) {
-        log.d("Picker aimed at $target (page $contextPageId), excluding page $excludePageId")
-        viewModel.loadPageData(contextPageId, excludePageId)
+    // Only page ids: the ViewModel resolves each pane's notebook from the record, because
+    // `Pane.notebookId` is null until that pane's own load finishes. A null target index means the
+    // picker will create a pane, so every existing pane counts as another one.
+    val panePageIds = paneGroup.panes.map { it.pageId }
+    val targetPaneIndex = targetPane?.let { paneGroup.panes.indexOf(it) }?.takeIf { it >= 0 }
+    LaunchedEffect(contextPageId, panePageIds, targetPaneIndex) {
+        log.d("Picker aimed at $target, pane $targetPaneIndex of $panePageIds")
+        viewModel.loadPageData(contextPageId, panePageIds, targetPaneIndex)
     }
 
 

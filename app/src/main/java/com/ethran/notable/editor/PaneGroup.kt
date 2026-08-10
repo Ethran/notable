@@ -3,6 +3,10 @@ package com.ethran.notable.editor
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.ethran.notable.editor.state.PaneLayout
+import com.ethran.notable.editor.state.PaneRejection
+import com.ethran.notable.editor.state.PaneSlot
+import io.shipbook.shipbooksdk.ShipBook
 
 /**
  * The panes on screen, and which of them input and the toolbar act on.
@@ -14,6 +18,8 @@ import androidx.compose.runtime.setValue
  * [active] is Compose state so the UI recomposes when focus moves.
  */
 class PaneGroup(initialPanes: List<Pane>) {
+
+    private val log = ShipBook.getLogger("PaneGroup")
 
     /**
      * The panes on screen, in left-to-right order.
@@ -55,16 +61,31 @@ class PaneGroup(initialPanes: List<Pane>) {
     }
 
     /**
-     * Two views of one document cannot be made coherent: each pane owns its own window bitmap and
-     * its own History, so a stroke committed by one leaves the other's bitmap stale and an undo in
-     * one is invisible to the other. Refreshing harder does not fix it — the state is genuinely
-     * duplicated. Fail loudly rather than ship the confusing half-working version.
+     * Check a candidate pane set against the shared rules in [PaneLayout].
+     *
+     * The two rejections are treated differently on purpose.
+     *
+     * Two panes on one *page* is genuinely incoherent — each owns its own window bitmap and its own
+     * History, so a stroke committed by one leaves the other's bitmap stale and an undo in one is
+     * invisible to the other. Refreshing harder does not fix it; the state is duplicated. Fail
+     * loudly rather than ship the confusing half-working version.
+     *
+     * Two panes in one *notebook* is against policy (ROADMAP §8) but not incoherent — they are
+     * different documents that happen to share a cover. Crashing a notes app over a policy breach
+     * is the wrong trade, so it is logged. If it ever appears in a log, something upstream skipped
+     * the rules rather than the rules being wrong.
      */
     private fun requireShowDistinctPages(candidate: List<Pane>) {
         require(candidate.isNotEmpty()) { "A pane group needs at least one pane" }
-        val ids = candidate.map { it.page.currentPageId }
-        require(ids.distinct().size == ids.size) {
-            "Panes must show distinct pages, got $ids"
+        val slots = candidate.map { PaneSlot(it.page.currentPageId, it.notebookId) }
+        when (val rejection = PaneLayout.rejectionAmong(slots)) {
+            is PaneRejection.PageHeldElsewhere ->
+                throw IllegalArgumentException("Panes must show distinct pages, got $slots")
+
+            is PaneRejection.NotebookHeldElsewhere ->
+                log.w("Two panes in notebook ${rejection.notebookId}; a rule was bypassed upstream")
+
+            else -> Unit
         }
     }
 
