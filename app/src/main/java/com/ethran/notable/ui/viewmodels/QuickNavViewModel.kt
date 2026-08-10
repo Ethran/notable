@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.editor.canvas.CanvasEventBus
@@ -21,7 +22,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+
+private const val QUICK_PAGE_LIMIT = 24
 
 data class QuickNavUiState(
     val isLoading: Boolean = true,
@@ -45,7 +49,10 @@ data class QuickNavUiState(
      * library selects via EditorDestination.createRoute — which rebuilds the whole editor on that
      * page, so a split could never be created from it.
      */
-    val notebooks: List<Notebook> = emptyList()
+    val notebooks: List<Notebook> = emptyList(),
+
+    /** Loose pages — the library calls these "quick pages" — that the target pane may open. */
+    val quickPages: List<Page> = emptyList()
 )
 
 
@@ -59,8 +66,14 @@ class QuickNavViewModel(
      * A provider rather than a value because the target moves: focus changes while the picker is
      * open, and the editor-hosted picker lets the user aim at the other pane. The app-level default
      * keeps the previous behaviour for callers outside the editor, which have no pane in hand.
+     *
+     * Reassignable, not just a constructor argument. This ViewModel is scoped to the nav entry and
+     * outlives the picker, but the picker's target selector is composable state that is discarded
+     * when the sheet closes. Captured once, the provider would go on reading the *first* session's
+     * state after a reopen — so a page chosen for one pane could load into the other. The picker
+     * re-points this on every composition.
      */
-    private val targetBus: () -> PaneEventBus = { CanvasEventBus.active },
+    var targetBus: () -> PaneEventBus = { CanvasEventBus.active },
 ) : ViewModel() {
     private val pageRepository = appRepository.pageRepository
     private val bookRepository = appRepository.bookRepository
@@ -96,15 +109,38 @@ class QuickNavViewModel(
     }
 
     // Initialize data when the ViewModel is created or when a new page is opened
-    fun loadPageData(currentPageId: String?, exclusion: PaneExclusion = PaneExclusion.NONE) {
+    fun loadPageData(currentPageId: String?, excludePageId: String? = null) {
         if (currentPageId == null) return
-        this.exclusion = exclusion
 
-        _uiState.update { it.copy(isLoading = true, currentPageId = currentPageId) }
+        // Clear the scrubber up front rather than letting the next load overwrite it.
+        //
+        // loadBookData only *writes* these when the book has two or more pages, so switching to a
+        // one-page notebook — or to a quick page, which has no notebook at all — left the previous
+        // notebook's values in place. That showed as "0/3" on a one-page notebook: index 0 of a
+        // page count belonging to a document no longer in view.
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                currentPageId = currentPageId,
+                bookPageCount = 0,
+                currentBookIndex = 0,
+                favoriteIndexesInBook = emptyList(),
+                bookPageIds = emptyList(),
+            )
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             val page = runCatching { pageRepository.getById(currentPageId) }.getOrNull()
             val folderList = getFolderList(appRepository, page)
+
+            // Resolve the other pane's notebook from its page record rather than from
+            // `Pane.notebookId`, which reads OpenPage and is null until that view's load finishes.
+            // Trusting the cached copy meant a picker opened in that window excluded nothing, and
+            // the same notebook could be opened in both panes.
+            val excludedNotebookId = excludePageId
+                ?.let { runCatching { pageRepository.getById(it)?.notebookId }.getOrNull() }
+            val exclusion = PaneExclusion(excludedNotebookId, excludePageId)
+            this@QuickNavViewModel.exclusion = exclusion
 
             // Read favorites from your database/preferences
             val currentSettings = GlobalAppSettings.current
@@ -120,6 +156,13 @@ class QuickNavViewModel(
                 .filter { it.id != exclusion.notebookId && it.pageIds.isNotEmpty() }
                 .sortedBy { it.title.lowercase() }
 
+            // Capped: this is a horizontal row on a fixed-height sheet, not a browser. The library
+            // is the tool for a long list — see ROADMAP §6.
+            val quickPagesDb = runCatching { pageRepository.getAllSinglePages() }
+                .getOrDefault(emptyList())
+                .filter(exclusion::allows)
+                .take(QUICK_PAGE_LIMIT)
+
             _uiState.update { state ->
                 state.copy(
                     folderId = page?.parentFolderId,
@@ -128,7 +171,7 @@ class QuickNavViewModel(
                     isCurrentPageFavorite = isFavorite,
                     favoritePages = favoritePagesDb,
                     notebooks = selectableBooks,
-                    isLoading = false
+                    quickPages = quickPagesDb,
                 )
             }
 
@@ -137,6 +180,11 @@ class QuickNavViewModel(
             // Not filtered by the exclusion: this scrubs the *target pane's own* notebook, which
             // the other pane cannot have open, so every page in it is a legal destination.
             page?.notebookId?.let { loadBookData(it, currentPageId, favorites) }
+
+            // Only now is the sheet fully described. Reporting loaded before the scrubber is
+            // resolved makes the sheet grow a row a moment after it appears — two repaints on a
+            // panel where each one is visible.
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 
@@ -245,6 +293,37 @@ class QuickNavViewModel(
             targetBus().changePage.emit(pageId)
         }
     }
+
+    /**
+     * Create a quick page and hand back its id, or null if creation failed.
+     *
+     * Creation lives here rather than in the caller so the picker's "new" affordances and its
+     * existing selections travel the same path — a created page is opened exactly as a chosen one.
+     */
+    suspend fun createQuickPage(parentFolderId: String?): String? =
+        withContext(Dispatchers.IO) {
+            appRepository.createNewQuickPage(parentFolderId)
+        }
+
+    /**
+     * Create a notebook and hand back the page to open in it.
+     *
+     * `BookRepository.create` seeds the notebook with a first page and records it as the open one,
+     * so there is always something to show.
+     */
+    suspend fun createNotebook(parentFolderId: String?): String? =
+        withContext(Dispatchers.IO) {
+            val settings = GlobalAppSettings.current
+            val notebook = Notebook(
+                parentFolderId = parentFolderId,
+                defaultBackground = settings.defaultNativeTemplate,
+                defaultBackgroundType = BackgroundType.Native.key,
+            )
+            runCatching {
+                bookRepository.create(notebook)
+                bookRepository.getById(notebook.id)?.openPageId
+            }.onFailure { log.e("Failed to create notebook", it) }.getOrNull()
+        }
 
     fun onReturnClick(quickNavSourcePageId: String?) {
         if (quickNavSourcePageId == null) {

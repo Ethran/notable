@@ -80,6 +80,16 @@ interface PageDao {
     @Query("SELECT * FROM page WHERE notebookId is null AND parentFolderId is :folderId")
     fun getSinglePagesInFolder(folderId: String? = null): LiveData<List<Page>>
 
+    /**
+     * Every quick page, newest first — a one-shot read rather than the LiveData above.
+     *
+     * The pane page picker needs a snapshot inside a single IO coroutine, and is deliberately not
+     * folder-scoped: it exists to find a note to put beside the current one, which is rarely in the
+     * folder you happen to be in.
+     */
+    @Query("SELECT * FROM page WHERE notebookId is null ORDER BY updatedAt DESC")
+    suspend fun getAllSinglePages(): List<Page>
+
     @Query("SELECT id FROM page WHERE notebookId = :notebookId")
     suspend fun getPageIdsForNotebook(notebookId: String): List<String>
 
@@ -144,6 +154,11 @@ class PageRepository @Inject constructor(
 
     fun getSinglePagesInFolder(folderId: String? = null): LiveData<List<Page>> {
         return db.getSinglePagesInFolder(folderId)
+    }
+
+    /** Every quick page, newest first. See [PageDao.getAllSinglePages]. */
+    suspend fun getAllSinglePages(): List<Page> {
+        return db.getAllSinglePages()
     }
 
     suspend fun update(page: Page) {

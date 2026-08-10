@@ -7,6 +7,12 @@ import androidx.compose.material.Text
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import com.ethran.notable.data.db.Notebook
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.size
+import compose.icons.FeatherIcons
+import compose.icons.feathericons.Plus
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -142,6 +148,14 @@ fun QuickNavContent(
      */
     notebooks: List<Notebook> = emptyList(),
     onSelectNotebook: ((Notebook) -> Unit)? = null,
+    /**
+     * Create a new document and open it in the target. Null hides the affordance.
+     *
+     * Both kinds are offered, and both from every context. Which document types you can make
+     * should not depend on which one you happen to have open.
+     */
+    onCreateQuickPage: (() -> Unit)? = null,
+    onCreateNotebook: (() -> Unit)? = null,
 ) {
     Column(
         Modifier
@@ -184,7 +198,15 @@ fun QuickNavContent(
                 onGenerateBookPreviews = onGenerateBookPreviews
             )
 
-            if (appRepository != null) {
+            // Nothing below is drawn until the state describes the *current* page.
+            //
+            // This ViewModel is scoped to the nav entry and outlives the sheet, so reopening it
+            // renders the previous session's lists for as long as the reload takes — a trace showed
+            // 76ms of the wrong notebook and the wrong page count. Cheaper on e-ink to paint the
+            // rows once, correct, than to paint them wrong and then correct them.
+            if (uiState.isLoading) return@Column
+
+            if (appRepository != null && uiState.favoritePages.isNotEmpty()) {
                 ShowPagesRow(
                     appRepository = appRepository,
                     pages = uiState.favoritePages,
@@ -194,10 +216,28 @@ fun QuickNavContent(
                 )
             }
 
+            // Quick pages and notebooks are rendered *differently*, not just labelled
+            // differently: page thumbnails versus titled chips. A quick page and a notebook are
+            // different kinds of thing, and a row of lookalike thumbnails would make you read a
+            // caption to tell which is which every time.
+            if (appRepository != null && onCreateQuickPage != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                ShowPagesRow(
+                    appRepository = appRepository,
+                    pages = uiState.quickPages,
+                    currentPageId = uiState.currentPageId,
+                    title = "Quick pages",
+                    onSelectPage = { goToPage(it) },
+                    showAddQuickPage = true,
+                    onCreateNewQuickPage = onCreateQuickPage,
+                )
+            }
+
             if (onSelectNotebook != null) {
                 NotebookRow(
                     notebooks = notebooks,
                     onSelect = onSelectNotebook,
+                    onCreate = onCreateNotebook,
                 )
             }
 
@@ -233,26 +273,53 @@ fun QuickNavContent(
 private fun NotebookRow(
     notebooks: List<Notebook>,
     onSelect: (Notebook) -> Unit,
+    onCreate: (() -> Unit)? = null,
 ) {
     Spacer(modifier = Modifier.height(12.dp))
     Text(text = "Notebooks", fontWeight = FontWeight.Light)
     Spacer(modifier = Modifier.height(6.dp))
-
-    if (notebooks.isEmpty()) {
-        // Says why there is nothing here. An empty gap would read as a failure to load.
-        Text(
-            text = "No other notebook available",
-            fontWeight = FontWeight.Light,
-            color = Color.DarkGray,
-        )
-        return
-    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
     ) {
+        // First, and always present, so its position does not shift with the list contents — and
+        // so "create one" is offered in the very case where the list is empty.
+        //
+        // Verb-first, and a plus rather than a book. "New notebook" is the *default title* of a
+        // newly created notebook (see Notebook.title), so a chip labelled that way is
+        // indistinguishable from a real entry — and a book icon reads as "a notebook" rather than
+        // "make one", which is the same confusion twice over.
+        if (onCreate != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .border(1.dp, Color.Gray, RectangleShape)
+                    .noRippleClickable { onCreate() }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Icon(
+                    imageVector = FeatherIcons.Plus,
+                    contentDescription = "Create notebook",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = "Create notebook", color = Color.DarkGray)
+            }
+        }
+
+        if (notebooks.isEmpty() && onCreate == null) {
+            // Says why there is nothing here. An empty gap would read as a failure to load.
+            Text(
+                text = "No other notebook available",
+                fontWeight = FontWeight.Light,
+                color = Color.DarkGray,
+            )
+        }
+
         notebooks.forEach { notebook ->
             Text(
                 text = notebook.title,

@@ -12,7 +12,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -96,6 +99,7 @@ fun PanePagePicker(
         EntryPoints.get(context.applicationContext, PanePagePickerEntryPoint::class.java)
     }
     val appRepository = remember(entryPoint) { entryPoint.appRepository() }
+    val scope = rememberCoroutineScope()
 
     val activePane = paneGroup.active
     val otherPane: Pane? = paneGroup.other(activePane)
@@ -133,37 +137,30 @@ fun PanePagePicker(
         }
     )
 
+    // Re-point the target each composition. The ViewModel is scoped to the nav entry and survives
+    // the sheet closing, while `target` above is discarded with it — so the provider passed to the
+    // factory (which runs once) would keep reading a dead session's selector after a reopen.
+    SideEffect {
+        viewModel.targetBus = { resolveTargetBus(paneGroup, target) }
+    }
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     // Reload when the aimed-at pane changes, or when its page does. For a new pane there is no
     // target page, so the active pane's supplies the breadcrumb context.
     val contextPageId = targetPane?.pageId ?: activePane.pageId
-    val exclusion = QuickNavViewModel.PaneExclusion(
-        notebookId = nonTargetPane?.notebookId,
-        pageId = nonTargetPane?.pageId,
-    )
-    LaunchedEffect(contextPageId, exclusion) {
-        log.d("Picker aimed at $target (page $contextPageId), excluding $exclusion")
-        viewModel.loadPageData(contextPageId, exclusion)
+    // Only the page id: the ViewModel resolves its notebook from the record, because
+    // `Pane.notebookId` is null until that pane's own load finishes.
+    val excludePageId = nonTargetPane?.pageId
+    LaunchedEffect(contextPageId, excludePageId) {
+        log.d("Picker aimed at $target (page $contextPageId), excluding page $excludePageId")
+        viewModel.loadPageData(contextPageId, excludePageId)
     }
 
-    // TRACE: what the sheet actually offers. If favourites is empty with target=NewPane the sheet
-    // has nothing selectable at all, since the scrubber is suppressed in that mode.
-    LaunchedEffect(target, uiState.favoritePages.size, uiState.bookPageCount) {
-        log.i(
-            "PICKER state: forNewPane=$forNewPane target=$target secondOption=$secondOption " +
-                "favourites=${uiState.favoritePages.size} bookPages=${uiState.bookPageCount} " +
-                "scrubberShown=${targetPane != null && uiState.bookPageCount >= 2}"
-        )
-    }
 
     // Every selection path — favourite page, notebook, scrubber — funnels through here, so a new
     // pane is created rather than an existing one repointed regardless of which control was used.
     fun selectPage(pageId: String) {
-        log.i(
-            "PICKER select: page=$pageId target=$target -> " +
-                if (target == PickerTarget.NewPane) "createPane" else "changePage in existing pane"
-        )
         if (target == PickerTarget.NewPane) onCreatePane(pageId)
         else viewModel.onPageSelected(pageId)
         onClose()
@@ -198,6 +195,20 @@ fun PanePagePicker(
         // the new pane may not open, so every position on it would be an illegal choice.
         showScrubber = targetPane != null,
         goToPage = { pageId -> selectPage(pageId) },
+        // A created document opens in the target pane just as a chosen one does, so splitting
+        // straight into a fresh page is one action rather than create-then-find.
+        onCreateQuickPage = {
+            scope.launch {
+                viewModel.createQuickPage(uiState.folderId)?.let { selectPage(it) }
+                    ?: log.e("Could not create a quick page")
+            }
+        },
+        onCreateNotebook = {
+            scope.launch {
+                viewModel.createNotebook(uiState.folderId)?.let { selectPage(it) }
+                    ?: log.e("Could not create a notebook")
+            }
+        },
         notebooks = uiState.notebooks,
         // Opening a notebook lands on the page it was last left at, so returning to a document
         // resumes where you were rather than at page one.
