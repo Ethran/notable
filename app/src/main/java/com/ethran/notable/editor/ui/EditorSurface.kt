@@ -6,7 +6,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ethran.notable.editor.EditorViewModel
-import com.ethran.notable.editor.Pane
+import com.ethran.notable.editor.PaneGroup
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.canvas.DrawCanvas
 import com.ethran.notable.editor.state.History
@@ -18,7 +18,7 @@ private val log = ShipBook.getLogger("EditorSurface")
 @Composable
 fun EditorSurface(
     viewModel: EditorViewModel,
-    pane: Pane,
+    paneGroup: PaneGroup,
 ) {
     val coroutineScope = rememberCoroutineScope()
     log.i("recompose surface")
@@ -29,7 +29,7 @@ fun EditorSurface(
                 context = ctx,
                 coroutineScope = coroutineScope,
                 viewModel = viewModel,
-                panes = listOf(pane),
+                paneGroup = paneGroup,
             ).apply {
                 init()
                 registerObservers()

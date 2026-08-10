@@ -1125,6 +1125,10 @@ class PageDataManager @Inject constructor(
     suspend fun getPageRecord(pageId: String): Page? =
         appRepository.pageRepository.getById(pageId)
 
+    /** The page after [pageId] in [notebookId], or null if it is the last. */
+    suspend fun getNextPageId(notebookId: String, pageId: String): String? =
+        appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = notebookId)
+
     /** Position of [pageId] within [notebookId]. Keyed counterpart to [getCurrentPageNumber]. */
     suspend fun getPageNumber(notebookId: String, pageId: String): Int =
         appRepository.getPageNumber(notebookId, pageId)

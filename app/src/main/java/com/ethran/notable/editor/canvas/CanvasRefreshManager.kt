@@ -24,12 +24,27 @@ import kotlinx.coroutines.launch
 
 class CanvasRefreshManager(
     private val drawCanvas: DrawCanvas,
-    private val page: PageView,
     private val viewModel: EditorViewModel,
     private val touchHelper: TouchHelper?
 ) {
     private val log = ShipBook.getLogger("DrawCanvas")
+
+    // Follows focus. Passing a PageView in by value captured the first pane forever, so every
+    // default dirty rect and every log line described the left pane whichever one was active.
+    private val page: PageView get() = drawCanvas.activePane.page
     private val blitPaint = Paint()
+
+    // Mid grey: on a monochrome panel a black divider competes with ink, and white is invisible.
+    private val dividerPaint = Paint().apply { color = android.graphics.Color.GRAY }
+
+    /** Thickness of the active-pane outline, in pixels. */
+    private val outlineWidth = 3f
+
+    private val outlinePaint = Paint().apply {
+        color = android.graphics.Color.BLACK
+        style = Paint.Style.STROKE
+        strokeWidth = outlineWidth
+    }
 
     /**
      * The whole drawing surface, in surface coordinates.
@@ -66,6 +81,68 @@ class CanvasRefreshManager(
             if (!dst.intersect(paneRect)) continue
             val src = Rect(dst).apply { offset(-paneRect.left, -paneRect.top) }
             canvas.drawBitmap(pane.page.windowedBitmap, src, dst, blitPaint)
+        }
+        drawDividers(canvas, surfaceDirty)
+        drawActivePaneOutline(canvas, surfaceDirty)
+    }
+
+    /**
+     * Outline the pane that input is directed at, so it is obvious which one the pen and toolbar
+     * will act on.
+     *
+     * Drawn onto the surface rather than into a pane's bitmap: the bitmap holds page content, and
+     * an outline baked into it would be saved with the note.
+     */
+    private fun drawActivePaneOutline(canvas: Canvas, surfaceDirty: Rect) {
+        if (drawCanvas.panes.size < 2) return
+        val rect = drawCanvas.activePane.screenRect
+        if (rect.isEmpty) return
+        if (!Rect(surfaceDirty).intersect(rect)) return
+        // Inset by half the stroke so the whole outline lands inside the pane rather than
+        // straddling the boundary and bleeding into the gutter.
+        val inset = outlineWidth / 2f
+        canvas.drawRect(
+            rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset,
+            outlinePaint,
+        )
+    }
+
+    /**
+     * Repaint just the outline bands of [panes], for when focus moves between them.
+     *
+     * Four thin strips per pane rather than the whole rect: a full-pane refresh at the moment the
+     * pen touches down would flash the panel exactly when the user is trying to write.
+     */
+    fun refreshPaneOutlines(panes: List<com.ethran.notable.editor.Pane>) {
+        val t = outlineWidth.toInt() + 1
+        for (pane in panes) {
+            val r = pane.screenRect
+            if (r.isEmpty) continue
+            listOf(
+                Rect(r.left, r.top, r.right, r.top + t),
+                Rect(r.left, r.bottom - t, r.right, r.bottom),
+                Rect(r.left, r.top, r.left + t, r.bottom),
+                Rect(r.right - t, r.top, r.right, r.bottom),
+            ).forEach { drawCanvasToView(it) }
+        }
+    }
+
+    /**
+     * Fill the gaps between panes.
+     *
+     * Nothing else paints them: each pane clips to its own rect, so without this the gutter keeps
+     * whatever was on the panel last — on e-ink that means stale ink sitting between the panes
+     * indefinitely. Drawn from the gaps between pane rects rather than a stored divider position,
+     * so it cannot drift out of step with the layout.
+     */
+    private fun drawDividers(canvas: Canvas, surfaceDirty: Rect) {
+        val rects = drawCanvas.panes.map { it.screenRect }.filterNot { it.isEmpty }.sortedBy { it.left }
+        if (rects.size < 2) return
+        for (i in 0 until rects.size - 1) {
+            val gap = Rect(rects[i].right, rects[i].top, rects[i + 1].left, rects[i].bottom)
+            if (gap.isEmpty) continue
+            if (!gap.intersect(surfaceDirty)) continue
+            canvas.drawRect(gap, dividerPaint)
         }
     }
 

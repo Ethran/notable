@@ -8,6 +8,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.Pane
+import com.ethran.notable.editor.PaneGroup
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.state.History
@@ -17,10 +18,18 @@ import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 
 // keep reference of the surface view presently associated to the singleton touchhelper
 var referencedSurfaceView: String = ""
+
+/**
+ * Dead space between panes, in pixels. Ink is rejected here — the firmware clips the live preview
+ * to each limit rect, and [routeStrokeToPane] drops strokes that start in the gap. Wide enough to
+ * be an unambiguous target, narrow enough not to waste a 10" panel.
+ */
+const val PANE_GUTTER_PX = 24
 
 @SuppressLint("ViewConstructor") // we never execute constructor from XML
 class DrawCanvas(
@@ -28,20 +37,17 @@ class DrawCanvas(
     val coroutineScope: CoroutineScope,
     val viewModel: EditorViewModel,
     /**
-     * The panes drawn into this surface. One today; the list exists so a second does not require
-     * restructuring. All panes share this one surface because the Onyx firmware permits exactly
-     * one raw-drawing owner per process.
+     * The panes drawn into this surface, and which one has focus. All panes share this one surface
+     * because the Onyx firmware permits exactly one raw-drawing owner per process.
      */
-    val panes: List<Pane>,
+    val paneGroup: PaneGroup,
 ) : SurfaceView(context) {
     private val log = ShipBook.getLogger("DrawCanvas")
 
-    /**
-     * The pane input is currently directed at. Writing in a pane will make it active once stroke
-     * routing lands; with a single pane it is simply that pane.
-     */
-    var activePane: Pane = panes.first()
-        private set
+    val panes: List<Pane> get() = paneGroup.panes
+
+    /** The pane input is directed at. Owned by [paneGroup] so the toolbar can see it too. */
+    val activePane: Pane get() = paneGroup.active
 
     val page: PageView
         get() = activePane.page
@@ -54,9 +60,15 @@ class DrawCanvas(
      * wrote in becomes the one the toolbar and history act on.
      */
     fun focusPane(pane: Pane) {
-        if (pane !in panes || pane === activePane) return
+        if (pane === activePane) return
         log.d("Active pane changed")
-        activePane = pane
+        val previous = activePane
+        if (!paneGroup.focus(pane)) return
+        // Re-arm raw drawing over the newly active pane; the limit rect follows focus.
+        inputHandler.updateActiveSurface()
+
+        // The repaint happens inside updateActiveSurface, after the re-arm has finished. Doing it
+        // here would be wiped: re-arming resets the EPD layer, and it completes asynchronously.
     }
 
     private fun isStylusOrEraser(toolType: Int): Boolean =
@@ -68,6 +80,39 @@ class DrawCanvas(
     // Overriding dispatchTouchEvent catches the event BEFORE it is routed
     // to onTouchEvent or sent down to nested Android components.
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        // 0. A touch landing in an inactive pane activates it rather than drawing into it.
+        //
+        // Raw drawing is armed over the active pane only, so the firmware does not consume input
+        // over the others — it arrives here as an ordinary MotionEvent, for pen and finger alike.
+        // Switching on DOWN means the gesture that selects a pane never also marks it.
+        // Fingers only. The firmware consumes stylus input inside its limit rects, but NOT outside
+        // them — so a pen-down in an inactive pane does arrive here as an ordinary MotionEvent and
+        // would otherwise switch focus. Focus is meant to change deliberately: inferring it from
+        // ink means a brush against the wrong pane both switches panes and marks the document.
+        if (event.actionMasked == MotionEvent.ACTION_DOWN &&
+            panes.size > 1 &&
+            !hasAnyStylusPointer(event)
+        ) {
+            val target = paneGroup.paneAt(event.x, event.y)
+            if (target != null && target !== activePane) {
+                log.i("Touch in inactive pane — bringing it to the front")
+                // In practice this is a finger: while raw drawing is armed the firmware consumes
+                // stylus input, so a pen-down never reaches here. That is the intended design —
+                // focus changes deliberately, and the pen only ever writes into the active pane.
+                // Focus moves, and the stroke is then allowed to proceed normally: routing runs
+                // after this, by which point the target pane is active, so the ink lands where it
+                // was drawn. The event is deliberately NOT consumed.
+                //
+                // Previously this consumed the event and flagged the next raw stroke to be dropped,
+                // so the activating gesture would not also mark the pane. But the firmware does not
+                // always deliver a raw stroke for a consumed touch, and the flag then survived to
+                // eat the next legitimate stroke — losing ink in the already-active pane.
+                // Losing a stroke the user meant to write is worse than an occasional unintended
+                // switch, and a stray mark can at least be undone.
+                focusPane(target)
+            }
+        }
+
         // 1. Accessibility & Clicks
         if (event.actionMasked == MotionEvent.ACTION_UP && !hasAnyStylusPointer(event)) {
             performClick()
@@ -117,14 +162,83 @@ class DrawCanvas(
 
 
     val inputHandler = OnyxInputHandler(this, viewModel, coroutineScope)
-    val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
+    val refreshManager = CanvasRefreshManager(this, viewModel, inputHandler.touchHelper)
 
 
-    private val observers = CanvasObserverRegistry(
-        coroutineScope, this, page, viewModel, history, inputHandler, refreshManager
-    )
+    /**
+     * One registry per pane.
+     *
+     * Signals are per-pane (see [PaneEventBus]), so a single registry bound to one page hears only
+     * that page's refreshes, reloads and history commits. With two panes that meant the second
+     * pane never repainted its own strokes — they sat committed but unrendered until something else
+     * forced a redraw — and undo only ever reached the first pane's history.
+     */
+    private val observers = panes.map { pane ->
+        CanvasObserverRegistry(
+            coroutineScope, this, pane, pane.page, viewModel, pane.history, inputHandler, refreshManager
+        )
+    }
 
-    fun registerObservers() = observers.registerAll()
+    fun registerObservers() = observers.forEach { it.registerAll() }
+
+    private var surfaceWidth = 0
+    private var surfaceHeight = 0
+
+    /**
+     * Divide the surface between the panes and tell each one its size.
+     *
+     * A single pane owns the whole surface — a degenerate case, not a special one. Two panes split
+     * it evenly with [PANE_GUTTER_PX] of dead space between them. Returns true if any pane's
+     * geometry changed.
+     *
+     * Vertical splitting is not built: the device is used in landscape, where side-by-side is what
+     * fits two documents. `Pane.screenRect` is a plain Rect, so nothing here precludes it.
+     */
+    private fun layoutPanes(width: Int, height: Int): Boolean {
+        val rects = when (panes.size) {
+            0 -> return false
+            1 -> listOf(Rect(0, 0, width, height))
+            else -> {
+                val half = width / 2
+                val g = PANE_GUTTER_PX / 2
+                listOf(
+                    Rect(0, 0, half - g, height),
+                    Rect(half + g, 0, width, height),
+                )
+            }
+        }
+        if (panes.size > rects.size) {
+            log.w("${panes.size} panes but only ${rects.size} slices; extra panes will not be laid out")
+        }
+
+        var changed = false
+        val resized = mutableListOf<Pane>()
+        panes.zip(rects).forEach { (pane, rect) ->
+            if (pane.screenRect != rect) changed = true
+            pane.layout(rect)
+            // Each pane's page renders at the pane's size, not the surface's.
+            val sizeChanged =
+                pane.page.viewWidth != rect.width() || pane.page.viewHeight != rect.height()
+            pane.page.updateDimensions(rect.width(), rect.height())
+            if (sizeChanged) resized.add(pane)
+        }
+
+        // updateDimensions recreates the window bitmap and reloads only the background, so a
+        // resized pane comes back blank until its strokes are redrawn. Splitting the surface
+        // resizes every pane at once, so every one of them needs that redraw — miss it and a pane
+        // simply shows nothing, with no error anywhere.
+        //
+        // Drawn directly rather than via pane.events.forceUpdate: that flow has no replay and no
+        // buffer, so an emit with no subscriber attached yet is silently dropped. During layout the
+        // registries may not be collecting, which is exactly how the left pane ended up blank while
+        // being blitted correctly from a correctly sized bitmap.
+        resized.forEach { pane ->
+            val p = pane.page
+            p.drawAreaScreenCoordinates(Rect(0, 0, p.viewWidth, p.viewHeight))
+        }
+        if (resized.isNotEmpty()) refreshManager.drawCanvasToView(null)
+        return changed
+    }
 
     fun init() {
         log.i("Initializing Canvas")
@@ -151,17 +265,14 @@ class DrawCanvas(
                 // with the same dimensions the surface ends up with, so that check usually short
                 // circuits — and a pane whose screenRect was never set has an empty rect, which
                 // makes the blit clip everything away and the screen come up blank.
-                // Single pane: it covers the whole surface. With two, each gets its slice and the
-                // divider sits between them.
-                panes.forEach { it.layout(Rect(0, 0, width, height)) }
+                val relaidOut = layoutPanes(width, height)
 
-                // Only act if actual dimensions changed
-                if (page.viewWidth == width && page.viewHeight == height) return
+                // Only act further if the surface itself actually changed size
+                if (!relaidOut && surfaceWidth == width && surfaceHeight == height) return
+                surfaceWidth = width
+                surfaceHeight = height
 
                 log.v("Surface dimension changed!")
-
-                // Update page dimensions, redraw and refresh
-                page.updateDimensions(width, height)
                 inputHandler.updateActiveSurface()
                 onSurfaceChanged(this@DrawCanvas)
             }

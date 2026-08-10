@@ -32,11 +32,15 @@ import java.util.UUID
 
 class EditorControlTower(
     private val scope: CoroutineScope,
-    val page: PageView,
-    private var history: History,
+    private val paneGroup: PaneGroup,
     private val viewModel: EditorViewModel,
     private val clipboardStore: ClipboardStore,
 ) : GestureActions {
+    // Undo, redo, paste and scrolling must act on the pane the user is looking at, so these follow
+    // focus rather than being captured at construction.
+    val page: PageView get() = paneGroup.active.page
+    private val history: History get() = paneGroup.active.history
+
     private var scrollInProgress = Mutex()
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
     private var changePageObserverJob: Job? = null
@@ -155,7 +159,13 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Undo called")
             history.undo()
-//            page.events.refreshUi.emit(Unit)
+            // History emits refreshUi on the acting page's own bus and nothing repaints as a
+            // result — the trace shows no canvas refresh after an undo.
+            //
+            // NOT refreshUiImmediately: that collector skips when scroll and zoom are unchanged,
+            // which is exactly the case for an undo, so the refresh would be dropped. forceUpdate
+            // redraws the pane's bitmap from the document and then pushes the surface.
+            page.events.forceUpdate.emit(null)
         }
     }
 
@@ -163,6 +173,7 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Redo called")
             history.redo()
+            page.events.forceUpdate.emit(null)
 //            page.events.refreshUi.emit(Unit)
         }
     }

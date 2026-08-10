@@ -81,6 +81,14 @@ class PageView(
     var viewWidth: Int,
     var viewHeight: Int,
     val snackManager: SnackState,
+    /**
+     * Whether this view may use the shared window-bitmap cache.
+     *
+     * The cache is keyed by page id, so two views of the *same* page would be handed the same
+     * Bitmap object and render into each other's pixels. Only one view of a page may use it; any
+     * other must own its buffer. Keyed-by-view caching would be the real fix.
+     */
+    private val useSharedBitmapCache: Boolean = true,
 ) {
     // TODO: unify width height variable
 
@@ -213,13 +221,13 @@ class PageView(
             // Scroll is now held by the viewport rather than read through PageDataManager on every
             // access, so a page switch has to adopt the persisted position explicitly.
             viewport.reloadFromPersistence()
-            pageDataManager.getCachedBitmap(currentPageId)?.let { cached ->
+            sharedCachedBitmap(currentPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
                 renderer.adopt(cached)
             } ?: run {
                 log.i("PageView.init: creating new bitmap")
                 recreateCanvas()
-                pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
+                cacheBitmapIfOwned(currentPageId)
             }
 
             coroutineScope.launch(Dispatchers.Main) {
@@ -261,7 +269,7 @@ class PageView(
             // Scroll is now held by the viewport rather than read through PageDataManager on every
             // access, so a page switch has to adopt the persisted position explicitly.
             viewport.reloadFromPersistence()
-            pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
+            sharedCachedBitmap(newPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
                 renderer.adopt(cached)
                 // Check if we have correct size of canvas
@@ -270,7 +278,7 @@ class PageView(
             } ?: run {
                 log.i("PageView.changePage: creating new bitmap")
                 recreateCanvas()
-                pageDataManager.cacheBitmap(newPageId, windowedBitmap)
+                cacheBitmapIfOwned(newPageId)
             }
 
             log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
@@ -283,6 +291,15 @@ class PageView(
             loadPage()
             log.d("Page loaded (updatePageID($currentPageId))")
         }
+    }
+
+    /** The shared cached bitmap for [pageId], or null if this view must not use it. */
+    private fun sharedCachedBitmap(pageId: String) =
+        if (useSharedBitmapCache) pageDataManager.getCachedBitmap(pageId) else null
+
+    /** Publish to the shared cache only if this view owns it, or views would clobber each other. */
+    private fun cacheBitmapIfOwned(pageId: String) {
+        if (useSharedBitmapCache) pageDataManager.cacheBitmap(pageId, windowedBitmap)
     }
 
     private fun recreateCanvas() {
@@ -672,7 +689,7 @@ class PageView(
         log.d("Redrawing full logical rect: $redrawRect")
         windowedCanvas.drawColor(Color.GREEN)
         drawBgToCanvas(redrawRect)
-        pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
+        cacheBitmapIfOwned(currentPageId)
 
         drawAreaScreenCoordinates(redrawRect)
 

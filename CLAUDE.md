@@ -76,6 +76,36 @@ documented in the Onyx SDK — re-verify after firmware updates.
 `try`/`catch` returning null, and every use is null-checked. Non-Onyx devices fall back to
 `OpenGLRenderer`. Keep both paths working — issue #211 item 1 plans to separate them further.
 
+### Multi-pane: five ways work vanishes silently
+
+Adding a second editor view surfaced five failure modes that share a signature — **content that
+should be there simply is not, with no exception, no failed test and no log**. Assume any new
+per-pane code can hit them.
+
+1. **State that was legitimately global.** Five separate cases: the window buffer, the viewport,
+   the signal bus, page identity, and `CanvasObserverRegistry`'s `activeObserverJob` — a companion
+   object holding *one* job, so registering a second pane cancelled the first pane's observers.
+   Correct with one view, wrong with two. Suspect anything `object`, `companion object` or
+   `@Singleton` that names "current".
+2. **Zero-buffer `MutableSharedFlow` emits are dropped.** `PaneEventBus` signals have no replay and
+   no buffer, so an emit with nothing subscribed yet vanishes — and a caller awaiting a reply
+   (`commitCompletion`) hangs forever. Never rely on one for correctness during construction or
+   layout; call the target directly.
+3. **Three coordinate spaces.** Page, pane-local screen, and surface. `toScreenCoordinates` and
+   `page.viewWidth/viewHeight` are pane-local; anything reaching `lockCanvas` must be surface. They
+   coincide only for a pane at the origin, so every pre-existing call site conflates them.
+4. **The EPD re-arm clears the panel.** `setupSurface` toggles `closeRawDrawing()` /
+   `openRawDrawing()`, which drops what is displayed. Repaint *after* it completes — it is async.
+   And use `refreshUi`, not `drawCanvasToView`: `setRawDrawingEnabled(true)` freezes the display,
+   so painting the surface alone updates pixels the panel never shows.
+5. **The firmware swallows stylus input only INSIDE its limit rects.** Outside them a pen-down
+   arrives as an ordinary `MotionEvent`. Check `hasAnyStylusPointer` if a gesture should be
+   finger-only. It still reports *points* for every region regardless — it clips the preview, not
+   the data — so limit rects never enforce which pane may be written to; routing must.
+
+None of this is reachable by tests (§1). It was found by device traces, and re-found the same way
+each time inference was tried instead.
+
 ### E-ink refresh is expensive and visible
 
 Prefer targeted dirty rects over full redraws. Refresh modes go through `EpdController`

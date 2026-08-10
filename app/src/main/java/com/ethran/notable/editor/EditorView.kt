@@ -9,6 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -35,6 +37,52 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 
 private val log = ShipBook.getLogger("EditorView")
+
+/** Show a second pane side by side. Temporary switch while the split is being built out. */
+private const val DUAL_PANE_PREVIEW = true
+
+/**
+ * The pane layout for one editor session, settled before anything is built.
+ *
+ * [secondPageId] is null when there is no second pane: a loose page, the last page of a notebook,
+ * or the preview switched off. Two panes on one document are not supported — see [PaneGroup].
+ */
+private data class PaneLayout(val secondPageId: String?)
+
+/**
+ * Resolves the layout once per (notebook, page), returning null while the lookup is in flight.
+ *
+ * Deliberately resolved up front. Composing a single-pane canvas and rebuilding it once the second
+ * page arrived left observer registries bound to the discarded canvas, so the live pane's signal
+ * bus had no subscribers and undo hung on a commit handshake nobody answered.
+ */
+@Composable
+private fun resolvePaneLayout(
+    viewModel: EditorViewModel,
+    bookId: String?,
+    initialPageId: String,
+): PaneLayout? {
+    val layout by produceState<PaneLayout?>(null, bookId, initialPageId) {
+        value = when {
+            !DUAL_PANE_PREVIEW -> {
+                log.i("Single pane: dual pane off")
+                PaneLayout(null)
+            }
+            bookId == null -> {
+                log.i("Single pane: not in a notebook")
+                PaneLayout(null)
+            }
+            else -> {
+                val next = viewModel.pageDataManager.getNextPageId(bookId, initialPageId)
+                    ?.takeIf { it != initialPageId }
+                if (next == null) log.i("Single pane: no page after $initialPageId in $bookId")
+                else log.i("Second pane will open $next")
+                PaneLayout(next)
+            }
+        }
+    }
+    return layout
+}
 
 object EditorDestination : NavigationDestination {
     override val route = "editor"
@@ -89,6 +137,19 @@ fun EditorView(
         val height = convertDpToPixel(this.maxHeight, context).toInt()
         val width = convertDpToPixel(this.maxWidth, context).toInt()
 
+        // Resolve the pane layout BEFORE building anything.
+        //
+        // Everything below — pages, panes, the control tower, the canvas — is constructed from
+        // this, so it must be settled first. Building a single-pane canvas and rebuilding it when
+        // the second page arrived left registries attached to the discarded canvas, and the live
+        // pane's signal bus with zero subscribers.
+        val resolved = resolvePaneLayout(viewModel, bookId, initialPageId)
+        if (resolved == null) {
+            // Still resolving. One frame at most, and drawing nothing beats drawing a layout
+            // that is about to change underneath the canvas.
+            return@BoxWithConstraints
+        }
+
         // Here we load initial page into the memory
         val page = remember {
             PageView(
@@ -108,11 +169,38 @@ fun EditorView(
         // share one surface because the Onyx firmware allows a single raw-drawing owner.
         val pane = remember(page, history) { Pane(page, history) }
 
+        // Second pane, shown side by side. Fixed 50/50 with no draggable divider yet — the
+        // divider is a separate change, and landing geometry and routing first keeps the number of
+        // things that can be wrong small. Flip DUAL_PANE_PREVIEW to return to a single pane.
+        //
+        // Opens the page after this one. Two views of the *same* document are not supported —
+        // each pane owns its own bitmap and History, so they cannot be kept coherent — and
+        // PaneGroup rejects that outright. It must not use the shared window-bitmap cache, which
+        // is keyed by page id and would hand both views the same Bitmap.
+        val secondPane = resolved.secondPageId?.let { secondId ->
+            remember(secondId) {
+            val secondPage = PageView(
+                context = context,
+                coroutineScope = scope,
+                pageDataManager = viewModel.pageDataManager,
+                initialPageId = secondId,
+                viewWidth = width / 2,
+                viewHeight = height,
+                snackManager = snackManager,
+                useSharedBitmapCache = false,
+            )
+            Pane(secondPage, viewModel.createHistory(secondPage))
+            }
+        }
+
+        val paneGroup = remember(pane, secondPane) { PaneGroup(listOfNotNull(pane, secondPane)) }
+
+
+
         val editorControlTower = remember {
             EditorControlTower(
                 scope = scope,
-                page = page,
-                history = history,
+                paneGroup = paneGroup,
                 viewModel = viewModel,
                 clipboardStore = ClipboardStore,
             )
@@ -237,9 +325,13 @@ fun EditorView(
 
         InkaTheme {
             EditorGestureReceiver(actions = editorControlTower)
+            // Built exactly once. The pane layout is resolved before this composes, so the canvas
+            // is never torn down and rebuilt — rebuilding it stranded observer registries on the
+            // discarded instance, leaving the live pane's signal bus with zero subscribers, and
+            // undo then hung forever on a commit handshake nobody answered.
             EditorSurface(
                 viewModel = viewModel,
-                pane = pane,
+                paneGroup = paneGroup,
             )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower
