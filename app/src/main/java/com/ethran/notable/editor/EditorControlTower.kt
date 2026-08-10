@@ -43,7 +43,7 @@ class EditorControlTower(
 
     private var scrollInProgress = Mutex()
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
-    private var changePageObserverJob: Job? = null
+    private var changePageObserverJobs = mutableListOf<Job>()
 
     // Accumulated, not-yet-rendered scroll delta in screen coordinates. Input events add
     // into this; a single consumer coroutine drains and renders it. StateFlow conflation
@@ -54,29 +54,36 @@ class EditorControlTower(
 
     fun registerObservers() {
         startScrollConsumer()
-        if (changePageObserverJob?.isActive == true) return
+        if (changePageObserverJobs.any { it.isActive }) return
 
-        changePageObserverJob = scope.launch {
-            page.events.changePage.collect { pageId ->
-                logEditorControlTower.d("Change to page $pageId")
+        // One observer per pane. Registering a single one captured whichever pane was active at
+        // the time, so a page picked for the other pane was delivered to the wrong bus.
+        changePageObserverJobs = paneGroup.panes.map { pane ->
+            scope.launch {
+                pane.events.changePage.collect { pageId ->
+                    logEditorControlTower.d("Change to page $pageId in pane ${pane.page.currentPageId.take(8)}")
 
-                // Switch to Main thread for Compose state mutations
-                withContext(Dispatchers.Main) {
-                    viewModel.changePage(pageId)
-                    history.cleanHistory()
+                    // Load into the pane whose bus this arrived on — QuickNav emits to the active
+                    // pane, so this is the pane the user was looking at when they chose.
+                    pane.page.changePage(pageId)
+
+                    // Switch to Main thread for Compose state mutations
+                    withContext(Dispatchers.Main) {
+                        // toolbarState tracks the *active* pane's page; only update it when the
+                        // change landed there, or the toolbar would follow the background pane.
+                        if (pane === paneGroup.active) viewModel.changePage(pageId)
+                        pane.history.cleanHistory()
+                    }
+                    refreshScreen()
                 }
-                // no need for this, we are listening for change of current page,
-                // in EditorView
-//                page.changePage(pageId)
-                refreshScreen()
             }
-        }
+        }.toMutableList()
     }
 
     // TODO: remove it, change to proper solution
     fun unregisterObservers() {
-        changePageObserverJob?.cancel()
-        changePageObserverJob = null
+        changePageObserverJobs.forEach { it.cancel() }
+        changePageObserverJobs.clear()
         scrollConsumerJob?.cancel()
         scrollConsumerJob = null
     }

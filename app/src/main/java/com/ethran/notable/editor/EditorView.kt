@@ -296,8 +296,10 @@ fun EditorView(
                 .drop(1) // Skip initial emission from loadBookData
                 .collect { newPageId ->
                     log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")
-                    // update the PageView
-                    page.changePage(newPageId)
+                    // The pane that received the change has already loaded it (see
+                    // EditorControlTower). Applying it to the primary pane here as well would drag
+                    // pane one onto a page chosen for pane two.
+                    paneGroup.active.page.changePage(newPageId)
 
                     // update the navigation state
                     onPageChange(newPageId)
