@@ -147,6 +147,14 @@ class DrawCanvas(
             override fun surfaceChanged(
                 holder: SurfaceHolder, format: Int, width: Int, height: Int
             ) {
+                // Lay panes out BEFORE the unchanged-dimensions check below. PageView is built
+                // with the same dimensions the surface ends up with, so that check usually short
+                // circuits — and a pane whose screenRect was never set has an empty rect, which
+                // makes the blit clip everything away and the screen come up blank.
+                // Single pane: it covers the whole surface. With two, each gets its slice and the
+                // divider sits between them.
+                panes.forEach { it.layout(Rect(0, 0, width, height)) }
+
                 // Only act if actual dimensions changed
                 if (page.viewWidth == width && page.viewHeight == height) return
 
@@ -154,9 +162,6 @@ class DrawCanvas(
 
                 // Update page dimensions, redraw and refresh
                 page.updateDimensions(width, height)
-                // Single pane: it covers the whole surface. With two, each gets its slice and the
-                // divider sits between them.
-                panes.forEach { it.layout(Rect(0, 0, width, height)) }
                 inputHandler.updateActiveSurface()
                 onSurfaceChanged(this@DrawCanvas)
             }

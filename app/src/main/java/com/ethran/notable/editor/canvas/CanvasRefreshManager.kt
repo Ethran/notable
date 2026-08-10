@@ -29,6 +29,45 @@ class CanvasRefreshManager(
     private val touchHelper: TouchHelper?
 ) {
     private val log = ShipBook.getLogger("DrawCanvas")
+    private val blitPaint = Paint()
+
+    /**
+     * The whole drawing surface, in surface coordinates.
+     *
+     * Deliberately not `page.viewWidth/viewHeight`: those are the *pane's* dimensions, which stop
+     * matching the surface as soon as there is more than one pane. Falls back to the page while
+     * the view has not been laid out yet.
+     */
+    private fun surfaceRect(): Rect =
+        if (drawCanvas.width > 0 && drawCanvas.height > 0)
+            Rect(0, 0, drawCanvas.width, drawCanvas.height)
+        else
+            Rect(0, 0, page.viewWidth, page.viewHeight)
+
+    /**
+     * Paints every pane that intersects [surfaceDirty] onto the locked surface canvas.
+     *
+     * Each pane holds a view-sized bitmap of its own page, so the blit maps pane-local source
+     * pixels to the pane's slice of the surface. Panes are clipped to their own rect and never to
+     * each other's, which is what stops one pane's redraw from painting over its neighbour.
+     */
+    private fun blitPanes(canvas: Canvas, surfaceDirty: Rect) {
+        val panes = drawCanvas.panes
+        for (pane in panes) {
+            // A pane is laid out from surfaceChanged. If a draw somehow beats that, an empty rect
+            // would clip everything away and the screen would come up blank with no error — so a
+            // lone pane falls back to owning the whole surface, which is what it will be given.
+            // Deliberately not applied when there are several: silently overlapping panes would
+            // hide a real layout bug.
+            val paneRect =
+                if (pane.screenRect.isEmpty && panes.size == 1) surfaceRect() else pane.screenRect
+
+            val dst = Rect(surfaceDirty)
+            if (!dst.intersect(paneRect)) continue
+            val src = Rect(dst).apply { offset(-paneRect.left, -paneRect.top) }
+            canvas.drawBitmap(pane.page.windowedBitmap, src, dst, blitPaint)
+        }
+    }
 
     fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoomLevel.value}")
@@ -108,7 +147,7 @@ class CanvasRefreshManager(
     /** Synchronous variant of [drawCanvasToView] (no `post{}` hop). Locks, draws the page
      *  bitmap for [dirtyRect], and posts — on the calling thread. */
     private fun drawBitmapToSurfaceSync(dirtyRect: Rect?) {
-        val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+        val zoneToRedraw = dirtyRect ?: surfaceRect()
         var canvas: Canvas? = null
         try {
             canvas = drawCanvas.holder.lockCanvas(zoneToRedraw)
@@ -121,7 +160,7 @@ class CanvasRefreshManager(
             // RxBaseReaderRequest.unlockCanvas.
             EpdController.enablePost(0)
             EpdController.enablePost(1)
-            canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
+            blitPanes(canvas, zoneToRedraw)
         } catch (e: IllegalStateException) {
             log.w("Surface released during erase draw", e)
         } finally {
@@ -137,7 +176,7 @@ class CanvasRefreshManager(
 
     fun drawCanvasToView(dirtyRect: Rect?, onPosted: (() -> Unit)? = null) {
         drawCanvas.post {
-            val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+            val zoneToRedraw = dirtyRect ?: surfaceRect()
             var canvas: Canvas? = null
             try {
                 log.v("Canvas refresh started, dirtyRect: $zoneToRedraw, bitmap: ${page.windowedBitmap.hashCode()}, thread: ${Thread.currentThread().name}")
@@ -152,7 +191,7 @@ class CanvasRefreshManager(
                     )
                     return@post
                 }
-                canvas.drawBitmap(page.windowedBitmap, zoneToRedraw, zoneToRedraw, Paint())
+                blitPanes(canvas, zoneToRedraw)
 
                 if (viewModel.toolbarState.value.mode == Mode.Select) {
                     // render selection, but only within dirtyRect
@@ -186,19 +225,30 @@ class CanvasRefreshManager(
     }
 
 
-    fun restoreCanvas(dirtyRect: Rect, bitmap: Bitmap = page.windowedBitmap) {
+    /**
+     * Repaints [dirtyRect] from [bitmap], or from the panes when [bitmap] is null.
+     *
+     * The explicit-bitmap form is quick-nav preview scrubbing, which shows a single page preview
+     * over the whole region and is an active-pane concept; the null form restores what the panes
+     * actually hold.
+     */
+    fun restoreCanvas(dirtyRect: Rect, bitmap: Bitmap? = null) {
         drawCanvas.post {
             val holder = drawCanvas.holder
             var surfaceCanvas: Canvas? = null
             try {
                 surfaceCanvas = holder.lockCanvas(dirtyRect)
-                // Draw the preview bitmap scaled to fit the dirty rect
-                surfaceCanvas.drawBitmap(bitmap, dirtyRect, dirtyRect, null)
+                if (bitmap != null) {
+                    // Draw the preview bitmap scaled to fit the dirty rect
+                    surfaceCanvas.drawBitmap(bitmap, dirtyRect, dirtyRect, null)
+                } else {
+                    blitPanes(surfaceCanvas, dirtyRect)
+                }
             } catch (e: Exception) {
                 Log.e("DrawCanvas", "Canvas lock failed: ${e.message}")
             } finally {
                 if (surfaceCanvas != null) {
-                    log.d("restoreCanvas: page=${page.currentPageId} bitmap=${bitmap.hashCode()}")
+                    log.d("restoreCanvas: page=${page.currentPageId} bitmap=${bitmap?.hashCode()}")
                     holder.unlockCanvasAndPost(surfaceCanvas)
                 }
                 // Trigger partial refresh
