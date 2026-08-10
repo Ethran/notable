@@ -8,6 +8,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.canvas.PaneEventBus
 import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
@@ -42,6 +43,14 @@ class QuickNavViewModel(
     private val appRepository: AppRepository,
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     private val snackDispatcher: SnackDispatcher,
+    /**
+     * The pane this picker acts on, resolved at emit time.
+     *
+     * A provider rather than a value because the target moves: focus changes while the picker is
+     * open, and the editor-hosted picker lets the user aim at the other pane. The app-level default
+     * keeps the previous behaviour for callers outside the editor, which have no pane in hand.
+     */
+    private val targetBus: () -> PaneEventBus = { CanvasEventBus.active },
 ) : ViewModel() {
     private val pageRepository = appRepository.pageRepository
     private val bookRepository = appRepository.bookRepository
@@ -52,9 +61,34 @@ class QuickNavViewModel(
     val uiState: StateFlow<QuickNavUiState> = _uiState.asStateFlow()
     private var lastScrubEndTargetPageId: String? = null
 
+    // Held so re-fetches (toggleFavorite) filter the same way the initial load did, rather than
+    // quietly reintroducing a page the target pane may not open.
+    private var exclusion: PaneExclusion = PaneExclusion.NONE
+
+    /**
+     * What the target pane may not open, because another pane already has it.
+     *
+     * A notebook may be open in at most one pane (ROADMAP §8), and no two panes may show the same
+     * page. Rather than resolve a collision after the fact, the picker does not offer one.
+     */
+    data class PaneExclusion(val notebookId: String?, val pageId: String?) {
+        fun allows(page: Page): Boolean {
+            if (pageId != null && page.id == pageId) return false
+            // Loose pages have no notebook, so they collide by page id only.
+            if (notebookId != null && page.notebookId == notebookId) return false
+            return true
+        }
+
+        companion object {
+            /** Nothing excluded — a single pane, or a caller outside the editor. */
+            val NONE = PaneExclusion(null, null)
+        }
+    }
+
     // Initialize data when the ViewModel is created or when a new page is opened
-    fun loadPageData(currentPageId: String?) {
+    fun loadPageData(currentPageId: String?, exclusion: PaneExclusion = PaneExclusion.NONE) {
         if (currentPageId == null) return
+        this.exclusion = exclusion
 
         _uiState.update { it.copy(isLoading = true, currentPageId = currentPageId) }
 
@@ -68,6 +102,7 @@ class QuickNavViewModel(
             val isFavorite = favorites.contains(currentPageId)
 
             val favoritePagesDb = appRepository.pageRepository.getByIds(favorites)
+                .filter(exclusion::allows)
 
             _uiState.update { state ->
                 state.copy(
@@ -80,7 +115,10 @@ class QuickNavViewModel(
                 )
             }
 
-            // Load Scrubber data if it belongs to a book
+            // Load Scrubber data if it belongs to a book.
+            //
+            // Not filtered by the exclusion: this scrubs the *target pane's own* notebook, which
+            // the other pane cannot have open, so every page in it is a legal destination.
             page?.notebookId?.let { loadBookData(it, currentPageId, favorites) }
         }
     }
@@ -129,6 +167,7 @@ class QuickNavViewModel(
 
             // Re-fetch the rich page objects for the ShowPagesRow
             val updatedFavoritePages = appRepository.pageRepository.getByIds(newFavorites)
+                .filter(exclusion::allows)
             _uiState.update { it.copy(favoritePages = updatedFavoritePages) }
         }
     }
@@ -138,8 +177,8 @@ class QuickNavViewModel(
     fun onScrubStart() {
         viewModelScope.launch {
             lastScrubEndTargetPageId = null
-            CanvasEventBus.active.saveCurrent.emit(Unit)
-            CanvasEventBus.active.isScrubbing.emit(true)
+            targetBus().saveCurrent.emit(Unit)
+            targetBus().isScrubbing.emit(true)
         }
     }
 
@@ -147,7 +186,7 @@ class QuickNavViewModel(
         val pageIds = _uiState.value.bookPageIds
         viewModelScope.launch {
             if (index in pageIds.indices) {
-                CanvasEventBus.active.previewPage.tryEmit(pageIds[index])
+                targetBus().previewPage.tryEmit(pageIds[index])
             }
         }
     }
@@ -160,9 +199,9 @@ class QuickNavViewModel(
             log.v("onScrubEnd: $index")
 
             // moved, to be only run if we are changing page to the current page
-//            CanvasEventBus.active.restoreCanvas.emit(Unit)
+//            targetBus().restoreCanvas.emit(Unit)
 
-            CanvasEventBus.active.isScrubbing.emit(false)
+            targetBus().isScrubbing.emit(false)
 
             // Gesture end callbacks can fire more than once; ignore repeated commit for same target.
             if (targetPageId == lastScrubEndTargetPageId)
@@ -173,7 +212,20 @@ class QuickNavViewModel(
             lastScrubEndTargetPageId = targetPageId
 
 
-            CanvasEventBus.active.changePage.emit(targetPageId)
+            targetBus().changePage.emit(targetPageId)
+        }
+    }
+
+    /**
+     * Load [pageId] into the target pane, as a state change rather than a navigation.
+     *
+     * The app-level QuickNav's favourites row instead calls `NotableNavigator.goToPage`, which
+     * navigates to the editor route and rebuilds it — taking both panes with it. That is fine from
+     * the library, where there is no editor to preserve, and wrong from inside one.
+     */
+    fun onPageSelected(pageId: String) {
+        viewModelScope.launch {
+            targetBus().changePage.emit(pageId)
         }
     }
 
@@ -183,7 +235,7 @@ class QuickNavViewModel(
                 SnackConf(text = "Can't go back, no QuickNav source page", duration = 4000)
             )
         } else {
-            CanvasEventBus.active.changePage.tryEmit(quickNavSourcePageId)
+            targetBus().changePage.tryEmit(quickNavSourcePageId)
         }
     }
 

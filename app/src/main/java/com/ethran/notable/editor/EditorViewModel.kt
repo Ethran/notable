@@ -97,6 +97,8 @@ data class ToolbarUiState(
     val hasClipboard: Boolean = false,
     val isDrawing: Boolean = true,
     val isQuickNavOpen: Boolean = false,
+    /** The in-editor, pane-aware page picker opened from the page counter. */
+    val isPagePickerOpen: Boolean = false,
 ) {
     /** The active preset's setting — what the drawing pipeline draws with. The fallback
      * only triggers if the active preset was deleted mid-session. */
@@ -106,7 +108,7 @@ data class ToolbarUiState(
     val isDrawingAllowed: Boolean
         get() = !isSelectionActive &&
                 !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
-                && !isQuickNavOpen
+                && !isQuickNavOpen && !isPagePickerOpen
 }
 
 
@@ -143,6 +145,12 @@ sealed class ToolbarAction {
 
     object CloseAllMenus : ToolbarAction()
     data class UpdateQuickNavOpen(val isOpen: Boolean) : ToolbarAction()
+
+    /**
+     * Open or close the in-editor page picker. Distinct from [NavigateToPages], which leaves the
+     * editor entirely for the full-screen grid and takes both panes with it.
+     */
+    data class SetPagePickerOpen(val isOpen: Boolean) : ToolbarAction()
 }
 
 
@@ -350,6 +358,13 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.CloseAllMenus -> handleCloseAllMenus()
             is ToolbarAction.UpdateQuickNavOpen -> {
                 _toolbarState.update { it.copy(isQuickNavOpen = action.isOpen) }
+                updateDrawingState()
+            }
+
+            is ToolbarAction.SetPagePickerOpen -> {
+                _toolbarState.update { it.copy(isPagePickerOpen = action.isOpen) }
+                // Raw drawing is global to the panel, so the pen has to be stood down while the
+                // picker is up or strokes land on the page behind it.
                 updateDrawingState()
             }
         }

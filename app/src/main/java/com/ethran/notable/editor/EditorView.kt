@@ -22,6 +22,7 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.ui.EditorSurface
 import com.ethran.notable.editor.ui.HorizontalScrollIndicator
+import com.ethran.notable.editor.ui.PanePagePicker
 import com.ethran.notable.editor.ui.ScrollIndicator
 import com.ethran.notable.editor.ui.SelectedBitmap
 import com.ethran.notable.editor.ui.toolbar.PositionedToolbar
@@ -356,6 +357,19 @@ fun EditorView(
             PositionedToolbar(
                 viewModel = viewModel, onDrawingStateCheck = { viewModel.updateDrawingState() })
             HorizontalScrollIndicator(viewModel = viewModel, page = page)
+
+            // Composed last so it sits above the toolbar and the canvas chrome. Drawing is stood
+            // down while it is open (see ToolbarUiState.isDrawingAllowed) because raw drawing is
+            // global to the panel — without that, pen strokes land on the page behind the sheet.
+            if (toolbarState.isPagePickerOpen) {
+                PanePagePicker(
+                    paneGroup = paneGroup,
+                    onClose = {
+                        viewModel.onToolbarAction(ToolbarAction.SetPagePickerOpen(false))
+                    },
+                    goToFolder = goToLibrary,
+                )
+            }
         }
     }
 }

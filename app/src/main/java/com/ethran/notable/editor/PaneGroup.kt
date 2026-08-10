@@ -58,4 +58,13 @@ class PaneGroup(val panes: List<Pane>) {
 
     /** The pane containing a surface coordinate, or null for the gutter or chrome. */
     fun paneAt(x: Float, y: Float): Pane? = panes.firstOrNull { it.contains(x, y) }
+
+    /**
+     * The pane that is not [pane], or null when there is only one.
+     *
+     * Two panes is the deliverable, so this is well defined today. With three it would have to
+     * become a list and every caller would need to say which one it meant — the picker's
+     * "other pane" target, for one.
+     */
+    fun other(pane: Pane): Pane? = panes.firstOrNull { it !== pane }
 }

@@ -80,6 +80,17 @@ private fun ToolbarMenuContent(
             onAction(ToolbarAction.NavigateToLibrary)
             onAction(ToolbarAction.ToggleMenu)
         }
+
+        // The full-screen page grid. It used to be what the page counter opened, but navigating
+        // there replaces the whole editor and both panes; the counter now opens the in-editor
+        // picker instead. The grid is still the right tool for reordering and bulk work, so it
+        // keeps an entry point here.
+        if (uiState.notebookId != null) {
+            MenuItem(stringResource(R.string.page_picker_all_pages)) {
+                onAction(ToolbarAction.NavigateToPages)
+                onAction(ToolbarAction.ToggleMenu)
+            }
+        }
         DividerCentered()
 
         // Page exports

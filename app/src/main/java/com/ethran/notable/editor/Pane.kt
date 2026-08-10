@@ -45,6 +45,18 @@ class Pane(
         get() = page.events
 
     /**
+     * The notebook this pane currently has open, or null for a loose page or before the record
+     * loads. A notebook may be open in at most one pane — see ROADMAP §8 — so this is what the
+     * page picker filters on.
+     */
+    val notebookId: String?
+        get() = page.openPage.notebookId
+
+    /** The page this pane currently shows. Shorthand for `page.currentPageId`. */
+    val pageId: String
+        get() = page.currentPageId
+
+    /**
      * Ids of strokes drawn since the last history commit, batched so a burst of strokes becomes
      * one undo step. Per-pane: undoing in one pane must not disturb the other.
      */

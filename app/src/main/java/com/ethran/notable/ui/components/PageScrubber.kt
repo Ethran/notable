@@ -72,6 +72,12 @@ fun PageHorizontalSliderWithReturn(
     onPreviewIndexChanged: (index: Int) -> Unit = {},
     onDragEnd: (index: Int) -> Unit = {},
     onReturnClick: () -> Unit = {},
+    /**
+     * Whether to show the return-to-source button. It belongs to the app-level QuickNav's jump
+     * tracking; the in-editor picker has no such source page, and rendering a button that does
+     * nothing is worse than rendering none.
+     */
+    showReturn: Boolean = true,
 ) {
     val density = LocalDensity.current
 
@@ -264,12 +270,14 @@ fun PageHorizontalSliderWithReturn(
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            if (showReturn) {
+                Spacer(modifier = Modifier.width(12.dp))
 
-            ToolbarButton(
-                imageVector = Icons.AutoMirrored.Filled.Undo,
-                onSelect = { onReturnClick() }
-            )
+                ToolbarButton(
+                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                    onSelect = { onReturnClick() }
+                )
+            }
         }
     }
 }

@@ -100,6 +100,10 @@
     <string name="choose_native_template">Choose Native Template</string>
     <string name="select_pdf_page">Select PDF Page</string>
     <string name="page_number">Page number</string>
+    <string name="page_picker_all_pages">All pages</string>
+    <string name="page_picker_target">Open in</string>
+    <string name="page_picker_this_pane">This pane</string>
+    <string name="page_picker_other_pane">Other pane</string>
     <string name="observe_pdf">Observe PDF</string>
     <string name="current_page">Current Page</string>
     <string name="toolbar_scribble_to_erase_two_lined_short">Scribble\nto Erase</string>

@@ -105,6 +105,11 @@ fun QuickNav(
     )
 }
 
+/**
+ * @param header Optional row rendered at the top of the sheet, above the breadcrumb. The
+ *   editor-hosted picker puts its target-pane selector here; the app-level QuickNav has no panes
+ *   to choose between and leaves it empty.
+ */
 @Composable
 fun QuickNavContent(
     appRepository: AppRepository?,
@@ -118,6 +123,8 @@ fun QuickNavContent(
     onScrubEnd: (Int) -> Unit,
     onReturnClick: () -> Unit,
     goToPage: (String) -> Unit,
+    header: (@Composable () -> Unit)? = null,
+    showReturn: Boolean = true,
 ) {
     Column(
         Modifier
@@ -146,6 +153,8 @@ fun QuickNavContent(
                 .background(Color.White)
                 .padding(10.dp)
         ) {
+
+            header?.invoke()
 
             // Header row: Breadcrumb on the left, Favorite toggle on the right
             QuickNavHeaderRow(
@@ -180,7 +189,8 @@ fun QuickNavContent(
                         onDragStart = onScrubStart,
                         onPreviewIndexChanged = onScrubPreview,
                         onDragEnd = onScrubEnd,
-                        onReturnClick = onReturnClick
+                        onReturnClick = onReturnClick,
+                        showReturn = showReturn
                     )
                 }
             }
