@@ -53,6 +53,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -116,11 +117,17 @@ class PageView(
 
     // warning: The setter is delayed!
     private var currentBackground: CachedBackground
-        get() = pageDataManager.getCurrentBackground()
-        set(value) = pageDataManager.setCurrentBackground(value)
+        get() = pageDataManager.getBackground(currentPageId)
+        set(value) = pageDataManager.setBackground(currentPageId, value)
+
+    private val openPageRef = AtomicReference(OpenPage(initialPageId))
+
+    /** Current snapshot of this view's page. Read it once into a local to use several fields together. */
+    val openPage: OpenPage
+        get() = openPageRef.get()
 
     val currentPageId: String
-        get() = pageDataManager.getCurrentPageId()
+        get() = openPage.pageId
 
 
     // scroll is observed by ui, represents top left corner
@@ -130,7 +137,7 @@ class PageView(
 
 
     val isTransformationAllowed: Boolean
-        get() = pageDataManager.isTransformationAllowedForCurrentPage()
+        get() = openPage.isTransformationAllowed
 
 
     // we need to observe zoom level, to adjust strokes size.
@@ -148,14 +155,14 @@ class PageView(
 //    private var dbImages = appRepository.imageRepository
 
     val currentPageNumber: Int
-        get() = pageDataManager.getCurrentPageNumber()
+        get() = openPage.pageNumber
 
     /*
         If pageNumber is -1, its assumed that the background is image type.
      */
-    fun getOrLoadBackground(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
+    fun getOrLoadBackground(pageId: String, filePath: String, pageNumber: Int, scale: Float): Bitmap? {
         log.i("getOrLoadBackground")
-        val cached = currentBackground
+        val cached = pageDataManager.getBackground(pageId)
         if (cached.matches(filePath, pageNumber, scale)) {
             log.i("Background bitmap (cached): ${cached.bitmap}")
             return cached.bitmap
@@ -165,7 +172,7 @@ class PageView(
         // the headroom stays proportional as you zoom; floored to the old additive margin near 1x.
         val renderScale = (scale * BACKGROUND_ZOOM_HEADROOM).coerceAtLeast(scale + 0.1f)
         val newBackground = CachedBackground(filePath, pageNumber, renderScale)
-        currentBackground = newBackground
+        pageDataManager.setBackground(pageId, newBackground)
         log.i("Background bitmap: ${newBackground.bitmap}")
         return newBackground.bitmap
     }
@@ -178,8 +185,7 @@ class PageView(
 
     init {
         coroutineScope.launch(Dispatchers.IO) {
-            // set page, and retrieve page data from db
-            pageDataManager.setPage(initialPageId)
+            showPage(initialPageId)
             log.i("PageView init with initial pageId: $initialPageId" )
             if(currentPageId.isEmpty())
                 log.e("Current page id is empty")
@@ -229,7 +235,7 @@ class PageView(
 
         coroutineScope.launch(Dispatchers.IO) {
             pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
-            pageDataManager.setPage(newPageId)
+            showPage(newPageId)
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
             pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
                 log.i("PageView: using cached bitmap")
@@ -452,12 +458,13 @@ class PageView(
 
     // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {
+        val shown = openPage
         val bitmapFromDisc = loadHQPagePreview(
             context = context,
-            pageID = currentPageId,
-            scroll = scroll,
+            pageID = shown.pageId,
+            scroll = pageDataManager.getPageScroll(shown.pageId),
             zoom = zoomLevel.value,
-            pageUpdatedAtMs = pageDataManager.pageFromDb?.updatedAt?.time,
+            pageUpdatedAtMs = shown.record?.updatedAt?.time,
             requireExactMatch = true,
         )
         if (bitmapFromDisc != null) {
@@ -472,7 +479,7 @@ class PageView(
 
         log.d("Drawing initial background.")
         // draw just background.
-        val backgroundType = pageDataManager.getBackgroundType()
+        val backgroundType = shown.backgroundType
         if (backgroundType == BackgroundType.Native) {
             drawBgToCanvas(null)
         } else
@@ -834,12 +841,29 @@ class PageView(
     }
 
 
+    /**
+     * Makes [pageId] this view's page. [PageDataManager.setPage] only marks it as the page in front,
+     * for prefetch and eviction; the view's own page is [openPage].
+     */
+    private suspend fun showPage(pageId: String) {
+        pageDataManager.setPage(pageId)
+        openPageRef.set(OpenPage(pageId))
+        loadOpenPage(pageId)
+    }
+
+    /** Loads [pageId]'s record and publishes it, unless this view has moved to another page meanwhile. */
+    private suspend fun loadOpenPage(pageId: String) {
+        val loaded = OpenPage.load(pageDataManager, pageId)
+        openPageRef.updateAndGet { it.withLoaded(loaded) }
+    }
+
     // updates page setting in db, (for instance type of background)
     // and redraws page to view.
     suspend fun refreshCurrentPage() {
         val pageId = currentPageId
         log.d("Refresh page: $pageId")
-        pageDataManager.refreshPageFromDb(pageId)
+        loadOpenPage(pageId)
+        log.i("Refreshed page $pageId, background: ${openPage.backgroundName}")
         withContext(Dispatchers.Main) {
             drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
 //            persistBitmapDebounced()
@@ -848,9 +872,10 @@ class PageView(
     }
 
     fun drawBgToCanvas(clipRect: Rect?) {
-        val backgroundType = pageDataManager.getBackgroundType() ?: BackgroundType.Native
-        val bg = pageDataManager.getBackgroundName()
-        val pageNumber = currentPageNumber
+        val shown = openPage
+        val backgroundType = shown.backgroundType ?: BackgroundType.Native
+        val bg = shown.backgroundName
+        val pageNumber = shown.pageNumber
         val scale = zoomLevel.value
         val bgImage: Bitmap? =
             when (backgroundType) {
@@ -860,7 +885,7 @@ class PageView(
                         val resId = R.drawable.iris
                         ImageBitmap.imageResource(context.resources, resId).asAndroidBitmap()
                     } else {
-                        getOrLoadBackground(bg, pageNumber, scale)
+                        getOrLoadBackground(shown.pageId, bg, pageNumber, scale)
                     }
                 }
 
@@ -872,7 +897,7 @@ class PageView(
             canvas = windowedCanvas,
             backgroundType = backgroundType,
             background = bg,
-            scroll = scroll,
+            scroll = pageDataManager.getPageScroll(shown.pageId),
             resourceBitmap = bgImage,
             scale = scale,
             repeat = false,
@@ -904,7 +929,7 @@ class PageView(
     }
 
 
-    private fun saveToPersistLayer() = pageDataManager.setScrollInDb()
+    private fun saveToPersistLayer() = pageDataManager.setScrollInDb(currentPageId)
 
     fun applyZoom(point: IntOffset): IntOffset {
         return point * zoomLevel.value
