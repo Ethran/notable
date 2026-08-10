@@ -83,11 +83,14 @@ object ToolbarElements {
             contentDescription = "redo",
             action = ToolbarAction.Redo,
         ),
+        // Shown for every document, not only notebook pages. It began as a page counter, but it
+        // is now the only way to open the picker for *this* pane — so hiding it on a quick page
+        // left that pane with no way to change what it shows.
         CustomElement(
             id = ToolbarElementId.PAGE_NAV,
             icon = null,
-            contentDescription = "page navigation",
-            visibleWhen = { state, _ -> state.location?.isInNotebook == true },
+            contentDescription = "choose this pane's page",
+            visibleWhen = { state, _ -> state.location != null },
             kind = CustomKind.PAGE_NAV,
         ),
         // Splitting opens the page picker rather than toggling straight into two panes: which note
