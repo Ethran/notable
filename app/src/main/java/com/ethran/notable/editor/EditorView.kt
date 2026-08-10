@@ -299,7 +299,14 @@ fun EditorView(
                     // The pane that received the change has already loaded it (see
                     // EditorControlTower). Applying it to the primary pane here as well would drag
                     // pane one onto a page chosen for pane two.
-                    paneGroup.active.page.changePage(newPageId)
+                    //
+                    // UNDER TRACE: EditorControlTower already called changePage on the pane that
+                    // received the selection, and for the *active* pane it then calls
+                    // viewModel.changePage, whose state update lands here — so this may be a second
+                    // load of the page just loaded. changePage has no same-id guard, so that would
+                    // re-run onExit against the page being loaded from a second IO coroutine.
+                    // Compare the [bus:paneN] and [snapshotFlow] tags in logcat before changing it.
+                    paneGroup.active.page.changePage(newPageId, reason = "snapshotFlow")
 
                     // update the navigation state
                     onPageChange(newPageId)

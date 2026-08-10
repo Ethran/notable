@@ -58,14 +58,17 @@ class EditorControlTower(
 
         // One observer per pane. Registering a single one captured whichever pane was active at
         // the time, so a page picked for the other pane was delivered to the wrong bus.
-        changePageObserverJobs = paneGroup.panes.map { pane ->
+        changePageObserverJobs = paneGroup.panes.mapIndexed { index, pane ->
             scope.launch {
                 pane.events.changePage.collect { pageId ->
-                    logEditorControlTower.d("Change to page $pageId in pane ${pane.page.currentPageId.take(8)}")
+                    logEditorControlTower.d(
+                        "Change to page $pageId in pane $index (${pane.page.currentPageId.take(8)}), " +
+                            "active=${pane === paneGroup.active}"
+                    )
 
                     // Load into the pane whose bus this arrived on — QuickNav emits to the active
                     // pane, so this is the pane the user was looking at when they chose.
-                    pane.page.changePage(pageId)
+                    pane.page.changePage(pageId, reason = "bus:pane$index")
 
                     // Switch to Main thread for Compose state mutations
                     withContext(Dispatchers.Main) {

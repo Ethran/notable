@@ -257,12 +257,19 @@ class PageView(
      * 8.  Launches a coroutine to load the page's content (strokes, images) asynchronously and refreshes the UI.
      *
      * @param newPageId The unique identifier of the page to switch to.
+     * @param reason Trace tag naming the caller. Two paths reach this — the per-pane `changePage`
+     *   bus observer in `EditorControlTower`, and `EditorView`'s toolbar-state `snapshotFlow` —
+     *   and whether both fire for a single selection is what the dual-pane picker trace has to
+     *   answer. It matters because there is **no same-id guard**: a second call re-runs
+     *   `onExit(oldId)` against the page it is concurrently loading, from a second IO coroutine.
      */
-    fun changePage(newPageId: String) {
+    fun changePage(newPageId: String, reason: String = "unspecified") {
         val oldId = currentPageId
-        log.d("changePage Entry: $oldId -> $newPageId")
+        val view = Integer.toHexString(System.identityHashCode(this))
+        log.d("changePage Entry [$reason] view=$view: $oldId -> $newPageId")
 
         coroutineScope.launch(Dispatchers.IO) {
+            log.d("changePage Begin [$reason] view=$view: onExit($oldId)")
             pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
             pageDataManager.setPage(newPageId)
             openPage.changeTo(newPageId)
@@ -281,7 +288,7 @@ class PageView(
                 cacheBitmapIfOwned(newPageId)
             }
 
-            log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
+            log.d("changePage Bitmap [$reason] view=$view: bitmap=${windowedBitmap.hashCode()}, ID: $currentPageId")
 
             // Refresh UI without waiting for drawing.
             // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
@@ -289,7 +296,7 @@ class PageView(
             //  but there might be still bugs with it.
             CanvasEventBus.refreshUiImmediately.emit(Unit)
             loadPage()
-            log.d("Page loaded (updatePageID($currentPageId))")
+            log.d("changePage Done [$reason] view=$view: loaded $currentPageId")
         }
     }
 
