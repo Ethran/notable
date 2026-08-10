@@ -73,7 +73,7 @@ class EditorUnsupportedConcurrentChangeComposeTests {
         composeRule.setContent {
             val state by viewModel.toolbarState.collectAsState()
             val selectionActive = viewModel.selectionState.isNonEmpty()
-            Text(text = "${state.pageId.orEmpty()}-$selectionActive")
+            Text(text = "${state.location?.pageId.orEmpty()}-$selectionActive")
         }
 
         runBlocking {
@@ -92,7 +92,7 @@ class EditorUnsupportedConcurrentChangeComposeTests {
             viewModel.goToNextPage()
 
             composeRule.waitUntil(15_000) {
-                viewModel.toolbarState.value.pageId == seeded.pageIds[1]
+                viewModel.toolbarState.value.location?.pageId == seeded.pageIds[1]
             }
             composeRule.waitUntil(10_000) {
                 viewModel.selectionState.selectedStrokes == null &&
