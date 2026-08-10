@@ -151,6 +151,14 @@ fun EditorView(
 
         val paneGroup = remember(pane, secondPane) { PaneGroup(listOfNotNull(pane, secondPane)) }
 
+        // TRACE: does a chosen second page actually reach a second pane?
+        LaunchedEffect(secondaryPageId, secondPane, paneGroup) {
+            log.i(
+                "PANES: secondaryPageId=$secondaryPageId secondPaneBuilt=${secondPane != null} " +
+                    "paneCount=${paneGroup.panes.size}"
+            )
+        }
+
         // Focus lives in PaneGroup; the ViewModel needs it to decide which pane an unsplit keeps.
         LaunchedEffect(paneGroup, paneGroup.active) {
             viewModel.onActivePaneChanged(

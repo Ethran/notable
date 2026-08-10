@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.canvas.PaneEventBus
@@ -35,7 +36,16 @@ data class QuickNavUiState(
     val bookPageCount: Int = 0,
     val currentBookIndex: Int = 0,
     val favoriteIndexesInBook: List<Int> = emptyList(),
-    val bookPageIds: List<String> = emptyList()
+    val bookPageIds: List<String> = emptyList(),
+
+    /**
+     * Notebooks the target pane is allowed to open, for choosing a *different* document.
+     *
+     * Without this the only way out of the picker was the breadcrumb into the library, and the
+     * library selects via EditorDestination.createRoute — which rebuilds the whole editor on that
+     * page, so a split could never be created from it.
+     */
+    val notebooks: List<Notebook> = emptyList()
 )
 
 
@@ -104,6 +114,12 @@ class QuickNavViewModel(
             val favoritePagesDb = appRepository.pageRepository.getByIds(favorites)
                 .filter(exclusion::allows)
 
+            // A notebook already open in another pane is not offered (ROADMAP §8), and neither is
+            // one with no pages to open.
+            val selectableBooks = runCatching { bookRepository.getAll() }.getOrDefault(emptyList())
+                .filter { it.id != exclusion.notebookId && it.pageIds.isNotEmpty() }
+                .sortedBy { it.title.lowercase() }
+
             _uiState.update { state ->
                 state.copy(
                     folderId = page?.parentFolderId,
@@ -111,6 +127,7 @@ class QuickNavViewModel(
                     bookId = page?.notebookId,
                     isCurrentPageFavorite = isFavorite,
                     favoritePages = favoritePagesDb,
+                    notebooks = selectableBooks,
                     isLoading = false
                 )
             }

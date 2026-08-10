@@ -147,6 +147,28 @@ fun PanePagePicker(
         viewModel.loadPageData(contextPageId, exclusion)
     }
 
+    // TRACE: what the sheet actually offers. If favourites is empty with target=NewPane the sheet
+    // has nothing selectable at all, since the scrubber is suppressed in that mode.
+    LaunchedEffect(target, uiState.favoritePages.size, uiState.bookPageCount) {
+        log.i(
+            "PICKER state: forNewPane=$forNewPane target=$target secondOption=$secondOption " +
+                "favourites=${uiState.favoritePages.size} bookPages=${uiState.bookPageCount} " +
+                "scrubberShown=${targetPane != null && uiState.bookPageCount >= 2}"
+        )
+    }
+
+    // Every selection path — favourite page, notebook, scrubber — funnels through here, so a new
+    // pane is created rather than an existing one repointed regardless of which control was used.
+    fun selectPage(pageId: String) {
+        log.i(
+            "PICKER select: page=$pageId target=$target -> " +
+                if (target == PickerTarget.NewPane) "createPane" else "changePage in existing pane"
+        )
+        if (target == PickerTarget.NewPane) onCreatePane(pageId)
+        else viewModel.onPageSelected(pageId)
+        onClose()
+    }
+
     QuickNavContent(
         appRepository = appRepository,
         uiState = uiState,
@@ -175,10 +197,15 @@ fun PanePagePicker(
         // no notebook, and the only one in scope — the active pane's — is precisely the notebook
         // the new pane may not open, so every position on it would be an illegal choice.
         showScrubber = targetPane != null,
-        goToPage = { pageId ->
-            if (target == PickerTarget.NewPane) onCreatePane(pageId)
-            else viewModel.onPageSelected(pageId)
-            onClose()
+        goToPage = { pageId -> selectPage(pageId) },
+        notebooks = uiState.notebooks,
+        // Opening a notebook lands on the page it was last left at, so returning to a document
+        // resumes where you were rather than at page one.
+        onSelectNotebook = { notebook ->
+            val pageId = notebook.openPageId?.takeIf { it in notebook.pageIds }
+                ?: notebook.pageIds.firstOrNull()
+            if (pageId == null) log.w("Notebook ${notebook.title} has no pages to open")
+            else selectPage(pageId)
         },
         header = {
             PaneTargetSelector(

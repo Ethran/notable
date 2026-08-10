@@ -1,5 +1,12 @@
 package com.ethran.notable.ui.components
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.Text
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.font.FontWeight
+import com.ethran.notable.data.db.Notebook
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -126,6 +133,15 @@ fun QuickNavContent(
     header: (@Composable () -> Unit)? = null,
     showReturn: Boolean = true,
     showScrubber: Boolean = true,
+    /**
+     * Notebooks offered as destinations, and what to do when one is chosen. Null hides the row.
+     *
+     * The in-editor picker needs this: without it the only way to reach a *different* document was
+     * the breadcrumb into the library, which navigates and rebuilds the editor — so a second pane
+     * could never be created from the picker at all.
+     */
+    notebooks: List<Notebook> = emptyList(),
+    onSelectNotebook: ((Notebook) -> Unit)? = null,
 ) {
     Column(
         Modifier
@@ -178,6 +194,13 @@ fun QuickNavContent(
                 )
             }
 
+            if (onSelectNotebook != null) {
+                NotebookRow(
+                    notebooks = notebooks,
+                    onSelect = onSelectNotebook,
+                )
+            }
+
             // Scrubber block only renders if we have a valid book
             if (showScrubber && uiState.bookPageCount >= 2) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -195,6 +218,50 @@ fun QuickNavContent(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Notebooks to open, as a scrolling row of titles.
+ *
+ * Titles rather than thumbnails: this is a list of *documents*, and a page preview of whichever
+ * page happens to be open says little about which notebook it is. It is also far cheaper to
+ * repaint on e-ink than a row of bitmaps.
+ */
+@Composable
+private fun NotebookRow(
+    notebooks: List<Notebook>,
+    onSelect: (Notebook) -> Unit,
+) {
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(text = "Notebooks", fontWeight = FontWeight.Light)
+    Spacer(modifier = Modifier.height(6.dp))
+
+    if (notebooks.isEmpty()) {
+        // Says why there is nothing here. An empty gap would read as a failure to load.
+        Text(
+            text = "No other notebook available",
+            fontWeight = FontWeight.Light,
+            color = Color.DarkGray,
+        )
+        return
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+    ) {
+        notebooks.forEach { notebook ->
+            Text(
+                text = notebook.title,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .border(1.dp, Color.Black, RectangleShape)
+                    .noRippleClickable { onSelect(notebook) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
         }
     }
 }
