@@ -1171,7 +1171,7 @@ class PageDataManager @Inject constructor(
                 for (pageId in pageIds) {
                     invalidateBackground(pageId)
                     if (pageId == currentPage) {
-                        CanvasEventBus.forceUpdate.emit(null)
+                        CanvasEventBus.active.forceUpdate.emit(null)
                         appEventBus.tryEmit(
                             AppEvent.ActionHint("Background file changed", 4000)
                         )

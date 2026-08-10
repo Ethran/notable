@@ -37,7 +37,7 @@ private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
  * The drawing process includes:
  * 1. Resolving the [image] URI into a [Bitmap].
  * 2. Creating a software-backed copy of the bitmap for compatibility with the [Canvas].
- * 3. Resetting [CanvasEventBus.addImageByUri] to prevent redundant add events.
+ * 3. Resetting the active view's addImageByUri to prevent redundant add events.
  * 4. Drawing the bitmap into a destination rectangle calculated from the image's position
  *    and dimensions, adjusted by the provided [offset].
  * 5. Logging the outcome of the operation.
@@ -73,7 +73,10 @@ fun drawImage(
         // Convert to software-backed bitmap
         val softwareBitmap = imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
 
-        CanvasEventBus.addImageByUri.value = null
+        // drawImage has no page in scope, so it addresses the active view — which reproduces
+        // the previous global behaviour exactly. Once panes exist this should take the owning
+        // view's bus as a parameter, or drawing an inactive pane will reset the wrong one.
+        CanvasEventBus.active.addImageByUri.value = null
 
         val rectOnImage = Rect(0, 0, imageBitmap.width, imageBitmap.height)
         val rectOnCanvas = Rect(

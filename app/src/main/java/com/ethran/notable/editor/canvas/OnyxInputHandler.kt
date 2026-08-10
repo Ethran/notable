@@ -286,7 +286,7 @@ class OnyxInputHandler(
                                 max(startPoint.y, endPoint.y).toInt()
                             )
                             drawCanvas.refreshManager.refreshUi(dirtyRect)
-                            CanvasEventBus.commitHistorySignal.emit(Unit)
+                            page.events.commitHistorySignal.emit(Unit)
                         }
                     }
 
@@ -346,7 +346,7 @@ class OnyxInputHandler(
 
                     }
                     coroutineScope.launch(Dispatchers.Default) {
-                        CanvasEventBus.commitHistorySignal.emit(Unit)
+                        page.events.commitHistorySignal.emit(Unit)
                     }
                 }
             }

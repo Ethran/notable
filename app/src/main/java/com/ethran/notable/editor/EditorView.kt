@@ -158,7 +158,7 @@ fun EditorView(
                     CanvasCommand.Paste -> editorControlTower.pasteFromClipboard()
                     CanvasCommand.ResetView -> editorControlTower.resetZoomAndScroll()
                     CanvasCommand.ClearAllStrokes -> {
-                        CanvasEventBus.clearPageSignal.emit(Unit)
+                        page.events.clearPageSignal.emit(Unit)
                         snackManager.displaySnack(
                             SnackConf(
                                 text = "Cleared all strokes",
@@ -168,11 +168,11 @@ fun EditorView(
                     }
 
                     CanvasCommand.RefreshCanvas -> {
-                        CanvasEventBus.reloadFromDb.emit(Unit)
+                        page.events.reloadFromDb.emit(Unit)
                     }
 
                     is CanvasCommand.CopyImageToCanvas -> {
-                        CanvasEventBus.addImageByUri.value = command.uri
+                        page.events.addImageByUri.value = command.uri
                     }
                 }
             }

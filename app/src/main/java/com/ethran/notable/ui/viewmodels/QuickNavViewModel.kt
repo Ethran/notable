@@ -138,8 +138,8 @@ class QuickNavViewModel(
     fun onScrubStart() {
         viewModelScope.launch {
             lastScrubEndTargetPageId = null
-            CanvasEventBus.saveCurrent.emit(Unit)
-            CanvasEventBus.isScrubbing.emit(true)
+            CanvasEventBus.active.saveCurrent.emit(Unit)
+            CanvasEventBus.active.isScrubbing.emit(true)
         }
     }
 
@@ -147,7 +147,7 @@ class QuickNavViewModel(
         val pageIds = _uiState.value.bookPageIds
         viewModelScope.launch {
             if (index in pageIds.indices) {
-                CanvasEventBus.previewPage.tryEmit(pageIds[index])
+                CanvasEventBus.active.previewPage.tryEmit(pageIds[index])
             }
         }
     }
@@ -160,9 +160,9 @@ class QuickNavViewModel(
             log.v("onScrubEnd: $index")
 
             // moved, to be only run if we are changing page to the current page
-//            CanvasEventBus.restoreCanvas.emit(Unit)
+//            CanvasEventBus.active.restoreCanvas.emit(Unit)
 
-            CanvasEventBus.isScrubbing.emit(false)
+            CanvasEventBus.active.isScrubbing.emit(false)
 
             // Gesture end callbacks can fire more than once; ignore repeated commit for same target.
             if (targetPageId == lastScrubEndTargetPageId)
@@ -173,7 +173,7 @@ class QuickNavViewModel(
             lastScrubEndTargetPageId = targetPageId
 
 
-            CanvasEventBus.changePage.emit(targetPageId)
+            CanvasEventBus.active.changePage.emit(targetPageId)
         }
     }
 
@@ -183,7 +183,7 @@ class QuickNavViewModel(
                 SnackConf(text = "Can't go back, no QuickNav source page", duration = 4000)
             )
         } else {
-            CanvasEventBus.changePage.tryEmit(quickNavSourcePageId)
+            CanvasEventBus.active.changePage.tryEmit(quickNavSourcePageId)
         }
     }
 

@@ -53,7 +53,7 @@ class EditorControlTower(
         if (changePageObserverJob?.isActive == true) return
 
         changePageObserverJob = scope.launch {
-            CanvasEventBus.changePage.collect { pageId ->
+            page.events.changePage.collect { pageId ->
                 logEditorControlTower.d("Change to page $pageId")
 
                 // Switch to Main thread for Compose state mutations
@@ -155,7 +155,7 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Undo called")
             history.undo()
-//            CanvasEventBus.refreshUi.emit(Unit)
+//            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -163,7 +163,7 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Redo called")
             history.redo()
-//            CanvasEventBus.refreshUi.emit(Unit)
+//            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -222,7 +222,7 @@ class EditorControlTower(
     fun applySelectionDisplace() {
         viewModel.selectionState.applySelectionDisplaceAndCommit(page, history)
         scope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -230,7 +230,7 @@ class EditorControlTower(
         viewModel.selectionState.deleteSelectionAndCommit(page, history)
         setIsDrawing(true)
         scope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -241,7 +241,7 @@ class EditorControlTower(
             viewModel.selectionState.resizeStrokes(scale, scope, page)
         // Emit a refresh signal to update UI
         scope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -320,13 +320,13 @@ class EditorControlTower(
         // the rectangle selects nothing.
         viewModel.selectionState.holdRefresh()
         scope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.emit(rect)
+            page.events.rectangleToSelectByGesture.emit(rect)
         }
     }
 
     override fun redrawCanvas() {
         scope.launch {
-            CanvasEventBus.forceUpdate.emit(null)
+            page.events.forceUpdate.emit(null)
         }
     }
 }

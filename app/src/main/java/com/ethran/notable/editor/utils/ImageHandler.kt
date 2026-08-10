@@ -30,7 +30,7 @@ class ImageHandler(
 
      fun observeImageUri() {
         coroutineScope.launch {
-            CanvasEventBus.addImageByUri.drop(1).collect { imageUri ->
+            page.events.addImageByUri.drop(1).collect { imageUri ->
                 if (imageUri != null) {
                     logImageHandler.v("Received image: $imageUri")
                     handleImage(imageUri)
@@ -51,7 +51,7 @@ class ImageHandler(
         }
         val softwareBitmap = imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
         if (softwareBitmap != null) {
-            CanvasEventBus.addImageByUri.value = null
+            page.events.addImageByUri.value = null
 
             // Get the image dimensions
             val imageWidth = softwareBitmap.width

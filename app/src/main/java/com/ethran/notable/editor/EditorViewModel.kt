@@ -372,7 +372,7 @@ class EditorViewModel @Inject constructor(
         }
         updateDrawingState()
         viewModelScope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            CanvasEventBus.active.refreshUi.emit(Unit)
         }
     }
 
@@ -720,7 +720,7 @@ class EditorViewModel @Inject constructor(
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
             snackDispatcher.showOrUpdateSnack(snack)
-            CanvasEventBus.restoreCanvas.emit(Unit)
+            CanvasEventBus.active.restoreCanvas.emit(Unit)
         }
     }
 

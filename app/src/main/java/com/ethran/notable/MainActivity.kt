@@ -238,7 +238,7 @@ class MainActivity : ComponentActivity() {
         super.onRestart()
         // redraw after device sleep
         this.lifecycleScope.launch {
-            CanvasEventBus.reinitSignal.emit(Unit)
+            CanvasEventBus.active.reinitSignal.emit(Unit)
         }
     }
 
@@ -246,7 +246,7 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
-            CanvasEventBus.refreshUi.emit(Unit)
+            CanvasEventBus.active.refreshUi.emit(Unit)
         }
     }
 

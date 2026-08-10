@@ -124,7 +124,7 @@ class CanvasObserverRegistry(
         // given null it will redraw whole page
         // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
         observerScope.launch(Dispatchers.Main) {
-            CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
+            page.events.forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
                 log.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
@@ -141,7 +141,7 @@ class CanvasObserverRegistry(
 
     private fun observeRefreshUi() {
         observerScope.launch(Dispatchers.Default) {
-            CanvasEventBus.refreshUi.collect {
+            page.events.refreshUi.collect {
                 log.v("Refreshing UI!")
                 refreshManager.refreshUiSuspend()
             }
@@ -184,7 +184,7 @@ class CanvasObserverRegistry(
 
     private fun observeSelectionGesture() {
         observerScope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.collect {
+            page.events.rectangleToSelectByGesture.collect {
                 log.v("Area to Select (screen): $it")
                 selectRectangle(page, drawCanvas.coroutineScope, viewModel, it)
             }
@@ -193,7 +193,7 @@ class CanvasObserverRegistry(
 
     private fun observeClearPage() {
         observerScope.launch {
-            CanvasEventBus.clearPageSignal.collect {
+            page.events.clearPageSignal.collect {
                 log.v("Clear page signal!")
                 cleanAllStrokes(page, history)
                 refreshManager.refreshUiSuspend()
@@ -203,7 +203,7 @@ class CanvasObserverRegistry(
 
     private fun observeRestartAfterConfChange() {
         observerScope.launch {
-            CanvasEventBus.reinitSignal.collect {
+            page.events.reinitSignal.collect {
                 log.v("Configuration changed!")
                 drawCanvas.init()
                 drawCanvas.refreshManager.drawCanvasToView(null)
@@ -213,7 +213,7 @@ class CanvasObserverRegistry(
 
     private fun observeReloadFromDb() {
         observerScope.launch {
-            CanvasEventBus.reloadFromDb.collect {
+            page.events.reloadFromDb.collect {
                 page.refreshCurrentPage()
                 refreshManager.refreshUiSuspend()
             }
@@ -309,15 +309,15 @@ class CanvasObserverRegistry(
     private fun observeHistory() {
         observerScope.launch {
             // After 500ms add to history strokes
-            CanvasEventBus.commitHistorySignal.debounce(500).collect {
+            page.events.commitHistorySignal.debounce(500).collect {
                 log.v("Commiting to history")
                 drawCanvas.commitToHistory()
             }
         }
         observerScope.launch {
-            CanvasEventBus.commitHistorySignalImmediately.collect {
+            page.events.commitHistorySignalImmediately.collect {
                 drawCanvas.commitToHistory()
-                CanvasEventBus.commitCompletion.complete(Unit)
+                page.events.commitCompletion.complete(Unit)
             }
         }
     }
@@ -325,7 +325,7 @@ class CanvasObserverRegistry(
 
     private fun observeSaveCurrent() {
         observerScope.launch {
-            CanvasEventBus.saveCurrent.collect {
+            page.events.saveCurrent.collect {
                 // Push current bitmap to persist layer so preview has something to load
                 pageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
                 pageDataManager.saveTopic.tryEmit(page.currentPageId)
@@ -336,8 +336,8 @@ class CanvasObserverRegistry(
     @OptIn(FlowPreview::class)
     private fun observeQuickNav() {
         observerScope.launch {
-            CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
-                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — scrub already ended
+            page.events.previewPage.debounce(50).collectLatest { pageId ->
+                if (!page.events.isScrubbing.value) return@collectLatest // dropped — scrub already ended
                 val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
                 val pageUpdatedAtMs = pageDataManager.getPageUpdatedAt(pageId)
 
@@ -359,7 +359,7 @@ class CanvasObserverRegistry(
                 }
 
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — race lost
+                if (!page.events.isScrubbing.value) return@collectLatest // dropped — race lost
                 log.d("QuickNav restoreCanvas: page=$pageId, bitmap=${previewBitmap.hashCode()}")
                 drawCanvas.refreshManager.restoreCanvas(zoneToRedraw, previewBitmap)
             }
@@ -368,7 +368,7 @@ class CanvasObserverRegistry(
 
     private fun observeRestoreCanvas() {
         observerScope.launch {
-            CanvasEventBus.restoreCanvas.collect {
+            page.events.restoreCanvas.collect {
                 log.d("Restoring canvas")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 drawCanvas.refreshManager.restoreCanvas(zoneToRedraw)

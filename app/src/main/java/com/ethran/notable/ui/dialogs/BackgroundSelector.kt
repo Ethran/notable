@@ -162,7 +162,7 @@ fun BackgroundSelector(
 
                     log.i("PickVisualMedia: copied -> ${copiedFile.absolutePath}")
                     onChange(currentType.key, copiedFile.toString())
-                    scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
+                    scope.launch { CanvasEventBus.active.refreshUi.emit(Unit) }
                     pageBackground = copiedFile.toString()
                     log.d("PickVisualMedia: UI updated, pageBackground=$pageBackground, type=${currentType.key}")
 
@@ -189,7 +189,7 @@ fun BackgroundSelector(
             try {
                 val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
                 onChange(currentType.key, copiedFile.toString())
-                scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
+                scope.launch { CanvasEventBus.active.refreshUi.emit(Unit) }
                 pageBackground = copiedFile.toString()
                 pageBackgroundType = currentType
                 log.i("PDF was received and copied, it is now at:${copiedFile.toUri()}")
