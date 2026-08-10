@@ -121,11 +121,20 @@ class PageView(
 
     // warning: The setter is delayed!
     private var currentBackground: CachedBackground
-        get() = pageDataManager.getCurrentBackground()
-        set(value) = pageDataManager.setCurrentBackground(value)
+        get() = pageDataManager.getBackground(currentPageId)
+        set(value) = pageDataManager.setBackground(currentPageId, value)
+
+    /**
+     * Which page this view shows, and everything derived from the page record.
+     *
+     * Owned here rather than read back from `PageDataManager.getCurrentPageId()`, which answers
+     * app-wide: two views asking it would both get the foreground page regardless of what they are
+     * actually showing.
+     */
+    val openPage = OpenPage(pageDataManager, initialPageId)
 
     val currentPageId: String
-        get() = pageDataManager.getCurrentPageId()
+        get() = openPage.pageId
 
 
     // Owns scroll, zoom, and the screen<->page transforms. Pairs with PageRenderer: the renderer
@@ -157,7 +166,7 @@ class PageView(
 //    private var dbImages = appRepository.imageRepository
 
     val currentPageNumber: Int
-        get() = pageDataManager.getCurrentPageNumber()
+        get() = openPage.pageNumber
 
     /*
         If pageNumber is -1, its assumed that the background is image type.
@@ -193,7 +202,10 @@ class PageView(
 
         coroutineScope.launch(Dispatchers.IO) {
             // set page, and retrieve page data from db
+            // setPage tells the manager which page is in front, for prefetch and eviction.
+            // openPage.load() is this view's own record — the two are different questions.
             pageDataManager.setPage(initialPageId)
+            openPage.load()
             log.i("PageView init with initial pageId: $initialPageId" )
             if(currentPageId.isEmpty())
                 log.e("Current page id is empty")
@@ -245,6 +257,7 @@ class PageView(
         coroutineScope.launch(Dispatchers.IO) {
             pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
             pageDataManager.setPage(newPageId)
+            openPage.changeTo(newPageId)
             // Scroll is now held by the viewport rather than read through PageDataManager on every
             // access, so a page switch has to adopt the persisted position explicitly.
             viewport.reloadFromPersistence()
@@ -475,7 +488,7 @@ class PageView(
             pageID = currentPageId,
             scroll = scroll,
             zoom = zoomLevel.value,
-            pageUpdatedAtMs = pageDataManager.pageFromDb?.updatedAt?.time,
+            pageUpdatedAtMs = openPage.entity?.updatedAt?.time,
             requireExactMatch = true,
         )
         if (bitmapFromDisc != null) {
@@ -490,7 +503,7 @@ class PageView(
 
         log.d("Drawing initial background.")
         // draw just background.
-        val backgroundType = pageDataManager.getBackgroundType()
+        val backgroundType = openPage.backgroundType
         if (backgroundType == BackgroundType.Native) {
             drawBgToCanvas(null)
         } else
@@ -796,7 +809,7 @@ class PageView(
     suspend fun refreshCurrentPage() {
         val pageId = currentPageId
         log.d("Refresh page: $pageId")
-        pageDataManager.refreshPageFromDb(pageId)
+        openPage.refresh()
         withContext(Dispatchers.Main) {
             drawAreaScreenCoordinates(Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT))
 //            persistBitmapDebounced()
@@ -805,8 +818,8 @@ class PageView(
     }
 
     fun drawBgToCanvas(clipRect: Rect?) {
-        val backgroundType = pageDataManager.getBackgroundType() ?: BackgroundType.Native
-        val bg = pageDataManager.getBackgroundName()
+        val backgroundType = openPage.backgroundType ?: BackgroundType.Native
+        val bg = openPage.backgroundName
         val pageNumber = currentPageNumber
         val scale = zoomLevel.value
         val bgImage: Bitmap? =
@@ -864,7 +877,7 @@ class PageView(
     }
 
 
-    private fun saveToPersistLayer() = pageDataManager.setScrollInDb()
+    private fun saveToPersistLayer() = pageDataManager.setScrollInDb(currentPageId)
 
     fun applyZoom(point: IntOffset): IntOffset {
         return point * zoomLevel.value

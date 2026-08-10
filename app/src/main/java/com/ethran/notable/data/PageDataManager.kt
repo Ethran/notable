@@ -1062,11 +1062,18 @@ class PageDataManager @Inject constructor(
         appRepository.bookRepository.update(notebook)
     }
 
-    fun setScrollInDb() {
+    fun setScrollInDb() = setScrollInDb(currentPage)
+
+    /**
+     * Keyed variant. The no-arg form writes the foreground page; a view that is not the active one
+     * must name its own page, since [currentPage] is app-wide.
+     */
+    fun setScrollInDb(pageId: String) {
+        if (pageId.isEmpty()) return
         launchDbWrite("scroll") {
             appRepository.pageRepository.updateScroll(
-                currentPage,
-                getPageScroll(currentPage).y.toInt()
+                pageId,
+                getPageScroll(pageId).y.toInt()
             )
         }
     }
@@ -1074,6 +1081,17 @@ class PageDataManager @Inject constructor(
     fun getBackgroundType(): BackgroundType? {
         return pageFromDb?.getBackgroundType()
     }
+
+    /**
+     * The page record for [pageId]. Keyed, unlike [pageFromDb], which is the foreground page only —
+     * a view that is not the active one needs its own record to answer questions about itself.
+     */
+    suspend fun getPageRecord(pageId: String): Page? =
+        appRepository.pageRepository.getById(pageId)
+
+    /** Position of [pageId] within [notebookId]. Keyed counterpart to [getCurrentPageNumber]. */
+    suspend fun getPageNumber(notebookId: String, pageId: String): Int =
+        appRepository.getPageNumber(notebookId, pageId)
 
     suspend fun getPageUpdatedAt(pageId: String): Long? {
         return appRepository.pageRepository.getById(pageId)?.updatedAt?.time
@@ -1139,12 +1157,18 @@ class PageDataManager @Inject constructor(
      * Retrieves the cached background for the current page, or a default empty [CachedBackground]
      * if none is linked (prevents null-pointer crashes downstream).
      */
-    fun getCurrentBackground(): CachedBackground {
+    fun getCurrentBackground(): CachedBackground = getBackground(currentPage)
+
+    /**
+     * Keyed variant. Backgrounds are already stored per page (`entries[pageId].backgroundKey`) and
+     * pooled across pages, so this needs no new state — only a page id instead of the app-wide one.
+     */
+    fun getBackground(pageId: String): CachedBackground {
         return synchronized(lock) {
-            val key = entries[currentPage]?.backgroundKey
+            val key = entries[pageId]?.backgroundKey
             val bg = if (key != null) backgroundCache[key] else null
             bg?.let { it.lastAccessSeq = ++bgAccessSeq }
-            log.d("Background for page $currentPage (no. $currentPageNumber): $bg")
+            log.d("Background for page $pageId: $bg")
             bg ?: CachedBackground("", 0, 1.0f)
         }
     }
