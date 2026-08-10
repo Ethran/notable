@@ -52,6 +52,20 @@ class EditorControlTower(
     private val pendingScroll = MutableStateFlow(Offset.Zero)
     private var scrollConsumerJob: Job? = null
 
+    /**
+     * Re-bind the per-pane observers after the pane set changes.
+     *
+     * The control tower is built once and outlives a split now — it used to be rebuilt along with
+     * the canvas, which destroyed the surface. So the observers have to be rebound explicitly:
+     * without this, a pane added by splitting has nothing collecting its `changePage`, and a page
+     * chosen for it silently never loads.
+     */
+    fun rebindPaneObservers() {
+        changePageObserverJobs.forEach { it.cancel() }
+        changePageObserverJobs.clear()
+        registerObservers()
+    }
+
     fun registerObservers() {
         startScrollConsumer()
         if (changePageObserverJobs.any { it.isActive }) return

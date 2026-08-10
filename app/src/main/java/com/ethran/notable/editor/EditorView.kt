@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -149,15 +148,15 @@ fun EditorView(
             onDispose { secondPane?.page?.disposeOldPage() }
         }
 
-        val paneGroup = remember(pane, secondPane) { PaneGroup(listOfNotNull(pane, secondPane)) }
+        // One group for the editor's life. Splitting mutates it rather than replacing it: a new
+        // group meant rebuilding the canvas to match, which destroyed the SurfaceView, and the
+        // replacement surface took six seconds to arrive — blank screen until a rotation forced it.
+        val paneGroup = remember { PaneGroup(listOf(pane)) }
 
-        // TRACE: does a chosen second page actually reach a second pane?
-        LaunchedEffect(secondaryPageId, secondPane, paneGroup) {
-            log.i(
-                "PANES: secondaryPageId=$secondaryPageId secondPaneBuilt=${secondPane != null} " +
-                    "paneCount=${paneGroup.panes.size}"
-            )
-        }
+        // Applied to paneGroup inside EditorSurface's update block, so the group is current
+        // before the canvas reconciles against it.
+        val panes = listOfNotNull(pane, secondPane)
+
 
         // Focus lives in PaneGroup; the ViewModel needs it to decide which pane an unsplit keeps.
         LaunchedEffect(paneGroup, paneGroup.active) {
@@ -203,6 +202,13 @@ fun EditorView(
             onDispose {
                 editorControlTower.unregisterObservers()
             }
+        }
+
+        // The control tower outlives a split now, so its per-pane changePage observers have to be
+        // rebound by hand. Without this a pane added by splitting has nothing collecting its bus,
+        // and a page chosen for it would silently never load.
+        LaunchedEffect(panes, editorControlTower) {
+            editorControlTower.rebindPaneObservers()
         }
 
         // Collect UI Events from ViewModel (navigation )
@@ -321,25 +327,19 @@ fun EditorView(
 
         InkaTheme {
             EditorGestureReceiver(actions = editorControlTower)
-            // Rebuilt when the pane set changes, and only then.
+            // Built once and never rebuilt. It reconciles to the pane set through its update
+            // block instead — see EditorSurface.
             //
-            // EditorSurface creates DrawCanvas in an AndroidView factory, which runs once and
-            // captures paneGroup with no update path — so a changed pane set has to discard the
-            // canvas rather than update it. key() is what makes that coherent: the old canvas is
-            // disposed, unregistering its observers, before the new one registers. Rebuilding it
-            // *without* that ordering is what previously stranded registries on a discarded
-            // instance and left the live pane's bus with zero subscribers, hanging undo on a
-            // commit handshake nobody answered.
-            //
-            // Splitting re-arms raw drawing as a result. That is legitimate here — the limit rects
-            // genuinely change — but it is an EPD re-arm, so it clears the panel and completes
-            // asynchronously. Verify on device that the repaint lands after it.
-            key(paneGroup) {
-                EditorSurface(
-                    viewModel = viewModel,
-                    paneGroup = paneGroup,
-                )
-            }
+            // This was briefly a key(paneGroup) wrapper, so that a changed pane set discarded the
+            // canvas and Compose ordered disposal before registration for free. It cost the
+            // surface: a device trace showed surfaceDestroyed at 11:51:48.804 and the replacement
+            // surfaceCreated only at 11:51:54.808 — six seconds of blank screen, and then only
+            // because a rotation forced it. Whatever a rebuild buys is not worth that.
+            EditorSurface(
+                viewModel = viewModel,
+                paneGroup = paneGroup,
+                panes = panes,
+            )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower
             )

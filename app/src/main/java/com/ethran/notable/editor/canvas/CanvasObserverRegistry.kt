@@ -75,6 +75,22 @@ class CanvasObserverRegistry(
         private val activeObserverJobs = mutableMapOf<String, Job>()
     }
 
+    /**
+     * Stop this pane's observers.
+     *
+     * Needed because a pane can now go away without the canvas going with it — closing a split
+     * removes a pane from a `DrawCanvas` that carries on living. Previously the only way to drop
+     * observers was to destroy the whole canvas, which cost the surface.
+     */
+    fun cancelAll() {
+        if (!registered) return
+        registered = false
+        val pageKey = page.currentPageId
+        // Only clear the map entry if it is still ours: a later registry for the same page owns it.
+        if (activeObserverJobs[pageKey] === observerJob) activeObserverJobs.remove(pageKey)
+        observerJob.cancel()
+    }
+
     fun registerAll() {
         // Guard against double registration on the same instance.
         if (registered) {

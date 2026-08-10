@@ -173,13 +173,49 @@ class DrawCanvas(
      * pane never repainted its own strokes — they sat committed but unrendered until something else
      * forced a redraw — and undo only ever reached the first pane's history.
      */
-    private val observers = panes.map { pane ->
-        CanvasObserverRegistry(
-            coroutineScope, this, pane, pane.page, viewModel, pane.history, inputHandler, refreshManager
-        )
-    }
+    private val observers = mutableMapOf<Pane, CanvasObserverRegistry>()
 
-    fun registerObservers() = observers.forEach { it.registerAll() }
+    fun registerObservers() = syncPanes()
+
+    /**
+     * Bring per-pane observers, layout and the EPD arming into line with [PaneGroup.panes].
+     *
+     * Idempotent, and called from the `AndroidView` update block, so it runs on every recomposition
+     * and does nothing unless the pane set actually changed.
+     *
+     * This exists because the canvas must **survive** a pane-set change. Splitting originally
+     * rebuilt `DrawCanvas` under a Compose `key`, which got observer disposal ordering right for
+     * free but destroyed the `SurfaceView`. A device trace showed the replacement surface was not
+     * allocated for six seconds — until a rotation forced it — and the screen was blank throughout.
+     * Keeping the canvas means doing by hand what the key was doing: dropping observers for panes
+     * that went away, adding them for panes that arrived.
+     */
+    fun syncPanes() {
+        val current = paneGroup.panes
+        if (observers.keys == current.toSet()) return
+        log.i("Pane set changed: ${observers.size} -> ${current.size}")
+
+        // Drop departed panes first, so a page reused by an arriving pane is not left holding a
+        // cancelled registry's entry in the shared activeObserverJobs map.
+        (observers.keys - current.toSet()).forEach { gone ->
+            observers.remove(gone)?.cancelAll()
+        }
+        current.filterNot { it in observers }.forEach { added ->
+            observers[added] = CanvasObserverRegistry(
+                coroutineScope, this, added, added.page, viewModel,
+                added.history, inputHandler, refreshManager
+            ).also { it.registerAll() }
+        }
+
+        // Nothing to lay out until the surface exists; surfaceChanged does it then.
+        if (surfaceWidth == 0 || surfaceHeight == 0) return
+        layoutPanes(surfaceWidth, surfaceHeight)
+
+        // The limit rects follow the pane count, so raw drawing has to be re-armed. The repaint
+        // happens inside updateActiveSurface, after the re-arm completes — doing it here would be
+        // wiped, since re-arming resets the EPD layer asynchronously.
+        inputHandler.updateActiveSurface()
+    }
 
     private var surfaceWidth = 0
     private var surfaceHeight = 0

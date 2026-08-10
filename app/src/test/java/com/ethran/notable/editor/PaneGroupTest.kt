@@ -5,6 +5,7 @@ import com.ethran.notable.editor.canvas.PaneEventBus
 import com.ethran.notable.editor.state.History
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -101,6 +102,79 @@ class PaneGroupTest {
 
         assertSame(paneOne, group.active)
         assertSame(paneOne.events, CanvasEventBus.active)
+    }
+
+    @Test
+    fun `adding a pane keeps the focused one focused`() {
+        val group = PaneGroup(listOf(paneOne))
+
+        group.updatePanes(listOf(paneOne, paneTwo))
+
+        assertEquals(listOf(paneOne, paneTwo), group.panes)
+        assertSame(paneOne, group.active)
+        assertSame(paneOne.events, CanvasEventBus.active)
+    }
+
+    @Test
+    fun `removing the focused pane moves focus to a survivor`() {
+        val group = PaneGroup(listOf(paneOne, paneTwo))
+        group.focus(paneTwo)
+
+        // Closing a split from the second pane: focus must not be left dangling on a pane that is
+        // no longer on screen, or input and the toolbar would act on a discarded view.
+        group.updatePanes(listOf(paneOne))
+
+        assertSame(paneOne, group.active)
+        assertSame(paneOne.events, CanvasEventBus.active)
+    }
+
+    @Test
+    fun `removing an unfocused pane leaves focus alone`() {
+        val group = PaneGroup(listOf(paneOne, paneTwo))
+
+        group.updatePanes(listOf(paneOne))
+
+        assertSame(paneOne, group.active)
+    }
+
+    @Test
+    fun `updating to the same panes is a no-op`() {
+        val group = PaneGroup(listOf(paneOne, paneTwo))
+        group.focus(paneTwo)
+
+        // Driven from a Compose update block, so this runs on every recomposition. It must not
+        // reset focus back to the first pane each time.
+        group.updatePanes(listOf(paneOne, paneTwo))
+
+        assertSame(paneTwo, group.active)
+    }
+
+    @Test
+    fun `updating to duplicate pages is rejected`() {
+        val group = PaneGroup(listOf(paneOne))
+        val clash = pane("page-one")
+
+        val thrown = runCatching { group.updatePanes(listOf(paneOne, clash)) }.exceptionOrNull()
+
+        assertTrue(
+            "expected IllegalArgumentException, got $thrown",
+            thrown is IllegalArgumentException
+        )
+        // The rejected update must not have been partially applied.
+        assertEquals(listOf(paneOne), group.panes)
+    }
+
+    @Test
+    fun `updating to no panes is rejected`() {
+        val group = PaneGroup(listOf(paneOne, paneTwo))
+
+        val thrown = runCatching { group.updatePanes(emptyList()) }.exceptionOrNull()
+
+        assertTrue(
+            "expected IllegalArgumentException, got $thrown",
+            thrown is IllegalArgumentException
+        )
+        assertEquals(listOf(paneOne, paneTwo), group.panes)
     }
 
     @Test

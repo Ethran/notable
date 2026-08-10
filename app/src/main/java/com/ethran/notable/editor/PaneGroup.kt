@@ -14,24 +14,59 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
  *
  * [active] is Compose state so the UI recomposes when focus moves.
  */
-class PaneGroup(val panes: List<Pane>) {
+class PaneGroup(initialPanes: List<Pane>) {
 
-    var active: Pane by mutableStateOf(panes.first())
+    /**
+     * The panes on screen, in left-to-right order.
+     *
+     * Mutable, and the group instance outlives any change to it. Splitting used to build a *new*
+     * PaneGroup and rebuild the canvas under a Compose `key` to match — which disposed the
+     * `SurfaceView`, and a device trace showed the replacement surface was not allocated for six
+     * seconds, until a rotation forced it. The screen was blank for that whole time. So the pane
+     * set changes underneath a canvas that keeps living, and `DrawCanvas.syncPanes` reconciles.
+     */
+    var panes: List<Pane> by mutableStateOf(initialPanes)
         private set
 
-    // Declared after [active] deliberately: init blocks and property initialisers run in
-    // declaration order, so publishing the bus above this point would read an uninitialised
+    var active: Pane by mutableStateOf(initialPanes.first())
+        private set
+
+    // Declared after [panes] and [active] deliberately: init blocks and property initialisers run
+    // in declaration order, so touching either above this point would read an uninitialised
     // delegate.
     init {
-        // Two views of one document cannot be made coherent: each pane owns its own window bitmap
-        // and its own History, so a stroke committed by one leaves the other's bitmap stale and an
-        // undo in one is invisible to the other. Refreshing harder does not fix it — the state is
-        // genuinely duplicated. Fail loudly rather than ship the confusing half-working version.
-        val ids = panes.map { it.page.currentPageId }
+        requireShowDistinctPages(initialPanes)
+        publishActiveBus()
+    }
+
+    /**
+     * Replace the pane set.
+     *
+     * If the focused pane is no longer present — closing a split from the pane being removed —
+     * focus falls back to the first remaining one rather than dangling.
+     */
+    fun updatePanes(newPanes: List<Pane>) {
+        // Idempotent: this is driven from a Compose update block, so it runs on every
+        // recomposition and must not churn state when nothing changed.
+        if (newPanes == panes) return
+        requireShowDistinctPages(newPanes)
+        panes = newPanes
+        if (active !in newPanes) active = newPanes.first()
+        publishActiveBus()
+    }
+
+    /**
+     * Two views of one document cannot be made coherent: each pane owns its own window bitmap and
+     * its own History, so a stroke committed by one leaves the other's bitmap stale and an undo in
+     * one is invisible to the other. Refreshing harder does not fix it — the state is genuinely
+     * duplicated. Fail loudly rather than ship the confusing half-working version.
+     */
+    private fun requireShowDistinctPages(candidate: List<Pane>) {
+        require(candidate.isNotEmpty()) { "A pane group needs at least one pane" }
+        val ids = candidate.map { it.page.currentPageId }
         require(ids.distinct().size == ids.size) {
             "Panes must show distinct pages, got $ids"
         }
-        publishActiveBus()
     }
 
     /** Direct input and the toolbar at [pane]. Ignores panes that are not part of this group. */
