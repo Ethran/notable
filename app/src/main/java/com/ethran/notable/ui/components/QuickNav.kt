@@ -47,6 +47,7 @@ import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.viewmodels.QuickNavUiState
+import com.ethran.notable.ui.viewmodels.ScrubberState
 import com.ethran.notable.ui.viewmodels.QuickNavViewModel
 import dagger.hilt.EntryPoint
 import dagger.hilt.EntryPoints
@@ -192,7 +193,7 @@ fun QuickNavContent(
                 folders = uiState.breadcrumbFolders,
                 isFavorite = uiState.isCurrentPageFavorite,
                 canToggleFavorite = uiState.currentPageId != null,
-                canGeneratePreviews = uiState.bookPageIds.isNotEmpty(),
+                canGeneratePreviews = uiState.scrubber != null,
                 onNavigateBreadcrumb = onNavigateBreadcrumb,
                 onToggleFavorite = onToggleFavorite,
                 onGenerateBookPreviews = onGenerateBookPreviews
@@ -242,14 +243,15 @@ fun QuickNavContent(
             }
 
             // Scrubber block only renders if we have a valid book
-            if (showScrubber && uiState.bookPageCount >= 2) {
+            val scrubber = uiState.scrubber
+            if (showScrubber && scrubber != null) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth()) {
                     PageHorizontalSliderWithReturn(
-                        pageCount = uiState.bookPageCount,
-                        currentIndex = uiState.currentBookIndex,
-                        favIndexes = uiState.favoriteIndexesInBook,
+                        pageCount = scrubber.count,
+                        currentIndex = scrubber.index,
+                        favIndexes = scrubber.favouriteIndexes,
                         onDragStart = onScrubStart,
                         onPreviewIndexChanged = onScrubPreview,
                         onDragEnd = onScrubEnd,
@@ -385,9 +387,11 @@ fun QuickNavContentPreview() {
             currentPageId = "page1",
             folderId = "folder1",
             isCurrentPageFavorite = true,
-            bookPageCount = 10,
-            currentBookIndex = 4,
-            favoriteIndexesInBook = listOf(0, 4, 9)
+            scrubber = ScrubberState(
+                pageIds = List(10) { "page$it" },
+                index = 4,
+                favouriteIndexes = listOf(0, 4, 9),
+            )
         ),
         onClose = {},
         onNavigateBreadcrumb = {},

@@ -87,7 +87,7 @@ object ToolbarElements {
             id = ToolbarElementId.PAGE_NAV,
             icon = null,
             contentDescription = "page navigation",
-            visibleWhen = { state, _ -> state.notebookId != null },
+            visibleWhen = { state, _ -> state.location?.isInNotebook == true },
             kind = CustomKind.PAGE_NAV,
         ),
         // Splitting opens the page picker rather than toggling straight into two panes: which note

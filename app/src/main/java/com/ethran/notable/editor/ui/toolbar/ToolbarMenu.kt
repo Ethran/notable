@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.ui.toolbar
 
+import com.ethran.notable.editor.state.PageLocation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -97,7 +98,7 @@ private fun ToolbarMenuContent(
         // there replaces the whole editor and both panes; the counter now opens the in-editor
         // picker instead. The grid is still the right tool for reordering and bulk work, so it
         // keeps an entry point here.
-        if (uiState.notebookId != null) {
+        if (uiState.location?.isInNotebook == true) {
             MenuItem(stringResource(R.string.page_picker_all_pages)) {
                 onAction(ToolbarAction.NavigateToPages)
                 onAction(ToolbarAction.ToggleMenu)
@@ -125,7 +126,7 @@ private fun ToolbarMenuContent(
         DividerCentered()
 
         // Book exports
-        if (uiState.notebookId != null) {
+        if (uiState.location?.isInNotebook == true) {
             MenuItem(stringResource(R.string.export_book_to, "PDF")) {
                 onAction(ToolbarAction.ExportBook(ExportFormat.PDF))
                 onAction(ToolbarAction.ToggleMenu)
@@ -194,7 +195,7 @@ fun ToolbarMenuPreview() {
     ToolbarMenuContent(
         uiState = ToolbarUiState(
             isMenuOpen = true,
-            notebookId = "book1",
+            location = PageLocation("page1", "book1", index = 0, count = 3),
             mode = Mode.Draw,
             pen = Pen.BALLPEN,
             penSettings = ToolbarPen.defaultPenSettings

@@ -285,7 +285,7 @@ fun EditorView(
 
         // Observe pageId changes from ViewModel state for navigation
         LaunchedEffect(viewModel) {
-            snapshotFlow { toolbarState.pageId }.filterNotNull().distinctUntilChanged()
+            snapshotFlow { toolbarState.location?.pageId }.filterNotNull().distinctUntilChanged()
                 .drop(1) // Skip initial emission from loadBookData
                 .collect { newPageId ->
                     log.v("EditorView: snapshotFlow detected pageId change to $newPageId, triggering onPageChange")

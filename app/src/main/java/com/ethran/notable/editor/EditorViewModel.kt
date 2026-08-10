@@ -11,7 +11,6 @@ import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.di.ApplicationScope
@@ -20,6 +19,7 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.state.PageLocation
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.editor.utils.DeviceCompat
@@ -63,11 +63,16 @@ private val log = ShipBook.getLogger("EditorViewModel")
  */
 data class ToolbarUiState(
     // Document info
-    val notebookId: String? = null,
-    val pageId: String? = null,
-    val isBookActive: Boolean = false,
-    val pageNumberInfo: String = "1/1",
-    val currentPageNumber: Int = 0,
+    /**
+     * Where the active pane's page sits — which page, which notebook, and its position in it.
+     *
+     * One value rather than the five correlated fields it replaces (`notebookId`, `pageId`,
+     * `isBookActive`, `pageNumberInfo`, `currentPageNumber`), which were written by different code
+     * on different triggers and could disagree. See [PageLocation] and STATE-PLAN §2.
+     *
+     * Null until the first page resolves.
+     */
+    val location: PageLocation? = null,
 
     // Background
     val backgroundType: String = "native",
@@ -251,8 +256,16 @@ class EditorViewModel @Inject constructor(
     val canvasCommands = canvasCommandChannel.receiveAsFlow()
 
     // ---- Internal document context ----
-    private var bookId: String? = null
-    private val currentPageId: String get() = _toolbarState.value.pageId.orEmpty()
+    private val currentPageId: String get() = _toolbarState.value.location?.pageId.orEmpty()
+
+    /**
+     * The notebook in play, derived rather than stored.
+     *
+     * Was a `var` seeded from the editor's route and never moved, so page navigation walked that
+     * notebook whichever pane had focus — putting one notebook in two panes (STATE-PLAN §2.3).
+     * Reading it from the resolved location leaves exactly one writer.
+     */
+    private val bookId: String? get() = _toolbarState.value.location?.notebookId
 
     // ---- Init guard ----
     private val didInitSettings = AtomicBoolean(false)
@@ -671,6 +684,19 @@ class EditorViewModel @Inject constructor(
     /**
      * Loads context data for the toolbar (page number, background info, etc.)
      */
+    /**
+     * Resolve a page's position from its notebook. The only place a [PageLocation] is built from
+     * the database, so index, count and notebook can never be refreshed independently of one
+     * another — which is how a stale count outlived its notebook and read "0/3".
+     */
+    private suspend fun locate(pageId: String, notebookId: String?): PageLocation {
+        val pageIds = notebookId
+            ?.let { runCatching { appRepository.bookRepository.getById(it) }.getOrNull() }
+            ?.pageIds
+            ?: emptyList()
+        return PageLocation.of(pageId, notebookId, pageIds)
+    }
+
     suspend fun loadToolbarState(routeBookId: String?, pageId: String) {
         log.v("loadBookData: routeBookId=$routeBookId, pageId=$pageId")
 
@@ -688,18 +714,10 @@ class EditorViewModel @Inject constructor(
         }
 
         // The page record is what says which notebook this is; the route only says which one the
-        // editor was *opened* on. Assigning the route's value here fought the per-pane one:
-        // focusing a pane updates toolbarState.pageId, which reaches the navigator, which changes
-        // `initialPageId`, which re-runs this — putting the route's notebook back a moment after
-        // focus had moved. Turning a page in a pane holding a quick page then walked the *other*
-        // pane's notebook into it.
-        val bookId = page.notebookId
-        this.bookId = bookId
-
-        val book = bookId?.let { appRepository.bookRepository.getById(it) }
-
-        val pageIndex = book?.getPageIndex(pageId) ?: 0
-        val totalPages = book?.pageIds?.size ?: 1
+        // editor was *opened* on. Resolving them together, from the record, is what stops the two
+        // disagreeing — see PageLocation.
+        val location = locate(page.id, page.notebookId)
+        val bookId = location.notebookId
 
         val backgroundTypeObj = BackgroundType.fromKey(page.backgroundType)
         val bgPageNumber = when (backgroundTypeObj) {
@@ -713,11 +731,7 @@ class EditorViewModel @Inject constructor(
 
         _toolbarState.update {
             it.copy(
-                notebookId = bookId,
-                pageId = pageId,
-                isBookActive = bookId != null,
-                pageNumberInfo = if (bookId != null) "${pageIndex + 1}/$totalPages" else "1/1",
-                currentPageNumber = pageIndex,
+                location = location,
                 backgroundType = page.backgroundType,
                 backgroundPath = page.background,
                 backgroundPageNumber = bgPageNumber
@@ -849,23 +863,32 @@ class EditorViewModel @Inject constructor(
      */
     private suspend fun updateOpenedPage(newPageId: String) {
         log.v("updateOpenedPage: $newPageId")
-        Log.d("EditorView", "Update open page to $newPageId")
-        if (bookId != null) {
-            appRepository.bookRepository.setOpenPageId(bookId!!, newPageId)
-        }
-        if (newPageId != currentPageId) {
-            // The View's LaunchedEffect will handle the full load once navigation syncs.
-            Log.d("EditorView", "Page changed")
-            _toolbarState.update { it.copy(pageId = newPageId) }
-            // Do NOT sync here: syncing the notebook that is open in the editor could download a
-            // newer remote copy and rewrite Room underneath the live in-memory state (P19).
-            // Sync is deferred to editor close (see onDispose).
-        } else {
+
+        if (newPageId == currentPageId) {
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
             snackDispatcher.showOrUpdateSnack(snack)
             CanvasEventBus.active.restoreCanvas.emit(Unit)
+            return
         }
+
+        Log.d("EditorView", "Page changed to $newPageId")
+        val page = appRepository.pageRepository.getById(newPageId)
+        val location = locate(newPageId, page?.notebookId)
+
+        // Record where we left off in the notebook the page actually belongs to. This used to
+        // write against whichever notebook was open *before* the change, which was harmless while
+        // pages could only be turned within one notebook — and wrong as soon as the picker could
+        // load a page from another, since it recorded a foreign page as that notebook's open one.
+        location.notebookId?.let { appRepository.bookRepository.setOpenPageId(it, newPageId) }
+
+        // Resolved whole. Setting the page id alone would leave the index and count describing the
+        // previous notebook until something else refreshed them — the shape that read "0/3".
+        _toolbarState.update { it.copy(location = location) }
+
+        // Do NOT sync here: syncing the notebook that is open in the editor could download a
+        // newer remote copy and rewrite Room underneath the live in-memory state (P19).
+        // Sync is deferred to editor close (see onDispose).
     }
 
     /**

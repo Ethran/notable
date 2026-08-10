@@ -118,7 +118,7 @@ fun ToolbarElementView(
                         .padding(horizontal = 10.dp)
                 ) {
                     Text(
-                        text = uiState.pageNumberInfo,
+                        text = uiState.location?.label.orEmpty(),
                         fontWeight = FontWeight.Light,
                         // Opens the in-editor picker rather than navigating to the full-screen
                         // grid. Navigating replaced the whole editor, panes and all — a
