@@ -2,10 +2,12 @@ package com.ethran.notable.editor.canvas
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.ethran.notable.editor.EditorViewModel
+import com.ethran.notable.editor.Pane
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.state.History
@@ -25,10 +27,27 @@ class DrawCanvas(
     context: Context,
     val coroutineScope: CoroutineScope,
     val viewModel: EditorViewModel,
-    val page: PageView,
-    val history: History
+    /**
+     * The panes drawn into this surface. One today; the list exists so a second does not require
+     * restructuring. All panes share this one surface because the Onyx firmware permits exactly
+     * one raw-drawing owner per process.
+     */
+    val panes: List<Pane>,
 ) : SurfaceView(context) {
     private val log = ShipBook.getLogger("DrawCanvas")
+
+    /**
+     * The pane input is currently directed at. Writing in a pane will make it active once stroke
+     * routing lands; with a single pane it is simply that pane.
+     */
+    var activePane: Pane = panes.first()
+        private set
+
+    val page: PageView
+        get() = activePane.page
+
+    val history: History
+        get() = activePane.history
 
     private fun isStylusOrEraser(toolType: Int): Boolean =
         toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
@@ -75,21 +94,20 @@ class DrawCanvas(
 
     var glRenderer = OpenGLRenderer(this)
 
-    private val strokeHistoryBatch = mutableListOf<String>()
     internal fun commitToHistory() {
-        if (strokeHistoryBatch.isNotEmpty()) history.addOperationsToHistory(
+        if (activePane.strokeHistoryBatch.isNotEmpty()) history.addOperationsToHistory(
             operations = listOf(
-                Operation.DeleteStroke(strokeHistoryBatch.map { it })
+                Operation.DeleteStroke(activePane.strokeHistoryBatch.map { it })
             )
         )
-        strokeHistoryBatch.clear()
+        activePane.strokeHistoryBatch.clear()
         //testing if it will help with undo hiding strokes.
         refreshManager.drawCanvasToView(null)
     }
 
 
     val inputHandler =
-        OnyxInputHandler(this, page, viewModel, history, coroutineScope, strokeHistoryBatch)
+        OnyxInputHandler(this, page, viewModel, history, coroutineScope, activePane.strokeHistoryBatch)
     val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
 
 
@@ -127,6 +145,9 @@ class DrawCanvas(
 
                 // Update page dimensions, redraw and refresh
                 page.updateDimensions(width, height)
+                // Single pane: it covers the whole surface. With two, each gets its slice and the
+                // divider sits between them.
+                panes.forEach { it.layout(Rect(0, 0, width, height)) }
                 inputHandler.updateActiveSurface()
                 onSurfaceChanged(this@DrawCanvas)
             }

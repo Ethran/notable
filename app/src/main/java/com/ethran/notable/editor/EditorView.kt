@@ -104,6 +104,10 @@ fun EditorView(
 
         val history = remember(page) { viewModel.createHistory(page) }
 
+        // One pane today. DrawCanvas takes a list so a second needs no restructuring; all panes
+        // share one surface because the Onyx firmware allows a single raw-drawing owner.
+        val pane = remember(page, history) { Pane(page, history) }
+
         val editorControlTower = remember {
             EditorControlTower(
                 scope = scope,
@@ -235,8 +239,7 @@ fun EditorView(
             EditorGestureReceiver(actions = editorControlTower)
             EditorSurface(
                 viewModel = viewModel,
-                page = page,
-                history = history
+                pane = pane,
             )
             SelectedBitmap(
                 context = context, controlTower = editorControlTower
