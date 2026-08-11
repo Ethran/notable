@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.ui.toolbar
 
+import com.ethran.notable.editor.state.PageLocation
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
@@ -59,8 +60,8 @@ fun ToolbarContent(
             initialPageBackgroundType = uiState.backgroundType,
             initialPageBackground = uiState.backgroundPath,
             initialPageNumberInPdf = uiState.backgroundPageNumber,
-            notebookId = uiState.notebookId,
-            pageNumberInBook = uiState.currentPageNumber,
+            notebookId = uiState.location?.notebookId,
+            pageNumberInBook = uiState.location?.index ?: 0,
             onChange = { type, path -> onAction(ToolbarAction.BackgroundChanged(type, path)) },
             onClose = { onAction(ToolbarAction.ToggleBackgroundSelector(false)) }
         )
@@ -180,8 +181,7 @@ fun ToolbarPreview() {
         pen = Pen.BALLPEN,
         penPresetId = ToolbarPen.DEFAULT_PENS.first().id,
         penSettings = ToolbarPen.defaultPenSettings,
-        pageNumberInfo = "3/12",
-        notebookId = "dummy_book"
+        location = PageLocation("dummy_page", "dummy_book", index = 2, count = 12),
     )
 
     ToolbarContent(

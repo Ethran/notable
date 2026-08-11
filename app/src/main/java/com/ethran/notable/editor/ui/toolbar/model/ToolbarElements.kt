@@ -10,6 +10,7 @@ import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
+import compose.icons.feathericons.Columns
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.RefreshCcw
 
@@ -82,12 +83,25 @@ object ToolbarElements {
             contentDescription = "redo",
             action = ToolbarAction.Redo,
         ),
+        // Shown for every document, not only notebook pages. It began as a page counter, but it
+        // is now the only way to open the picker for *this* pane — so hiding it on a quick page
+        // left that pane with no way to change what it shows.
         CustomElement(
             id = ToolbarElementId.PAGE_NAV,
             icon = null,
-            contentDescription = "page navigation",
-            visibleWhen = { state, _ -> state.notebookId != null },
+            contentDescription = "choose this pane's page",
+            visibleWhen = { state, _ -> state.location != null },
             kind = CustomKind.PAGE_NAV,
+        ),
+        // Splitting opens the page picker rather than toggling straight into two panes: which note
+        // goes beside this one is the point of the action. Closing needs no prompt, so the same
+        // button toggles back.
+        ActionElement(
+            id = ToolbarElementId.SPLIT,
+            icon = IconRef.Vector(FeatherIcons.Columns),
+            contentDescription = "split view",
+            selectedWhen = { state -> state.isSplit },
+            action = ToolbarAction.ToggleSplit,
         ),
         ActionElement(
             id = ToolbarElementId.HOME,

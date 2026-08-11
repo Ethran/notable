@@ -101,7 +101,7 @@ class EditorUnsupportedConcurrentChangeTests {
             // ViewModel's `withContext(Dispatchers.Main.immediate) { selectionState.reset() }`.
             android.util.Log.i("EditorTest", "Awaiting toolbar page change...")
             val pageChanged = waitForCondition(15_000) {
-                viewModel.toolbarState.value.pageId == seeded.pageIds[1]
+                viewModel.toolbarState.value.location?.pageId == seeded.pageIds[1]
             }
             assertTrue("Toolbar page did not change to the next page in time", pageChanged)
 

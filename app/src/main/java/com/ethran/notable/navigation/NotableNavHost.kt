@@ -1,5 +1,7 @@
 package com.ethran.notable.navigation
 
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
@@ -96,7 +98,13 @@ fun NotableNavHost(
             ) { backStackEntry ->
                 val bookId = backStackEntry.arguments?.getString(EditorDestination.BOOK_ID_ARG)
 
-                val currentPageId = appNavigator.resolveAndSyncPageId(backStackEntry)
+                // Read once per back-stack entry, so a page change reported back through
+                // onPageChange cannot return as a changed seed. Navigating to another page pushes
+                // a *new* entry, which is a new editor session and re-reads this.
+                val currentPageId = remember(backStackEntry) {
+                    appNavigator.initialPageId(backStackEntry)
+                }
+                LaunchedEffect(backStackEntry) { appNavigator.onEditorOpened(currentPageId) }
 
                 EditorView(
                     goToLibrary = {appNavigator.goToLibrary(it)},

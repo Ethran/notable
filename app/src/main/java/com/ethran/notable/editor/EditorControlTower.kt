@@ -32,14 +32,18 @@ import java.util.UUID
 
 class EditorControlTower(
     private val scope: CoroutineScope,
-    val page: PageView,
-    private var history: History,
+    private val paneGroup: PaneGroup,
     private val viewModel: EditorViewModel,
     private val clipboardStore: ClipboardStore,
 ) : GestureActions {
+    // Undo, redo, paste and scrolling must act on the pane the user is looking at, so these follow
+    // focus rather than being captured at construction.
+    val page: PageView get() = paneGroup.active.page
+    private val history: History get() = paneGroup.active.history
+
     private var scrollInProgress = Mutex()
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
-    private var changePageObserverJob: Job? = null
+    private var changePageObserverJobs = mutableListOf<Job>()
 
     // Accumulated, not-yet-rendered scroll delta in screen coordinates. Input events add
     // into this; a single consumer coroutine drains and renders it. StateFlow conflation
@@ -48,31 +52,55 @@ class EditorControlTower(
     private val pendingScroll = MutableStateFlow(Offset.Zero)
     private var scrollConsumerJob: Job? = null
 
+    /**
+     * Re-bind the per-pane observers after the pane set changes.
+     *
+     * The control tower is built once and outlives a split now — it used to be rebuilt along with
+     * the canvas, which destroyed the surface. So the observers have to be rebound explicitly:
+     * without this, a pane added by splitting has nothing collecting its `changePage`, and a page
+     * chosen for it silently never loads.
+     */
+    fun rebindPaneObservers() {
+        changePageObserverJobs.forEach { it.cancel() }
+        changePageObserverJobs.clear()
+        registerObservers()
+    }
+
     fun registerObservers() {
         startScrollConsumer()
-        if (changePageObserverJob?.isActive == true) return
+        if (changePageObserverJobs.any { it.isActive }) return
 
-        changePageObserverJob = scope.launch {
-            CanvasEventBus.changePage.collect { pageId ->
-                logEditorControlTower.d("Change to page $pageId")
+        // One observer per pane. Registering a single one captured whichever pane was active at
+        // the time, so a page picked for the other pane was delivered to the wrong bus.
+        changePageObserverJobs = paneGroup.panes.mapIndexed { index, pane ->
+            scope.launch {
+                pane.events.changePage.collect { pageId ->
+                    logEditorControlTower.d(
+                        "Change to page $pageId in pane $index (${pane.page.currentPageId.take(8)}), " +
+                            "active=${pane === paneGroup.active}"
+                    )
 
-                // Switch to Main thread for Compose state mutations
-                withContext(Dispatchers.Main) {
-                    viewModel.changePage(pageId)
-                    history.cleanHistory()
+                    // Load into the pane whose bus this arrived on — QuickNav emits to the active
+                    // pane, so this is the pane the user was looking at when they chose.
+                    pane.page.changePage(pageId, reason = "bus:pane$index")
+
+                    // Switch to Main thread for Compose state mutations
+                    withContext(Dispatchers.Main) {
+                        // toolbarState tracks the *active* pane's page; only update it when the
+                        // change landed there, or the toolbar would follow the background pane.
+                        if (pane === paneGroup.active) viewModel.changePage(pageId)
+                        pane.history.cleanHistory()
+                    }
+                    refreshScreen()
                 }
-                // no need for this, we are listening for change of current page,
-                // in EditorView
-//                page.changePage(pageId)
-                refreshScreen()
             }
-        }
+        }.toMutableList()
     }
 
     // TODO: remove it, change to proper solution
     fun unregisterObservers() {
-        changePageObserverJob?.cancel()
-        changePageObserverJob = null
+        changePageObserverJobs.forEach { it.cancel() }
+        changePageObserverJobs.clear()
         scrollConsumerJob?.cancel()
         scrollConsumerJob = null
     }
@@ -155,7 +183,13 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Undo called")
             history.undo()
-//            CanvasEventBus.refreshUi.emit(Unit)
+            // History emits refreshUi on the acting page's own bus and nothing repaints as a
+            // result — the trace shows no canvas refresh after an undo.
+            //
+            // NOT refreshUiImmediately: that collector skips when scroll and zoom are unchanged,
+            // which is exactly the case for an undo, so the refresh would be dropped. forceUpdate
+            // redraws the pane's bitmap from the document and then pushes the surface.
+            page.events.forceUpdate.emit(null)
         }
     }
 
@@ -163,7 +197,8 @@ class EditorControlTower(
         scope.launch {
             logEditorControlTower.i("Redo called")
             history.redo()
-//            CanvasEventBus.refreshUi.emit(Unit)
+            page.events.forceUpdate.emit(null)
+//            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -222,7 +257,7 @@ class EditorControlTower(
     fun applySelectionDisplace() {
         viewModel.selectionState.applySelectionDisplaceAndCommit(page, history)
         scope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -230,7 +265,7 @@ class EditorControlTower(
         viewModel.selectionState.deleteSelectionAndCommit(page, history)
         setIsDrawing(true)
         scope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -241,7 +276,7 @@ class EditorControlTower(
             viewModel.selectionState.resizeStrokes(scale, scope, page)
         // Emit a refresh signal to update UI
         scope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            page.events.refreshUi.emit(Unit)
         }
     }
 
@@ -320,13 +355,13 @@ class EditorControlTower(
         // the rectangle selects nothing.
         viewModel.selectionState.holdRefresh()
         scope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.emit(rect)
+            page.events.rectangleToSelectByGesture.emit(rect)
         }
     }
 
     override fun redrawCanvas() {
         scope.launch {
-            CanvasEventBus.forceUpdate.emit(null)
+            page.events.forceUpdate.emit(null)
         }
     }
 }

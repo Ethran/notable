@@ -143,7 +143,7 @@ fun selectImagesAndStrokes(
         ignoredStrokeIds = strokesToSelect.map { it.id })
 
     scope.launch {
-        CanvasEventBus.refreshUi.emit(Unit)
+        page.events.refreshUi.emit(Unit)
     }
 }
 

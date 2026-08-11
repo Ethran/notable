@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.ui.toolbar
 
+import com.ethran.notable.editor.state.PageLocation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -80,6 +81,29 @@ private fun ToolbarMenuContent(
             onAction(ToolbarAction.NavigateToLibrary)
             onAction(ToolbarAction.ToggleMenu)
         }
+
+        // Split view. Also a pinned toolbar button, but a user with a customised layout already
+        // persisted will not pick up a new default element — so the menu is the path that reaches
+        // everyone.
+        MenuItem(
+            stringResource(
+                if (uiState.isSplit) R.string.split_view_close else R.string.split_view_open
+            )
+        ) {
+            onAction(ToolbarAction.ToggleSplit)
+            onAction(ToolbarAction.ToggleMenu)
+        }
+
+        // The full-screen page grid. It used to be what the page counter opened, but navigating
+        // there replaces the whole editor and both panes; the counter now opens the in-editor
+        // picker instead. The grid is still the right tool for reordering and bulk work, so it
+        // keeps an entry point here.
+        if (uiState.location?.isInNotebook == true) {
+            MenuItem(stringResource(R.string.page_picker_all_pages)) {
+                onAction(ToolbarAction.NavigateToPages)
+                onAction(ToolbarAction.ToggleMenu)
+            }
+        }
         DividerCentered()
 
         // Page exports
@@ -102,7 +126,7 @@ private fun ToolbarMenuContent(
         DividerCentered()
 
         // Book exports
-        if (uiState.notebookId != null) {
+        if (uiState.location?.isInNotebook == true) {
             MenuItem(stringResource(R.string.export_book_to, "PDF")) {
                 onAction(ToolbarAction.ExportBook(ExportFormat.PDF))
                 onAction(ToolbarAction.ToggleMenu)
@@ -171,7 +195,7 @@ fun ToolbarMenuPreview() {
     ToolbarMenuContent(
         uiState = ToolbarUiState(
             isMenuOpen = true,
-            notebookId = "book1",
+            location = PageLocation("page1", "book1", index = 0, count = 3),
             mode = Mode.Draw,
             pen = Pen.BALLPEN,
             penSettings = ToolbarPen.defaultPenSettings

@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.state.Mode
+import com.ethran.notable.editor.Pane
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.utils.DeviceCompat
@@ -47,12 +48,19 @@ import kotlin.math.min
 
 class OnyxInputHandler(
     private val drawCanvas: DrawCanvas,
-    private val page: PageView,
     private val viewModel: EditorViewModel,
-    private val history: History,
     private val coroutineScope: CoroutineScope,
-    private val strokeHistoryBatch: MutableList<String>,
 ) {
+    // Derived from the active pane rather than captured at construction: a stroke routed to
+    // another pane changes which page, history and stroke batch these refer to.
+    //
+    // Reached via activePane rather than drawCanvas.page/history on purpose — going through the
+    // shorthand once produced `get() = page`, a property returning itself, which is a
+    // StackOverflowError on the first pen stroke.
+    private val page: PageView get() = drawCanvas.activePane.page
+    private val history: History get() = drawCanvas.activePane.history
+    private val strokeHistoryBatch: MutableList<String> get() = drawCanvas.activePane.strokeHistoryBatch
+
     var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
     private val log = ShipBook.getLogger("DrawCanvas")
@@ -216,17 +224,62 @@ class OnyxInputHandler(
             setupSurface(
                 drawCanvas,
                 touchHelper,
-                toolbarHeight
+                toolbarHeight,
+                // Only the active pane accepts ink. Limiting the firmware to that one rect means
+                // the back pane never even shows wet ink, so there is nothing to clean up when a
+                // stroke strays across the divider.
+                listOf(drawCanvas.activePane.screenRect),
             )
             // setupSurface resets the framework stroke style to firmware defaults. Re-send the
             // pen style here, inside the same coroutine and after the surface is armed: a caller
             // that invokes updatePenAndStroke() right after updateActiveSurface() would otherwise
             // race this launch and have its style overwritten.
             updatePenAndStroke()
+
+            // Re-arming toggles closeRawDrawing()/openRawDrawing(), which resets the EPD layer and
+            // drops whatever was on the panel — including a stroke committed while this coroutine
+            // was in flight. Repaint here, once the surface is armed, rather than at the call site:
+            // a caller repainting before this runs has its work wiped by the reset.
+            //
+            // refreshUi, not drawCanvasToView: setRawDrawingEnabled(true) freezes the display, so
+            // painting the surface alone updates pixels the panel never shows. refreshUi also
+            // resets the freeze. The trace for a stroke that stayed invisible showed a correct
+            // repaint with the correct bitmap — the pixels were right, the panel was just frozen.
+            drawCanvas.refreshManager.refreshUi(null)
         }
     }
+    /**
+     * Pane-local screen coordinates to surface coordinates.
+     *
+     * `PageView.toScreenCoordinates` is relative to the pane's own bitmap, but the refresh paths
+     * lock and repaint regions of the shared surface. The two spaces coincide only for a pane at
+     * the surface origin, which is why this was invisible with one pane.
+     */
+    private fun Rect.paneToSurface(pane: Pane): Rect =
+        Rect(this).apply { offset(pane.screenRect.left, pane.screenRect.top) }
+
     private fun onRawDrawingList(plist: TouchPointList) {
         if (touchHelper == null) return
+
+        // Only the active pane accepts ink; focus is changed deliberately, by a finger tap.
+        //
+        // Routing against the active pane alone is what enforces that. Limiting the firmware's
+        // rects is not sufficient: it clips the live preview but still reports every point, so an
+        // inactive pane would otherwise capture invisible strokes that surface later when
+        // something repaints — ink appearing in a pane the user was told is read-only.
+        //
+        // The pen deliberately does NOT move focus. It cannot be intercepted at the view layer
+        // anyway (while raw drawing is armed the firmware consumes stylus input, so
+        // dispatchTouchEvent never sees a pen-down — confirmed by trace), and inferring intent from
+        // ink means a brush against the wrong pane both switches panes and marks the document.
+        val routed =
+            routeStrokeToPane(plist.points, listOf(drawCanvas.activePane), { it.x }, { it.y })
+                ?: return
+        val pane = routed.pane
+        val page = pane.page
+        val origin = pane.origin
+        val points = routed.points
+
         val currentLastStrokeEndTime = lastStrokeEndTime
         lastStrokeEndTime = System.currentTimeMillis()
         val startTime = System.currentTimeMillis()
@@ -236,10 +289,10 @@ class OnyxInputHandler(
             Mode.Select -> {
                 thread {
                     val points =
-                        copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+                        copyInputToSimplePointF(points, page.scroll, page.zoomLevel.value, origin)
                     handleSelect(
                         scope = coroutineScope,
-                        page = drawCanvas.page,
+                        page = page,
                         viewModel = viewModel,
                         points = points
                     )
@@ -263,14 +316,15 @@ class OnyxInputHandler(
 
 
                         val (startPoint, endPoint) = getModifiedStrokeEndpoints(
-                            plist.points,
+                            points,
                             page.scroll,
-                            page.zoomLevel.value
+                            page.zoomLevel.value,
+                            origin,
                         )
                         val linePoints = transformToLine(startPoint, endPoint)
 
                         handleDraw(
-                            drawCanvas.page,
+                            page,
                             strokeHistoryBatch,
                             toolbarState.activePenSetting.strokeSize,
                             toolbarState.activePenSetting.color,
@@ -286,7 +340,7 @@ class OnyxInputHandler(
                                 max(startPoint.y, endPoint.y).toInt()
                             )
                             drawCanvas.refreshManager.refreshUi(dirtyRect)
-                            CanvasEventBus.commitHistorySignal.emit(Unit)
+                            page.events.commitHistorySignal.emit(Unit)
                         }
                     }
 
@@ -300,8 +354,8 @@ class OnyxInputHandler(
                         log.d("lock obtained in ${lock - startTime} ms")
 
                         val scaledPoints =
-                            copyInput(plist.points, page.scroll, page.zoomLevel.value)
-                        val firstPointTime = plist.points.first().timestamp
+                            copyInput(points, page.scroll, page.zoomLevel.value, origin)
+                        val firstPointTime = points.first().timestamp
                         val erasedByScribbleDirtyRect = handleScribbleToErase(
                             page,
                             scaledPoints,
@@ -316,7 +370,7 @@ class OnyxInputHandler(
                             log.d("Drawing...")
                             // draw the stroke
                             handleDraw(
-                                drawCanvas.page,
+                                page,
                                 strokeHistoryBatch,
                                 toolbarState.activePenSetting.strokeSize,
                                 toolbarState.activePenSetting.color,
@@ -332,21 +386,22 @@ class OnyxInputHandler(
                             // See docs/onyx-sdk/onyx-scribble-to-erase.md.
                             val padding = 10
                             val trackBox =
-                                calculateBoundingBox(plist.points) { Pair(it.x, it.y) }.toRect()
+                                calculateBoundingBox(points) { Pair(it.x, it.y) }.toRect()
                             val dirty = Rect(
                                 trackBox.left - padding,
                                 trackBox.top - padding,
                                 trackBox.right + padding,
                                 trackBox.bottom + padding
                             )
-                            erasedByScribbleDirtyRect.let { dirty.union(it) }
+                            // Pane-local, like handleErase's result — lift it to the surface.
+                            erasedByScribbleDirtyRect.let { dirty.union(it.paneToSurface(pane)) }
                             // Use areaErase=true for the longer 500ms settle (scribble is a large gesture).
                             drawCanvas.refreshManager.commitErase(dirty, areaErase = true)
                         }
 
                     }
                     coroutineScope.launch(Dispatchers.Default) {
-                        CanvasEventBus.commitHistorySignal.emit(Unit)
+                        page.events.commitHistorySignal.emit(Unit)
                     }
                 }
             }
@@ -357,10 +412,20 @@ class OnyxInputHandler(
         isErasing = false
 
         if (plist == null) return
-        val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+        // Erasing routes exactly like drawing: the eraser runs on a separate firmware channel but
+        // respects the same limit rects, and a cross-pane drag arrives as one callback.
+        // Same rule as drawing: only the active pane is editable.
+        val routed =
+            routeStrokeToPane(plist.points, listOf(drawCanvas.activePane), { it.x }, { it.y })
+                ?: return
+        val page = routed.pane.page
+        val points =
+            copyInputToSimplePointF(routed.points, page.scroll, page.zoomLevel.value, routed.pane.origin)
 
         val padding = 10
-        val boundingBox = (calculateBoundingBox(plist.points) { Pair(it.x, it.y) }).toRect()
+        // Raw firmware points: this rect covers the eraser's live track on the *surface*, so it
+        // must not be built from the page-coordinate conversion above.
+        val boundingBox = (calculateBoundingBox(routed.points) { Pair(it.x, it.y) }).toRect()
         val strokeArea = Rect(
             boundingBox.left - padding,
             boundingBox.top - padding,
@@ -368,7 +433,7 @@ class OnyxInputHandler(
             boundingBox.bottom + padding
         )
         val zoneEffected = handleErase(
-            drawCanvas.page,
+            page,
             history,
             points,
             eraser = toolbarState.eraser
@@ -381,7 +446,8 @@ class OnyxInputHandler(
         // indicator + strokes disappear together (no double refresh, no gap to draw into).
         // See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
         val dirty = Rect(strokeArea)
-        if (zoneEffected != null) dirty.union(zoneEffected)
+        // handleErase reports pane-local coordinates; the commit repaints the shared surface.
+        if (zoneEffected != null) dirty.union(zoneEffected.paneToSurface(routed.pane))
         // Area (lasso/select) erase needs the longer 500ms settle the official app uses; the
         // pen/marker erase uses the 150ms stroke settle.
         drawCanvas.refreshManager.commitErase(dirty, areaErase = toolbarState.eraser == Eraser.SELECT)

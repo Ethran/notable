@@ -136,7 +136,22 @@ fun onSurfaceDestroy(view: View, touchHelper: TouchHelper?) {
 }
 
 
-fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
+/**
+ * Arms raw drawing over [paneRects] — one limit rect per pane.
+ *
+ * The firmware honours multiple limit rects and genuinely clips the live preview to each, so the
+ * gaps between panes reject ink. It does NOT split a stroke that crosses them: the drag arrives as
+ * one callback spanning both regions, which is why strokes are partitioned in software. Verified on
+ * a BOOX Go 10.3, firmware 2026-05-12_4.2-rel.
+ *
+ * Pass an empty list to use the whole view, which is what a single full-surface pane amounts to.
+ */
+fun setupSurface(
+    view: View,
+    touchHelper: TouchHelper?,
+    toolbarHeight: Int,
+    paneRects: List<Rect> = emptyList(),
+) {
     if (touchHelper == null) return
     // Takes at least 50ms on Note 4c,
     // and I don't think that we need it immediately
@@ -163,7 +178,14 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
         else
             Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
 
-    touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
+    // Intersect each pane with the toolbar-adjusted area so a pane can never arm ink under chrome.
+    val limitRects = paneRects
+        .map { Rect(it) }
+        .filter { it.intersect(limitRect) }
+        .ifEmpty { listOf(limitRect) }
+
+    log.i("Setup editable surface with ${limitRects.size} limit rect(s): $limitRects")
+    touchHelper.setLimitRect(limitRects.toMutableList()).setExcludeRect(listOf(excludeRect))
         .openRawDrawing()
 
     touchHelper.setRawDrawingEnabled(true)

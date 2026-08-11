@@ -3,6 +3,7 @@ package com.ethran.notable.editor.canvas
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.editor.EditorViewModel
+import com.ethran.notable.editor.Pane
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
@@ -30,6 +31,7 @@ import kotlinx.coroutines.withContext
 class CanvasObserverRegistry(
     private val coroutineScope: CoroutineScope,
     private val drawCanvas: DrawCanvas,
+    private val pane: Pane,
     private val page: PageView,
     private val viewModel: EditorViewModel,
     private val history: History,
@@ -37,6 +39,15 @@ class CanvasObserverRegistry(
     private val refreshManager: CanvasRefreshManager
 ) {
     private val log = ShipBook.getLogger("CanvasObservers")
+
+    /**
+     * This pane's region of the shared surface.
+     *
+     * `page.viewWidth/viewHeight` describe the pane's own bitmap and start at (0,0). Refresh calls
+     * lock and repaint regions of the *surface*, so handing them a pane-local rect repaints
+     * whichever pane happens to sit at those coordinates — for a right-hand pane, the left one.
+     */
+    private fun paneSurfaceRect(): Rect = Rect(pane.screenRect)
     private val pageDataManager = page.pageDataManager
 
     private var registered = false
@@ -48,13 +59,39 @@ class CanvasObserverRegistry(
     private val observerJob = SupervisorJob(coroutineScope.coroutineContext[Job])
     private val observerScope = CoroutineScope(coroutineScope.coroutineContext + observerJob)
 
-    companion object {
-        // The observer job of the currently active registry. A newly registering registry
-        // cancels the previous one, guaranteeing exactly one live observer set even if an old
-        // DrawCanvas instance leaked.
-        private var activeObserverJob: Job? = null
+    /**
+     * Stop this pane's observers.
+     *
+     * Needed because a pane can go away without the canvas going with it — closing a split removes
+     * a pane from a `DrawCanvas` that carries on living.
+     */
+    fun cancelAll() {
+        if (!registered) return
+        registered = false
+        observerJob.cancel()
     }
 
+    /**
+     * Start this pane's observers.
+     *
+     * ### There is deliberately no global registry of live observer jobs
+     *
+     * There were two, and both were wrong. First a single `activeObserverJob` cancelled by whoever
+     * registered next — correct with one editor view, and wrong the moment there were two, since
+     * registering the second pane killed the first pane's observers. Then a map keyed by *page id*,
+     * which looked right and was not: the key is captured when a registry starts, but a pane's page
+     * changes underneath it. A pane that registered on page A and later moved to page B still owned
+     * the entry for A, so opening a *different* pane on A cancelled the still-live first pane.
+     *
+     * That is exactly what a device trace caught: after an unsplit, the surviving pane emitted
+     * `forceUpdate` with nothing subscribed, the emit was dropped (a zero-buffer `MutableSharedFlow`
+     * — CLAUDE.md failure mode 2), and the page came up blank.
+     *
+     * The guard existed to stop a registry leaking when the canvas was rebuilt. The canvas is no
+     * longer rebuilt, and `DrawCanvas.syncPanes` owns one registry per *pane*, creating and
+     * cancelling them as the pane set changes. Ownership by the thing whose lifetime it actually
+     * follows needs no global index — and cannot cancel a pane that is still on screen.
+     */
     fun registerAll() {
         // Guard against double registration on the same instance.
         if (registered) {
@@ -62,9 +99,6 @@ class CanvasObserverRegistry(
             return
         }
         registered = true
-        // Cancel observers from any prior (possibly leaked) registry so refreshes aren't doubled.
-        activeObserverJob?.cancel()
-        activeObserverJob = observerJob
         // NOTE: Be careful with the dispatchers, choose them wisely.
 
         ImageHandler(drawCanvas.context, page, viewModel, coroutineScope).observeImageUri()
@@ -113,8 +147,7 @@ class CanvasObserverRegistry(
                 lastImmediateScroll = scroll
                 lastImmediateZoom = zoom
                 log.v("Refreshing UI!")
-                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                refreshManager.refreshUi(zoneToRedraw)
+                refreshManager.refreshUi(paneSurfaceRect())
             }
         }
     }
@@ -124,9 +157,14 @@ class CanvasObserverRegistry(
         // given null it will redraw whole page
         // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
         observerScope.launch(Dispatchers.Main) {
-            CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
+            page.events.forceUpdate.collect { dirtyRectangle ->
                 // On loading, make sure that the loaded strokes are visible to it.
-                log.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
+                log.v(
+                    "Force update page=${page.currentPageId.take(8)} zone=$dirtyRectangle " +
+                        "strokes=${page.strokes.size} bmp=${page.windowedBitmap.hashCode()} " +
+                        "${page.windowedBitmap.width}x${page.windowedBitmap.height} " +
+                        "paneRect=${pane.screenRect}"
+                )
                 val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 launch(Dispatchers.Default) {
@@ -141,7 +179,7 @@ class CanvasObserverRegistry(
 
     private fun observeRefreshUi() {
         observerScope.launch(Dispatchers.Default) {
-            CanvasEventBus.refreshUi.collect {
+            page.events.refreshUi.collect {
                 log.v("Refreshing UI!")
                 refreshManager.refreshUiSuspend()
             }
@@ -184,7 +222,7 @@ class CanvasObserverRegistry(
 
     private fun observeSelectionGesture() {
         observerScope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.collect {
+            page.events.rectangleToSelectByGesture.collect {
                 log.v("Area to Select (screen): $it")
                 selectRectangle(page, drawCanvas.coroutineScope, viewModel, it)
             }
@@ -193,7 +231,7 @@ class CanvasObserverRegistry(
 
     private fun observeClearPage() {
         observerScope.launch {
-            CanvasEventBus.clearPageSignal.collect {
+            page.events.clearPageSignal.collect {
                 log.v("Clear page signal!")
                 cleanAllStrokes(page, history)
                 refreshManager.refreshUiSuspend()
@@ -203,7 +241,7 @@ class CanvasObserverRegistry(
 
     private fun observeRestartAfterConfChange() {
         observerScope.launch {
-            CanvasEventBus.reinitSignal.collect {
+            page.events.reinitSignal.collect {
                 log.v("Configuration changed!")
                 drawCanvas.init()
                 drawCanvas.refreshManager.drawCanvasToView(null)
@@ -213,7 +251,7 @@ class CanvasObserverRegistry(
 
     private fun observeReloadFromDb() {
         observerScope.launch {
-            CanvasEventBus.reloadFromDb.collect {
+            page.events.reloadFromDb.collect {
                 page.refreshCurrentPage()
                 refreshManager.refreshUiSuspend()
             }
@@ -309,15 +347,15 @@ class CanvasObserverRegistry(
     private fun observeHistory() {
         observerScope.launch {
             // After 500ms add to history strokes
-            CanvasEventBus.commitHistorySignal.debounce(500).collect {
+            page.events.commitHistorySignal.debounce(500).collect {
                 log.v("Commiting to history")
                 drawCanvas.commitToHistory()
             }
         }
         observerScope.launch {
-            CanvasEventBus.commitHistorySignalImmediately.collect {
+            page.events.commitHistorySignalImmediately.collect {
                 drawCanvas.commitToHistory()
-                CanvasEventBus.commitCompletion.complete(Unit)
+                page.events.commitCompletion.complete(Unit)
             }
         }
     }
@@ -325,7 +363,7 @@ class CanvasObserverRegistry(
 
     private fun observeSaveCurrent() {
         observerScope.launch {
-            CanvasEventBus.saveCurrent.collect {
+            page.events.saveCurrent.collect {
                 // Push current bitmap to persist layer so preview has something to load
                 pageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
                 pageDataManager.saveTopic.tryEmit(page.currentPageId)
@@ -336,8 +374,8 @@ class CanvasObserverRegistry(
     @OptIn(FlowPreview::class)
     private fun observeQuickNav() {
         observerScope.launch {
-            CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
-                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — scrub already ended
+            page.events.previewPage.debounce(50).collectLatest { pageId ->
+                if (!page.events.isScrubbing.value) return@collectLatest // dropped — scrub already ended
                 val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
                 val pageUpdatedAtMs = pageDataManager.getPageUpdatedAt(pageId)
 
@@ -358,8 +396,8 @@ class CanvasObserverRegistry(
                     return@collectLatest
                 }
 
-                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — race lost
+                val zoneToRedraw = paneSurfaceRect()
+                if (!page.events.isScrubbing.value) return@collectLatest // dropped — race lost
                 log.d("QuickNav restoreCanvas: page=$pageId, bitmap=${previewBitmap.hashCode()}")
                 drawCanvas.refreshManager.restoreCanvas(zoneToRedraw, previewBitmap)
             }
@@ -368,9 +406,9 @@ class CanvasObserverRegistry(
 
     private fun observeRestoreCanvas() {
         observerScope.launch {
-            CanvasEventBus.restoreCanvas.collect {
+            page.events.restoreCanvas.collect {
                 log.d("Restoring canvas")
-                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
+                val zoneToRedraw = paneSurfaceRect()
                 drawCanvas.refreshManager.restoreCanvas(zoneToRedraw)
                 log.v("Restored canvas")
             }

@@ -1,5 +1,18 @@
 package com.ethran.notable.ui.components
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.Text
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.font.FontWeight
+import com.ethran.notable.data.db.Notebook
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.size
+import compose.icons.FeatherIcons
+import compose.icons.feathericons.Plus
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +47,7 @@ import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.viewmodels.QuickNavUiState
+import com.ethran.notable.ui.viewmodels.ScrubberState
 import com.ethran.notable.ui.viewmodels.QuickNavViewModel
 import dagger.hilt.EntryPoint
 import dagger.hilt.EntryPoints
@@ -105,6 +119,11 @@ fun QuickNav(
     )
 }
 
+/**
+ * @param header Optional row rendered at the top of the sheet, above the breadcrumb. The
+ *   editor-hosted picker puts its target-pane selector here; the app-level QuickNav has no panes
+ *   to choose between and leaves it empty.
+ */
 @Composable
 fun QuickNavContent(
     appRepository: AppRepository?,
@@ -118,6 +137,26 @@ fun QuickNavContent(
     onScrubEnd: (Int) -> Unit,
     onReturnClick: () -> Unit,
     goToPage: (String) -> Unit,
+    header: (@Composable () -> Unit)? = null,
+    showReturn: Boolean = true,
+    showScrubber: Boolean = true,
+    /**
+     * Notebooks offered as destinations, and what to do when one is chosen. Null hides the row.
+     *
+     * The in-editor picker needs this: without it the only way to reach a *different* document was
+     * the breadcrumb into the library, which navigates and rebuilds the editor — so a second pane
+     * could never be created from the picker at all.
+     */
+    notebooks: List<Notebook> = emptyList(),
+    onSelectNotebook: ((Notebook) -> Unit)? = null,
+    /**
+     * Create a new document and open it in the target. Null hides the affordance.
+     *
+     * Both kinds are offered, and both from every context. Which document types you can make
+     * should not depend on which one you happen to have open.
+     */
+    onCreateQuickPage: (() -> Unit)? = null,
+    onCreateNotebook: (() -> Unit)? = null,
 ) {
     Column(
         Modifier
@@ -147,18 +186,28 @@ fun QuickNavContent(
                 .padding(10.dp)
         ) {
 
+            header?.invoke()
+
             // Header row: Breadcrumb on the left, Favorite toggle on the right
             QuickNavHeaderRow(
                 folders = uiState.breadcrumbFolders,
                 isFavorite = uiState.isCurrentPageFavorite,
                 canToggleFavorite = uiState.currentPageId != null,
-                canGeneratePreviews = uiState.bookPageIds.isNotEmpty(),
+                canGeneratePreviews = uiState.scrubber != null,
                 onNavigateBreadcrumb = onNavigateBreadcrumb,
                 onToggleFavorite = onToggleFavorite,
                 onGenerateBookPreviews = onGenerateBookPreviews
             )
 
-            if (appRepository != null) {
+            // Nothing below is drawn until the state describes the *current* page.
+            //
+            // This ViewModel is scoped to the nav entry and outlives the sheet, so reopening it
+            // renders the previous session's lists for as long as the reload takes — a trace showed
+            // 76ms of the wrong notebook and the wrong page count. Cheaper on e-ink to paint the
+            // rows once, correct, than to paint them wrong and then correct them.
+            if (uiState.isLoading) return@Column
+
+            if (appRepository != null && uiState.favoritePages.isNotEmpty()) {
                 ShowPagesRow(
                     appRepository = appRepository,
                     pages = uiState.favoritePages,
@@ -168,22 +217,120 @@ fun QuickNavContent(
                 )
             }
 
+            // Quick pages and notebooks are rendered *differently*, not just labelled
+            // differently: page thumbnails versus titled chips. A quick page and a notebook are
+            // different kinds of thing, and a row of lookalike thumbnails would make you read a
+            // caption to tell which is which every time.
+            if (appRepository != null && onCreateQuickPage != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                ShowPagesRow(
+                    appRepository = appRepository,
+                    pages = uiState.quickPages,
+                    currentPageId = uiState.currentPageId,
+                    title = "Quick pages",
+                    onSelectPage = { goToPage(it) },
+                    showAddQuickPage = true,
+                    onCreateNewQuickPage = onCreateQuickPage,
+                )
+            }
+
+            if (onSelectNotebook != null) {
+                NotebookRow(
+                    notebooks = notebooks,
+                    onSelect = onSelectNotebook,
+                    onCreate = onCreateNotebook,
+                )
+            }
+
             // Scrubber block only renders if we have a valid book
-            if (uiState.bookPageCount >= 2) {
+            val scrubber = uiState.scrubber
+            if (showScrubber && scrubber != null) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth()) {
                     PageHorizontalSliderWithReturn(
-                        pageCount = uiState.bookPageCount,
-                        currentIndex = uiState.currentBookIndex,
-                        favIndexes = uiState.favoriteIndexesInBook,
+                        pageCount = scrubber.count,
+                        currentIndex = scrubber.index,
+                        favIndexes = scrubber.favouriteIndexes,
                         onDragStart = onScrubStart,
                         onPreviewIndexChanged = onScrubPreview,
                         onDragEnd = onScrubEnd,
-                        onReturnClick = onReturnClick
+                        onReturnClick = onReturnClick,
+                        showReturn = showReturn
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Notebooks to open, as a scrolling row of titles.
+ *
+ * Titles rather than thumbnails: this is a list of *documents*, and a page preview of whichever
+ * page happens to be open says little about which notebook it is. It is also far cheaper to
+ * repaint on e-ink than a row of bitmaps.
+ */
+@Composable
+private fun NotebookRow(
+    notebooks: List<Notebook>,
+    onSelect: (Notebook) -> Unit,
+    onCreate: (() -> Unit)? = null,
+) {
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(text = "Notebooks", fontWeight = FontWeight.Light)
+    Spacer(modifier = Modifier.height(6.dp))
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+    ) {
+        // First, and always present, so its position does not shift with the list contents — and
+        // so "create one" is offered in the very case where the list is empty.
+        //
+        // Verb-first, and a plus rather than a book. "New notebook" is the *default title* of a
+        // newly created notebook (see Notebook.title), so a chip labelled that way is
+        // indistinguishable from a real entry — and a book icon reads as "a notebook" rather than
+        // "make one", which is the same confusion twice over.
+        if (onCreate != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .border(1.dp, Color.Gray, RectangleShape)
+                    .noRippleClickable { onCreate() }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Icon(
+                    imageVector = FeatherIcons.Plus,
+                    contentDescription = "Create notebook",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = "Create notebook", color = Color.DarkGray)
+            }
+        }
+
+        if (notebooks.isEmpty() && onCreate == null) {
+            // Says why there is nothing here. An empty gap would read as a failure to load.
+            Text(
+                text = "No other notebook available",
+                fontWeight = FontWeight.Light,
+                color = Color.DarkGray,
+            )
+        }
+
+        notebooks.forEach { notebook ->
+            Text(
+                text = notebook.title,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .border(1.dp, Color.Black, RectangleShape)
+                    .noRippleClickable { onSelect(notebook) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
         }
     }
 }
@@ -240,9 +387,11 @@ fun QuickNavContentPreview() {
             currentPageId = "page1",
             folderId = "folder1",
             isCurrentPageFavorite = true,
-            bookPageCount = 10,
-            currentBookIndex = 4,
-            favoriteIndexesInBook = listOf(0, 4, 9)
+            scrubber = ScrubberState(
+                pageIds = List(10) { "page$it" },
+                index = 4,
+                favouriteIndexes = listOf(0, 4, 9),
+            )
         ),
         onClose = {},
         onNavigateBreadcrumb = {},

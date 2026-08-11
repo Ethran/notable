@@ -118,9 +118,15 @@ fun ToolbarElementView(
                         .padding(horizontal = 10.dp)
                 ) {
                     Text(
-                        text = uiState.pageNumberInfo,
+                        text = uiState.location?.label.orEmpty(),
                         fontWeight = FontWeight.Light,
-                        modifier = Modifier.noRippleClickable { onAction(ToolbarAction.NavigateToPages) },
+                        // Opens the in-editor picker rather than navigating to the full-screen
+                        // grid. Navigating replaced the whole editor, panes and all — a
+                        // discoverable control doing the wrong thing. The full grid is still
+                        // reachable from the toolbar menu.
+                        modifier = Modifier.noRippleClickable {
+                            onAction(ToolbarAction.SetPagePickerOpen(true))
+                        },
                         textAlign = TextAlign.Center
                     )
                 }

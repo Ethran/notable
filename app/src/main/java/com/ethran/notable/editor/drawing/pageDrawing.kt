@@ -17,7 +17,7 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.utils.imageBounds
 import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
@@ -37,7 +37,7 @@ private val pageDrawingLog = ShipBook.getLogger("PageDrawingLog")
  * The drawing process includes:
  * 1. Resolving the [image] URI into a [Bitmap].
  * 2. Creating a software-backed copy of the bitmap for compatibility with the [Canvas].
- * 3. Resetting [CanvasEventBus.addImageByUri] to prevent redundant add events.
+ * 3. Resetting the active view's addImageByUri to prevent redundant add events.
  * 4. Drawing the bitmap into a destination rectangle calculated from the image's position
  *    and dimensions, adjusted by the provided [offset].
  * 5. Logging the outcome of the operation.
@@ -73,7 +73,10 @@ fun drawImage(
         // Convert to software-backed bitmap
         val softwareBitmap = imageBitmap.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, true)
 
-        CanvasEventBus.addImageByUri.value = null
+        // Addressed by the image's own page rather than by focus. Drawing into an inactive pane
+        // would otherwise clear the *focused* pane's pending image — the hazard the previous
+        // comment here predicted once panes existed.
+        PaneRegistry.showing(image.pageId).forEach { it.addImageByUri.value = null }
 
         val rectOnImage = Rect(0, 0, imageBitmap.width, imageBitmap.height)
         val rectOnCanvas = Rect(

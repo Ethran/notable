@@ -22,7 +22,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
-import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.editor.PaneRegistry
 import com.ethran.notable.editor.utils.saveHQPagePreview
 import com.ethran.notable.editor.utils.savePageThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
@@ -213,9 +213,45 @@ class PageDataManager @Inject constructor(
         entry.lastAccessSeq = ++accessSeq
     }
 
-    /** A page is pinned (never evicted) while it is the current page or has an active load. */
+    /**
+     * Pages currently open in a view.
+     *
+     * [currentPage] names only the *foreground* page, so with more than one editor view the others
+     * would be evictable while still on screen — their strokes would vanish from under them under
+     * memory pressure. Views pin themselves via [pinPage] / [unpinPage].
+     *
+     * A concurrent set so [isPinnedLocked] can read it while holding [lock] without taking a second
+     * lock, and so views can pin and unpin without contending on the cache monitor.
+     */
+    /** One pin per open view; more than a few means a pin was not released. */
+    private val MAX_EXPECTED_PINNED_PAGES = 4
+
+    private val pinnedPages: MutableSet<String> =
+        java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
+    /** Pin [pageId] against eviction while a view is showing it. Idempotent. */
+    fun pinPage(pageId: String) {
+        if (pageId.isEmpty()) return
+        pinnedPages.add(pageId)
+        // A pin is released from the view's dispose path. If that is ever missed the page becomes
+        // permanently unevictable, which is invisible until memory runs out — so make the leak
+        // audible instead. There is one pin per open view, and views are few.
+        if (pinnedPages.size > MAX_EXPECTED_PINNED_PAGES) {
+            log.w("Pinned pages = ${pinnedPages.size} ($pinnedPages) — likely a leaked pin")
+        }
+    }
+
+    /** Release a pin taken by [pinPage]. Idempotent. */
+    fun unpinPage(pageId: String) {
+        pinnedPages.remove(pageId)
+    }
+
+    /**
+     * A page is pinned (never evicted) while it is open in a view, is the current page, or has an
+     * active load.
+     */
     private fun isPinnedLocked(pageId: String, entry: PageCacheEntry): Boolean =
-        pageId == currentPage || entry.loadJob?.isActive == true
+        pageId == currentPage || pageId in pinnedPages || entry.loadJob?.isActive == true
 
     /** Distinct background bitmaps, counted once (dedup pool) — the background budget line. */
     private fun backgroundBytesLocked(): Long =
@@ -854,8 +890,22 @@ class PageDataManager @Inject constructor(
         log.i("Refresh current page, background: ${pageFromDb?.background}")
     }
 
-    fun getCachedBitmap(pageId: String): Bitmap? = synchronized(lock) {
-        entries[pageId]?.bitmap?.get()?.takeIf { !it.isRecycled && it.isMutable }
+    /**
+     * A cached window bitmap for [pageId], but only if it was rendered at exactly [width]×[height].
+     *
+     * The size is part of the identity of a rendered page: the same page in a half-width pane and
+     * in a full-width one are different pictures. Handing back a mismatched bitmap left a view
+     * whose canvas was the wrong size, which the caller then had to detect and recreate — arriving
+     * blank. Panes made that reachable, and the workaround was to bar the second pane from the
+     * cache entirely.
+     *
+     * A mismatch is a miss, so the caller renders one and caches it under the same key. Sizes are
+     * few and stable — full width and half width — so this does not thrash.
+     */
+    fun getCachedBitmap(pageId: String, width: Int, height: Int): Bitmap? = synchronized(lock) {
+        entries[pageId]?.bitmap?.get()
+            ?.takeIf { !it.isRecycled && it.isMutable }
+            ?.takeIf { it.width == width && it.height == height }
     }
 
     fun cacheBitmap(pageId: String, bitmap: Bitmap) = synchronized(lock) {
@@ -1062,11 +1112,18 @@ class PageDataManager @Inject constructor(
         appRepository.bookRepository.update(notebook)
     }
 
-    fun setScrollInDb() {
+    fun setScrollInDb() = setScrollInDb(currentPage)
+
+    /**
+     * Keyed variant. The no-arg form writes the foreground page; a view that is not the active one
+     * must name its own page, since [currentPage] is app-wide.
+     */
+    fun setScrollInDb(pageId: String) {
+        if (pageId.isEmpty()) return
         launchDbWrite("scroll") {
             appRepository.pageRepository.updateScroll(
-                currentPage,
-                getPageScroll(currentPage).y.toInt()
+                pageId,
+                getPageScroll(pageId).y.toInt()
             )
         }
     }
@@ -1074,6 +1131,21 @@ class PageDataManager @Inject constructor(
     fun getBackgroundType(): BackgroundType? {
         return pageFromDb?.getBackgroundType()
     }
+
+    /**
+     * The page record for [pageId]. Keyed, unlike [pageFromDb], which is the foreground page only —
+     * a view that is not the active one needs its own record to answer questions about itself.
+     */
+    suspend fun getPageRecord(pageId: String): Page? =
+        appRepository.pageRepository.getById(pageId)
+
+    /** The page after [pageId] in [notebookId], or null if it is the last. */
+    suspend fun getNextPageId(notebookId: String, pageId: String): String? =
+        appRepository.getNextPageIdFromBookAndPage(pageId = pageId, notebookId = notebookId)
+
+    /** Position of [pageId] within [notebookId]. Keyed counterpart to [getCurrentPageNumber]. */
+    suspend fun getPageNumber(notebookId: String, pageId: String): Int =
+        appRepository.getPageNumber(notebookId, pageId)
 
     suspend fun getPageUpdatedAt(pageId: String): Long? {
         return appRepository.pageRepository.getById(pageId)?.updatedAt?.time
@@ -1139,12 +1211,18 @@ class PageDataManager @Inject constructor(
      * Retrieves the cached background for the current page, or a default empty [CachedBackground]
      * if none is linked (prevents null-pointer crashes downstream).
      */
-    fun getCurrentBackground(): CachedBackground {
+    fun getCurrentBackground(): CachedBackground = getBackground(currentPage)
+
+    /**
+     * Keyed variant. Backgrounds are already stored per page (`entries[pageId].backgroundKey`) and
+     * pooled across pages, so this needs no new state — only a page id instead of the app-wide one.
+     */
+    fun getBackground(pageId: String): CachedBackground {
         return synchronized(lock) {
-            val key = entries[currentPage]?.backgroundKey
+            val key = entries[pageId]?.backgroundKey
             val bg = if (key != null) backgroundCache[key] else null
             bg?.let { it.lastAccessSeq = ++bgAccessSeq }
-            log.d("Background for page $currentPage (no. $currentPageNumber): $bg")
+            log.d("Background for page $pageId: $bg")
             bg ?: CachedBackground("", 0, 1.0f)
         }
     }
@@ -1170,8 +1248,13 @@ class PageDataManager @Inject constructor(
                 log.i("Background file(s) changed, invalidating pages: $pageIds")
                 for (pageId in pageIds) {
                     invalidateBackground(pageId)
-                    if (pageId == currentPage) {
-                        CanvasEventBus.forceUpdate.emit(null)
+                    // Addressed by page, not by focus. This used to ask whether the changed page
+                    // was the app-wide "current" one and then refresh whichever pane happened to
+                    // be focused — so a background change to the page in the *other* pane either
+                    // did nothing or repainted the wrong one.
+                    val showing = PaneRegistry.showing(pageId)
+                    showing.forEach { it.forceUpdate.emit(null) }
+                    if (showing.isNotEmpty()) {
                         appEventBus.tryEmit(
                             AppEvent.ActionHint("Background file changed", 4000)
                         )

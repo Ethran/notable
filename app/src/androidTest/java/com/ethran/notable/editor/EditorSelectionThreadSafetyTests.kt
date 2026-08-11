@@ -227,7 +227,7 @@ class EditorSelectionThreadSafetyTests {
     private suspend fun awaitToolbarPage(viewModel: EditorViewModel, expectedPageId: String) {
         withTimeout(5.seconds) {
             viewModel.toolbarState
-                .first { it.pageId == expectedPageId }
+                .first { it.location?.pageId == expectedPageId }
         }
     }
 

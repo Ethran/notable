@@ -194,15 +194,16 @@ fun offsetImage(image: Image, offset: Offset): Image {
 fun getModifiedStrokeEndpoints(
     points: List<TouchPoint>,
     scroll: Offset,
-    zoomLevel: Float
+    zoomLevel: Float,
+    origin: Offset = Offset.Zero,
 ): Pair<StrokePoint, StrokePoint> {
     if (points.isEmpty()) throw IllegalArgumentException("points list is empty")
 
     val startIdx = points.size / 10
     val endIdx = (9 * points.size) / 10
 
-    val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel)
-    val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel)
+    val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel, origin)
+    val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel, origin)
 
     val startPoint = baseStartPoint.copy(
         tiltX = points[startIdx].tiltX,

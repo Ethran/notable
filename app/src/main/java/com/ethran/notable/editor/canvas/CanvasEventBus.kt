@@ -1,65 +1,50 @@
 package com.ethran.notable.editor.canvas
 
-import android.graphics.Rect
-import android.net.Uri
 import io.shipbook.shipbooksdk.Log
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.measureTimeMillis
 
+/**
+ * Signals that are genuinely global.
+ *
+ * Everything here concerns the device or the app as a whole rather than one editor view: the EPD
+ * raw-drawing state is a property of the panel, focus is a property of the window, and the menu
+ * state is app-wide. Per-view signals live on [PaneEventBus] — see its documentation for why the
+ * split exists.
+ *
+ * Keep this small. A signal added here is a signal every view will react to.
+ */
 object CanvasEventBus {
-    val forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
-    val refreshUi = MutableSharedFlow<Unit>()
-    val refreshUiImmediately = MutableSharedFlow<Unit>(
-        replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
-    val reinitSignal = MutableSharedFlow<Unit>()
-    val reloadFromDb = MutableSharedFlow<Unit>()
 
+    /**
+     * Guards stroke commits. Global because raw drawing is global: the Onyx firmware has one
+     * raw-draw state for the whole panel, so two views cannot be mid-commit independently.
+     */
+    val drawingInProgress = Mutex()
 
     val isDrawing = MutableSharedFlow<Boolean>()
 
     // used for managing drawing state on regain focus
     val onFocusChange = MutableSharedFlow<Boolean>()
 
-    // before undo we need to commit changes
-    val commitHistorySignal = MutableSharedFlow<Unit>()
-    val commitHistorySignalImmediately = MutableSharedFlow<Unit>()
-
-    // used for checking if commit was completed
-    var commitCompletion = CompletableDeferred<Unit>()
-
-    // It might be bad idea, but plan is to insert graphic in this, and then take it from it
-    // There is probably better way
-    val addImageByUri = MutableStateFlow<Uri?>(null)
-
-    // Event, not state: each emission is one gesture-selection request.
-    val rectangleToSelectByGesture = MutableSharedFlow<Rect>()
-    val drawingInProgress = Mutex()
-
-    // For cleaning whole page, activated from toolbar menu
-    val clearPageSignal = MutableSharedFlow<Unit>()
-
-    // Signal to UI to close any open menus/modals,
-    // observed in EditorView
+    /**
+     * Signal to UI to close any open menus/modals, observed in EditorView. App-wide: menus are not
+     * owned by a view.
+     */
     val closeMenusSignal = MutableSharedFlow<Unit>()
 
-
-    // For QuickNav scrolling with previews
-    val saveCurrent = MutableSharedFlow<Unit>()
-
-    val isScrubbing = MutableStateFlow<Boolean> (false)
-    val previewPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val restoreCanvas = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
-
-    val changePage = MutableSharedFlow<String>(extraBufferCapacity = 1)
-
+    /**
+     * Immediate, unconditional repaint of the whole surface. Global because it repaints the
+     * surface itself rather than a view's content — it is used on surface creation and when the
+     * EPD needs to be brought back into a known state.
+     */
+    val refreshUiImmediately = MutableSharedFlow<Unit>(
+        replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
 
     suspend fun waitForDrawing() {
         Log.d(

@@ -103,7 +103,14 @@ data class ActionElement(
     override val contentDescription: String,
     override val visibleWhen: VisibleWhen = ALWAYS,
     val action: ToolbarAction,
-) : ToolbarElement
+    /**
+     * Selected-state predicate, for actions that toggle rather than fire once. Most actions are
+     * stateless and keep the default; split view is on or off and has to show which.
+     */
+    val selectedWhen: (ToolbarUiState) -> Boolean = { false },
+) : ToolbarElement {
+    override fun isSelected(state: ToolbarUiState): Boolean = selectedWhen(state)
+}
 
 /**
  * Elements whose rendering data can't express: the page-number text, the menu dropdown,

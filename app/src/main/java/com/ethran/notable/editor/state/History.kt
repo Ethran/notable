@@ -57,15 +57,15 @@ class History @AssistedInject constructor(
             is HistoryBusActions.MoveHistory -> {
                 // Wait for commit to history to complete
                 if (actions.type == UndoRedoType.Undo) {
-                    CanvasEventBus.commitCompletion = CompletableDeferred()
-                    CanvasEventBus.commitHistorySignalImmediately.emit(Unit)
-                    CanvasEventBus.commitCompletion.await()
+                    pageModel.events.commitCompletion = CompletableDeferred()
+                    pageModel.events.commitHistorySignalImmediately.emit(Unit)
+                    pageModel.events.commitCompletion.await()
                 }
                 val zoneAffected = undoRedo(type = actions.type)
                 if (zoneAffected != null) {
                     pageModel.drawAreaPageCoordinates(zoneAffected)
                     //moved to refresh after drawing
-                    CanvasEventBus.refreshUi.emit(Unit)
+                    pageModel.events.refreshUi.emit(Unit)
                 } else {
                     val message = when (actions.type) {
                         UndoRedoType.Undo -> "Nothing to undo"
