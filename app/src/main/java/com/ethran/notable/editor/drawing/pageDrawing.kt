@@ -184,13 +184,11 @@ fun drawOnCanvasFromPage(
             persistentError = persistentError?.let { it + error } ?: error
         }
         try {
-            page.strokes.forEach { stroke ->
-                if (ignoredStrokeIds.contains(stroke.id)) return@forEach
-                val bounds = strokeBounds(stroke)
-                // if stroke is not inside page section
-                if (!bounds.toRect().intersect(pageArea)) return@forEach
-
-                StrokeRenderers.current.drawStroke(this, stroke, -page.scroll)
+            // Highlighter strokes go behind the pen strokes, through one shared layer.
+            drawStrokesLayered(this, page.strokes, -page.scroll) { stroke ->
+                !ignoredStrokeIds.contains(stroke.id) &&
+                    // only strokes that reach into this page section
+                    strokeBounds(stroke).toRect().intersect(pageArea)
             }
         } catch (e: Exception) {
             val error = DomainError.DrawingError("Strokes failed: ${e.message ?: e.toString()}")
