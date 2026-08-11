@@ -9,8 +9,8 @@ import com.ethran.notable.editor.utils.Pen
 
 /**
  * Onyx-free renderer that draws every pen through plain Canvas path code. Markers use the
- * marker path; all other pens fall back to the ballpen path, so strokes render as flat lines
- * with no pressure or texture. Usable on any device where the Onyx SDK is unavailable.
+ * highlighter path; all other pens fall back to the ballpen path, so strokes render as flat
+ * lines with no pressure or texture. Usable on any device where the Onyx SDK is unavailable.
  */
 object AppStrokeRenderer : StrokeRenderer {
 
@@ -26,7 +26,7 @@ object AppStrokeRenderer : StrokeRenderer {
         // into a shifted Stroke (see OnyxStrokeRenderer / P15).
         canvas.withTranslation(offset.x, offset.y) {
             when (stroke.pen) {
-                Pen.MARKER -> drawMarkerStroke(canvas, paint, stroke.size, points)
+                Pen.MARKER -> drawHighlighterStroke(canvas, paint, stroke.size, points)
                 else -> drawBallPenStroke(canvas, paint, stroke.size, points)
             }
         }
