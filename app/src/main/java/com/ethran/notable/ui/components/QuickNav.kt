@@ -80,7 +80,18 @@ fun QuickNav(
     })
 
     // Observe the UI State lifecycle-safely
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val collectedState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // The sheet composes before the effect below runs, so on the first frame the state still
+    // describes the page QuickNav was last opened on. Drop the scrubber until the state catches
+    // up, rather than drawing one for the previous notebook and removing it a frame later.
+    val uiState = if (collectedState.currentPageId == currentPageId) collectedState
+    else collectedState.copy(
+        bookPageCount = 0,
+        currentBookIndex = 0,
+        favoriteIndexesInBook = emptyList(),
+        bookPageIds = emptyList(),
+    )
 
     // Load data when the page changes
     LaunchedEffect(currentPageId) {

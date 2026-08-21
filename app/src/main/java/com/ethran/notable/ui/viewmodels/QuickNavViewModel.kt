@@ -56,7 +56,21 @@ class QuickNavViewModel(
     fun loadPageData(currentPageId: String?) {
         if (currentPageId == null) return
 
-        _uiState.update { it.copy(isLoading = true, currentPageId = currentPageId) }
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                currentPageId = currentPageId,
+                // Clear the scrubber, which describes the notebook we are leaving. loadBookData
+                // below writes these only for a notebook of two or more pages, and nothing else
+                // resets them, so without this they survive onto a shorter notebook, or onto a
+                // quick page that has no notebook at all, and the scrubber is drawn with the
+                // previous notebook's page count.
+                bookPageCount = 0,
+                currentBookIndex = 0,
+                favoriteIndexesInBook = emptyList(),
+                bookPageIds = emptyList(),
+            )
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             val page = runCatching { pageRepository.getById(currentPageId) }.getOrNull()
