@@ -2,7 +2,9 @@ package com.ethran.notable.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 
@@ -78,5 +80,16 @@ fun GeneralSettings(
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(visualizePdfPagination = isChecked))
             })
+
+        // Zoom Level (UI Scale)
+        SettingSliderRow(
+            label = stringResource(R.string.uiScale),
+            value = settings.uiScale,
+            valueRange = 0.5f..1.5f,
+            steps = 9,
+            onValueChange = { newValue ->
+                onSettingsChange(settings.copy(uiScale = newValue))
+            }
+        )
     }
 }

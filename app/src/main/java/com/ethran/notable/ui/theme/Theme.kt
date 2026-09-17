@@ -5,6 +5,10 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import com.ethran.notable.data.datastore.GlobalAppSettings
 
 private val DarkColorPalette = darkColors(
     primary = Purple200,
@@ -26,19 +30,31 @@ private val LightColorPalette = lightColors(
     onSurface = Color.Black,
     */
 )
-
 @Composable
-fun InkaTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun InkaTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    scaleFactor: Float = GlobalAppSettings.current.uiScale,
+    content: @Composable () -> Unit) {
     val colors = if (darkTheme) {
         DarkColorPalette
     } else {
         LightColorPalette
     }
 
-    MaterialTheme(
-        colors = colors,
-        typography = Typography,
-        shapes = Shapes,
-        content = content
-    )
+    val currentDensity = LocalDensity.current
+    // This wrapper scales all dp and sp measurements
+    CompositionLocalProvider(
+        LocalDensity provides Density(
+            density = currentDensity.density * scaleFactor,
+            fontScale = currentDensity.fontScale * scaleFactor
+        )
+    ) {
+        MaterialTheme(
+            colors = colors,
+            typography = Typography,
+            shapes = Shapes,
+            content = content
+        )
+    }
+
 }

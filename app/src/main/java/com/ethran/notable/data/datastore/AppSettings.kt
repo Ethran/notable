@@ -52,6 +52,7 @@ data class AppSettings(
     // User-created pen instances; layouts reference them as "PEN:<id>". The preset is the
     // single source of truth for a pen's color/size — StrokeMenu edits write back here.
     val toolbarPens: List<ToolbarPen> = ToolbarPen.DEFAULT_PENS,
+    val uiScale: Float = 1.0f, // Scale factor for the entire UI
 
     // Gestures
     val doubleTapAction: GestureAction = GestureAction.Undo,

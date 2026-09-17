@@ -11,7 +11,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ethran.notable.editor.ui.SelectMenu
-
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.Slider
 
 @Composable
 fun <T> SelectorRow(
@@ -68,6 +69,48 @@ fun SettingToggleRow(
             modifier = Modifier.padding(start = 8.dp, top = 10.dp, bottom = 12.dp),
         )
     }
+    SettingsDivider()
+}
+
+@Composable
+fun SettingSliderRow(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, start = 4.dp, end = 4.dp)
+    ) {
+        val stepSize = (valueRange.endInclusive - valueRange.start) / (steps + 1)
+        Text(
+            text = "$label: ${"%.2f".format(value)}x",
+            modifier = Modifier
+                .padding(bottom = 8.dp),
+            style = MaterialTheme.typography.body1,
+            color = MaterialTheme.colors.onSurface,
+            maxLines = 2
+        )
+
+        Slider(
+            value = value,
+            onValueChange = { newValue ->
+                val snappedValue =
+                    valueRange.start +
+                            kotlin.math.round(
+                                (newValue - valueRange.start) / stepSize
+                            ) * stepSize
+
+                onValueChange(snappedValue)
+            },
+            valueRange = valueRange,
+            steps = steps
+        )
+    }
+
     SettingsDivider()
 }
 
