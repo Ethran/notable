@@ -119,7 +119,7 @@
     <string name="observe_pdf">Podgląd PDF</string>
     <string name="current_page">Bieżąca strona</string>
 
-    <string name="toolbar_scribble_to_erase">Zamaż\n→usuń</string>
+    <string name="toolbar_scribble_to_erase">Zamaż→usuń</string>
     <string name="toolbar_position">Pozycja paska narzędzi</string>
 
     <!-- Sync Settings Tab -->
