@@ -1,7 +1,6 @@
 *.iml
 .gradle
 /local.properties
-/.idea/
 .DS_Store
 /build
 /captures
@@ -19,3 +18,13 @@ app/libs
 
 # Kotlin build-session scratch
 .kotlin/
+
+# Android Studio
+.idea/
+# Keep shared Android Studio project configuration
+!.idea/.name
+!.idea/codeStyles/
+!.idea/codeStyles/*
+!.idea/inspectionProfiles/
+!.idea/inspectionProfiles/*
+!.idea/runConfigurations.xml
