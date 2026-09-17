@@ -56,6 +56,7 @@ data class AppSettings(
     // Gestures
     val doubleTapAction: GestureAction = GestureAction.Undo,
     val twoFingerTapAction: GestureAction = GestureAction.ChangeTool,
+    val threeFingerTapAction: GestureAction = GestureAction.Redo,
     val swipeLeftAction: GestureAction = GestureAction.NextPage,
     val swipeRightAction: GestureAction = GestureAction.PreviousPage,
     // Fired by *three*-finger swipes (two fingers are pan/zoom); the field

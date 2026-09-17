@@ -292,6 +292,10 @@ class SettingsViewModel @Inject constructor(
             settings.twoFingerTapAction,
         ) { a -> updateSettings(settings.copy(twoFingerTapAction = a)) },
         GestureRowModel(
+            (R.string.gestures_three_finger_tap_action),
+            settings.threeFingerTapAction,
+        ) { a -> updateSettings(settings.copy(threeFingerTapAction = a)) },
+        GestureRowModel(
             (R.string.gestures_swipe_left_action),
             settings.swipeLeftAction,
         ) { a -> updateSettings(settings.copy(swipeLeftAction = a)) },
