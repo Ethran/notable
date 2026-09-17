@@ -2,19 +2,21 @@ package com.ethran.notable.editor.ui.toolbar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,7 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -49,7 +51,7 @@ import com.ethran.notable.editor.ui.toolbar.model.PenElement
 import com.ethran.notable.editor.ui.toolbar.model.ShapeElement
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarElement
 import com.ethran.notable.editor.utils.Eraser
-import com.ethran.notable.ui.convertDpToPixel
+import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.noRippleClickable
 
 /**
@@ -230,62 +232,104 @@ private fun EraserSubmenu(
     uiState: ToolbarUiState,
     onAction: (ToolbarAction) -> Unit,
 ) {
-    val context = LocalContext.current
+    val density = LocalDensity.current
 
     Popup(
-        offset = IntOffset(0, convertDpToPixel(43.dp, context).toInt()),
-        onDismissRequest = { onAction(ToolbarAction.ToggleEraserManu(false)) },
+        offset = with(density) {
+            IntOffset(
+                0,
+                43.dp.roundToPx()
+            )
+        },
+        onDismissRequest = {
+            onAction(ToolbarAction.ToggleEraserManu(false))
+        },
         properties = PopupProperties(focusable = true),
         alignment = Alignment.TopCenter
     ) {
-        Column(
-            modifier = Modifier
-                .padding(bottom = (BUTTON_SIZE + 5).dp) // For toolbar is located at the button,
-                .background(Color.White)
-                .border(1.dp, Color.Black)
-                .height(IntrinsicSize.Max)
+        // Reuse the density already provided by InkaTheme.
+        CompositionLocalProvider(
+            LocalDensity provides density
         ) {
-            Row(
-                Modifier
-                    .height(IntrinsicSize.Max)
+            Column(
+                modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .padding(bottom = (BUTTON_SIZE + 5).dp)
+                    .background(Color.White)
                     .border(1.dp, Color.Black)
+                    .height(IntrinsicSize.Max)
             ) {
-                spec.erasers.forEach { eraser ->
-                    ToolbarButton(
-                        iconId = eraserIcon(eraser),
-                        isSelected = uiState.eraser == eraser,
-                        onSelect = { onAction(ToolbarAction.ChangeEraser(eraser)) },
-                        modifier = Modifier.height(BUTTON_SIZE.dp)
+                // Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.toolbar_eraser),
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            }
-            Row(
-                modifier = Modifier
-                    .padding(4.dp)
-                    .height(26.dp)
-                    .width(IntrinsicSize.Min)
-                    .background(Color.White),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicText(
-                    text = stringResource(R.string.toolbar_scribble_to_erase_two_lined_short),
-                    modifier = Modifier.padding(end = 6.dp),
-                    style = TextStyle(color = Color.Black, fontSize = 13.sp)
-                )
-                // Reflects the global flag; ToggleScribbleToErase persists it.
-                val initialState = GlobalAppSettings.current.scribbleToEraseEnabled
-                var isChecked by remember { mutableStateOf(initialState) }
 
-                Box(
+                Row(
                     modifier = Modifier
-                        .size(15.dp, 15.dp)
-                        .border(1.dp, Color.Black)
-                        .background(if (isChecked) Color.Black else Color.White)
-                        .clickable {
-                            isChecked = !isChecked
-                            onAction(ToolbarAction.ToggleScribbleToErase(isChecked))
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max)
+                        .border(1.dp, Color.Black),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    spec.erasers.forEach { eraser ->
+                        ToolbarButton(
+                            iconId = eraserIcon(eraser),
+                            isSelected = uiState.eraser == eraser,
+                            onSelect = {
+                                onAction(ToolbarAction.ChangeEraser(eraser))
+                            },
+                            modifier = Modifier.height(BUTTON_SIZE.dp)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .height(72.dp)
+                        .background(Color.White),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BasicText(
+                        text = stringResource(
+                            R.string.toolbar_scribble_to_erase
+                        ),
+                        modifier = Modifier.padding(end = 6.dp),
+                        style = TextStyle(
+                            color = Color.Black,
+                            fontSize = 13.sp
+                        )
+                    )
+
+                    val initialState =
+                        GlobalAppSettings.current.scribbleToEraseEnabled
+
+                    var isChecked by remember {
+                        mutableStateOf(initialState)
+                    }
+
+                    Spacer(modifier = Modifier.width(15.dp))
+
+                    OnOffSwitch(
+                        checked = isChecked,
+                        onCheckedChange = { checked ->
+                            isChecked = checked
+                            onAction(
+                                ToolbarAction.ToggleScribbleToErase(checked)
+                            )
                         }
-                )
+                    )
+                }
             }
         }
     }

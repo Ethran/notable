@@ -103,7 +103,7 @@
     <string name="page_number">Page number</string>
     <string name="observe_pdf">Observe PDF</string>
     <string name="current_page">Current Page</string>
-    <string name="toolbar_scribble_to_erase_two_lined_short">Scribble\nto Erase</string>
+    <string name="toolbar_scribble_to_erase">Scribble to Erase</string>
     <string name="toolbar_position">Toolbar Position</string>
 
     <!-- Sync Settings Tab -->
@@ -288,5 +288,6 @@
     <string name="toolbar_element_home">Library</string>
     <string name="toolbar_element_menu">Menu</string>
     <string name="toolbar_element_divider">Divider</string>
+    <string name="toolbar_eraser">Eraser</string>
 
 </resources>
