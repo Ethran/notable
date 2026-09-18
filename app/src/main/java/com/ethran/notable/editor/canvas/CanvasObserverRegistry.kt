@@ -26,6 +26,10 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
+
+
+val COMMIT_HISTORY_DEBOUNCE_TIME = 150.milliseconds // // Maximum pause between strokes for them to be grouped together
 
 class CanvasObserverRegistry(
     private val coroutineScope: CoroutineScope,
@@ -309,7 +313,7 @@ class CanvasObserverRegistry(
     private fun observeHistory() {
         observerScope.launch {
             // After 500ms add to history strokes
-            CanvasEventBus.commitHistorySignal.debounce(500).collect {
+            CanvasEventBus.commitHistorySignal.debounce(COMMIT_HISTORY_DEBOUNCE_TIME).collect {
                 log.v("Commiting to history")
                 drawCanvas.commitToHistory()
             }
