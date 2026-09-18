@@ -287,5 +287,7 @@
     <string name="toolbar_element_home">Library</string>
     <string name="toolbar_element_menu">Menu</string>
     <string name="toolbar_element_divider">Divider</string>
+    <string name="no_undo_to_perform">Nothing to undo</string>
+    <string name="no_redo_to_perform">Nothing to redo</string>
 
 </resources>

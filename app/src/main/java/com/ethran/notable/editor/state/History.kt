@@ -1,6 +1,7 @@
 package com.ethran.notable.editor.state
 
 import android.graphics.Rect
+import com.ethran.notable.R
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.events.AppEvent
@@ -69,8 +70,8 @@ class History @AssistedInject constructor(
                     CanvasEventBus.refreshUi.emit(Unit)
                 } else {
                     val message = when (actions.type) {
-                        UndoRedoType.Undo -> "Nothing to undo"
-                        UndoRedoType.Redo -> "Nothing to redo"
+                        UndoRedoType.Undo -> pageView.context.getString(R.string.no_undo_to_perform)
+                        UndoRedoType.Redo -> pageView.context.getString(R.string.no_redo_to_perform)
                     }
                     appEventBus.emit(AppEvent.ActionHint(message, 3000))
                 }
