@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 
-val COMMIT_HISTORY_DEBOUNCE_TIME = 150.milliseconds // // Maximum pause between strokes for them to be grouped together
+private val COMMIT_HISTORY_DEBOUNCE_TIME = 150.milliseconds // // Maximum pause between strokes for them to be grouped together
 
 class CanvasObserverRegistry(
     private val coroutineScope: CoroutineScope,
