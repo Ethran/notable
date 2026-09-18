@@ -61,15 +61,15 @@ data class AppSettings(
     val swipeRightAction: GestureAction = GestureAction.PreviousPage,
     // Fired by *three*-finger swipes (two fingers are pan/zoom); the field
     // names are kept for persisted-settings compatibility.
-    val twoFingerSwipeLeftAction: GestureAction = GestureAction.ToggleZen,
-    val twoFingerSwipeRightAction: GestureAction = GestureAction.ToggleZen,
+    val threeFingerSwipeLeftAction: GestureAction = GestureAction.ToggleZen,
+    val threeFingerSwipeRightAction: GestureAction = GestureAction.ToggleZen,
     val holdAction: GestureAction = GestureAction.Select,
     val enableQuickNav: Boolean = true,
     // Onyx only: broadcast onyx.action.INTERCEPT_GESTURE while the app is resumed so
     // SystemUI's three-finger screenshot cannot steal our multi-finger gestures. The
     // same SystemUI pipeline serves the side/bottom edge navigation swipes, so those
     // stop working inside the app while this is on — hence opt-in.
-    val blockSystemGestures: Boolean = false,
+    val blockOnyxSystemGestures: Boolean = true, // True by default
     val renameOnCreate: Boolean = true,
 
     // Debug

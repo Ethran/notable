@@ -374,8 +374,8 @@ private fun dispatchEvent(event: GestureEvent, ctx: GestureContext) {
                 // on rare churn edge cases (a finger lifting mid-gesture),
                 // where firing the same action is the sensible outcome.
                 else -> when (event.direction) {
-                    GestureEvent.Direction.Left -> ctx.appSettings.twoFingerSwipeLeftAction
-                    GestureEvent.Direction.Right -> ctx.appSettings.twoFingerSwipeRightAction
+                    GestureEvent.Direction.Left -> ctx.appSettings.threeFingerSwipeLeftAction
+                    GestureEvent.Direction.Right -> ctx.appSettings.threeFingerSwipeRightAction
                 }
             }
             resolveGesture(action, ctx)

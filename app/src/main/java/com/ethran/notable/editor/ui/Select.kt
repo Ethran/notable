@@ -40,22 +40,43 @@ import com.ethran.notable.ui.noRippleClickable
  * @param onChange A callback function that is invoked with the new value of type [T] when an option is selected.
  */
 @Composable
-fun <T> SelectMenu(options: List<Pair<T, String>>, value: T, onChange: (T) -> Unit) {
+fun <T> SelectMenu(
+    options: List<Pair<T, String>>,
+    value: T,
+    onChange: (T) -> Unit,
+    enabled: Boolean = true,
+) {
     var isExpanded by remember { mutableStateOf(false) }
 
     Box {
-        Row {
+        Row(
+            modifier = Modifier
+                .then(
+                    if (enabled) {
+                        Modifier.noRippleClickable { isExpanded = true }
+                    } else {
+                        Modifier
+                    }
+                )
+        ) {
             Text(
                 text = options.find { it.first == value }?.second ?: "Undefined",
                 fontWeight = FontWeight.Light,
-                modifier = Modifier.noRippleClickable { isExpanded = true })
+                color = if (enabled) {
+                    Color.Black
+                } else {
+                    Color.Gray
+                },
+            )
 
             Icon(
-                Icons.Rounded.ArrowDropDown, contentDescription = "open select",
+                Icons.Rounded.ArrowDropDown,
+                contentDescription = "open select",
+                tint = if (enabled) Color.Black else Color.Gray,
                 modifier = Modifier.height(20.dp)
             )
         }
-        if (isExpanded) Popup(onDismissRequest = { isExpanded = false }) {
+        if (isExpanded && enabled) Popup(onDismissRequest = { isExpanded = false }) {
             Column(
                 modifier = Modifier
                     .width(IntrinsicSize.Max)

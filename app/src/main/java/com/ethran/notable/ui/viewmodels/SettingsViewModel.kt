@@ -37,6 +37,7 @@ import javax.inject.Inject
 data class GestureRowModel(
     val titleRes: Int,
     val currentValue: AppSettings.GestureAction,
+    val blockedByOnyxGestures: Boolean = false,
     val onUpdate: (AppSettings.GestureAction) -> Unit
 )
 
@@ -294,6 +295,7 @@ class SettingsViewModel @Inject constructor(
         GestureRowModel(
             (R.string.gestures_three_finger_tap_action),
             settings.threeFingerTapAction,
+            true,
         ) { a -> updateSettings(settings.copy(threeFingerTapAction = a)) },
         GestureRowModel(
             (R.string.gestures_swipe_left_action),
@@ -305,12 +307,14 @@ class SettingsViewModel @Inject constructor(
         ) { a -> updateSettings(settings.copy(swipeRightAction = a)) },
         GestureRowModel(
             (R.string.gestures_three_finger_swipe_left_action),
-            settings.twoFingerSwipeLeftAction,
-        ) { a -> updateSettings(settings.copy(twoFingerSwipeLeftAction = a)) },
+            settings.threeFingerSwipeLeftAction,
+            true,
+        ) { a -> updateSettings(settings.copy(threeFingerSwipeLeftAction = a)) },
         GestureRowModel(
             R.string.gestures_three_finger_swipe_right_action,
-            settings.twoFingerSwipeRightAction,
-        ) { a -> updateSettings(settings.copy(twoFingerSwipeRightAction = a)) },
+            settings.threeFingerSwipeRightAction,
+            true,
+        ) { a -> updateSettings(settings.copy(threeFingerSwipeRightAction = a)) },
     )
 
 

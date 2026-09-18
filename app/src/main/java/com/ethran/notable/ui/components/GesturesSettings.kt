@@ -24,53 +24,39 @@ fun GesturesSettings(
             .fillMaxWidth()
             .padding(vertical = 8.dp)
     ) {
+        if (DeviceCompat.isOnyxDevice) {
+            SettingToggleRow(
+                label = stringResource(R.string.block_onyx_system_gestures),
+                value = settings.blockOnyxSystemGestures,
+                onToggle = { isChecked ->
+                    onSettingsChange(settings.copy(blockOnyxSystemGestures = isChecked))
+                },
+                description = stringResource(R.string.block_onyx_system_gestures_description),
+            )
+        }
+
         listOfGestures.forEach { config ->
+
             GestureSelectorRow(
                 title = stringResource(config.titleRes),
                 currentAction = config.currentValue,
                 onActionSelected = { action -> config.onUpdate(action) },
-                availableGestures = availableGestures
+                availableGestures = availableGestures,
+                enabled = (
+                        if (config.blockedByOnyxGestures) settings.blockOnyxSystemGestures else true
+                        ),
             )
         }
 
+        val quickNavAvailable = !DeviceCompat.isOnyxDevice || settings.blockOnyxSystemGestures
         SettingToggleRow(
-            label = stringResource(R.string.enable_quick_nav), value = settings.enableQuickNav,
+            label = stringResource(R.string.enable_quick_nav),
+            value = settings.enableQuickNav && quickNavAvailable,
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(enableQuickNav = isChecked))
-            })
+            },
+            enabled = quickNavAvailable
+        )
 
-        if (DeviceCompat.isOnyxDevice) {
-            SettingToggleRow(
-                label = stringResource(R.string.block_system_gestures),
-                value = settings.blockSystemGestures,
-                onToggle = { isChecked ->
-                    onSettingsChange(settings.copy(blockSystemGestures = isChecked))
-                })
-        }
     }
-}
-
-@Composable
-fun GestureSelectorRow(
-    title: String,
-    currentAction: AppSettings.GestureAction,
-    onActionSelected: (AppSettings.GestureAction) -> Unit,
-    availableGestures: List<Pair<AppSettings.GestureAction, Any>>
-) {
-    // Map the Pair list to the format expected by SelectorRow
-    val options = availableGestures.map { (action, resource) ->
-        val label = when (resource) {
-            is Int -> stringResource(resource)
-            is String -> resource
-            else -> resource.toString()
-        }
-        action to label
-    }
-
-    SelectorRow(
-        label = title,
-        options = options,
-        value = currentAction,
-        onValueChange = onActionSelected
-    )
 }
