@@ -121,7 +121,8 @@ class PageContentRenderer @Inject constructor(
                 scroll = scroll,
                 resourceBitmap = bgImage,
                 scale = scaleFactor,
-                repeat = resolvedBackgroundType is BackgroundType.ImageRepeating
+                repeat = resolvedBackgroundType is BackgroundType.ImageRepeating,
+                context = context
             )
 
             data.images.forEach { drawImage(context, canvas, it, -scroll) }

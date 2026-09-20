@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.drawing
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -12,9 +13,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
+import com.ethran.notable.data.datastore.A4_HEIGHT
+import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.USE_A4_SHEET_MODE
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.utils.scaleRect
+import com.ethran.notable.ui.convertPointsToPixel
 import com.onyx.android.sdk.extension.copy
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.cos
@@ -42,7 +47,7 @@ private val defaultPaint = Paint().apply {
 private val defaultPaintStroke = defaultPaint.copy().apply { this.style = Paint.Style.STROKE }
 private val marginPaint = Paint().apply {
     this.color = Color.MAGENTA
-    this.strokeWidth = 2f
+    this.strokeWidth = 4f
 }
 private val paginationLinePaint = Paint().apply {
     color = Color.RED
@@ -284,6 +289,7 @@ fun drawBg(
     scale: Float = 1f,          // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
     repeat: Boolean = false,    // for repeating image
     clipRect: Rect? = null,     // before the scaling
+    context: Context,
 ) {
 
     log.v("Loading the background")
@@ -323,10 +329,13 @@ fun drawBg(
             }
         }
     }
-    drawMargin(canvas, scroll, scale)
+    if (!USE_A4_SHEET_MODE) {
+        drawMargin(canvas, scroll, scale)
+    }
 
-    if (GlobalAppSettings.current.visualizePdfPagination) {
-        drawPaginationLine(canvas, scroll, scale)
+    // TODO remove the global setting and use it only when in sheet mode
+    if (GlobalAppSettings.current.visualizePdfPagination || USE_A4_SHEET_MODE) {
+        drawPaginationLine(canvas, scroll, scale, context)
     }
     if (clipRect != null) {
         canvas.restore()
@@ -345,41 +354,41 @@ fun drawMargin(canvas: Canvas, scroll: Offset, scale: Float) {
     }
 }
 
-fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
+fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float, context: Context) {
     val textPaint = Paint().apply {
         color = Color.BLACK
         textSize = 24f
         isAntiAlias = true
     }
 
-    // A4 paper ratio (height/width in portrait)
-    val a4Ratio = 297f / 210f
-    val screenWidth = min(SCREEN_HEIGHT, SCREEN_WIDTH)
-    val pageHeight = screenWidth * a4Ratio
+    val sheetHeightPixels = convertPointsToPixel(A4_HEIGHT.toFloat(), context)
+    val sheetWidthPixels = convertPointsToPixel(A4_WIDTH.toFloat(), context)
 
     // Convert scroll position to canvas coordinates
     // Calculate current page number (1-based)
-    val currentPage = floor(scroll.y / pageHeight).toInt() + 1
+    val currentPage = floor(scroll.y / sheetHeightPixels).toInt() + 1
 
     // Calculate position of first page break
-    var yPos = (currentPage * pageHeight) - scroll.y
+    var yPos = (currentPage * sheetHeightPixels) - scroll.y
 
     var pageNum = currentPage
     while (yPos < canvas.height / scale) {
-        if (yPos >= 0) { // Only draw visible lines
-            val yPosScaled = yPos
-            canvas.drawLine(
-                0f, yPosScaled, screenWidth.toFloat(), yPosScaled, paginationLinePaint
-            )
+        canvas.drawLine(
+            0f,
+            yPos,
+            sheetWidthPixels,
+            yPos,
+            paginationLinePaint
+        )
 
-            // Draw page number label (offset slightly below the line)
-            canvas.drawText(
-                "Subpage ${pageNum + 1}", 20f - scroll.x, yPosScaled + 30f, textPaint
-            )
-        } else {
-            log.d("Skipping line at $yPos (above visible area)")
-        }
-        yPos += pageHeight
+        canvas.drawText(
+            "Subpage ${pageNum + 1}",
+            20f - scroll.x,
+            yPos + 30f,
+            textPaint
+        )
+
+        yPos += sheetHeightPixels
         pageNum++
     }
 }

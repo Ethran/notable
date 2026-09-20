@@ -23,7 +23,9 @@ import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.USE_A4_SHEET_MODE
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.BackgroundType
@@ -47,6 +49,7 @@ import com.ethran.notable.gestures.ZOOM_SENSITIVITY
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.convertPointsToPixel
 import com.ethran.notable.utils.onError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -636,6 +639,50 @@ class PageView(
             deltaInPage = deltaInPage.copy(y = -start.scroll.y)
         }
 
+        if (USE_A4_SHEET_MODE) { // Block scrolling in x direction outside A4 bounds
+            val a4Width = convertPointsToPixel(A4_WIDTH.toFloat(), context)
+            val viewportWidth = viewWidth.toFloat()
+            val viewportHeight = viewHeight.toFloat()
+
+            /*
+            * Calculate the excess width of real A4 size compared to the viewport size,
+            * as reference we get the max value between width and height to avoid that the sheet has
+            * different x sizes based on the orientation of the screen.
+            * If excess is less than 2% match the sheet size to the viewport size.
+            * */
+            log.d("Viewport size: $viewportWidth x $viewportHeight")
+            val viewPortReference = max(viewportWidth, viewportHeight)
+            val excess = a4Width - viewPortReference
+            val tolerance = viewPortReference * 0.02f // 2%
+
+            val effectiveWidth =
+                if (excess > 0f && excess <= tolerance) {
+                    viewPortReference
+                } else {
+                    a4Width
+                }
+
+            val maxScrollX = max(0f, effectiveWidth - viewportWidth / start.zoom)
+
+            log.d(
+                """
+                    A4 width: $a4Width
+                    View width: $viewportWidth
+                    Excess: $excess
+                    Tolerance: $tolerance
+                    Effective width: $effectiveWidth
+                    Max scroll X: $maxScrollX
+                    Zoom level: ${start.zoom}
+                """.trimIndent()
+            )
+
+            if (start.scroll.x + deltaInPage.x > maxScrollX) {
+                deltaInPage = deltaInPage.copy(
+                    x = maxScrollX - start.scroll.x
+                )
+            }
+        }
+
         // There is nothing to do, return.
         if (deltaInPage == Offset.Zero) return
 
@@ -940,24 +987,46 @@ class PageView(
             resourceBitmap = bgImage,
             scale = scale,
             repeat = false,
+            context = context,
         )
     }
 
-
+    private var skipInitialScrollAdjustment = true
     fun updateDimensions(newWidth: Int, newHeight: Int) {
         if (newWidth != viewWidth || newHeight != viewHeight) {
-            log.d("Updating dimensions: $newWidth x $newHeight")
+            log.d("Updating dimensions from: $viewWidth x $viewHeight, to: $newWidth x $newHeight")
+
+            // Preserve the same visual position after rotation (landscape/portrait), adjusted for
+            // the new screen width. The viewport is committed by updateCanvasDimensions, which also
+            // drops the zoom, so this stays in page coordinates throughout.
+            val residualScrollX = if (skipInitialScrollAdjustment) {
+                skipInitialScrollAdjustment = false
+                null
+            } else {
+                val scrollThreshold = newWidth - viewWidth
+                (scroll.x - scrollThreshold).coerceAtLeast(0f).also {
+                    log.v("scrollThreshold: $scrollThreshold, residualScroll: $it")
+                }
+            }
+
             viewWidth = newWidth
             viewHeight = newHeight
-            updateCanvasDimensions()
+            updateCanvasDimensions(residualScrollX)
         }
     }
 
-    private fun updateCanvasDimensions() {
+    /** Resizes the screen bitmap, dropping the zoom that fitted the old size and, on a rotation,
+     *  shifting the shown page's horizontal scroll by how much the view grew. */
+    private fun updateCanvasDimensions(residualScrollX: Float? = null) {
         checkMainThread("updateDimensions")
         // A zoom fitted to the old size does not fit the new one, on any page.
         synchronized(pageLock) {
-            viewportFlow.update { it.copy(zoom = 1f) }
+            viewportFlow.update { shown ->
+                shown.copy(
+                    scroll = residualScrollX?.let { x -> shown.scroll.copy(x = x) } ?: shown.scroll,
+                    zoom = 1f,
+                )
+            }
             leftPages.replaceAll { _, left -> left.copy(zoom = 1f) }
         }
         // Blank at the new size, rather than read from disk on the main thread; the redraw below

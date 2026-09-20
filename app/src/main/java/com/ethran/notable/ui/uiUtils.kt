@@ -28,3 +28,13 @@ fun convertDpToPixel(dp: Dp, context: Context): Float {
     )
 }
 
+/**
+ * Converts a value in PDF points to pixels using the display's horizontal DPI.
+ *
+ * @param points The value in PDF points, where 1 point equals 1/72 of an inch.
+ * @param context The Android context used to obtain the display's DPI.
+ * @return The equivalent value in pixels.
+ */
+fun convertPointsToPixel(points: Float, context: Context): Float {
+    return points * context.resources.displayMetrics.xdpi / 72f
+}
