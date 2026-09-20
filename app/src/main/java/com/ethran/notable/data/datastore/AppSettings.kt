@@ -7,6 +7,10 @@ import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import kotlinx.serialization.Serializable
 
 
+// Build-time toggle for switching between Infinite Canvas and Fixed A4 Sheet modes.
+// Set to `true` to enable the new A4 sheet behavior, or `false` to keep the existing infinite canvas.
+const val USE_A4_SHEET_MODE = true
+
 // Define the target page size (A4 in points: 595 x 842)
 const val A4_WIDTH = 595
 const val A4_HEIGHT = 842
