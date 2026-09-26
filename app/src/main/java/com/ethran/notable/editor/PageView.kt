@@ -114,10 +114,8 @@ class PageView(
         get() = pageDataManager.getImages(currentPageId)
         set(value) = pageDataManager.setImages(currentPageId, value)
 
-    // warning: The setter is delayed!
-    private var currentBackground: CachedBackground
+    private val currentBackground: CachedBackground
         get() = pageDataManager.getCurrentBackground()
-        set(value) = pageDataManager.setCurrentBackground(value)
 
     val currentPageId: String
         get() = pageDataManager.getCurrentPageId()
@@ -156,16 +154,23 @@ class PageView(
     fun getOrLoadBackground(filePath: String, pageNumber: Int, scale: Float): Bitmap? {
         log.i("getOrLoadBackground")
         val cached = currentBackground
-        if (cached.matches(filePath, pageNumber, scale)) {
+        // A pooled entry never has a null bitmap, but check anyway: a failed render must be retried
+        // on the next draw, never treated as a hit.
+        if (cached.bitmap != null && cached.matches(filePath, pageNumber, scale)) {
             log.i("Background bitmap (cached): ${cached.bitmap}")
             return cached.bitmap
         }
+        // Taken before the render: if the file changes while we decode it, the invalidation bumps
+        // the generation and the (now stale) result is dropped instead of being published late.
+        val pageId = currentPageId
+        val generation = pageDataManager.getBackgroundGeneration(pageId)
         // Render a little larger than requested so small zoom-in steps reuse this bitmap instead of
         // forcing a re-render (matches() accepts any cached scale >= requested). Multiplicative so
         // the headroom stays proportional as you zoom; floored to the old additive margin near 1x.
         val renderScale = (scale * BACKGROUND_ZOOM_HEADROOM).coerceAtLeast(scale + 0.1f)
         val newBackground = CachedBackground(filePath, pageNumber, renderScale)
-        currentBackground = newBackground
+        // Delayed publish; see PageDataManager.setBackground.
+        pageDataManager.setBackground(pageId, newBackground, generation)
         log.i("Background bitmap: ${newBackground.bitmap}")
         return newBackground.bitmap
     }

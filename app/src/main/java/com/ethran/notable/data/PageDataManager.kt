@@ -90,6 +90,10 @@ internal class PageCacheEntry(val pageId: String) {
     var loadJob: Job? = null
     var backgroundKey: String? = null
 
+    // Bumped every time the background is invalidated. A render started before the bump is stale
+    // and must not be published, even if it finishes after (see [PageDataManager.setBackground]).
+    var backgroundGeneration: Int = 0
+
     // Native (dotted/lined/blank) backgrounds have no bitmap; caching this lets
     // ensureBackgroundLoaded skip a pointless reload. null = not yet known.
     var backgroundIsNative: Boolean? = null
@@ -629,7 +633,11 @@ class PageDataManager @Inject constructor(
 
             BackgroundType.Image, ImageRepeating, CoverImage -> -1
         }
-        synchronized(lock) { entries[pageId]?.backgroundIsNative = false }
+        val generation = synchronized(lock) {
+            val entry = entries[pageId]
+            entry?.backgroundIsNative = false
+            entry?.backgroundGeneration ?: 0
+        }
         val value = CachedBackground(background, pageNumber, 1f)
         log.i("Preloaded background: $value")
         // Link synchronously (not via the fire-and-forget [setBackground]) so a caller that awaited
@@ -637,8 +645,7 @@ class PageDataManager @Inject constructor(
         // background. A deferred publish would leave entry.backgroundKey null when the join runs, and
         // ensureBackgroundLoaded would launch a *second* decode of the same image/PDF page. The
         // inotify watch stays deferred (blocking file I/O, ordered against nothing).
-        linkBackground(pageId, value)
-        armBackgroundWatch(pageId, value)
+        if (linkBackground(pageId, value, generation)) armBackgroundWatch(pageId, value)
     }
 
     private suspend fun loadPageFromDb(coroutineScope: CoroutineScope, pageId: String) {
@@ -1083,16 +1090,24 @@ class PageDataManager @Inject constructor(
         return pageFromDb?.background ?: "blank"
     }
 
-    fun setCurrentBackground(background: CachedBackground) {
-        setBackground(currentPage, background)
+    /**
+     * Invalidation counter for [pageId]'s background; capture it before a render and hand it back to
+     * [setBackground] so a render that outlived an invalidation is discarded.
+     */
+    fun getBackgroundGeneration(pageId: String): Int = synchronized(lock) {
+        entries[pageId]?.backgroundGeneration ?: 0
     }
 
-    fun setBackground(pageId: String, background: CachedBackground) {
-        // Fire-and-forget entry point (e.g. the delayed currentBackground property setter). The load
-        // path publishes synchronously via [linkBackground] instead — see [preLoadBackground].
+    /**
+     * Fire-and-forget publish. [generation] is the value of [getBackgroundGeneration] taken before
+     * the render; if the background was invalidated in the meantime the result is stale and dropped.
+     * The load path publishes synchronously via [linkBackground] instead — see [preLoadBackground].
+     */
+    fun setBackground(pageId: String, background: CachedBackground, generation: Int) {
         dataScope.launch {
-            linkBackground(pageId, background)
-            armBackgroundWatch(pageId, background)
+            if (linkBackground(pageId, background, generation)) {
+                armBackgroundWatch(pageId, background)
+            }
         }
     }
 
@@ -1100,9 +1115,30 @@ class PageDataManager @Inject constructor(
      * Publish [background] into the shared pool and link [pageId] to it — pure in-memory work under
      * [lock], no I/O. Caller must hold no lock. Synchronous so an awaited load observes the link
      * before it returns.
+     *
+     * Refuses to publish a background whose render failed ([CachedBackground.bitmap] == null): a
+     * pooled null would satisfy every later cache lookup and pin the page to a white background,
+     * and the "keep the higher scale" merge below would even reject a later successful render at a
+     * lower scale. Leaving the page unlinked makes the next draw retry instead. Also refuses when
+     * [generation] no longer matches — the file changed while this render was running — or the
+     * page was evicted meanwhile, so a late render never re-creates a dropped entry.
+     *
+     * @return true if the page is now linked to [background] (or an equivalent pooled entry).
      */
-    private fun linkBackground(pageId: String, background: CachedBackground) {
+    private fun linkBackground(
+        pageId: String,
+        background: CachedBackground,
+        generation: Int,
+    ): Boolean {
+        if (background.bitmap == null) {
+            log.w("Not caching background ${background.path}#${background.pageNumber}: render failed")
+            return false
+        }
         synchronized(lock) {
+            if (entries[pageId]?.backgroundGeneration != generation) {
+                log.d("Dropping stale background for $pageId: invalidated during render")
+                return false
+            }
             // Merge/upgrade the shared pool: keep the higher-scale (higher-quality) bitmap.
             val existing = backgroundCache[background.id]
             if (existing == null || background.scale > existing.scale) {
@@ -1120,6 +1156,7 @@ class PageDataManager @Inject constructor(
             // Keep the pool within its own budget line right after every addition.
             trimBackgroundsLocked()
         }
+        return true
     }
 
     /**
@@ -1187,6 +1224,7 @@ class PageDataManager @Inject constructor(
             val entry = entries[pageId]
             val key = entry?.backgroundKey
             entry?.backgroundKey = null
+            entry?.backgroundGeneration = (entry?.backgroundGeneration ?: 0) + 1
             if (key != null) {
                 val stillUsed = entries.values.any { it.backgroundKey == key }
                 if (!stillUsed) {
