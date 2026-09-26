@@ -12,7 +12,6 @@ import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.pointsToPath
-import com.ethran.notable.editor.utils.enableNativeEraser
 import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.utils.logCallStack
@@ -92,13 +91,11 @@ class CanvasRefreshManager(
             touchHelper?.setRawDrawingEnabled(false)
             // 4. Settle before re-arming (150ms stroke / 500ms area), mirroring the official app.
             DeviceCompat.delayBeforeResumingDrawing(isErasing = true, areaErase = areaErase)
-            // 5. Re-arm raw drawing. The heavy toggle resets the eraser channel and stroke
-            //    style, so re-assert both (matches the official C(true) path).
+            // 5. Re-arm raw drawing (also re-enables input). The heavy toggle resets the eraser
+            //    channel and stroke style; enableRawDrawing re-asserts both (matches the
+            //    official C(true) path).
             if (viewModel.toolbarState.value.isDrawing) {
-                touchHelper?.setRawDrawingEnabled(true)
-                enableNativeEraser(touchHelper, viewModel.toolbarState.value.eraser)
-                drawCanvas.inputHandler.updatePenAndStroke()
-                touchHelper?.setRawInputReaderEnable(true)
+                drawCanvas.inputHandler.enableRawDrawing()
             } else {
                 log.w("commitErase: not in drawing mode, leaving raw drawing disabled")
             }
