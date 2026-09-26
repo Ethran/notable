@@ -39,6 +39,7 @@ import com.onyx.android.sdk.pen.data.TouchPointList
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlin.concurrent.thread
@@ -225,11 +226,20 @@ class OnyxInputHandler(
         enableNativeEraser(touchHelper, toolbarState.eraser)
     }
 
+    private var surfaceSetupJob: Job? = null
+
     fun updateActiveSurface() {
-        // Takes at least 50ms on Note 4c,
-        // and I don't think that we need it immediately
+        // Takes at least 50ms on Note 4c, so bursts (toolbar change + surfaceCreated when the
+        // editor opens) are coalesced: a newer request cancels one that has not started yet.
         log.i("Update editable surface")
-        coroutineScope.launch {
+        surfaceSetupJob?.cancel()
+        surfaceSetupJob = coroutineScope.launch {
+            // Before surfaceCreated there is nothing to set up (no surface, possibly zero size);
+            // surfaceCreated calls this again once the surface exists.
+            if (!drawCanvas.holder.surface.isValid) {
+                log.d("Surface not ready, skipping surface setup")
+                return@launch
+            }
             onSurfaceInit(drawCanvas)
             val toolbarHeight =
                 if (toolbarState.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
