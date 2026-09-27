@@ -20,6 +20,8 @@ import com.ethran.notable.utils.hasFilePermission
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
@@ -94,6 +96,7 @@ class KvProxy @Inject constructor(
     private val cryptoHelper: CryptoHelper
 ) {
     private val log = ShipBook.getLogger("KvProxy")
+    private val syncSettingsMutex = Mutex()
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
@@ -146,10 +149,7 @@ class KvProxy @Inject constructor(
     // Helper functions that handle sync settings, as it needs to be decrypted and encrypted
 
     suspend fun getSyncSettings(): SyncSettings = withContext(Dispatchers.IO) {
-        val settings = kvRepository.get(SYNC_SETTINGS_KEY)
-            ?.let { json.decodeFromString(SyncSettings.serializer(), it.value) }
-            ?: return@withContext SyncSettings()
-
+        val settings = readStoredSyncSettings()
         if (settings.password.isBlank()) return@withContext settings
 
         when (val decrypted = cryptoHelper.decrypt(settings.password)) {
@@ -161,20 +161,43 @@ class KvProxy @Inject constructor(
         }
     }
 
-    suspend fun setSyncSettings(value: SyncSettings) {
-        val encryptedPassword = when (val encrypted = cryptoHelper.encrypt(value.password)) {
-            is AppResult.Success -> encrypted.data
-            is AppResult.Error -> {
-                throw IllegalStateException("Unable to encrypt sync password: ${encrypted.error.userMessage}")
-            }
+    /**
+     * The only write path for sync settings: an atomic read-modify-write of the stored record.
+     *
+     * [transform] never sees the password. The stored encrypted password is kept as it is, without
+     * a decrypt/re-encrypt round trip, unless [newPassword] is given, in which case that is
+     * encrypted and stored instead; an empty [newPassword] clears it. Round-tripping through
+     * [getSyncSettings] would lose the password, because it reads as empty whenever the Keystore
+     * fails to decrypt it.
+     *
+     * @throws IllegalStateException if [newPassword] cannot be encrypted; nothing is written then.
+     */
+    suspend fun updateSyncSettings(
+        newPassword: String? = null,
+        transform: (SyncSettings) -> SyncSettings
+    ) = withContext(Dispatchers.IO) {
+        val encryptedNewPassword = newPassword?.let { encryptSyncPassword(it) }
+        syncSettingsMutex.withLock {
+            setKv(
+                SYNC_SETTINGS_KEY,
+                applySyncSettingsUpdate(readStoredSyncSettings(), encryptedNewPassword, transform),
+                SyncSettings.serializer()
+            )
         }
-
-        setKv(
-            SYNC_SETTINGS_KEY,
-            value.copy(password = encryptedPassword),
-            SyncSettings.serializer()
-        )
     }
+
+    /** The record as stored, password still encrypted. */
+    private suspend fun readStoredSyncSettings(): SyncSettings =
+        kvRepository.get(SYNC_SETTINGS_KEY)
+            ?.let { json.decodeFromString(SyncSettings.serializer(), it.value) }
+            ?: SyncSettings()
+
+    private fun encryptSyncPassword(password: String): String =
+        when (val encrypted = cryptoHelper.encrypt(password)) {
+            is AppResult.Success -> encrypted.data
+            is AppResult.Error ->
+                throw IllegalStateException("Unable to encrypt sync password: ${encrypted.error.userMessage}")
+        }
 
     // Measured server capabilities. A separate KV entry, not a field on SyncSettings: it is a fact
     // about the server, not a user preference, and callers must check its serverKey before trusting
@@ -188,3 +211,14 @@ class KvProxy @Inject constructor(
         setKv(SYNC_SERVER_CAPABILITIES_KEY, value, ServerCapabilities.serializer())
 
 }
+
+/**
+ * Applies [transform] to [stored] with the password hidden from it: [transform] sees an empty
+ * password, and the result carries [encryptedNewPassword], or the stored encrypted password if null.
+ */
+internal fun applySyncSettingsUpdate(
+    stored: SyncSettings,
+    encryptedNewPassword: String?,
+    transform: (SyncSettings) -> SyncSettings
+): SyncSettings = transform(stored.copy(password = ""))
+    .copy(password = encryptedNewPassword ?: stored.password)

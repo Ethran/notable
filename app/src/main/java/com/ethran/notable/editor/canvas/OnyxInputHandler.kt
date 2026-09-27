@@ -39,6 +39,7 @@ import com.onyx.android.sdk.pen.data.TouchPointList
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlin.concurrent.thread
@@ -187,12 +188,7 @@ class OnyxInputHandler(
         if(touchHelper == null) return
         log.i("Update is drawing: $toolbarState.isDrawing")
         if (toolbarState.isDrawing) {
-            touchHelper!!.setRawDrawingEnabled(true)
-            // setRawDrawingEnabled(true) resets the framework stroke config to firmware defaults
-            // (brush channel on, eraser channel off). Re-assert the eraser channel (styled for the
-            // active eraser type) and re-send the active pen style so the next stroke uses the tool.
-            enableNativeEraser(touchHelper, toolbarState.eraser)
-            updatePenAndStroke()
+            enableRawDrawing()
         } else {
             // A pending resetScreenFreeze resume would re-freeze the screen after we disable
             // raw drawing (e.g. lasso select: the select-stroke refreshUi armed it) — kill it.
@@ -205,24 +201,52 @@ class OnyxInputHandler(
         }
     }
 
+    /**
+     * The only way raw drawing is (re)enabled. Every setRawDrawingEnabled call resets the
+     * firmware's eraser channel (TouchHelper.resetPenDefaultRawDrawing), and SDK callbacks are
+     * posted to the UI thread after the firmware has already started a stroke, so the eraser track
+     * and the pen style must be configured here, synchronously, before any stroke can begin.
+     * See docs/onyx-sdk/onyx-native-eraser-indicator.md.
+     */
+    fun enableRawDrawing() {
+        val helper = touchHelper ?: return
+        helper.setRawDrawingEnabled(true)
+        enableNativeEraser(helper, toolbarState.eraser)
+        updatePenAndStroke()
+    }
+
+    /**
+     * Re-styles the native eraser track for the current eraser type. Must run when the type
+     * changes: the re-assert in onBeginRawErasing lands after the firmware has latched the style,
+     * so without this the first button-erase after switching would still use the old track.
+     * While raw drawing is off there is nothing to update; [enableRawDrawing] applies it on resume.
+     */
+    fun updateEraserTrack() {
+        if (!toolbarState.isDrawing) return
+        enableNativeEraser(touchHelper, toolbarState.eraser)
+    }
+
+    private var surfaceSetupJob: Job? = null
+
     fun updateActiveSurface() {
-        // Takes at least 50ms on Note 4c,
-        // and I don't think that we need it immediately
+        // Takes at least 50ms on Note 4c, so bursts (toolbar change + surfaceCreated when the
+        // editor opens) are coalesced: a newer request cancels one that has not started yet.
         log.i("Update editable surface")
-        coroutineScope.launch {
+        surfaceSetupJob?.cancel()
+        surfaceSetupJob = coroutineScope.launch {
+            // Before surfaceCreated there is nothing to set up (no surface, possibly zero size);
+            // surfaceCreated calls this again once the surface exists.
+            if (!drawCanvas.holder.surface.isValid) {
+                log.d("Surface not ready, skipping surface setup")
+                return@launch
+            }
             onSurfaceInit(drawCanvas)
             val toolbarHeight =
                 if (toolbarState.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
-            setupSurface(
-                drawCanvas,
-                touchHelper,
-                toolbarHeight
-            )
-            // setupSurface resets the framework stroke style to firmware defaults. Re-send the
-            // pen style here, inside the same coroutine and after the surface is armed: a caller
-            // that invokes updatePenAndStroke() right after updateActiveSurface() would otherwise
-            // race this launch and have its style overwritten.
-            updatePenAndStroke()
+            setupSurface(drawCanvas, touchHelper, toolbarHeight)
+            // Armed inside the same coroutine, after the session is recreated: a caller that sets
+            // the pen style right after updateActiveSurface() would otherwise race this launch.
+            enableRawDrawing()
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {

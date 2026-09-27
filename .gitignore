@@ -20,11 +20,11 @@ app/libs
 .kotlin/
 
 # Android Studio
-.idea/
-# Keep shared Android Studio project configuration
+# Ignore the directory's contents, not the directory itself, so the
+# exceptions below can re-include shared project configuration.
+.idea/*
 !.idea/.name
-!.idea/codeStyles/
-!.idea/codeStyles/*
-!.idea/inspectionProfiles/
-!.idea/inspectionProfiles/*
+!.idea/vcs.xml
 !.idea/runConfigurations.xml
+!.idea/codeStyles/
+!.idea/inspectionProfiles/

@@ -1,7 +1,3 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 # Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
@@ -10,22 +6,20 @@ updates:
     schedule:
       interval: "weekly"
 
-    # Strictly limit to 2 PRs. 
-    # Usually: one for Onyx, one for "The rest of the world."
+    # Usually: one PR for Onyx, one for "the rest of the world".
     open-pull-requests-limit: 2
 
-    # GLOBAL RULE: Allow patches AND minor feature updates.
-    # This blocks Major (v1 to v2) breaking changes.
-    allow:
-      - dependency-name: "*"
-        update-types: 
-          - "version-update:semver-patch"
-          - "version-update:semver-minor"
-
     ignore:
+      # Patches and minor updates only; major (v1 to v2) updates stay manual.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
       # These remain fully manual.
       - dependency-name: "com.google.firebase:*"
       - dependency-name: "org.jetbrains.kotlin*"
+      # AGP is resolved through its plugin IDs, not the com.android.tools.build artifact.
+      - dependency-name: "com.android.application"
+      - dependency-name: "com.android.library"
       - dependency-name: "com.android.tools.build:*"
       - dependency-name: "com.google.devtools.ksp*"
       - dependency-name: "org.lsposed.hiddenapibypass:*"
@@ -44,4 +38,14 @@ updates:
           - "*"
         exclude-patterns:
           - "com.onyx.android.sdk:*"
-          - "at.yawk.lz4.*"
+          - "at.yawk.lz4:*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns:
+          - "*"
