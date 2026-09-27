@@ -149,25 +149,22 @@ class SettingsViewModel @Inject constructor(
 
         if (saveToDb) {
             viewModelScope.launch(Dispatchers.IO) {
-                // Retrieve password
-                val password =
-                    newSettings.password.ifBlank {
-                        kvProxy.getSyncSettings().password
-                    }
-                val settingWithPassword = newSettings.copy(password = password)
-
                 try {
-                    kvProxy.setSyncSettings(settingWithPassword)
+                    // A blank password field means "(unchanged)". lastSyncTime belongs to the
+                    // orchestrator; the copy held here dates from when the screen was opened.
+                    kvProxy.updateSyncSettings(newPassword = newSettings.password.ifBlank { null }) {
+                        newSettings.copy(lastSyncTime = it.lastSyncTime)
+                    }
 
                     // Reconcile schedule only if relevant parameters changed
                     val scheduleChanged =
-                        oldSettings.syncEnabled != settingWithPassword.syncEnabled ||
-                                oldSettings.autoSync != settingWithPassword.autoSync ||
-                                oldSettings.syncInterval != settingWithPassword.syncInterval ||
-                                oldSettings.wifiOnly != settingWithPassword.wifiOnly
+                        oldSettings.syncEnabled != newSettings.syncEnabled ||
+                                oldSettings.autoSync != newSettings.autoSync ||
+                                oldSettings.syncInterval != newSettings.syncInterval ||
+                                oldSettings.wifiOnly != newSettings.wifiOnly
 
                     if (scheduleChanged) {
-                        syncScheduler.reconcilePeriodicSync(settingWithPassword)
+                        syncScheduler.reconcilePeriodicSync(newSettings)
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
