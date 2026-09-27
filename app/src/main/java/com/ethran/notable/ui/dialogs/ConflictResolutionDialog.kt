@@ -31,12 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.ethran.notable.sync.NotebookConflict
 import com.ethran.notable.sync.NotebookConflictResolution
 import com.ethran.notable.sync.PageConflictResolution
 import com.ethran.notable.sync.SyncOrchestratorEntryPoint
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.utils.AppResult
 import dagger.hilt.EntryPoints
 import kotlinx.coroutines.launch
@@ -124,7 +124,7 @@ fun ConflictResolutionDialog(
 
     LaunchedEffect(bookId) { refresh() }
 
-    Dialog(onDismissRequest = { if (!working) onClose() }) {
+    ScaledDialog(onDismissRequest = { if (!working) onClose() }) {
         Column(
             modifier = Modifier
                 .background(Color.White)

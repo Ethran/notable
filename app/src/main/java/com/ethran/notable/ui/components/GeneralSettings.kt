@@ -78,5 +78,16 @@ fun GeneralSettings(
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(visualizePdfPagination = isChecked))
             })
+
+        // Zoom Level (UI Scale)
+        SettingSliderRow(
+            label = stringResource(R.string.uiScale),
+            value = settings.uiScale,
+            valueRange = 0.5f..1.5f,
+            steps = 9,
+            onValueChangeFinished = { newValue ->
+                onSettingsChange(settings.copy(uiScale = newValue))
+            }
+        )
     }
 }

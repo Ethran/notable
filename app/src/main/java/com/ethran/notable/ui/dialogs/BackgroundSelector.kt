@@ -72,7 +72,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import com.ethran.notable.R
@@ -87,6 +86,7 @@ import com.ethran.notable.editor.drawing.drawSquaredBg
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.getPdfPageCount
 import com.ethran.notable.ui.components.OnOffSwitch
+import com.ethran.notable.ui.components.ScaledDialog
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Loader
 import io.shipbook.shipbooksdk.ShipBook
@@ -201,7 +201,7 @@ fun BackgroundSelector(
     }
 
     val modalHeight = 550.dp
-    Dialog(onDismissRequest = { onClose() }) {
+    ScaledDialog(onDismissRequest = { onClose() }) {
         Column(
             modifier = Modifier
                 .background(Color.White)

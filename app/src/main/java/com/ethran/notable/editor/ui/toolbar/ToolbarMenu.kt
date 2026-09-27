@@ -16,12 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
@@ -31,7 +30,7 @@ import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.io.ExportFormat
-import com.ethran.notable.ui.convertDpToPixel
+import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
 
 /**
@@ -43,17 +42,19 @@ fun ToolbarMenu(
     uiState: ToolbarUiState,
     onAction: (ToolbarAction) -> Unit,
 ) {
-    val context = LocalContext.current
+    val density = LocalDensity.current
 
-    Popup(
+    ScaledPopup(
         alignment = Alignment.TopEnd,
         onDismissRequest = {
-                onAction(ToolbarAction.ToggleMenu)
+            onAction(ToolbarAction.ToggleMenu)
         },
-        offset = IntOffset(
-            convertDpToPixel((-10).dp, context).toInt(),
-            convertDpToPixel(50.dp, context).toInt()
-        ),
+        offset = with(density) {
+            IntOffset(
+                (-10).dp.roundToPx(),
+                50.dp.roundToPx()
+            )
+        },
         properties = PopupProperties(focusable = true),
     ) {
         ToolbarMenuContent(

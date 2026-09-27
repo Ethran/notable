@@ -23,10 +23,10 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.ui.components.BreadCrumb
+import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.ui.components.getFolderList
 
 
@@ -50,7 +50,7 @@ fun ShowFolderSelectionDialog(
 
     val parentFolder = appRepository.folderRepository.getParentLive(currentFolderId).observeAsState().value
 
-    Dialog(onDismissRequest = { onCancel() }) {
+    ScaledDialog(onDismissRequest = { onCancel() }) {
         Column(
             modifier = Modifier
                 .background(Color.White)

@@ -24,7 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
+import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
 
 /**
@@ -55,7 +55,7 @@ fun <T> SelectMenu(options: List<Pair<T, String>>, value: T, onChange: (T) -> Un
                 modifier = Modifier.height(20.dp)
             )
         }
-        if (isExpanded) Popup(onDismissRequest = { isExpanded = false }) {
+        if (isExpanded) ScaledPopup(onDismissRequest = { isExpanded = false }) {
             Column(
                 modifier = Modifier
                     .width(IntrinsicSize.Max)

@@ -17,12 +17,12 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportOptions
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.components.ScaledDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -56,7 +56,7 @@ fun ShowConfirmationDialog(
     confirmButtonText: String = "Confirm",
     cancelButtonText: String = "Cancel"
 ) {
-    Dialog(onDismissRequest = { onDismiss() }) {
+    ScaledDialog(onDismissRequest = { onDismiss() }) {
         Column(
             modifier = Modifier
                 .background(Color.White)
@@ -89,7 +89,7 @@ fun ShowExportDialog(
     onCancel: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    Dialog(onDismissRequest = { onCancel() }) {
+    ScaledDialog(onDismissRequest = { onCancel() }) {
         Column(
             modifier = Modifier
                 .background(Color.White)

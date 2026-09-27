@@ -16,10 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.deletePage
+import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
 import kotlinx.coroutines.launch
 
@@ -35,7 +35,7 @@ fun PageMenu(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    Popup(
+    ScaledPopup(
         alignment = Alignment.TopStart,
         onDismissRequest = { onClose() },
         properties = PopupProperties(focusable = true)

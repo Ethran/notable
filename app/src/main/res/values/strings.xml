@@ -22,6 +22,7 @@
     <string name="rename_on_create">Open properties on new notebook</string>
     <string name="paginate_pdf">Paginate PDF</string>
     <string name="preview_pdf_pagination">Preview PDF Pagination</string>
+    <string name="uiScale">UI Scale</string>
     <string name="app_new_version">It seems a new version of Notable is available on GitHub!</string>
     <string name="app_see_release">See release in browser</string>
     <string name="app_latest_version">You are on the latest version.</string>
@@ -287,5 +288,6 @@
     <string name="toolbar_element_home">Library</string>
     <string name="toolbar_element_menu">Menu</string>
     <string name="toolbar_element_divider">Divider</string>
+    <string name="toolbar_eraser">Eraser</string>
 
 </resources>
