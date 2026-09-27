@@ -297,7 +297,7 @@ private fun EraserSubmenu(
             ) {
                 BasicText(
                     text = stringResource(
-                        R.string.toolbar_scribble_to_erase
+                        R.string.toolbar_scribble_to_erase_two_lined_short
                     ),
                     modifier = Modifier.padding(end = 6.dp),
                     style = TextStyle(
