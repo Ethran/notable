@@ -282,7 +282,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 try {
-                    snapshotFlow { GlobalAppSettings.current.blockSystemGestures }
+                    snapshotFlow { GlobalAppSettings.current.blockOnyxSystemGestures }
                         .collect { setOnyxSystemGesturesBlocked(it) }
                 } finally {
                     setOnyxSystemGesturesBlocked(false)

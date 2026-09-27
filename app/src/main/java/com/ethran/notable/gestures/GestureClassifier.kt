@@ -1,6 +1,8 @@
 package com.ethran.notable.gestures
 
+import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.abs
+private val log = ShipBook.getLogger("GestureClassifier")
 
 /**
  * Recognizer phase of the gesture in progress. Owned by the receiver;
@@ -37,6 +39,8 @@ fun classifyGesture(
     val events = mutableListOf<GestureEvent>()
     val fingers = tracker.maxConcurrentPressed
 
+    log.d("classifyGesture: fingers=$fingers mode=$mode")
+
     if (fingers == 1) {
         if (isOneFingerTap(tracker, thresholds)) events += GestureEvent.Tap(fingers = 1)
     } else if (fingers == 2) {
@@ -45,6 +49,10 @@ fun classifyGesture(
         val pinchRatio = tracker.pinchRatio()
         if (!flags.continuousZoom && abs(pinchRatio) > PINCH_ZOOM_THRESHOLD) {
             events += GestureEvent.PinchZoom(pinchRatio)
+        }
+    } else if (fingers == 3) {
+        if (isThreeFingerTap(tracker, mode, thresholds)) {
+            events += GestureEvent.Tap(fingers = 3)
         }
     }
 
@@ -93,8 +101,47 @@ fun isTwoFingerTap(
 ): Boolean {
     if (tracker.maxConcurrentPressed == 1) return false
     if (mode != GestureMode.Normal) return false
+
     val duration = tracker.inputDuration()
-    return tracker.totalTravel() < thresholds.twoFingerTapMovementTolerancePx &&
+    val fingers = tracker.maxConcurrentPressed
+    val travel = tracker.totalTravel()
+    log.v(
+        "2-finger tap check: " +
+                "fingers=$fingers, " +
+                "mode=$mode, " +
+                "duration=$duration, " +
+                "travel=$travel, " +
+                "travelThreshold=${thresholds.twoFingerTapMovementTolerancePx}, " +
+                "minTime=$TWO_FINGER_TOUCH_TAP_MIN_TIME, " +
+                "maxTime=$TWO_FINGER_TOUCH_TAP_MAX_TIME"
+    )
+
+
+    return travel < thresholds.twoFingerTapMovementTolerancePx &&
+            duration < TWO_FINGER_TOUCH_TAP_MAX_TIME &&
+            duration > TWO_FINGER_TOUCH_TAP_MIN_TIME
+}
+
+fun isThreeFingerTap(
+    tracker: PointerTracker,
+    mode: GestureMode,
+    thresholds: GestureThresholds,
+): Boolean {
+    val fingers = tracker.maxConcurrentPressed
+    val duration = tracker.inputDuration()
+    val travel = tracker.totalTravel()
+    log.v(
+        "3-finger tap check: " +
+                "fingers=$fingers, " +
+                "mode=$mode, " +
+                "duration=$duration, " +
+                "travel=$travel, " +
+                "travelThreshold=${thresholds.twoFingerTapMovementTolerancePx}, " +
+                "minTime=$TWO_FINGER_TOUCH_TAP_MIN_TIME, " +
+                "maxTime=$TWO_FINGER_TOUCH_TAP_MAX_TIME"
+    )
+
+    return  travel < thresholds.twoFingerTapMovementTolerancePx &&
             duration < TWO_FINGER_TOUCH_TAP_MAX_TIME &&
             duration > TWO_FINGER_TOUCH_TAP_MIN_TIME
 }

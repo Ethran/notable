@@ -28,12 +28,14 @@
     <string name="app_check_updates">Check for newer version</string>
     <string name="gestures_double_tap_action">Double Tap Action</string>
     <string name="gestures_two_finger_tap_action">Two Finger Tap Action</string>
+    <string name="gestures_three_finger_tap_action">Three Finger Tap Action</string>
     <string name="gestures_swipe_left_action">Swipe Left Action</string>
     <string name="gestures_swipe_right_action">Swipe Right Action</string>
     <string name="gestures_three_finger_swipe_left_action">Three Finger Swipe Left Action</string>
     <string name="gestures_three_finger_swipe_right_action">Three Finger Swipe Right Action</string>
     <string name="enable_quick_nav">Swipe up with three fingers to open QuickNav</string>
-    <string name="block_system_gestures">Block system gestures while in Notable — fixes three-finger gestures when the system screenshot gesture is on, but edge navigation swipes stop working in the app</string>
+    <string name="block_onyx_system_gestures">Block Onyx system gestures</string>
+    <string name="block_onyx_system_gestures_description">Prevents Onyx system gestures from interfering with Notable’s 3-finger gestures, but disables edge navigation swipes while in Notable.</string>
     <string name="work_in_progress">(work in progress)</string>
     <string name="toolbar_position_top">Top</string>
     <string name="toolbar_position_bottom">Bottom</string>
@@ -287,5 +289,4 @@
     <string name="toolbar_element_home">Library</string>
     <string name="toolbar_element_menu">Menu</string>
     <string name="toolbar_element_divider">Divider</string>
-
 </resources>
