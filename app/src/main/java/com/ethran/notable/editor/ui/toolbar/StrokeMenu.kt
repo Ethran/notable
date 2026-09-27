@@ -30,16 +30,15 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.utils.PenSetting
-import com.ethran.notable.ui.convertDpToPixel
+import com.ethran.notable.ui.components.ScaledPopup
 import kotlin.math.roundToInt
 
 
@@ -51,15 +50,15 @@ fun StrokeMenu(
     sizeOptions: List<Pair<String, Float>>,
     colorOptions: List<Color>,
 ) {
-    val context = LocalContext.current
+    val density = LocalDensity.current
 
     val columnModifier =
         if (GlobalAppSettings.current.continuousStrokeSlider) Modifier
             .background(Color.White)
             .border(1.dp, Color.Black)
         else Modifier
-    Popup(
-        offset = IntOffset(0, convertDpToPixel(43.dp, context).toInt()),
+    ScaledPopup(
+        offset = with(density) { IntOffset(0, 43.dp.roundToPx()) },
         onDismissRequest = { onClose() },
         properties = PopupProperties(focusable = true),
         alignment = Alignment.TopCenter

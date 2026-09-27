@@ -20,7 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
@@ -72,6 +71,8 @@ import com.ethran.notable.sync.SyncLogger
 import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
 import com.ethran.notable.sync.SyncStep
+import com.ethran.notable.ui.components.ScaledAlertDialog
+import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.ui.components.SettingToggleRow
 import com.ethran.notable.ui.components.SettingsDivider
 import com.ethran.notable.ui.theme.InkaTheme
@@ -122,7 +123,7 @@ fun SyncSettings(
 
     // 2. The Blocking Dialog — only warn before the user has opted in (sync disabled) (8i-2).
     if (showWarningDialog && !state.syncSettings.syncEnabled) {
-        AlertDialog(
+        ScaledAlertDialog(
             // Passing an empty lambda prevents dismissing by clicking outside the dialog
             onDismissRequest = { },
             title = {
@@ -1073,7 +1074,7 @@ fun SyncLogViewer(syncLogs: List<SyncLogger.LogEntry>, onClearLog: () -> Unit) {
 fun ConfirmationDialog(
     title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit
 ) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+    ScaledDialog(onDismissRequest = onDismiss) {
         Surface(
             color = MaterialTheme.colors.surface,
             shape = RoundedCornerShape(8.dp),
