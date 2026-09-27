@@ -85,7 +85,7 @@ fun GeneralSettings(
             value = settings.uiScale,
             valueRange = 0.5f..1.5f,
             steps = 9,
-            onValueChange = { newValue ->
+            onValueChangeFinished = { newValue ->
                 onSettingsChange(settings.copy(uiScale = newValue))
             }
         )
