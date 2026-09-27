@@ -246,7 +246,9 @@ class OnyxInputHandler(
             setupSurface(drawCanvas, touchHelper, toolbarHeight)
             // Armed inside the same coroutine, after the session is recreated: a caller that sets
             // the pen style right after updateActiveSurface() would otherwise race this launch.
-            enableRawDrawing()
+            // Only when drawing is on: if updateIsDrawing() disabled it while the surface did not
+            // exist yet (QuickNav open across a page navigation), nothing would disable it again.
+            if (toolbarState.isDrawing) enableRawDrawing()
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {
