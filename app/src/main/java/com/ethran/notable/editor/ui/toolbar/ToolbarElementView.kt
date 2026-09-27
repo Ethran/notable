@@ -291,7 +291,6 @@ private fun EraserSubmenu(
             Row(
                 modifier = Modifier
                     .padding(4.dp)
-                    .height(72.dp)
                     .background(Color.White),
                 verticalAlignment = Alignment.CenterVertically
             ) {
