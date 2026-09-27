@@ -256,6 +256,7 @@ class CanvasObserverRegistry(
                 .drop(1)
                 .collect { eraser ->
                     log.v("eraser change: $eraser")
+                    inputHandler.updateEraserTrack()
                     inputHandler.updatePenAndStroke()
                     refreshManager.refreshUiSuspend()
                 }

@@ -136,6 +136,11 @@ fun onSurfaceDestroy(view: View, touchHelper: TouchHelper?) {
 }
 
 
+/**
+ * Recreates the raw-drawing session for [view] (limit/exclude rects around the toolbar) and leaves
+ * it **disabled**: the caller arms it with `OnyxInputHandler.enableRawDrawing`, which also
+ * configures the eraser channel and pen style.
+ */
 fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
     if (touchHelper == null) return
     // Takes at least 50ms on Note 4c,
@@ -165,13 +170,6 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
 
     touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
         .openRawDrawing()
-
-    touchHelper.setRawDrawingEnabled(true)
-
-    // Enable the firmware's native eraser indicator. MUST be called after setRawDrawingEnabled(true)
-    // because that call internally resets it to disabled. Also re-asserted in onBeginRawErasing.
-    // See docs/onyx-sdk/onyx-native-eraser-indicator.md.
-    enableNativeEraser(touchHelper)
     log.i("Setup editable surface completed")
 
 }
@@ -233,7 +231,7 @@ private val SELECT_ERASER_PARAMS = floatArrayOf(5f, 9f, 9f, 0f)
  * these params and falls back to the pen's global width, bringing the bug back.
  * See docs/onyx-sdk/onyx-native-eraser-indicator.md.
  */
-fun enableNativeEraser(touchHelper: TouchHelper?, eraser: Eraser = Eraser.PEN) {
+fun enableNativeEraser(touchHelper: TouchHelper?, eraser: Eraser) {
     if (touchHelper == null) return
     try {
         when (eraser) {

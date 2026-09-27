@@ -238,9 +238,9 @@ class SyncOrchestrator @Inject constructor(
             finalizeSyncResult(reporter, summary, nonCriticalError).onSuccess {
                 // Persist the last successful full-sync time so the settings "Last synced" line
                 // reflects background/periodic syncs too, not just manual ones.
-                kvProxy.setSyncSettings(
-                    kvProxy.getSyncSettings().copy(lastSyncTime = System.currentTimeMillis())
-                )
+                kvProxy.updateSyncSettings {
+                    it.copy(lastSyncTime = System.currentTimeMillis())
+                }
             }
 
         } catch (e: CancellationException) {
