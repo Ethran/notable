@@ -4,7 +4,7 @@ import com.ethran.notable.sync.SyncSettings
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class KeepStoredPasswordTest {
+class ApplySyncSettingsUpdateTest {
 
     private val stored = SyncSettings(
         syncEnabled = true,
@@ -16,7 +16,7 @@ class KeepStoredPasswordTest {
 
     @Test
     fun updates_other_fields_and_keeps_the_encrypted_password() {
-        val result = keepStoredPassword(stored) { it.copy(lastSyncTime = 2L) }
+        val result = applySyncSettingsUpdate(stored, null) { it.copy(lastSyncTime = 2L) }
 
         assertEquals(2L, result.lastSyncTime)
         assertEquals("ENCRYPTED-BLOB", result.password)
@@ -27,23 +27,31 @@ class KeepStoredPasswordTest {
         // What a failed decrypt looks like: getSyncSettings() hands out password = "".
         val decryptFailed = stored.copy(password = "", wifiOnly = true)
 
-        val result = keepStoredPassword(stored) { decryptFailed }
+        val result = applySyncSettingsUpdate(stored, null) { decryptFailed }
 
         assertEquals(true, result.wifiOnly)
         assertEquals("ENCRYPTED-BLOB", result.password)
     }
 
     @Test
+    fun a_new_password_replaces_the_stored_one() {
+        val result = applySyncSettingsUpdate(stored, "NEW-BLOB") { it.copy(username = "other") }
+
+        assertEquals("NEW-BLOB", result.password)
+        assertEquals("other", result.username)
+    }
+
+    @Test
     fun the_transform_never_sees_the_stored_password() {
         var seen: String? = null
-        keepStoredPassword(stored) { seen = it.password; it }
+        applySyncSettingsUpdate(stored, null) { seen = it.password; it }
 
         assertEquals("", seen)
     }
 
     @Test
     fun nothing_stored_stays_empty() {
-        val result = keepStoredPassword(SyncSettings()) { it.copy(serverUrl = "https://x") }
+        val result = applySyncSettingsUpdate(SyncSettings(), null) { it.copy(serverUrl = "https://x") }
 
         assertEquals("", result.password)
         assertEquals("https://x", result.serverUrl)

@@ -237,10 +237,8 @@ class SyncOrchestrator @Inject constructor(
             )
             finalizeSyncResult(reporter, summary, nonCriticalError).onSuccess {
                 // Persist the last successful full-sync time so the settings "Last synced" line
-                // reflects background/periodic syncs too, not just manual ones. Keeps the stored
-                // password as it is: a decrypt-and-re-encrypt round trip would wipe it whenever
-                // the Keystore fails to decrypt.
-                kvProxy.updateSyncSettingsKeepingPassword {
+                // reflects background/periodic syncs too, not just manual ones.
+                kvProxy.updateSyncSettings {
                     it.copy(lastSyncTime = System.currentTimeMillis())
                 }
             }

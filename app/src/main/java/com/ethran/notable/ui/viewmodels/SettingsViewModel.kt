@@ -150,13 +150,10 @@ class SettingsViewModel @Inject constructor(
         if (saveToDb) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    if (newSettings.password.isBlank()) {
-                        // Blank field means "(unchanged)": keep the stored password as it is. Going
-                        // through getSyncSettings() and back would save an empty password whenever
-                        // the Keystore fails to decrypt it.
-                        kvProxy.updateSyncSettingsKeepingPassword { newSettings }
-                    } else {
-                        kvProxy.setSyncSettings(newSettings)
+                    // A blank password field means "(unchanged)". lastSyncTime belongs to the
+                    // orchestrator; the copy held here dates from when the screen was opened.
+                    kvProxy.updateSyncSettings(newPassword = newSettings.password.ifBlank { null }) {
+                        newSettings.copy(lastSyncTime = it.lastSyncTime)
                     }
 
                     // Reconcile schedule only if relevant parameters changed
