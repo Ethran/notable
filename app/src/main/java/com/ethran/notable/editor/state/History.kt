@@ -1,6 +1,7 @@
 package com.ethran.notable.editor.state
 
 import android.graphics.Rect
+import com.ethran.notable.R
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.events.AppEvent
@@ -15,6 +16,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
 
+private const val MAX_UNDO_STEPS: Int = 200 // Maximum number of strokes stored in the undo/redo history.
 
 sealed class Operation {
     data class DeleteStroke(val strokeIds: List<String>) : Operation()
@@ -68,8 +70,8 @@ class History @AssistedInject constructor(
                     CanvasEventBus.refreshUi.emit(Unit)
                 } else {
                     val message = when (actions.type) {
-                        UndoRedoType.Undo -> "Nothing to undo"
-                        UndoRedoType.Redo -> "Nothing to redo"
+                        UndoRedoType.Undo -> pageView.context.getString(R.string.no_undo_to_perform)
+                        UndoRedoType.Redo -> pageView.context.getString(R.string.no_redo_to_perform)
                     }
                     appEventBus.emit(AppEvent.ActionHint(message, 3000))
                 }
@@ -169,7 +171,7 @@ class History @AssistedInject constructor(
             return
         }
         undoList.add(operations)
-        if (undoList.size > 5) undoList.removeAt(0)
+        if (undoList.size > MAX_UNDO_STEPS) undoList.removeAt(0)
         redoList.clear()
     }
 
