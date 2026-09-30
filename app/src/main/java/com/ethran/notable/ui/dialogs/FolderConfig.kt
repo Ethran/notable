@@ -34,9 +34,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.FolderRepository
+import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.ui.noRippleClickable
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
@@ -64,7 +64,7 @@ fun FolderConfigDialog(folderRepository: FolderRepository,
 
     if (folder == null) return
 
-    Dialog(
+    ScaledDialog(
         onDismissRequest = {
             log.i("Closing Directory Dialog - upstream")
             onClose()

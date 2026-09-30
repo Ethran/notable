@@ -51,7 +51,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
@@ -65,6 +64,7 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
+import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
@@ -197,7 +197,7 @@ fun NotebookConfigDialog(
             })
     }
 
-    Dialog(
+    ScaledDialog(
         onDismissRequest = {
             onClose()
         }) {
