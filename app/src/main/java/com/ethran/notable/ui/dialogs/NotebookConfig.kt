@@ -66,6 +66,7 @@ import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 
 private val log = ShipBook.getLogger("NotebookConfig")
@@ -266,9 +267,14 @@ fun NotebookConfigDialog(
                                     if (!focusState.isFocused) {
                                         log.i("loose focus")
                                         if (book!!.title != bookTitle) {
-                                            val updatedBook = book!!.copy(title = bookTitle)
+                                            // A single-column write, not a full-row update from
+                                            // this (possibly stale) snapshot -- the Create button
+                                            // below calls focusManager.clearFocus(), which fires
+                                            // this same callback, so this and Create's own title
+                                            // save must not stomp a concurrent background/link
+                                            // change with a stale copy of the rest of the row.
                                             scope.launch {
-                                                bookRepository.update(updatedBook)
+                                                bookRepository.setTitle(bookId, bookTitle)
                                             }
                                         }
                                     }
@@ -366,10 +372,20 @@ fun NotebookConfigDialog(
                 if (!isNewlyCreated) {
                     ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
                         scope.launch {
-                            snackManager.runWithSnack("Copying notebook...", 2000) {
-                                val newNotebookId = appRepository.duplicateNotebook(bookId)
-                                if (newNotebookId != null) "Notebook copied."
-                                else "Copy failed: notebook not found."
+                            try {
+                                snackManager.runWithSnack("Copying notebook...", 2000) {
+                                    val newNotebookId = appRepository.duplicateNotebook(bookId)
+                                    if (newNotebookId != null) "Notebook copied."
+                                    else "Copy failed: notebook not found."
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                // runWithSnack already displayed "Error: ${e.message}" before
+                                // rethrowing (e.g. duplicateNotebook's missing-referenced-page
+                                // check) -- swallow it here so that doesn't also surface as an
+                                // uncaught exception in this coroutine scope.
+                                log.e("Notebook copy failed: ${e.message}", e)
                             }
                         }
                     }
