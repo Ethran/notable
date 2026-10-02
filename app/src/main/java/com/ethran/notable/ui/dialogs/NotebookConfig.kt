@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
@@ -206,6 +207,48 @@ fun NotebookEditDialog(
                 .padding(top = 24.dp, bottom = 16.dp)
         ) {
 
+            /* -------------- Title Field -----------*/
+            Row {
+                Text(
+                    text = stringResource(R.string.details_notebook_title),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp
+                )
+                Spacer(Modifier.width(20.dp))
+                BasicTextField(
+                    value = bookTitle,
+                    textStyle = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Light,
+                        fontSize = 24.sp
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text, imeAction = ImeAction.Done
+                    ),
+                    onValueChange = { bookTitle = it },
+                    keyboardActions = KeyboardActions(onDone = {
+                        focusManager.clearFocus()
+                    }),
+                    modifier = Modifier
+                        .background(Color(230, 230, 230, 255))
+                        .padding(10.dp, 0.dp)
+                        .onFocusChanged { focusState ->
+                            if (!focusState.isFocused) {
+                                log.i("loose focus")
+                                if (book!!.title != bookTitle) {
+                                    val updatedBook = book!!.copy(title = bookTitle)
+                                    scope.launch {
+                                        bookRepository.update(updatedBook)
+                                    }
+                                }
+                            }
+                        }
+
+
+                )
+            }
+
             Box(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -241,48 +284,6 @@ fun NotebookEditDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
 
-                    /* -------------- Title Field -----------*/
-                    Row {
-                        Text(
-                            text = stringResource(R.string.details_notebook_title),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp
-                        )
-                        Spacer(Modifier.width(20.dp))
-                        BasicTextField(
-                            value = bookTitle,
-                            textStyle = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Light,
-                                fontSize = 24.sp
-                            ),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Text, imeAction = ImeAction.Done
-                            ),
-                            onValueChange = { bookTitle = it },
-                            keyboardActions = KeyboardActions(onDone = {
-                                focusManager.clearFocus()
-                            }),
-                            modifier = Modifier
-                                .background(Color(230, 230, 230, 255))
-                                .padding(10.dp, 0.dp)
-                                .onFocusChanged { focusState ->
-                                    if (!focusState.isFocused) {
-                                        log.i("loose focus")
-                                        if (book!!.title != bookTitle) {
-                                            val updatedBook = book!!.copy(title = bookTitle)
-                                            scope.launch {
-                                                bookRepository.update(updatedBook)
-                                            }
-                                        }
-                                    }
-                                }
-
-
-                        )
-                    }
-
                     /* -------------- Template selection -----------*/
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -291,7 +292,12 @@ fun NotebookEditDialog(
                         Text(
                             text = stringResource(R.string.details_notebook_default_background_template),
                         )
-                        Spacer(modifier = Modifier.width(40.dp))
+                    }
+//                        Spacer(modifier = Modifier.width(40.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                         Button(
                             onClick = { showBackgroundSelector = !showBackgroundSelector },
                             colors = ButtonDefaults.buttonColors(
@@ -310,8 +316,19 @@ fun NotebookEditDialog(
                                     BackgroundType.Native -> "Native"
                                     is BackgroundType.Pdf -> "Static pdf Page"
                                 }
+
+                            // Map native keys to localized names, or extract the file name for image/PDF paths
+                            val backgroundDisplayName = when (book!!.defaultBackground) {
+                                "blank" -> stringResource(R.string.blank_page)
+                                "dotted" -> stringResource(R.string.dot_grid)
+                                "lined" -> stringResource(R.string.lines)
+                                "squared" -> stringResource(R.string.small_squares_grid)
+                                "hexed" -> stringResource(R.string.hexagon_grid)
+                                else -> book!!.defaultBackground
+                            }
+
                             Text(
-                                text = typeName,
+                                text = "$typeName: $backgroundDisplayName",
                                 fontWeight = FontWeight.SemiBold
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -340,7 +357,7 @@ fun NotebookEditDialog(
 
                     /* -------------- Other book info -----------*/
                     Text(stringResource(R.string.details_notebook_pages, book!!.pageIds.size))
-                    Text("Size: TODO!")
+                    Text("Size: TODO!") // TODO implement size calculation
                     Row {
                         Text(stringResource(R.string.details_notebook_in_folder))
                         BreadCrumb(folders = breadcrumbFolders, fontSize = 16) { }
@@ -379,6 +396,244 @@ fun NotebookEditDialog(
 
     }
 
+}
+
+@Composable
+fun NotebookCreateDialog(
+    appRepository: AppRepository,
+    initialFolderId: String?,
+    onCreate: (
+        title: String,
+        background: String,
+        backgroundType: String
+    ) -> Unit,
+    onClose: () -> Unit
+) {
+    log.v("Opening notebook creation dialog")
+
+    var bookTitle by remember {
+        mutableStateOf<String>("New Notebook")
+    }
+
+    var bookFolder by remember {
+        mutableStateOf(initialFolderId)
+    }
+
+    var breadcrumbFolders by remember {
+        mutableStateOf<List<Folder>>(emptyList())
+    }
+
+    LaunchedEffect(bookFolder) {
+        breadcrumbFolders = getFolderList(appRepository, bookFolder)
+    }
+
+    var defaultBackgroundType by remember {
+        mutableStateOf(BackgroundType.Native.key)
+    }
+
+    var defaultBackground by remember {
+        mutableStateOf<String>(GlobalAppSettings.current.defaultNativeTemplate)
+    }
+
+    var showBackgroundSelector by remember {
+        mutableStateOf(false)
+    }
+
+    if (showBackgroundSelector) {
+        BackgroundSelector(
+            initialPageBackgroundType = defaultBackgroundType,
+            initialPageBackground = defaultBackground,
+            isNotebookBgSelector = true,
+            onChange = { backgroundType, background ->
+                defaultBackgroundType = backgroundType
+                defaultBackground = background
+            },
+            onClose = {
+                showBackgroundSelector = false
+            }
+        )
+    }
+
+    log.d("User chose background type: $defaultBackgroundType and background: $defaultBackground")
+
+    ScaledDialog(
+        onDismissRequest = {
+            onClose()
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Color.White)
+                .fillMaxWidth()
+                .border(2.dp, Color.Black, RectangleShape)
+                .padding(16.dp)
+                .padding(top = 24.dp, bottom = 16.dp)
+        ) {
+
+            // Header / creation fields
+            Row(
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+
+                    /* -------------- Title Field ----------- */
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.details_notebook_title),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 24.sp
+                        )
+
+                        Spacer(Modifier.width(20.dp))
+                        val focusManager = LocalFocusManager.current
+
+                        BasicTextField(
+                            value = bookTitle,
+                            textStyle = TextStyle(
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Light,
+                                fontSize = 24.sp
+                            ),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Done
+                            ),
+                            onValueChange = {
+                                bookTitle = it
+                            },
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    focusManager.clearFocus()
+                                }
+                            ),
+                            modifier = Modifier
+                                .background(Color(230, 230, 230, 255))
+                                .padding(10.dp, 0.dp)
+                        )
+                    }
+
+                    /* -------------- Template selection ----------- */
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.details_notebook_default_background_template
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.width(40.dp))
+
+                        Button(
+                            onClick = {
+                                showBackgroundSelector = !showBackgroundSelector
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color(Color.White.toArgb()),
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color.Black)
+                        ) {
+                            val backgroundType = BackgroundType.fromKey(defaultBackgroundType)
+
+                            val typeName = when (backgroundType) {
+                                BackgroundType.AutoPdf -> "Observe Pdf"
+                                BackgroundType.CoverImage -> "Cover Image"
+                                BackgroundType.Image -> "Image"
+                                BackgroundType.ImageRepeating -> "Repeating Image"
+                                BackgroundType.Native -> "Native"
+                                is BackgroundType.Pdf -> "Static pdf Page"
+                            }
+
+                            // Map native keys to localized names, or extract the file name for image/PDF paths
+                            val backgroundDisplayName = when (defaultBackground) {
+                                    "blank" -> stringResource(R.string.blank_page)
+                                    "dotted" -> stringResource(R.string.dot_grid)
+                                    "lined" -> stringResource(R.string.lines)
+                                    "squared" -> stringResource(R.string.small_squares_grid)
+                                    "hexed" -> stringResource(R.string.hexagon_grid)
+                                    else -> defaultBackground
+                                }
+
+                            Text(
+                                text = "$typeName: $backgroundDisplayName",
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            Icon(
+                                imageVector = Icons.Default.ArrowCircleRight,
+                                contentDescription = "Expand selector",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    /* -------------- Folder ----------- */
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.details_notebook_in_folder)
+                        )
+
+                        Spacer(Modifier.width(12.dp))
+
+                        BreadCrumb(
+                            folders = breadcrumbFolders,
+                            fontSize = 16
+                        ) {
+                            // No folder picker here.
+                            // TODO: decide later whether breadcrumb should be interactive.
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Creation actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                ActionButton(
+                    stringResource(R.string.details_notebook_buttons_cancel)
+                ) {
+                    onClose()
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                ActionButton(
+                    stringResource(R.string.details_notebook_buttons_create)
+                ) {
+                    val title = bookTitle.trim()
+
+                    if (title.isEmpty()) {
+                        return@ActionButton
+                    }
+
+                    onCreate(
+                        title,
+                        defaultBackground,
+                        defaultBackgroundType
+                    )
+                    onClose()
+                }
+            }
+        }
+    }
 }
 
 @Composable

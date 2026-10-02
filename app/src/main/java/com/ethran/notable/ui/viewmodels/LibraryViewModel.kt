@@ -7,11 +7,9 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
@@ -27,16 +25,21 @@ import com.ethran.notable.sync.SyncBadge
 import com.ethran.notable.sync.SyncScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+private val log = ShipBook.getLogger("LibraryViewModel")
 
 data class LibraryUiState(
     val folderId: String? = null,
@@ -68,7 +71,7 @@ class LibraryViewModel @Inject constructor(
     val pageDataManager: PageDataManager,
     private val snackDispatcher: SnackDispatcher,
     val syncScheduler: SyncScheduler,
-    private val syncStatusStore: NotebookSyncStatusStore,
+    syncStatusStore: NotebookSyncStatusStore,
     @param:ApplicationContext private val context: Context // Kept strictly for ImportEngine
 ) : ViewModel() {
 
@@ -77,9 +80,10 @@ class LibraryViewModel @Inject constructor(
     private val pageRepository = appRepository.pageRepository
 
     private val _folderId = MutableStateFlow<String?>(null)
+    val folderId: StateFlow<String?> = _folderId
     private val _isImporting = MutableStateFlow(false)
-    private val _newlyCreatedBookId = MutableStateFlow<String?>(null)
-    val newlyCreatedBookId: StateFlow<String?> = _newlyCreatedBookId
+    private val _openCreateNewNotebookDialog = MutableStateFlow(false)
+    val openCreateNewNotebookDialog: StateFlow<Boolean> = _openCreateNewNotebookDialog
     private val _isLatestVersion = MutableStateFlow(true)
     private val _breadcrumbFolders = MutableStateFlow<List<Folder>>(emptyList())
 
@@ -172,20 +176,45 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun onCreateNewNotebook() {
+        log.v("Received creating notebook request, showing dialog")
+        _openCreateNewNotebookDialog.value = true
+    }
+
+    /**
+     * Create a new document and open it
+     */
+    fun createNotebook(
+        title: String,
+        backgroundType: String,
+        background: String,
+        onCreated: (pageId: String, notebookId: String) -> Unit
+    ) {
+        log.v("Creating notebook")
+
+        val notebook = Notebook(
+            title = title,
+            parentFolderId = _folderId.value,
+            defaultBackground = background,
+            defaultBackgroundType = backgroundType
+        )
+
         viewModelScope.launch(Dispatchers.IO) {
-            val settings = GlobalAppSettings.current
-            val notebook = Notebook(
-                parentFolderId = _folderId.value,
-                defaultBackground = settings.defaultNativeTemplate,
-                defaultBackgroundType = BackgroundType.Native.key
-            )
             bookRepository.create(notebook)
-            _newlyCreatedBookId.value = notebook.id
+
+            // Reactively wait until Room emits this specific notebook with non-empty pageIds
+            val readyBook = bookRepository.getByIdLive(notebook.id)
+                .asFlow().first { it != null && it.pageIds.isNotEmpty() }
+
+            readyBook?.let { book ->
+                withContext(Dispatchers.Main) {
+                    onCreated(book.pageIds.first(), book.id)
+                }
+            }
         }
     }
 
-    fun clearNewlyCreatedBookId() {
-        _newlyCreatedBookId.value = null
+    fun onCreateNewNotebookDialogClosed() {
+        _openCreateNewNotebookDialog.value = false
     }
 
     fun onPdfFile(uri: Uri, copy: Boolean) {
@@ -201,11 +230,14 @@ class LibraryViewModel @Inject constructor(
                 val result = importEngine.import(
                     uri, ImportOptions(folderId = _folderId.value, linkToExternalFile = !copy)
                 )
-                
+
                 result.fold(
                     onSuccess = { importedPageIds ->
                         if (importedPageIds.isNotEmpty()) {
-                            thumbnailBackfillQueue.enqueue(importedPageIds, PreviewSaveMode.STRICT_BW)
+                            thumbnailBackfillQueue.enqueue(
+                                importedPageIds,
+                                PreviewSaveMode.STRICT_BW
+                            )
                         }
                         snackDispatcher.showOrUpdateSnack(SnackConf(text = "PDF Import Successful"))
                     },
@@ -234,8 +266,13 @@ class LibraryViewModel @Inject constructor(
             try {
                 val result = importEngine.import(uri, ImportOptions(folderId = _folderId.value))
                 result.fold(
-                    onSuccess = { _ -> 
-                        snackDispatcher.showOrUpdateSnack(SnackConf(text = "XOPP Import Successful", duration = 3000))
+                    onSuccess = { _ ->
+                        snackDispatcher.showOrUpdateSnack(
+                            SnackConf(
+                                text = "XOPP Import Successful",
+                                duration = 3000
+                            )
+                        )
                     },
                     onError = { error ->
                         snackDispatcher.showOrUpdateSnack(SnackConf(text = "Import failed: ${error.userMessage}"))

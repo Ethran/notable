@@ -291,5 +291,7 @@
     <string name="no_undo_to_perform">Nothing to undo</string>
     <string name="no_redo_to_perform">Nothing to redo</string>
     <string name="toolbar_eraser">Eraser</string>
+    <string name="details_notebook_buttons_cancel">Cancel</string>
+    <string name="details_notebook_buttons_create">Create</string>
 
 </resources>
