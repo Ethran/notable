@@ -60,6 +60,8 @@
     <string name="details_notebook_buttons_delete">Usuń</string>
     <string name="details_notebook_buttons_move">Przenieś</string>
     <string name="details_notebook_buttons_export">Eksportuj</string>
+    <string name="details_notebook_buttons_copy">Kopiuj</string>
+    <string name="details_notebook_buttons_create">Utwórz</string>
     <string name="details_notebook_linked_to">Powiązane z: %1$s</string>
 
 
