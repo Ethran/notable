@@ -1,6 +1,7 @@
 package com.ethran.notable.editor
 
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
@@ -27,6 +28,10 @@ data class OpenPage(
 
     val backgroundType: BackgroundType?
         get() = record?.getBackgroundType()
+
+    /** The sheet this page is laid out on, or null while it keeps the infinite canvas. */
+    val pageMode: PageMode?
+        get() = record?.pageMode
 
     /**
      * Whether scroll and zoom are allowed: only once [load] has read the page's record, so its

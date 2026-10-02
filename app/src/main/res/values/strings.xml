@@ -298,5 +298,8 @@
     <string name="page_mode_letter">Letter</string>
     <string name="page_mode_legal">Legal</string>
     <string name="default_page_mode">Default page mode</string>
+    <string name="page_mode_a3">A3</string>
+    <string name="page_mode_a6">A6</string>
+    <string name="page_mode_tabloid">Tabloid</string>
 
 </resources>

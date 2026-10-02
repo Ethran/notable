@@ -11,12 +11,15 @@ import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
+import androidx.core.graphics.withScale
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.utils.scaleRect
 import com.ethran.notable.ui.convertPointsToPixel
+import com.ethran.notable.ui.sideBarsRectangles
+import com.ethran.notable.ui.sheetAdjustedWidth
 import com.onyx.android.sdk.extension.copy
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.cos
@@ -40,11 +43,15 @@ private val defaultPaint = Paint().apply {
     this.strokeWidth = 1f
 }
 
+private val sideBarPaint = Paint().apply {
+    this.color = Color.rgb(120, 120, 120)
+}
+
 // For drawing Hexagons
 private val defaultPaintStroke = defaultPaint.copy().apply { this.style = Paint.Style.STROKE }
 private val marginPaint = Paint().apply {
     this.color = Color.MAGENTA
-    this.strokeWidth = 4f
+    this.strokeWidth = 2.5f
 }
 private val paginationLinePaint = Paint().apply {
     color = Color.RED
@@ -80,7 +87,6 @@ fun drawDottedBg(canvas: Canvas, scroll: Offset, scale: Float) {
     val width = (canvas.width / scale).toInt()
     // white bg
     canvas.drawColor(Color.WHITE)
-
 
     // dots
     val offset = IntOffset(lineHeight, lineHeight) - IntOffset(
@@ -313,6 +319,11 @@ fun drawBg(
                     )
                 }
             }
+            // The sheet is narrower than the view: cover the slack either side with the dot
+            // pattern, so it reads as a sheet on a desk rather than as part of the page.
+            for (rect in sideBarsRectangles(pageMode, canvas.width, canvas.height, scale, context)) {
+                drawDotPattern(canvas, rect, scale)
+            }
         }
 
         else -> {
@@ -327,13 +338,74 @@ fun drawBg(
             }
         }
     }
-    drawMargin(canvas, scroll, scale) // TODO investigate if still useful
+    if (pageMode == PageMode.INFINITE) {
+        drawMargin(canvas, scroll, scale) // TODO investigate if still useful
+    }
 
     // Draw the page line if using a page with defined size
     drawPaginationLine(canvas, scroll, scale, context, pageMode)
 
     if (clipRect != null) {
         canvas.restore()
+    }
+}
+
+fun drawDotPattern(canvas: Canvas, rect: Rect, scale: Float) {
+
+    canvas.withScale( // Use no scale to apply the dow pattern
+        1f / scale, 1f / scale
+    ) {
+
+
+        // Background
+        /*
+         * TODO: Remove when/if the background rendering is overhauled.
+         * Ideally, background drawing functions should be constrained to the sheet bounds
+         * instead of drawing across the entire canvas, eliminating the need to cover
+         * the areas outside the sheet with white rectangles.
+         *
+         * For now, they draw across the entire canvas, so the white rectangles are necessary.
+         */
+        canvas.drawRect(
+            rect.left.toFloat(),
+            rect.top.toFloat(),
+            rect.right.toFloat(),
+            rect.bottom.toFloat(),
+            Paint().apply { color = Color.WHITE }
+        )
+
+        val spacing = 9
+        val radius = 1.25f
+
+        for (y in rect.top until rect.bottom step spacing) {
+            for (x in rect.left until rect.right step spacing) {
+                canvas.drawCircle(
+                    x.toFloat(),
+                    y.toFloat(),
+                    radius,
+                    sideBarPaint
+                )
+            }
+        }
+
+        paginationLinePaint.pathEffect = DashPathEffect(
+            floatArrayOf(10f, 10f), // dash length, gap length
+            0f
+        )
+        var startX = 0f
+        startX = if (rect.left == 0) { // if left rectangle
+            rect.right.toFloat()
+        } else{ // if right rectangle
+            rect.left.toFloat()
+        }
+
+        canvas.drawLine(
+            startX,
+            padding.toFloat(),
+            startX,
+            (canvas.height - padding).toFloat(),
+            marginPaint
+        )
     }
 }
 
@@ -363,8 +435,11 @@ fun drawPaginationLine(
     }
     if (pageMode == null || pageMode == PageMode.INFINITE) return
 
-    val sheetHeightPixels = convertPointsToPixel(pageMode.height.toFloat(), context)
-    val sheetWidthPixels = convertPointsToPixel(pageMode.width.toFloat(), context)
+    val sheetHeightPixels = convertPointsToPixel(pageMode.height, context)
+    val sheetAdjustedWidth = sheetAdjustedWidth(
+        canvas.width, pageMode.width, context
+    )
+
 
     // Convert scroll position to canvas coordinates
     // Calculate current page number (1-based)
@@ -373,19 +448,29 @@ fun drawPaginationLine(
     // Calculate position of first page break
     var yPos = (currentPage * sheetHeightPixels) - scroll.y
 
+    val residualScrollX = scroll.x
+    val startX = -residualScrollX
+    val stopX = -residualScrollX + sheetAdjustedWidth
+    log.d(
+        """
+    Sheet adj width $sheetAdjustedWidth, scrollX $residualScrollX
+    StartX $startX, stopX $stopX
+    """.trimIndent()
+    )
+
     var pageNum = currentPage
     while (yPos < canvas.height / scale) {
         canvas.drawLine(
-            0f,
+            startX,
             yPos,
-            sheetWidthPixels,
+            stopX,
             yPos,
             paginationLinePaint
         )
 
         canvas.drawText(
             "Subpage ${pageNum + 1}",
-            20f - scroll.x,
+            20f - residualScrollX,
             yPos + 30f,
             textPaint
         )
