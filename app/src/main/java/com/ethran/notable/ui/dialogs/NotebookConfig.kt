@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -71,6 +72,8 @@ import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
+import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.ui.components.SelectorRow
 
 private val log = ShipBook.getLogger("NotebookConfig")
 
@@ -294,10 +297,10 @@ fun NotebookEditDialog(
                         )
                     }
 //                        Spacer(modifier = Modifier.width(40.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Button(
                             onClick = { showBackgroundSelector = !showBackgroundSelector },
                             colors = ButtonDefaults.buttonColors(
@@ -357,6 +360,11 @@ fun NotebookEditDialog(
 
                     /* -------------- Other book info -----------*/
                     Text(stringResource(R.string.details_notebook_pages, book!!.pageIds.size))
+                    val pageMode = book!!.pageMode?.displayNameId
+                    if (pageMode != null) {
+                        Text("${stringResource(R.string.details_notebook_pageMode)}: ${stringResource(pageMode)}"
+                        )
+                    }
                     Text("Size: TODO!") // TODO implement size calculation
                     Row {
                         Text(stringResource(R.string.details_notebook_in_folder))
@@ -393,9 +401,7 @@ fun NotebookEditDialog(
 
             }
         }
-
     }
-
 }
 
 @Composable
@@ -405,14 +411,15 @@ fun NotebookCreateDialog(
     onCreate: (
         title: String,
         background: String,
-        backgroundType: String
+        backgroundType: String,
+        pageMode: PageMode
     ) -> Unit,
     onClose: () -> Unit
 ) {
     log.v("Opening notebook creation dialog")
 
     var bookTitle by remember {
-        mutableStateOf<String>("New Notebook")
+        mutableStateOf("New Notebook")
     }
 
     var bookFolder by remember {
@@ -433,6 +440,10 @@ fun NotebookCreateDialog(
 
     var defaultBackground by remember {
         mutableStateOf<String>(GlobalAppSettings.current.defaultNativeTemplate)
+    }
+
+    var pageMode by remember {
+        mutableStateOf(GlobalAppSettings.current.defaultPageMode)
     }
 
     var showBackgroundSelector by remember {
@@ -556,13 +567,13 @@ fun NotebookCreateDialog(
 
                             // Map native keys to localized names, or extract the file name for image/PDF paths
                             val backgroundDisplayName = when (defaultBackground) {
-                                    "blank" -> stringResource(R.string.blank_page)
-                                    "dotted" -> stringResource(R.string.dot_grid)
-                                    "lined" -> stringResource(R.string.lines)
-                                    "squared" -> stringResource(R.string.small_squares_grid)
-                                    "hexed" -> stringResource(R.string.hexagon_grid)
-                                    else -> defaultBackground
-                                }
+                                "blank" -> stringResource(R.string.blank_page)
+                                "dotted" -> stringResource(R.string.dot_grid)
+                                "lined" -> stringResource(R.string.lines)
+                                "squared" -> stringResource(R.string.small_squares_grid)
+                                "hexed" -> stringResource(R.string.hexagon_grid)
+                                else -> defaultBackground
+                            }
 
                             Text(
                                 text = "$typeName: $backgroundDisplayName",
@@ -577,6 +588,19 @@ fun NotebookCreateDialog(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+                    }
+
+                    /* -------------- Page mode ----------- */
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SelectorRow(
+                            label = stringResource(R.string.details_notebook_pageMode),
+                            options = PageMode.entries.map { it to stringResource(it.displayNameId) },
+                            value = pageMode,
+                            onValueChange = { pageMode = it },
+                            contentPadding = PaddingValues(0.dp)
+                        )
                     }
 
                     /* -------------- Folder ----------- */
@@ -627,7 +651,8 @@ fun NotebookCreateDialog(
                     onCreate(
                         title,
                         defaultBackground,
-                        defaultBackgroundType
+                        defaultBackgroundType,
+                        pageMode
                     )
                     onClose()
                 }

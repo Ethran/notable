@@ -114,12 +114,13 @@ fun Library(
         NotebookCreateDialog(
             appRepository = viewModel.appRepository,
             initialFolderId = folderId,
-            onCreate = { title, defaultBackground, defaultBackgroundType ->
+            onCreate = { title, defaultBackground, defaultBackgroundType, pageMode ->
                 // Create notebook
                 viewModel.createNotebook(
                     title = title,
                     background = defaultBackground,
                     backgroundType = defaultBackgroundType,
+                    pageMode = pageMode,
                     onCreated = { pageId, notebookId ->
                         // Open just created notebook
                         navController.navigate(
@@ -487,51 +488,6 @@ fun NotebookImportPanel(
     }
 }
 
-
-@Preview(
-    showBackground = true,
-    name = "Library - Default State",
-    widthDp = 800,
-    heightDp = 1200
-)
-@Composable
-fun LibraryContentPreview() {
-    // 1. Create a dummy UI state with mock data
-    val mockUiState = LibraryUiState(
-        folderId = null,
-        isLatestVersion = true,
-        isImporting = false,
-        breadcrumbFolders = listOf(
-            // Optional: Add mock breadcrumbs if you want to preview nested folder state
-            Folder(id = "root", title = "Home", parentFolderId = null)
-        ),
-        folders = listOf(
-            // Adjust constructor arguments based on your exact entity definition
-            Folder(id = "folder_1", title = "Work Notes", parentFolderId = null),
-            Folder(id = "folder_2", title = "Personal", parentFolderId = null)
-        ),
-        books = listOf(
-            // Needs pageIds to render the card (empty books show a warning)
-            Notebook(id = "book_1", title = "Meeting Minutes", pageIds = listOf("page1", "page2")),
-            Notebook(id = "book_2", title = "Journal", pageIds = listOf("page3"))
-        ),
-        singlePages = emptyList() // Populate with mock Page() objects if you want to see Quick Pages
-    )
-
-    // 2. Render the stateless component with empty lambdas
-//    LibraryContent(
-//        uiState = mockUiState,
-//        onNavigateToFolder = {},
-//        onNavigateToSettings = {},
-//        onNavigateToEditor = { _, _ -> },
-//        goToPage = {},
-//        onCreateNewQuickPage = {},
-//        onCreateNewFolder = {},
-//        onDeleteEmptyBook = {},
-//        onCreateNewNotebook = {},
-//        onImportPdf = { _, _ -> },
-//        onImportXopp = {})
-}
 
 @Suppress("UnusedVariable")
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)

@@ -12,6 +12,7 @@ import androidx.room.Query
 import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.Log
@@ -37,6 +38,7 @@ data class Page(
     @ColumnInfo(index = true) val notebookId: String? = null,
     @ColumnInfo(defaultValue = "blank") val background: String = "blank", // path or native subtype
     @ColumnInfo(defaultValue = "native") val backgroundType: String = "native", // image, imageRepeating, coverImage, native
+    val pageMode: PageMode? = null,
     @ColumnInfo(index = true) val parentFolderId: String? = null,
     val createdAt: Date = Date(), val updatedAt: Date = Date()
 )

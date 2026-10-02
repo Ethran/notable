@@ -7,6 +7,7 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
@@ -187,6 +188,7 @@ class LibraryViewModel @Inject constructor(
         title: String,
         backgroundType: String,
         background: String,
+        pageMode: PageMode,
         onCreated: (pageId: String, notebookId: String) -> Unit
     ) {
         log.v("Creating notebook")
@@ -195,7 +197,8 @@ class LibraryViewModel @Inject constructor(
             title = title,
             parentFolderId = _folderId.value,
             defaultBackground = background,
-            defaultBackgroundType = backgroundType
+            defaultBackgroundType = backgroundType,
+            pageMode = pageMode
         )
 
         viewModelScope.launch(Dispatchers.IO) {
