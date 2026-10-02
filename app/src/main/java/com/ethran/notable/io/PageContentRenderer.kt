@@ -3,6 +3,8 @@ package com.ethran.notable.io
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -12,18 +14,24 @@ import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.PageWithData
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.Native
-import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawImage
 import com.ethran.notable.editor.drawing.StrokeRenderers
+import com.ethran.notable.editor.drawing.drawBitmapToCanvas
+import com.ethran.notable.editor.drawing.drawDottedBg
+import com.ethran.notable.editor.drawing.drawHexedBg
+import com.ethran.notable.editor.drawing.drawLinedBg
+import com.ethran.notable.editor.drawing.drawSquaredBg
+import com.ethran.notable.editor.drawing.drawTitleBox
+import com.ethran.notable.editor.utils.scaleRect
 import com.ethran.notable.utils.ensureNotMainThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.Log
+import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -41,6 +49,8 @@ class PageContentRenderer @Inject constructor(
     private val pageRepo: PageRepository,
     private val appRepository: AppRepository
 ) {
+
+    val log = ShipBook.getLogger("PageContentRenderer")
 
     suspend fun renderPageBitmap(pageId: String, target: RenderTarget): Bitmap {
         ensureNotMainThread("PageContentRenderer")
@@ -81,6 +91,63 @@ class PageContentRenderer @Inject constructor(
         } ?: Native
     }
 
+    private fun drawBgExport( // Used for when exporting file
+        canvas: Canvas,
+        backgroundType: BackgroundType,
+        background: String,
+        scroll: Offset = Offset.Zero,
+        resourceBitmap: Bitmap?,
+        scale: Float = 1f,          // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
+        repeat: Boolean = false,    // for repeating image
+        clipRect: Rect? = null,     // before the scaling
+    ) {
+
+        // TODO needs revamp when revamping export
+
+        log.v("Loading the background")
+        clipRect?.let {
+            canvas.save()
+            canvas.clipRect(scaleRect(it, scale))
+        }
+
+        when (backgroundType) {
+            // draw native background for it we don't need a resource
+            is BackgroundType.Native -> {
+                when (background) {
+                    "blank" -> canvas.drawColor(Color.WHITE)
+                    "dotted" -> drawDottedBg(canvas, scroll, scale)
+                    "lined" -> drawLinedBg(canvas, scroll, scale)
+                    "squared" -> drawSquaredBg(canvas, scroll, scale)
+                    "hexed" -> drawHexedBg(canvas, scroll, scale)
+                    else -> {
+                        // Reaching the Native branch with an unknown value usually means the *type*
+                        // detection misclassified a non-native background (e.g. a .pdf) as Native, not
+                        // that the string is merely unknown — surface the type so it's obvious.
+                        throw IllegalArgumentException(
+                            "Unknown native background '$background' (type=$backgroundType)"
+                        )
+                    }
+                }
+            }
+
+            else -> {
+                if (resourceBitmap != null) {
+                    drawBitmapToCanvas(canvas, resourceBitmap, scroll, scale, repeat)
+                    if (backgroundType is BackgroundType.CoverImage) {
+                        drawTitleBox(canvas)
+                    }
+                } else {
+                    log.i("No resource provided to draw, maybe out of pages in pdf?")
+                    canvas.drawColor(Color.WHITE)
+                }
+            }
+        }
+
+        if (clipRect != null) {
+            canvas.restore()
+        }
+    }
+
     suspend fun drawPage(
         canvas: Canvas,
         data: PageWithData,
@@ -114,16 +181,14 @@ class PageContentRenderer @Inject constructor(
         withContext(Dispatchers.Default) {
             canvas.scale(scaleFactor, scaleFactor)
 
-            drawBg(
+            drawBgExport(
                 canvas = canvas,
                 backgroundType = resolvedBackgroundType,
                 background = data.page.background,
                 scroll = scroll,
                 resourceBitmap = bgImage,
                 scale = scaleFactor,
-                repeat = resolvedBackgroundType is BackgroundType.ImageRepeating,
-                context = context,
-                pageMode = data.page.pageMode
+                repeat = resolvedBackgroundType is BackgroundType.ImageRepeating
             )
 
             data.images.forEach { drawImage(context, canvas, it, -scroll) }

@@ -166,6 +166,8 @@ class CanvasObserverRegistry(
         observerScope.launch {
             page.viewport.map { it.zoom }.distinctUntilChanged().drop(1).collect { zoom ->
                 log.v("zoom level change: $zoom")
+                // The writeable area depends on the zoom, so the surface follows it.
+                inputHandler.updateActiveSurface()
                 inputHandler.updatePenAndStroke()
             }
         }
