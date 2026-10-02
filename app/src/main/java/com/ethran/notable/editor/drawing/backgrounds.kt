@@ -13,10 +13,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.data.datastore.A4_HEIGHT
-import com.ethran.notable.data.datastore.A4_WIDTH
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.datastore.USE_A4_SHEET_MODE
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.utils.scaleRect
 import com.ethran.notable.ui.convertPointsToPixel
@@ -284,6 +281,7 @@ fun drawBg(
     canvas: Canvas,
     backgroundType: BackgroundType,
     background: String,
+    pageMode: PageMode?,
     scroll: Offset = Offset.Zero,
     resourceBitmap: Bitmap?,
     scale: Float = 1f,          // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
@@ -329,14 +327,11 @@ fun drawBg(
             }
         }
     }
-    if (!USE_A4_SHEET_MODE) {
-        drawMargin(canvas, scroll, scale)
-    }
+    drawMargin(canvas, scroll, scale) // TODO investigate if still useful
 
-    // TODO remove the global setting and use it only when in sheet mode
-    if (GlobalAppSettings.current.visualizePdfPagination || USE_A4_SHEET_MODE) {
-        drawPaginationLine(canvas, scroll, scale, context)
-    }
+    // Draw the page line if using a page with defined size
+    drawPaginationLine(canvas, scroll, scale, context, pageMode)
+
     if (clipRect != null) {
         canvas.restore()
     }
@@ -354,15 +349,22 @@ fun drawMargin(canvas: Canvas, scroll: Offset, scale: Float) {
     }
 }
 
-fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float, context: Context) {
+fun drawPaginationLine(
+    canvas: Canvas,
+    scroll: Offset,
+    scale: Float,
+    context: Context,
+    pageMode: PageMode?
+) {
     val textPaint = Paint().apply {
         color = Color.BLACK
         textSize = 24f
         isAntiAlias = true
     }
+    if (pageMode == null || pageMode == PageMode.INFINITE) return
 
-    val sheetHeightPixels = convertPointsToPixel(A4_HEIGHT.toFloat(), context)
-    val sheetWidthPixels = convertPointsToPixel(A4_WIDTH.toFloat(), context)
+    val sheetHeightPixels = convertPointsToPixel(pageMode.height.toFloat(), context)
+    val sheetWidthPixels = convertPointsToPixel(pageMode.width.toFloat(), context)
 
     // Convert scroll position to canvas coordinates
     // Calculate current page number (1-based)

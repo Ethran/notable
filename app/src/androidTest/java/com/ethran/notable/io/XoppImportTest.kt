@@ -8,7 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.data.datastore.A4_WIDTH
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.ImageRepository
@@ -220,7 +220,7 @@ class XoppImportTest {
      * page to the test's screen width.
      */
     private fun readPages(input: InputStream): List<XoppPage> {
-        val scale = TEST_SCREEN_WIDTH.toFloat() / A4_WIDTH
+        val scale = TEST_SCREEN_WIDTH.toFloat() / PageMode.A4.width
         val parser = Xml.newPullParser().apply { setInput(GZIPInputStream(input), "UTF-8") }
         val pages = mutableListOf<XoppPage>()
         while (parser.next() != XmlPullParser.END_DOCUMENT) {

@@ -19,7 +19,6 @@
     <string name="continuous_zoom">Continuous Zoom</string>
     <string name="continuous_stroke_slider">Continuous Stroke Slider</string>
     <string name="paginate_pdf">Paginate PDF</string>
-    <string name="preview_pdf_pagination">Preview PDF Pagination</string>
     <string name="uiScale">UI Scale</string>
     <string name="app_new_version">It seems a new version of Notable is available on GitHub!</string>
     <string name="app_see_release">See release in browser</string>
