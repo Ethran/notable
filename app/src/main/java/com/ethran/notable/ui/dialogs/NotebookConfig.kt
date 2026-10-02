@@ -24,9 +24,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowCircleRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,13 +74,14 @@ import kotlinx.coroutines.launch
 private val log = ShipBook.getLogger("NotebookConfig")
 
 @Composable
-fun NotebookConfigDialog(
+fun NotebookEditDialog(
     appRepository: AppRepository,
     exportEngine: ExportEngine,
     syncScheduler: SyncScheduler,
     bookId: String,
-    onClose: () -> Unit) {
-    val bookRepository  = appRepository.bookRepository
+    onClose: () -> Unit
+) {
+    val bookRepository = appRepository.bookRepository
 
     val book by bookRepository.getByIdLive(bookId).observeAsState()
     val scope = rememberCoroutineScope()
@@ -111,16 +114,7 @@ fun NotebookConfigDialog(
             isNotebookBgSelector = true,
             notebookId = book!!.id,
             onChange = { backgroundType, background ->
-                if (background == null) {
-                    if (book!!.defaultBackgroundType != backgroundType) {
-                        val updatedBook = book!!.copy(
-                            defaultBackgroundType = backgroundType
-                        )
-                        scope.launch {
-                            bookRepository.update(updatedBook)
-                        }
-                    }
-                } else if (book!!.defaultBackgroundType != backgroundType || book!!.defaultBackground != background) {
+                if (book!!.defaultBackgroundType != backgroundType || book!!.defaultBackground != background) {
                     val updatedBook = book!!.copy(
                         defaultBackgroundType = backgroundType,
                         defaultBackground = background
@@ -211,6 +205,21 @@ fun NotebookConfigDialog(
                 .padding(16.dp)
                 .padding(top = 24.dp, bottom = 16.dp)
         ) {
+
+            Box(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null
+                    )
+                }
+            }
+
             // Header Section
             Row(Modifier.padding(bottom = 16.dp)) {
                 Box(
@@ -334,7 +343,7 @@ fun NotebookConfigDialog(
                     Text("Size: TODO!")
                     Row {
                         Text(stringResource(R.string.details_notebook_in_folder))
-                        BreadCrumb(folders = breadcrumbFolders, fontSize = 16)  { }
+                        BreadCrumb(folders = breadcrumbFolders, fontSize = 16) { }
                     }
                     Text(stringResource(R.string.details_notebook_created, formattedCreatedAt))
                     Text(stringResource(R.string.details_notebook_last_updated, formattedUpdatedAt))

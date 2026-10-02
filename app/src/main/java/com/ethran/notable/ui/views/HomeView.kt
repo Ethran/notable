@@ -67,7 +67,8 @@ import com.ethran.notable.ui.components.ShowPagesRow
 import com.ethran.notable.ui.dialogs.ConflictResolutionDialog
 import com.ethran.notable.ui.dialogs.EmptyBookWarningHandler
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
-import com.ethran.notable.ui.dialogs.NotebookConfigDialog
+import com.ethran.notable.ui.dialogs.NotebookEditDialog
+import com.ethran.notable.ui.dialogs.NotebookCreateDialog
 import com.ethran.notable.ui.dialogs.PdfImportChoiceDialog
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.viewmodels.LibraryUiState
@@ -354,7 +355,7 @@ fun NotebookGrid(
                 )
 
                 if (isSettingsOpen) {
-                    NotebookConfigDialog(
+                    NotebookEditDialog(
                         appRepository,
                         exportEngine = exportEngine,
                         syncScheduler = syncScheduler,
@@ -489,7 +490,7 @@ fun LibraryContentPreview() {
         isImporting = false,
         breadcrumbFolders = listOf(
             // Optional: Add mock breadcrumbs if you want to preview nested folder state
-             Folder(id = "root", title = "Home", parentFolderId = null)
+            Folder(id = "root", title = "Home", parentFolderId = null)
         ),
         folders = listOf(
             // Adjust constructor arguments based on your exact entity definition
