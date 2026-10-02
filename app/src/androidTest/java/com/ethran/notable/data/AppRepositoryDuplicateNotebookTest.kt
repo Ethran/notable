@@ -170,6 +170,33 @@ class AppRepositoryDuplicateNotebookTest {
     }
 
     @Test(timeout = 30000)
+    fun duplicateNotebook_missingReferencedPage_rollsBackEntireCopy() = runBlocking {
+        val original = Notebook(title = "Inconsistent notebook")
+        appRepository.bookRepository.create(original) // auto-creates its first page
+        val firstPageId = appRepository.bookRepository.getById(original.id)!!.pageIds.single()
+        val secondPageId = appRepository.newPageInBook(original.id, 1)!!
+        val booksBefore = appRepository.bookRepository.getAll().size
+
+        // Simulate the notebook.pageIds list referencing a page that no longer exists --
+        // e.g. a page deleted by a path that doesn't also update pageIds, or a lost sync race --
+        // by deleting the page row directly, bypassing bookRepository.removePage.
+        appRepository.pageRepository.delete(secondPageId)
+
+        try {
+            appRepository.duplicateNotebook(original.id)
+            org.junit.Assert.fail("Expected duplicateNotebook to throw for a missing referenced page")
+        } catch (e: IllegalStateException) {
+            // expected
+        }
+
+        // No partial copy was left behind.
+        assertEquals(booksBefore, appRepository.bookRepository.getAll().size)
+        // The source notebook itself is untouched.
+        val sourceAfter = appRepository.bookRepository.getById(original.id)!!
+        assertEquals(listOf(firstPageId, secondPageId), sourceAfter.pageIds)
+    }
+
+    @Test(timeout = 30000)
     fun duplicateNotebook_missingNotebook_returnsNullAndCreatesNothing() = runBlocking {
         val before = appRepository.bookRepository.getAll().size
 

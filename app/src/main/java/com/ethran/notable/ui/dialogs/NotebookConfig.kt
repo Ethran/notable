@@ -380,7 +380,7 @@ fun NotebookConfigDialog(
                         focusManager.clearFocus()
                         scope.launch {
                             if (book!!.title != bookTitle) {
-                                bookRepository.update(book!!.copy(title = bookTitle))
+                                bookRepository.setTitle(bookId, bookTitle)
                             }
                             onClose()
                             if (firstPageId != null) {

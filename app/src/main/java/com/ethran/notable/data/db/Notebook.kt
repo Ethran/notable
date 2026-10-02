@@ -69,6 +69,9 @@ interface NotebookDao {
     @Query("UPDATE notebook SET openPageId=:pageId WHERE id=:notebookId")
     suspend fun setOpenPageId(notebookId: String, pageId: String)
 
+    @Query("UPDATE notebook SET title=:title, updatedAt=:updatedAt WHERE id=:notebookId")
+    suspend fun setTitle(notebookId: String, title: String, updatedAt: Date)
+
     // Advances updatedAt alongside pageIds so a structural change (add/remove/reorder) marks the
     // notebook dirty for sync — otherwise the change would not be detected and could be lost.
     @Query("UPDATE notebook SET pageIds=:pageIds, updatedAt=:updatedAt WHERE id=:id")
@@ -143,6 +146,15 @@ class BookRepository @Inject constructor(
 
     suspend fun setOpenPageId(id: String, pageId: String) {
         notebookDao.setOpenPageId(id, pageId)
+    }
+
+    /**
+     * Write only the title column, instead of a full-row [update] built from a (possibly stale,
+     * e.g. Compose-observed) in-memory [Notebook] snapshot -- which would silently overwrite any
+     * other field a concurrent edit changed in the meantime.
+     */
+    suspend fun setTitle(id: String, title: String) {
+        notebookDao.setTitle(id, title, Date())
     }
 
     suspend fun addPage(bookId: String, pageId: String, index: Int? = null) {
