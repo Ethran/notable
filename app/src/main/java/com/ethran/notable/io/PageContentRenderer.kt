@@ -122,7 +122,8 @@ class PageContentRenderer @Inject constructor(
                 resourceBitmap = bgImage,
                 scale = scaleFactor,
                 repeat = resolvedBackgroundType is BackgroundType.ImageRepeating,
-                context = context
+                context = context,
+                pageMode = data.page.pageMode
             )
 
             data.images.forEach { drawImage(context, canvas, it, -scroll) }
@@ -141,8 +142,7 @@ class PageContentRenderer @Inject constructor(
         val imageBottom = data.images.maxOfOrNull { it.y + it.height } ?: 0
         val imageRight = data.images.maxOfOrNull { it.x + it.width } ?: 0
 
-        val rawHeight = maxOf(strokeBottom, imageBottom) +
-                if (GlobalAppSettings.current.visualizePdfPagination) 0 else 50
+        val rawHeight = maxOf(strokeBottom, imageBottom) + 50
         val rawWidth = maxOf(strokeRight, imageRight) + 50
 
         val height = rawHeight.coerceAtLeast(SCREEN_HEIGHT)

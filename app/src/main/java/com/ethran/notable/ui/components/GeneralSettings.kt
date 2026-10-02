@@ -79,13 +79,6 @@ fun GeneralSettings(
                 onSettingsChange(settings.copy(paginatePdf = isChecked))
             })
 
-        SettingToggleRow(
-            label = stringResource(R.string.preview_pdf_pagination),
-            value = settings.visualizePdfPagination,
-            onToggle = { isChecked ->
-                onSettingsChange(settings.copy(visualizePdfPagination = isChecked))
-            })
-
         // Zoom Level (UI Scale)
         SettingSliderRow(
             label = stringResource(R.string.uiScale),

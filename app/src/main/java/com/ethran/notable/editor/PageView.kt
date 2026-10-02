@@ -965,6 +965,7 @@ class PageView(
     /** Draws the background of [shown] at [shownViewport] into [canvas]. */
     private fun drawBackground(canvas: Canvas, shown: OpenPage, shownViewport: PageViewport) {
         val backgroundType = shown.backgroundType ?: BackgroundType.Native
+        val pageMode = shown.record?.pageMode
         val bg = shown.backgroundName
         val pageNumber = shown.pageNumber
         val scale = shownViewport.zoom
@@ -991,6 +992,7 @@ class PageView(
             scroll = shownViewport.scroll,
             resourceBitmap = bgImage,
             scale = scale,
+            pageMode = pageMode,
             repeat = false,
             context = context,
         )
