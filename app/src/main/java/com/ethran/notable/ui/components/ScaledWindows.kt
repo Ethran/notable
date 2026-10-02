@@ -29,7 +29,7 @@ import androidx.compose.ui.window.PopupProperties
 @Composable
 fun ScaledDialog(
     onDismissRequest: () -> Unit,
-    properties: DialogProperties = DialogProperties(),
+    properties: DialogProperties = DialogProperties(dismissOnClickOutside = false),
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
