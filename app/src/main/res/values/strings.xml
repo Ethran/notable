@@ -56,6 +56,7 @@
     <string name="details_notebook_buttons_move">Move</string>
     <string name="details_notebook_buttons_export">Export</string>
     <string name="details_notebook_buttons_copy">Copy</string>
+    <string name="details_notebook_buttons_create">Create</string>
     <string name="details_notebook_linked_to">Linked to: %1$s</string>
     <string name="welcome_view_title">Welcome to Notable</string>
     <string name="welcome_view_subtitle">For optimal experience, please complete these setup steps:</string>
