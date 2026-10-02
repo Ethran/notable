@@ -271,5 +271,12 @@
     <string name="no_undo_to_perform">Nothing to undo</string>
     <string name="no_redo_to_perform">Nothing to redo</string>
     <string name="toolbar_eraser">Eraser</string>
+    <string name="details_notebook_pageMode">Page mode</string>
+    <string name="page_mode_infinite">Infinite canvas</string>
+    <string name="page_mode_a4">A4</string>
+    <string name="page_mode_a5">A5</string>
+    <string name="page_mode_letter">Letter</string>
+    <string name="page_mode_legal">Legal</string>
+    <string name="default_page_mode">Default page mode</string>
 
 </resources>

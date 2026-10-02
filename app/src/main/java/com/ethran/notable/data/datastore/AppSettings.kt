@@ -6,15 +6,28 @@ import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.navigation.LinkFormat
 import kotlinx.serialization.Serializable
-
+import com.ethran.notable.R
 
 // Build-time toggle for switching between Infinite Canvas and Fixed A4 Sheet modes.
 // Set to `true` to enable the new A4 sheet behavior, or `false` to keep the existing infinite canvas.
-const val USE_A4_SHEET_MODE = true
+const val USE_A4_SHEET_MODE = false
 
 // Define the target page size (A4 in points: 595 x 842)
 const val A4_WIDTH = 595
 const val A4_HEIGHT = 842
+
+enum class PageMode(val width: Int, val height: Int, val displayNameId:Int) {
+    INFINITE(0, 0, (R.string.page_mode_infinite)),
+
+    // ISO 216
+    A4(595, 842, R.string.page_mode_a4),
+    A5(420, 595, R.string.page_mode_a5),
+
+    // ANSI
+    LETTER(612, 792, R.string.page_mode_letter),
+    LEGAL(612, 1008, R.string.page_mode_legal)
+}
+
 const val BUTTON_SIZE = 37
 
 
@@ -43,6 +56,7 @@ data class AppSettings(
     val version: Int,
     val monitorBgFiles: Boolean = false,
     val defaultNativeTemplate: String = "blank",
+    val defaultPageMode: PageMode = PageMode.A4,
     val quickNavPages: List<String> = listOf(),
     val scribbleToEraseEnabled: Boolean = false,
     val toolbarPosition: Position = Position.Top,

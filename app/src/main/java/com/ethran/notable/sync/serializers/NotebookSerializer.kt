@@ -1,5 +1,6 @@
 package com.ethran.notable.sync.serializers
 
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
@@ -135,6 +136,7 @@ object NotebookSerializer {
             background = page.background,
             backgroundType = page.backgroundType,
             parentFolderId = page.parentFolderId,
+            pageMode = page.pageMode,
             scroll = page.scroll,
             createdAt = page.createdAt.toInstant().toString(),
             updatedAt = page.updatedAt.toInstant().toString()
@@ -211,7 +213,8 @@ object NotebookSerializer {
                 parentFolderId = pageDto.parentFolderId,
                 scroll = pageDto.scroll,
                 createdAt = pageCreated,
-                updatedAt = pageUpdated
+                updatedAt = pageUpdated,
+                pageMode = pageDto.pageMode
             )
 
             val strokes = pageDto.strokes.mapNotNull { strokeDto ->
@@ -358,6 +361,7 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
+        val pageMode: PageMode?,
         val scroll: Int,
         val createdAt: String,
         val updatedAt: String
@@ -371,6 +375,7 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
+        val pageMode: PageMode? = null,
         val scroll: Int,
         val createdAt: String,
         val updatedAt: String,

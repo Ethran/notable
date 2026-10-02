@@ -9,6 +9,7 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.Flow
@@ -40,7 +41,9 @@ data class Notebook(
     @ColumnInfo(defaultValue = "native")
     val defaultBackgroundType: String = "native",
 
-    // File that its linked to:
+    val pageMode: PageMode? = null,
+
+    // File that it's linked to:
     val linkedExternalUri: String? = null,
     val createdAt: Date = Date(),
     val updatedAt: Date = Date()
@@ -126,7 +129,8 @@ class BookRepository @Inject constructor(
         val page = Page(
             notebookId = notebook.id,
             background = notebook.defaultBackground,
-            backgroundType = notebook.defaultBackgroundType
+            backgroundType = notebook.defaultBackgroundType,
+            pageMode = notebook.pageMode
         )
         pageDao.create(page)
 
@@ -269,7 +273,8 @@ fun Notebook.newPage(): Page {
     return Page(
         notebookId = id,
         background = defaultBackground,
-        backgroundType = defaultBackgroundType
+        backgroundType = defaultBackgroundType,
+        pageMode = pageMode
     )
 }
 
