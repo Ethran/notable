@@ -61,12 +61,12 @@ import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncRequest
 import com.ethran.notable.ui.LocalSnackContext
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.ScaledDialog
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 
 private val log = ShipBook.getLogger("NotebookConfig")
@@ -77,6 +77,11 @@ fun NotebookConfigDialog(
     exportEngine: ExportEngine,
     syncScheduler: SyncScheduler,
     bookId: String,
+    // True right after the notebook was created (the auto-opened rename prompt). Swaps the Copy
+    // action -- meaningless on a notebook with nothing in it yet -- for a Create action that
+    // confirms the title and jumps straight into the editor.
+    isNewlyCreated: Boolean = false,
+    onOpenInEditor: ((pageId: String, bookId: String) -> Unit)? = null,
     onClose: () -> Unit) {
     val bookRepository  = appRepository.bookRepository
 
@@ -262,9 +267,14 @@ fun NotebookConfigDialog(
                                     if (!focusState.isFocused) {
                                         log.i("loose focus")
                                         if (book!!.title != bookTitle) {
-                                            val updatedBook = book!!.copy(title = bookTitle)
+                                            // A single-column write, not a full-row update from
+                                            // this (possibly stale) snapshot -- the Create button
+                                            // below calls focusManager.clearFocus(), which fires
+                                            // this same callback, so this and Create's own title
+                                            // save must not stomp a concurrent background/link
+                                            // change with a stale copy of the rest of the row.
                                             scope.launch {
-                                                bookRepository.update(updatedBook)
+                                                bookRepository.setTitle(bookId, bookTitle)
                                             }
                                         }
                                     }
@@ -357,14 +367,44 @@ fun NotebookConfigDialog(
                 ActionButton(stringResource(R.string.details_notebook_buttons_export)) {
                     showExportDialog = true
                 }
-                ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
-                    scope.launch {
-                        snackManager.displaySnack(
-                            SnackConf(text = "Not implemented!", duration = 2000)
-                        )
+                // Copying an empty, just-created notebook has nothing useful to duplicate yet --
+                // offer it only once the notebook has had a chance to accumulate content.
+                if (!isNewlyCreated) {
+                    ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
+                        scope.launch {
+                            try {
+                                snackManager.runWithSnack("Copying notebook...", 2000) {
+                                    val newNotebookId = appRepository.duplicateNotebook(bookId)
+                                    if (newNotebookId != null) "Notebook copied."
+                                    else "Copy failed: notebook not found."
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                // runWithSnack already displayed "Error: ${e.message}" before
+                                // rethrowing (e.g. duplicateNotebook's missing-referenced-page
+                                // check) -- swallow it here so that doesn't also surface as an
+                                // uncaught exception in this coroutine scope.
+                                log.e("Notebook copy failed: ${e.message}", e)
+                            }
+                        }
                     }
                 }
-
+                if (isNewlyCreated) {
+                    ActionButton(stringResource(R.string.details_notebook_buttons_create)) {
+                        val firstPageId = book!!.pageIds.firstOrNull()
+                        focusManager.clearFocus()
+                        scope.launch {
+                            if (book!!.title != bookTitle) {
+                                bookRepository.setTitle(bookId, bookTitle)
+                            }
+                            onClose()
+                            if (firstPageId != null) {
+                                onOpenInEditor?.invoke(firstPageId, bookId)
+                            }
+                        }
+                    }
+                }
             }
         }
 
