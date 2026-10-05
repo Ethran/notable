@@ -166,25 +166,7 @@ class AppRepository @Inject constructor(
         }
     }
 
-    /**
-     * Clone [notebookId] into a new notebook in the same folder: same title (suffixed) and
-     * background settings, with every page -- and its strokes and images -- copied under fresh
-     * ids. Returns the new notebook's id, or null if [notebookId] doesn't exist.
-     *
-     * The whole clone runs in one transaction, including the read of [notebookId] itself: reading
-     * it beforehand would let a concurrent edit, delete, or sync land between that read and the
-     * writes, cloning a notebook that no longer matches what was read (or no longer exists at
-     * all). If a page [Notebook.pageIds] references turns out to be missing -- from that same
-     * kind of race, or from a pre-existing inconsistency -- this throws [IllegalStateException]
-     * rather than silently cloning a truncated notebook; Room rolls the whole transaction back,
-     * so no partial copy is left behind.
-     *
-     * [Notebook.linkedExternalUri] is deliberately dropped on the copy: it names an external file
-     * the app periodically overwrites on save (see [com.ethran.notable.io.ExportEngine.exportToLinkedFileAsync]),
-     * and carrying it over would make the original and the copy race to overwrite that same file.
-     * Background/image file paths are copied as-is (shared, not duplicated on disk), matching how
-     * [duplicatePage] already shares per-page backgrounds and images.
-     */
+    /** Copies a notebook and its contents, excluding its external link. */
     suspend fun duplicateNotebook(notebookId: String): String? = db.withTransaction {
         val source = bookRepository.getById(notebookId) ?: return@withTransaction null
         val duplicatedNotebook = source.copy(
@@ -196,7 +178,6 @@ class AppRepository @Inject constructor(
             createdAt = Date(),
             updatedAt = Date()
         )
-        // The notebook row must exist before any page can reference it (notebookId FK).
         bookRepository.createEmpty(duplicatedNotebook)
         val newPageIds = source.pageIds.map { sourcePageId ->
             val pageWithData = pageRepository.getWithDataById(sourcePageId)

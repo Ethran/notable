@@ -148,11 +148,7 @@ class BookRepository @Inject constructor(
         notebookDao.setOpenPageId(id, pageId)
     }
 
-    /**
-     * Write only the title column, instead of a full-row [update] built from a (possibly stale,
-     * e.g. Compose-observed) in-memory [Notebook] snapshot -- which would silently overwrite any
-     * other field a concurrent edit changed in the meantime.
-     */
+    /** Updates only the title to preserve concurrent changes to other fields. */
     suspend fun setTitle(id: String, title: String) {
         notebookDao.setTitle(id, title, Date())
     }

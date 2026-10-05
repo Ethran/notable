@@ -34,11 +34,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
 
-/**
- * Covers [AppRepository.duplicateNotebook] against a real (in-memory) Room DB -- the same wiring
- * [com.ethran.notable.testing.createEditorViewModelForTest] uses -- so the FK-ordering and
- * transaction behavior are exercised for real rather than mocked away.
- */
 @RunWith(AndroidJUnit4::class)
 class AppRepositoryDuplicateNotebookTest {
 
@@ -79,13 +74,6 @@ class AppRepositoryDuplicateNotebookTest {
         db.close()
     }
 
-    // Pressure already normalized to [0, 1] with maxPressure=1 -- how the live app writes
-    // strokes today (see Stroke.maxPressure's doc: "In SB2 is set to 1"). A raw/legacy
-    // digitizer-scale pressure value would get clamped to 1.0 by the point encoder on write
-    // (StrokePointConverter.encodeStrokePoints requires pre-normalized input) and then drift by
-    // a handful of parts in 65535 on a second encode/decode cycle -- real, but a property of the
-    // fixed-point pressure encoding itself, not of duplicateNotebook, so it's irrelevant to what
-    // this test is checking and would only add noise.
     private fun dummyStroke(pageId: String) = Stroke(
         id = UUID.randomUUID().toString(),
         size = 5f,
@@ -113,7 +101,7 @@ class AppRepositoryDuplicateNotebookTest {
     @Test(timeout = 30000)
     fun duplicateNotebook_copiesTitlePagesStrokesAndImages() = runBlocking {
         val original = Notebook(title = "Lecture notes", parentFolderId = null)
-        appRepository.bookRepository.create(original) // also creates the notebook's first page
+        appRepository.bookRepository.create(original)
         val firstPageId = appRepository.bookRepository.getById(original.id)!!.pageIds.single()
         val secondPageId = appRepository.newPageInBook(original.id, 1)!!
 
@@ -130,13 +118,9 @@ class AppRepositoryDuplicateNotebookTest {
         val copy = appRepository.bookRepository.getById(newNotebookId!!)!!
         assertEquals("Lecture notes (copy)", copy.title)
         assertEquals(2, copy.pageIds.size)
-        // Fresh page ids throughout -- nothing shared with the source notebook's pages.
         assertTrue(copy.pageIds.none { it in setOf(firstPageId, secondPageId) })
         assertEquals(copy.pageIds.first(), copy.openPageId)
 
-        // Compare against the source re-read the same way, not the raw construction value --
-        // getWithDataById normalizes legacy raw-pressure rows on every load (Page.kt), so the
-        // constructed dummyStroke's un-normalized pressure is not what either side reads back as.
         val sourceFirstPage = appRepository.pageRepository.getWithDataById(firstPageId)!!
         val copiedFirstPage = appRepository.pageRepository.getWithDataById(copy.pageIds[0])!!
         assertEquals(1, copiedFirstPage.strokes.size)
@@ -146,10 +130,8 @@ class AppRepositoryDuplicateNotebookTest {
         val copiedSecondPage = appRepository.pageRepository.getWithDataById(copy.pageIds[1])!!
         assertEquals(1, copiedSecondPage.images.size)
         assertNotEquals(imageOnSecondPage.id, copiedSecondPage.images[0].id)
-        // Image files are shared by reference, not duplicated on disk (matches duplicatePage).
         assertEquals(imageOnSecondPage.uri, copiedSecondPage.images[0].uri)
 
-        // The source notebook is untouched.
         val sourceAfter = appRepository.bookRepository.getById(original.id)!!
         assertEquals(listOf(firstPageId, secondPageId), sourceAfter.pageIds)
         assertEquals(1, appRepository.pageRepository.getWithDataById(firstPageId)!!.strokes.size)
@@ -164,7 +146,6 @@ class AppRepositoryDuplicateNotebookTest {
 
         val copy = appRepository.bookRepository.getById(newNotebookId)!!
         assertNull(copy.linkedExternalUri)
-        // The original keeps pointing at its own export target.
         val sourceAfter = appRepository.bookRepository.getById(original.id)!!
         assertEquals("content://export/target.xopp", sourceAfter.linkedExternalUri)
     }
@@ -172,26 +153,20 @@ class AppRepositoryDuplicateNotebookTest {
     @Test(timeout = 30000)
     fun duplicateNotebook_missingReferencedPage_rollsBackEntireCopy() = runBlocking {
         val original = Notebook(title = "Inconsistent notebook")
-        appRepository.bookRepository.create(original) // auto-creates its first page
+        appRepository.bookRepository.create(original)
         val firstPageId = appRepository.bookRepository.getById(original.id)!!.pageIds.single()
         val secondPageId = appRepository.newPageInBook(original.id, 1)!!
         val booksBefore = appRepository.bookRepository.getAll().size
 
-        // Simulate the notebook.pageIds list referencing a page that no longer exists --
-        // e.g. a page deleted by a path that doesn't also update pageIds, or a lost sync race --
-        // by deleting the page row directly, bypassing bookRepository.removePage.
         appRepository.pageRepository.delete(secondPageId)
 
         try {
             appRepository.duplicateNotebook(original.id)
             org.junit.Assert.fail("Expected duplicateNotebook to throw for a missing referenced page")
         } catch (e: IllegalStateException) {
-            // expected
         }
 
-        // No partial copy was left behind.
         assertEquals(booksBefore, appRepository.bookRepository.getAll().size)
-        // The source notebook itself is untouched.
         val sourceAfter = appRepository.bookRepository.getById(original.id)!!
         assertEquals(listOf(firstPageId, secondPageId), sourceAfter.pageIds)
     }
@@ -209,7 +184,7 @@ class AppRepositoryDuplicateNotebookTest {
     @Test(timeout = 30000)
     fun duplicateNotebook_emptyNotebook_copiesWithNoPages() = runBlocking {
         val original = Notebook(title = "Empty shell")
-        appRepository.bookRepository.createEmpty(original) // no auto-created first page
+        appRepository.bookRepository.createEmpty(original)
 
         val newNotebookId = appRepository.duplicateNotebook(original.id)!!
 
