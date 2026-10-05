@@ -80,9 +80,6 @@ fun NotebookConfigDialog(
     exportEngine: ExportEngine,
     syncScheduler: SyncScheduler,
     bookId: String,
-    // True right after the notebook was created (the auto-opened rename prompt). Swaps the Copy
-    // action -- meaningless on a notebook with nothing in it yet -- for a Create action that
-    // confirms the title and jumps straight into the editor.
     isNewlyCreated: Boolean = false,
     onOpenInEditor: ((pageId: String, bookId: String) -> Unit)? = null,
     onClose: () -> Unit) {
@@ -271,12 +268,6 @@ fun NotebookConfigDialog(
                                     if (!focusState.isFocused) {
                                         log.i("loose focus")
                                         if (book!!.title != bookTitle) {
-                                            // A single-column write, not a full-row update from
-                                            // this (possibly stale) snapshot -- the Create button
-                                            // below calls focusManager.clearFocus(), which fires
-                                            // this same callback, so this and Create's own title
-                                            // save must not stomp a concurrent background/link
-                                            // change with a stale copy of the rest of the row.
                                             scope.launch {
                                                 bookRepository.setTitle(bookId, bookTitle)
                                             }
@@ -374,8 +365,6 @@ fun NotebookConfigDialog(
                 ActionButton(stringResource(R.string.copy_link)) {
                     copyLink(context, DeepLink.Book(bookId), book!!.title, snackManager::showOrUpdateSnack)
                 }
-                // Copying an empty, just-created notebook has nothing useful to duplicate yet --
-                // offer it only once the notebook has had a chance to accumulate content.
                 if (!isNewlyCreated) {
                     ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
                         scope.launch {
@@ -388,10 +377,7 @@ fun NotebookConfigDialog(
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                // runWithSnack already displayed "Error: ${e.message}" before
-                                // rethrowing (e.g. duplicateNotebook's missing-referenced-page
-                                // check) -- swallow it here so that doesn't also surface as an
-                                // uncaught exception in this coroutine scope.
+                                // runWithSnack has already shown the error to the user.
                                 log.e("Notebook copy failed: ${e.message}", e)
                             }
                         }
