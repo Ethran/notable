@@ -20,20 +20,7 @@ fun <T : Number> encode(coords: List<T>, precision: Int = 5): String {
     var prevValue = 0
 
     for (value in coords) {
-        // Round to the nearest scaled integer, not truncate toward zero. `coords` is
-        // frequently a `Float` value that was itself decoded from a previously-encoded
-        // polyline (e.g. every stroke Room re-persists after a sync import), so the
-        // Double this function sees is often a Float-widened value that lands just
-        // above OR just below the true scaled-decimal value it represents (Float32 has
-        // far less precision than the Double arithmetic here -- which side it lands on
-        // depends on the value, not a fixed direction). Truncating a value that landed
-        // just below discards a whole unit at this precision, so re-encoding a value
-        // that was just decoded does not always reproduce the original integer -- i.e.
-        // encode(decode(encode(x))) != encode(x) for some x, even though nothing about
-        // the point changed. Rounding to the nearest integer recovers the original
-        // integer whenever the Float32 narrowing error is under half a precision unit
-        // (true for ordinary on-screen coordinates; magnitudes large enough that Float32
-        // itself can no longer resolve this precision are not fixed by this change).
+        // Round, not truncate: Float-decoded values can land just below the scaled integer.
         val iValue = (value.toDouble() * 10.0.pow(precision)).roundToInt()
         val delta = encodeValue(iValue - prevValue)
         prevValue = iValue
