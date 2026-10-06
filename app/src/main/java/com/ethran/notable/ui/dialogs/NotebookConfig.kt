@@ -54,6 +54,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
@@ -143,7 +144,7 @@ fun NotebookEditDialog(
                 showDeleteDialog = false
                 onClose()
 
-                // Queue remote deletion in background so it is independent from this view lifecycle.
+                // Queue remote deletion in background so it is independent of this view lifecycle.
                 scope.launch {
                     snackManager.runWithSnack("Deleting notebook...", 3000) {
                         syncScheduler.triggerImmediateSync(
@@ -252,19 +253,7 @@ fun NotebookEditDialog(
                 )
             }
 
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null
-                    )
-                }
-            }
+            Spacer(Modifier.height(25.dp))
 
             // Header Section
             Row(Modifier.padding(bottom = 16.dp)) {
@@ -470,7 +459,8 @@ fun NotebookCreateDialog(
     ScaledDialog(
         onDismissRequest = {
             onClose()
-        }
+        },
+        properties = DialogProperties(dismissOnClickOutside = false)
     ) {
         Column(
             modifier = Modifier
