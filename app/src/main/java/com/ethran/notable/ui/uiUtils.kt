@@ -9,10 +9,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.datastore.PageMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.round
 import kotlin.math.roundToInt
 
 val log = ShipBook.getLogger("UI Utils")
@@ -47,6 +49,10 @@ fun convertPointsToPixel(points: Int, context: Context): Float {
     return points * context.resources.displayMetrics.xdpi / 72f
 }
 
+fun mmToPdfPoints(mm: Float): Int {
+    return round(mm * 72f / 25.4f).toInt()
+}
+
 /**
  * Calculates the sheet width adjusted to the viewport.
  *
@@ -58,13 +64,14 @@ fun convertPointsToPixel(points: Int, context: Context): Float {
  * @return the adjusted sheet width
  */
 fun sheetAdjustedWidth(screenWidth: Int, pageWidth: Int, context: Context): Float {
-    // TODO instead of percentage use points for tolerance
-    val sheetTolerance = 0.02f // The max allowed deviation between screen width and sheet width
+    val deviationThreshold = convertPointsToPixel(mmToPdfPoints(5f),context)
     val sheetWidth = convertPointsToPixel(pageWidth, context)
     val deviation = abs(sheetWidth - screenWidth)
-    val deviationThreshold = screenWidth * sheetTolerance
-    val sheetAdjustedWidth =
-        if (deviation <= deviationThreshold) screenWidth.toFloat() else sheetWidth
+    val sheetAdjustedWidth  = if (deviation <= deviationThreshold) {
+        screenWidth.toFloat()
+    } else {
+        sheetWidth
+    }
 
     log.d(
         """
@@ -101,7 +108,8 @@ fun sideBarsRectangles(
             )
             val sheetAdjustedInt = sheetAdjustedWidth.roundToInt()
 
-            log.d("""
+            log.d(
+                """
                 Sheet width original: 
                 Sheet width adjusted: $sheetAdjustedWidth
                 To int: $sheetAdjustedInt
