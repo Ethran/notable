@@ -40,7 +40,6 @@ reviews:
 
   path_filters:
     - "!**/build/**"
-    - "!app/schemas/**"
     - "!**/*.png"
     - "!**/*.webp"
     - "!gradle/wrapper/**"
@@ -94,7 +93,7 @@ reviews:
         mode: "warning"
         instructions: |
           Count changed lines as additions + deletions, excluding app/src/test/**,
-          app/src/androidTest/**, app/schemas/** and docs/**.
+          app/src/androidTest/**, app/schemas/**, docs/** and Markdown files.
           FAIL if the PR mixes unrelated concerns (e.g. a feature plus an unrelated refactor,
           rename, or formatting pass, or several unrelated fixes), or if it has more than 500
           changed lines and could be split into smaller PRs that each build and make sense on
@@ -113,4 +112,5 @@ knowledge_base:
     enabled: true
     filePatterns:
       - "CONTRIBUTING.md"
-      - "docs/file-structure.md"
+      - files: "docs/file-structure.md"
+        applyTo: "app/src/main/**"
