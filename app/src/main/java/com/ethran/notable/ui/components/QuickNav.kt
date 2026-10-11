@@ -35,6 +35,7 @@ import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.viewmodels.QuickNavUiState
 import com.ethran.notable.ui.viewmodels.QuickNavViewModel
+import com.ethran.notable.ui.viewmodels.ScrubberState
 import dagger.hilt.EntryPoint
 import dagger.hilt.EntryPoints
 import dagger.hilt.InstallIn
@@ -89,6 +90,7 @@ fun QuickNav(
 
     QuickNavContent(
         appRepository = appRepository,
+        currentPageId = currentPageId,
         uiState = uiState,
         onClose = {
             logQuickNav.d("outside tap -> close")
@@ -108,6 +110,7 @@ fun QuickNav(
 @Composable
 fun QuickNavContent(
     appRepository: AppRepository?,
+    currentPageId: String?,
     uiState: QuickNavUiState,
     onClose: () -> Unit,
     onNavigateBreadcrumb: (String?) -> Unit,
@@ -119,6 +122,12 @@ fun QuickNavContent(
     onReturnClick: () -> Unit,
     goToPage: (String) -> Unit,
 ) {
+    // uiState may still describe the previous page while its load is in flight.
+    // The scrubber is gated on notebook membership, not page identity, so it stays mounted across a scrub.
+    val isStateForPage = uiState.pageId != null && uiState.pageId == currentPageId
+    val scrubber = uiState.scrubber
+    val scrubberIndex = scrubber?.pageIds?.indexOf(currentPageId) ?: -1
+
     Column(
         Modifier
             .fillMaxWidth()
@@ -149,10 +158,10 @@ fun QuickNavContent(
 
             // Header row: Breadcrumb on the left, Favorite toggle on the right
             QuickNavHeaderRow(
-                folders = uiState.breadcrumbFolders,
-                isFavorite = uiState.isCurrentPageFavorite,
-                canToggleFavorite = uiState.currentPageId != null,
-                canGeneratePreviews = uiState.bookPageIds.isNotEmpty(),
+                folders = if (isStateForPage) uiState.breadcrumbFolders else emptyList(),
+                isFavorite = isStateForPage && uiState.isCurrentPageFavorite,
+                canToggleFavorite = isStateForPage,
+                canGeneratePreviews = scrubberIndex >= 0,
                 onNavigateBreadcrumb = onNavigateBreadcrumb,
                 onToggleFavorite = onToggleFavorite,
                 onGenerateBookPreviews = onGenerateBookPreviews
@@ -162,21 +171,20 @@ fun QuickNavContent(
                 ShowPagesRow(
                     appRepository = appRepository,
                     pages = uiState.favoritePages,
-                    currentPageId = uiState.currentPageId,
+                    currentPageId = currentPageId,
                     title = "Favorite pages",
                     onSelectPage = { goToPage(it) }
                 )
             }
 
-            // Scrubber block only renders if we have a valid book
-            if (uiState.bookPageCount >= 2) {
+            if (scrubber != null && scrubberIndex >= 0) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(modifier = Modifier.fillMaxWidth()) {
                     PageHorizontalSliderWithReturn(
-                        pageCount = uiState.bookPageCount,
-                        currentIndex = uiState.currentBookIndex,
-                        favIndexes = uiState.favoriteIndexesInBook,
+                        pageCount = scrubber.pageIds.size,
+                        currentIndex = scrubberIndex,
+                        favIndexes = scrubber.favoriteIndexes,
                         onDragStart = onScrubStart,
                         onPreviewIndexChanged = onScrubPreview,
                         onDragEnd = onScrubEnd,
@@ -211,7 +219,7 @@ private fun QuickNavHeaderRow(
                 if (canToggleFavorite) {
                     onToggleFavorite()
                 } else {
-                    logQuickNav.w("favorite toggle ignored, pageId=null")
+                    logQuickNav.w("favorite toggle ignored, page not loaded")
                 }
             })
 
@@ -234,15 +242,16 @@ private fun QuickNavHeaderRow(
 fun QuickNavContentPreview() {
     QuickNavContent(
         appRepository = null,
+        currentPageId = "page4",
         uiState = QuickNavUiState(
-            favoritePages = listOf(Page(id = "page1")),
-            isLoading = false,
-            currentPageId = "page1",
+            favoritePages = listOf(Page(id = "page4")),
+            pageId = "page4",
             folderId = "folder1",
             isCurrentPageFavorite = true,
-            bookPageCount = 10,
-            currentBookIndex = 4,
-            favoriteIndexesInBook = listOf(0, 4, 9)
+            scrubber = ScrubberState(
+                pageIds = List(10) { "page$it" },
+                favoriteIndexes = listOf(0, 4, 9),
+            ),
         ),
         onClose = {},
         onNavigateBreadcrumb = {},
