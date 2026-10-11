@@ -28,7 +28,7 @@ Small PRs get reviewed. Big PRs wait.
 | Large                 | ~300 – 1000   | Only after **you've had at least one small PR merged** here.                 |
 | Very large            | over 1000     | Only after agreeing on it in an issue first. Expect to be asked to split it. |
 
-**Your first PR must be a small one.** A first PR over ~300 changed lines, or touching more than 30 files, is closed automatically.
+**Your first PR must be small.** Over ~300 changed lines or 30 files, it's closed automatically unless agreed in advance.
 
 ### One PR = one concern
 
