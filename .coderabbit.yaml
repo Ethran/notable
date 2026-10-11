@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+tone_instructions: "Be helpful and encouraging. Explain why changes are suggested, not just what to change."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  sequence_diagrams: true
+
+  auto_review:
+    enabled: true
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "draft"
+
+  path_filters:
+    - "!dist/**"
+    - "!build/**"
+    - "!**/package-lock.json"
+    - "!**/yarn.lock"
+    - "!**/pnpm-lock.yaml"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+    - "!**/*.generated.*"
+    - "!docs/api/**"
+
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        This is an open source project. Contributors may be first-time contributors.
+        Be constructive and explain the reasoning behind suggestions.
+        Flag breaking changes to public APIs.
+        Ensure new public functions and classes have documentation.
+        Check that error messages are clear and actionable.
+    - path: "tests/**"
+      instructions: |
+        Verify that tests have meaningful assertions.
+        Flag tests that test implementation details rather than behavior.
+        Suggest descriptive test names that explain the expected behavior.
+    - path: "src/**"
+      instructions: |
+        Check for consistent error handling patterns.
+        Flag any hardcoded credentials, API keys, or secrets.
+        Ensure exported functions have JSDoc or docstring documentation.
+
+  tools:
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
