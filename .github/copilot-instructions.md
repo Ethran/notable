@@ -10,8 +10,8 @@
 - **Immutability** — update state via `copy()`, not direct field mutation.
 - **Threading** — never block the OpenGL render thread or main thread with I/O; use coroutines.
 - **Compose** — use `remember`/`derivedStateOf` to limit recomposition; keep Composables stateless.
-- **Room migrations** — any `@Entity` change requires a DB version bump, a migration in `AppDatabase.kt`, and a new schema snapshot in `app/schemas/`. Run `MigrationTest`.
-- **Package placement** — follow `docs/file-structure.md`. Never add code to `floatingEditor/` (unused/historical).
+- **Room migrations** — any `@Entity` change requires a DB version bump in `data/db/Db.kt` (`AppDatabase`), an `AutoMigration` there or a manual migration in `data/db/Migrations.kt`, and a new schema snapshot in `app/schemas/`. Run `MigrationTest`.
+- **Package placement** — follow `docs/file-structure.md`.
 
 
 ### Kotlin Best Practices
@@ -42,6 +42,9 @@
 |---|-------------------------------------------------------------------------------|
 | `data/` | Room DB (`db/`), DataStore (`datastore/`), `AppRepository`, `PageDataManager` |
 | `editor/` | `canvas/`, `drawing/`, `state/` , `utils/`, `ui/`                             |
+| `gestures/` | Touch gesture classification and actions                                     |
+| `sync/` | WebDAV sync                                                                   |
+| `di/` | Hilt modules                                                                  |
 | `ui/` | `views/` (screens), `components/` (reusable), `theme/`                        |
 | `io/` | Import/export engines                                                         |
 | `navigation/` | `NotableNavHost`, `NavigationDestination`                                     |
