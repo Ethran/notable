@@ -2,6 +2,7 @@ package com.ethran.notable.data.db
 
 import kotlin.math.pow
 import kotlin.math.round
+import kotlin.math.roundToInt
 
 
 /**
@@ -19,7 +20,7 @@ fun <T : Number> encode(coords: List<T>, precision: Int = 5): String {
     var prevValue = 0
 
     for (value in coords) {
-        val iValue = (value.toDouble() * 10.0.pow(precision)).toInt()
+        val iValue = (value.toDouble() * 10.0.pow(precision)).roundToInt()
         val delta = encodeValue(iValue - prevValue)
         prevValue = iValue
         result.add(delta)
@@ -27,6 +28,7 @@ fun <T : Number> encode(coords: List<T>, precision: Int = 5): String {
 
     return result.joinToString("")
 }
+
 private fun encodeValue(value: Int): String {
     // Step 2 & 4
     val actualValue = if (value < 0) (value shl 1).inv() else (value shl 1)
@@ -42,7 +44,7 @@ private fun splitIntoChunks(toEncode: Int): List<Int> {
     // Step 5-8
     val chunks = mutableListOf<Int>()
     var value = toEncode
-    while(value >= 32) {
+    while (value >= 32) {
         chunks.add((value and 31) or (0x20))
         value = value shr 5
     }
