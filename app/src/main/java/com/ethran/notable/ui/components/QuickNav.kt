@@ -158,8 +158,8 @@ fun QuickNavContent(
 
             // Header row: Breadcrumb on the left, Favorite toggle on the right
             QuickNavHeaderRow(
-                folders = uiState.breadcrumbFolders,
-                isFavorite = uiState.isCurrentPageFavorite,
+                folders = if (isStateForPage) uiState.breadcrumbFolders else emptyList(),
+                isFavorite = isStateForPage && uiState.isCurrentPageFavorite,
                 canToggleFavorite = isStateForPage,
                 canGeneratePreviews = scrubberIndex >= 0,
                 onNavigateBreadcrumb = onNavigateBreadcrumb,
