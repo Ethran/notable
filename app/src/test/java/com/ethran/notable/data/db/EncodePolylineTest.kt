@@ -65,6 +65,33 @@ class EncodePolylineTest {
         assertEquals("", encode(emptyList<Double>()))
     }
 
+    // Simple test to check if encoding is reversible. 
+    @Test
+    fun reencoding_a_float32_narrowed_decoded_value_reproduces_the_same_integer() {
+        // Decoded coordinates are Float32; re-encoding them must reproduce the same integers.
+        val trueValues = listOf(708.29, 706.95, 706.19, 704.66, 704.42, 711.8, 725.79, 728.48, -706.95, -708.29, 0.0, -0.01)
+        val decodedAsFloat32 = trueValues.map { it.toFloat() }
+
+        val reencoded = encode(decodedAsFloat32, precision = 2)
+        val reencodedThenDecoded = decode(reencoded, precision = 2) { it }
+
+        assertEquals(trueValues.size, reencodedThenDecoded.size)
+        trueValues.zip(reencodedThenDecoded).forEach { (original, roundTripped) ->
+            assertEquals(
+                "value $original must survive a decode-then-Float32-then-reencode cycle unchanged",
+                original, roundTripped, 1e-9
+            )
+        }
+    }
+
+    @Test
+    fun reencoding_a_fixed_known_polyline_reproduces_the_same_bytes() {
+        // First 4 points of a real device stroke at precision 2.
+        val fixture = "yiiCjGjCJ"
+        val decodedAsFloat32 = decode(fixture, precision = 2) { it.toFloat() }
+        assertEquals(fixture, encode(decodedAsFloat32, precision = 2))
+    }
+
     @Test
     fun negative_deltas_encode_and_decode_symmetrically() {
         // Monotonically decreasing — every delta is negative, exercising the
