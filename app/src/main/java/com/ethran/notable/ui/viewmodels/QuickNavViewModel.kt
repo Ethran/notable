@@ -13,28 +13,34 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.components.getFolderList
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
+/** Scrubber data for a notebook with 2+ pages; null in [QuickNavUiState] means no scrubber. */
+data class ScrubberState(
+    val pageIds: List<String>,
+    val favoriteIndexes: List<Int> = emptyList(),
+) {
+    fun pageAt(index: Int): String? = pageIds.getOrNull(index)
+}
+
+/** Everything QuickNav shows about one page, loaded and published together. */
 data class QuickNavUiState(
-    val isLoading: Boolean = true,
-    val currentPageId: String? = null,
+    /** The page this state describes. May lag the page on screen. */
+    val pageId: String? = null,
     val folderId: String? = null,
     val breadcrumbFolders: List<Folder> = emptyList(),
     val bookId: String? = null,
     val isCurrentPageFavorite: Boolean = false,
     val favoritePages: List<Page> = emptyList(),
-
-    // Scrubber specific state
-    val bookPageCount: Int = 0,
-    val currentBookIndex: Int = 0,
-    val favoriteIndexesInBook: List<Int> = emptyList(),
-    val bookPageIds: List<String> = emptyList()
+    val scrubber: ScrubberState? = null,
 )
 
 
@@ -52,84 +58,68 @@ class QuickNavViewModel(
     val uiState: StateFlow<QuickNavUiState> = _uiState.asStateFlow()
     private var lastScrubEndTargetPageId: String? = null
 
-    // Initialize data when the ViewModel is created or when a new page is opened
-    fun loadPageData(currentPageId: String?) {
-        if (currentPageId == null) return
+    private var loadJob: Job? = null
+    private var requestedPageId: String? = null
 
-        _uiState.update { it.copy(isLoading = true, currentPageId = currentPageId) }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            val page = runCatching { pageRepository.getById(currentPageId) }.getOrNull()
-            val folderList = getFolderList(appRepository, page)
-
-            // Read favorites from your database/preferences
-            val currentSettings = GlobalAppSettings.current
-            val favorites = currentSettings.quickNavPages
-            val isFavorite = favorites.contains(currentPageId)
-
-            val favoritePagesDb = appRepository.pageRepository.getByIds(favorites)
-
-            _uiState.update { state ->
-                state.copy(
-                    folderId = page?.parentFolderId,
-                    breadcrumbFolders = folderList,
-                    bookId = page?.notebookId,
-                    isCurrentPageFavorite = isFavorite,
-                    favoritePages = favoritePagesDb,
-                    isLoading = false
-                )
+    // Publish the whole state in one write; cancelling the previous job guarantees a stale load never lands.
+    fun loadPageData(pageId: String?) {
+        requestedPageId = pageId
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _uiState.value = withContext(Dispatchers.IO) {
+                try {
+                    loadState(pageId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.e("Failed to load QuickNav state for page $pageId: ${e.message}")
+                    QuickNavUiState()
+                }
             }
-
-            // Load Scrubber data if it belongs to a book
-            page?.notebookId?.let { loadBookData(it, currentPageId, favorites) }
         }
     }
 
-    private suspend fun loadBookData(
-        bookId: String, currentPageId: String, favorites: List<String>
-    ) {
-        val book = bookRepository.getById(bookId)
-        if (book != null && book.pageIds.size >= 2) {
-            val currentIdx = appRepository.getPageNumber(bookId, currentPageId)
-            val favIndexes = book.pageIds.mapIndexedNotNull { idx, id ->
-                if (favorites.contains(id)) idx else null
-            }
+    private suspend fun loadState(pageId: String?): QuickNavUiState {
+        val page = pageId?.let { runCatching { pageRepository.getById(it) }.getOrNull() }
+        val favorites = GlobalAppSettings.current.quickNavPages
 
-            _uiState.update { state ->
-                state.copy(
-                    bookPageCount = book.pageIds.size,
-                    currentBookIndex = currentIdx,
-                    favoriteIndexesInBook = favIndexes,
-                    bookPageIds = book.pageIds
-                )
-            }
+        return QuickNavUiState(
+            pageId = page?.id,
+            folderId = page?.parentFolderId,
+            breadcrumbFolders = getFolderList(appRepository, page),
+            bookId = page?.notebookId,
+            isCurrentPageFavorite = page?.id in favorites,
+            favoritePages = pageRepository.getByIds(favorites),
+            scrubber = page?.notebookId?.let { loadScrubber(it, favorites) },
+        )
+    }
+
+    private suspend fun loadScrubber(bookId: String, favorites: List<String>): ScrubberState? {
+        val book = bookRepository.getById(bookId)
+        if (book == null || book.pageIds.size < 2) return null
+
+        val favIndexes = book.pageIds.mapIndexedNotNull { idx, id ->
+            if (favorites.contains(id)) idx else null
         }
+        return ScrubberState(pageIds = book.pageIds, favoriteIndexes = favIndexes)
     }
 
     fun toggleFavorite() {
-        val currentState = _uiState.value
-        val pageId = currentState.currentPageId ?: return
+        val pageId = _uiState.value.pageId ?: return
 
-        viewModelScope.launch(Dispatchers.IO) {
-            val settings = GlobalAppSettings.current
-            val currentFavorites = settings.quickNavPages
-            val isFav = currentFavorites.contains(pageId)
-
-            val newFavorites = if (isFav) {
-                currentFavorites.filterNot { it == pageId }
-            } else {
-                currentFavorites + pageId
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val settings = GlobalAppSettings.current
+                val currentFavorites = settings.quickNavPages
+                val newFavorites = if (pageId in currentFavorites) {
+                    currentFavorites.filterNot { it == pageId }
+                } else {
+                    currentFavorites + pageId
+                }
+                kv.setAppSettings(settings.copy(quickNavPages = newFavorites))
             }
-
-            // Save to DB
-            kv.setAppSettings(settings.copy(quickNavPages = newFavorites))
-
-            // Update UI State locally immediately
-            _uiState.update { it.copy(isCurrentPageFavorite = !isFav) }
-
-            // Re-fetch the rich page objects for the ShowPagesRow
-            val updatedFavoritePages = appRepository.pageRepository.getByIds(newFavorites)
-            _uiState.update { it.copy(favoritePages = updatedFavoritePages) }
+            // Reloading settings.
+            loadPageData(requestedPageId)
         }
     }
 
@@ -144,29 +134,28 @@ class QuickNavViewModel(
     }
 
     fun onScrubPreview(index: Int) {
-        val pageIds = _uiState.value.bookPageIds
-        viewModelScope.launch {
-            if (index in pageIds.indices) {
-                CanvasEventBus.previewPage.tryEmit(pageIds[index])
-            }
-        }
+        val pageId = _uiState.value.scrubber?.pageAt(index) ?: return
+        viewModelScope.launch { CanvasEventBus.previewPage.tryEmit(pageId) }
     }
 
     fun onScrubEnd(index: Int) {
-        val pageIds = _uiState.value.bookPageIds
-        val targetPageId = pageIds.getOrNull(index) ?: return
+        val targetPageId = _uiState.value.scrubber?.pageAt(index)
 
         viewModelScope.launch {
+            CanvasEventBus.isScrubbing.emit(false)
+            if (targetPageId == null) {
+                // Nothing to commit; redraw the current page over the last preview.
+                CanvasEventBus.restoreCanvas.emit(Unit)
+                return@launch
+            }
+
             log.v("onScrubEnd: $index")
 
             // moved, to be only run if we are changing page to the current page
 //            CanvasEventBus.restoreCanvas.emit(Unit)
 
-            CanvasEventBus.isScrubbing.emit(false)
-
             // Gesture end callbacks can fire more than once; ignore repeated commit for same target.
-            if (targetPageId == lastScrubEndTargetPageId)
-            {
+            if (targetPageId == lastScrubEndTargetPageId) {
                 log.e("Events can be send multiple times, really")
                 return@launch
             }
@@ -188,8 +177,7 @@ class QuickNavViewModel(
     }
 
     fun generateThumbnailsForCurrentBook() {
-        val pageIds = _uiState.value.bookPageIds
-        if (pageIds.isEmpty()) return
+        val pageIds = _uiState.value.scrubber?.pageIds ?: return
         thumbnailBackfillQueue.enqueue(pageIds)
     }
 }
