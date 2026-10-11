@@ -19,8 +19,8 @@ they might have some mistakes.
 
 Small PRs get reviewed. Big PRs wait.
 
-"Changed lines" below means additions + deletions, **not counting** tests (`src/test`,
-`src/androidTest`), Room schema snapshots (`app/schemas/`), and docs.
+"Changed lines" below means additions + deletions, **not counting** tests (`app/src/test`,
+`app/src/androidTest`), Room schema snapshots (`app/schemas/`), and docs.
 
 | Size                  | Changed lines | Rule                                                                         |
 |-----------------------|---------------|------------------------------------------------------------------------------|
@@ -28,7 +28,7 @@ Small PRs get reviewed. Big PRs wait.
 | Large                 | ~300 – 1000   | Only after **you've had at least one small PR merged** here.                 |
 | Very large            | over 1000     | Only after agreeing on it in an issue first. Expect to be asked to split it. |
 
-**Your first PR must be a small one.** 
+**Your first PR must be a small one.** A first PR over ~300 changed lines is closed automatically.
 
 ### One PR = one concern
 
