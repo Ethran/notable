@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 language: "en-US"
-tone_instructions: "Be helpful and encouraging. Explain why changes are suggested, not just what to change."
+tone_instructions: "Be helpful and encouraging. Explain why changes are suggested. Be strict about PR scope: if a PR mixes concerns or is too large to review, say so first and propose a concrete split."
 
 reviews:
   profile: "chill"
@@ -8,48 +8,78 @@ reviews:
   high_level_summary: true
   poem: false
   review_status: true
-  collapse_walkthrough: false
-  sequence_diagrams: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
 
   auto_review:
     enabled: true
+    drafts: false
     ignore_title_keywords:
       - "WIP"
       - "DO NOT MERGE"
       - "draft"
+    ignore_usernames:
+      - "dependabot[bot]"
 
   path_filters:
-    - "!dist/**"
-    - "!build/**"
-    - "!**/package-lock.json"
-    - "!**/yarn.lock"
-    - "!**/pnpm-lock.yaml"
-    - "!**/*.min.js"
-    - "!**/*.min.css"
-    - "!**/*.generated.*"
-    - "!docs/api/**"
+    - "!**/build/**"
+    - "!app/schemas/**"
+    - "!**/*.png"
+    - "!**/*.webp"
+    - "!gradle/wrapper/**"
 
   path_instructions:
     - path: "**/*"
       instructions: |
         This is an open source project. Contributors may be first-time contributors.
         Be constructive and explain the reasoning behind suggestions.
-        Flag breaking changes to public APIs.
-        Ensure new public functions and classes have documentation.
-        Check that error messages are clear and actionable.
-    - path: "tests/**"
+        Before line-level comments, judge whether this PR should be split: a feature mixed with
+        a refactor, rename, or formatting pass; unrelated fixes bundled together; preparatory
+        refactors that could land first; independent layers (data model, logic, UI) that could be
+        separate PRs. If a split makes sense, post one comment listing the proposed PRs in merge
+        order. Don't propose splits that would leave an intermediate PR broken or pointless.
+        Smaller PRs don't require splitting.
+        Flag files that are only reformatted with no functional change.
+    - path: "app/src/test/**"
       instructions: |
         Verify that tests have meaningful assertions.
         Flag tests that test implementation details rather than behavior.
-        Suggest descriptive test names that explain the expected behavior.
-    - path: "src/**"
+    - path: "app/src/androidTest/**"
       instructions: |
-        Check for consistent error handling patterns.
-        Flag any hardcoded credentials, API keys, or secrets.
-        Ensure exported functions have JSDoc or docstring documentation.
+        Verify that tests have meaningful assertions.
+        Flag tests that test implementation details rather than behavior.
+    - path: "app/src/main/java/com/ethran/notable/data/db/**"
+      instructions: |
+        Any change to a Room @Entity requires a DB version bump in Db.kt, an AutoMigration there or
+        a manual migration in Migrations.kt, and a new schema snapshot under app/schemas/.
+        Flag a missing piece as a blocking issue.
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    custom_checks:
+      - name: "Focused, reviewable scope"
+        mode: "warning"
+        instructions: |
+          Count changed lines as additions + deletions, excluding app/src/test/**,
+          app/src/androidTest/**, app/schemas/** and docs/**.
+          FAIL if the PR mixes unrelated concerns (e.g. a feature plus an unrelated refactor,
+          rename, or formatting pass, or several unrelated fixes), or if it has more than 500
+          changed lines and could be split into smaller PRs that each build and make sense on
+          their own. When failing, list the proposed PRs in merge order. PASS otherwise.
 
   tools:
     gitleaks:
       enabled: true
     semgrep:
       enabled: true
+    detekt:
+      enabled: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CONTRIBUTING.md"
+      - "docs/file-structure.md"
