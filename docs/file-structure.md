@@ -44,6 +44,8 @@ com.ethran.notable/
 
 - gestures/ — Custom gesture detection (QuickNav gestures, Editor receiver).
 
+- sync/ — WebDAV synchronization.
+
 - di/ — Dependency injection (Hilt modules).
 
 - utils/ — Generic helpers (Permissions, Debugging, Flow extensions).
