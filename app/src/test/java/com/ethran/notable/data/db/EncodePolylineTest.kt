@@ -65,6 +65,7 @@ class EncodePolylineTest {
         assertEquals("", encode(emptyList<Double>()))
     }
 
+    // Simple test to check if encoding is reversible. 
     @Test
     fun reencoding_a_float32_narrowed_decoded_value_reproduces_the_same_integer() {
         // Decoded coordinates are Float32; re-encoding them must reproduce the same integers.
