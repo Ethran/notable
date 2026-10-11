@@ -12,6 +12,22 @@ reviews:
   sequence_diagrams: false
   estimate_code_review_effort: true
 
+  suggested_labels: true
+  auto_apply_labels: true
+  labeling_instructions:
+    - label: "needs-split"
+      instructions: "Apply when the \"Focused, reviewable scope\" pre-merge check fails."
+    - label: "database"
+      instructions: "Apply when the PR changes a Room @Entity, Db.kt, Migrations.kt, or adds a file under app/schemas/."
+    - label: "translation"
+      instructions: "Apply when the PR only changes files under app/src/main/res/values-*/."
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+
   auto_review:
     enabled: true
     drafts: false
@@ -49,6 +65,21 @@ reviews:
       instructions: |
         Verify that tests have meaningful assertions.
         Flag tests that test implementation details rather than behavior.
+    - path: "app/src/main/java/com/ethran/notable/editor/**"
+      instructions: |
+        Drawing and input path on Onyx BOOX e-ink devices; latency matters most here.
+        Flag I/O, database access, or other blocking work on the main or render thread.
+        Flag object allocations inside per-point or per-frame loops (touch handling, stroke
+        drawing). Flag screen refresh or Onyx SDK calls that could cause extra full-screen
+        refreshes or flicker.
+    - path: "app/src/main/res/values-*/strings.xml"
+      instructions: |
+        Translations. Check that every string keeps the same format placeholders (%s, %d, %1$s)
+        and markup as the matching string in values/strings.xml. Don't comment on wording.
+    - path: ".github/workflows/**"
+      instructions: |
+        Workflows using pull_request_target must never check out or run code from the PR.
+        Flag secrets or write-scoped tokens exposed to steps that handle PR-controlled input.
     - path: "app/src/main/java/com/ethran/notable/data/db/**"
       instructions: |
         Any change to a Room @Entity requires a DB version bump in Db.kt, an AutoMigration there or
