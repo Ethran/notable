@@ -122,11 +122,8 @@ fun QuickNavContent(
     onReturnClick: () -> Unit,
     goToPage: (String) -> Unit,
 ) {
-    // uiState can describe a different page from the one on screen: when the sheet opens it still
-    // holds the page QuickNav last showed, and after a scrub the page before it, until the load for
-    // currentPageId lands. Whatever depends on the page is checked against currentPageId. The
-    // scrubber is drawn only when the page on screen is in its notebook, and positioned from that
-    // page, so a scrub within the notebook keeps it in place while the load catches up.
+    // uiState may still describe the previous page while its load is in flight.
+    // The scrubber is gated on notebook membership, not page identity, so it stays mounted across a scrub.
     val isStateForPage = uiState.pageId != null && uiState.pageId == currentPageId
     val scrubber = uiState.scrubber
     val scrubberIndex = scrubber?.pageIds?.indexOf(currentPageId) ?: -1

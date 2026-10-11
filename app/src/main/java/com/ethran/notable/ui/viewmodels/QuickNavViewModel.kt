@@ -23,10 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 
-/**
- * The pages of a notebook, for the scrubber. Only built for a notebook of two or more pages, so
- * its presence is what says there is something to scrub.
- */
+/** Scrubber data for a notebook with 2+ pages; null in [QuickNavUiState] means no scrubber. */
 data class ScrubberState(
     val pageIds: List<String>,
     val favoriteIndexes: List<Int> = emptyList(),
@@ -36,7 +33,7 @@ data class ScrubberState(
 
 /** Everything QuickNav shows about one page, loaded and published together. */
 data class QuickNavUiState(
-    /** The page this state describes. Lags the page on screen until the load for it lands. */
+    /** The page this state describes. May lag the page on screen. */
     val pageId: String? = null,
     val folderId: String? = null,
     val breadcrumbFolders: List<Folder> = emptyList(),
@@ -63,10 +60,7 @@ class QuickNavViewModel(
 
     private var loadJob: Job? = null
 
-    // Loads everything that describes the page, then publishes it as one value, so the state never
-    // mixes two pages. A new page cancels the load in flight. The publish runs on the main thread,
-    // as does this function, and withContext discards its result once the job is cancelled, so a
-    // superseded load never lands.
+    // Publish the whole state in one write; cancelling the previous job guarantees a stale load never lands.
     fun loadPageData(pageId: String?) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
