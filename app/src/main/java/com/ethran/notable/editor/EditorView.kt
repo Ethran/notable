@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.editor.canvas.CanvasEventBus
@@ -27,7 +28,6 @@ import com.ethran.notable.gestures.EditorGestureReceiver
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
-import com.ethran.notable.ui.convertDpToPixel
 import com.ethran.notable.ui.theme.InkaTheme
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -86,8 +86,9 @@ fun EditorView(
 
 
     BoxWithConstraints {
-        val height = convertDpToPixel(this.maxHeight, context).toInt()
-        val width = convertDpToPixel(this.maxWidth, context).toInt()
+        val density = LocalDensity.current
+        val height = with(density) { maxHeight.toPx().toInt() }
+        val width = with(density) { maxWidth.toPx().toInt() }
 
         // Here we load initial page into the memory
         val page = remember {

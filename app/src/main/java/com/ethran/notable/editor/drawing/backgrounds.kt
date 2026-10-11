@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.drawing
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -10,11 +11,12 @@ import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
+import androidx.core.graphics.withScale
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.data.datastore.GlobalAppSettings
-import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.editor.utils.scaleRect
+import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.ui.convertPointsToPixel
+import com.ethran.notable.ui.sheetAdjustedWidth
 import com.onyx.android.sdk.extension.copy
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.cos
@@ -38,11 +40,15 @@ private val defaultPaint = Paint().apply {
     this.strokeWidth = 1f
 }
 
+private val sideBarPaint = Paint().apply {
+    this.color = Color.rgb(120, 120, 120)
+}
+
 // For drawing Hexagons
 private val defaultPaintStroke = defaultPaint.copy().apply { this.style = Paint.Style.STROKE }
 private val marginPaint = Paint().apply {
     this.color = Color.MAGENTA
-    this.strokeWidth = 2f
+    this.strokeWidth = 2.5f
 }
 private val paginationLinePaint = Paint().apply {
     color = Color.RED
@@ -78,7 +84,6 @@ fun drawDottedBg(canvas: Canvas, scroll: Offset, scale: Float) {
     val width = (canvas.width / scale).toInt()
     // white bg
     canvas.drawColor(Color.WHITE)
-
 
     // dots
     val offset = IntOffset(lineHeight, lineHeight) - IntOffset(
@@ -275,61 +280,62 @@ fun drawBitmapToCanvas(
     }
 }
 
-fun drawBg(
-    canvas: Canvas,
-    backgroundType: BackgroundType,
-    background: String,
-    scroll: Offset = Offset.Zero,
-    resourceBitmap: Bitmap?,
-    scale: Float = 1f,          // When exporting, we change scale of canvas. therefore canvas.width/height is scaled
-    repeat: Boolean = false,    // for repeating image
-    clipRect: Rect? = null,     // before the scaling
-) {
+fun drawDotPattern(canvas: Canvas, rect: Rect, scale: Float) {
 
-    log.v("Loading the background")
-    clipRect?.let {
-        canvas.save()
-        canvas.clipRect(scaleRect(it, scale))
-    }
-    when (backgroundType) {
-        // draw native background for it we don't need a resource
-        is BackgroundType.Native -> {
-            when (background) {
-                "blank" -> canvas.drawColor(Color.WHITE)
-                "dotted" -> drawDottedBg(canvas, scroll, scale)
-                "lined" -> drawLinedBg(canvas, scroll, scale)
-                "squared" -> drawSquaredBg(canvas, scroll, scale)
-                "hexed" -> drawHexedBg(canvas, scroll, scale)
-                else -> {
-                    // Reaching the Native branch with an unknown value usually means the *type*
-                    // detection misclassified a non-native background (e.g. a .pdf) as Native, not
-                    // that the string is merely unknown — surface the type so it's obvious.
-                    throw IllegalArgumentException(
-                        "Unknown native background '$background' (type=$backgroundType)"
-                    )
-                }
+    canvas.withScale( // Use no scale to apply the dow pattern
+        1f / scale, 1f / scale
+    ) {
+
+
+        // Background
+        /*
+         * TODO: Remove when/if the background rendering is overhauled.
+         * Ideally, background drawing functions should be constrained to the sheet bounds
+         * instead of drawing across the entire canvas, eliminating the need to cover
+         * the areas outside the sheet with white rectangles.
+         *
+         * For now, they draw across the entire canvas, so the white rectangles are necessary.
+         */
+        canvas.drawRect(
+            rect.left.toFloat(),
+            rect.top.toFloat(),
+            rect.right.toFloat(),
+            rect.bottom.toFloat(),
+            Paint().apply { color = Color.WHITE }
+        )
+
+        val spacing = 9
+        val radius = 1.25f
+
+        for (y in rect.top until rect.bottom step spacing) {
+            for (x in rect.left until rect.right step spacing) {
+                canvas.drawCircle(
+                    x.toFloat(),
+                    y.toFloat(),
+                    radius,
+                    sideBarPaint
+                )
             }
         }
 
-        else -> {
-            if (resourceBitmap != null) {
-                drawBitmapToCanvas(canvas, resourceBitmap, scroll, scale, repeat)
-                if (backgroundType is BackgroundType.CoverImage) {
-                    drawTitleBox(canvas)
-                }
-            } else {
-                log.i("No resource provided to draw, maybe out of pages in pdf?")
-                canvas.drawColor(Color.WHITE)
-            }
+        paginationLinePaint.pathEffect = DashPathEffect(
+            floatArrayOf(10f, 10f), // dash length, gap length
+            0f
+        )
+        var startX = 0f
+        startX = if (rect.left == 0) { // if left rectangle
+            rect.right.toFloat()
+        } else{ // if right rectangle
+            rect.left.toFloat()
         }
-    }
-    drawMargin(canvas, scroll, scale)
 
-    if (GlobalAppSettings.current.visualizePdfPagination) {
-        drawPaginationLine(canvas, scroll, scale)
-    }
-    if (clipRect != null) {
-        canvas.restore()
+        canvas.drawLine(
+            startX,
+            padding.toFloat(),
+            startX,
+            (canvas.height - padding).toFloat(),
+            marginPaint
+        )
     }
 }
 
@@ -345,41 +351,61 @@ fun drawMargin(canvas: Canvas, scroll: Offset, scale: Float) {
     }
 }
 
-fun drawPaginationLine(canvas: Canvas, scroll: Offset, scale: Float) {
+fun drawPaginationLine(
+    canvas: Canvas,
+    scroll: Offset,
+    scale: Float,
+    context: Context,
+    pageMode: PageMode?
+) {
     val textPaint = Paint().apply {
         color = Color.BLACK
         textSize = 24f
         isAntiAlias = true
     }
+    if (pageMode == null || pageMode == PageMode.INFINITE) return
 
-    // A4 paper ratio (height/width in portrait)
-    val a4Ratio = 297f / 210f
-    val screenWidth = min(SCREEN_HEIGHT, SCREEN_WIDTH)
-    val pageHeight = screenWidth * a4Ratio
+    val sheetHeightPixels = convertPointsToPixel(pageMode.height, context)
+    val sheetAdjustedWidth = sheetAdjustedWidth(
+        canvas.width, pageMode.width, context
+    )
+
 
     // Convert scroll position to canvas coordinates
     // Calculate current page number (1-based)
-    val currentPage = floor(scroll.y / pageHeight).toInt() + 1
+    val currentPage = floor(scroll.y / sheetHeightPixels).toInt() + 1
 
     // Calculate position of first page break
-    var yPos = (currentPage * pageHeight) - scroll.y
+    var yPos = (currentPage * sheetHeightPixels) - scroll.y
+
+    val residualScrollX = scroll.x
+    val startX = -residualScrollX
+    val stopX = -residualScrollX + sheetAdjustedWidth
+    log.d(
+        """
+    Sheet adj width $sheetAdjustedWidth, scrollX $residualScrollX
+    StartX $startX, stopX $stopX
+    """.trimIndent()
+    )
 
     var pageNum = currentPage
     while (yPos < canvas.height / scale) {
-        if (yPos >= 0) { // Only draw visible lines
-            val yPosScaled = yPos
-            canvas.drawLine(
-                0f, yPosScaled, screenWidth.toFloat(), yPosScaled, paginationLinePaint
-            )
+        canvas.drawLine(
+            startX,
+            yPos,
+            stopX,
+            yPos,
+            paginationLinePaint
+        )
 
-            // Draw page number label (offset slightly below the line)
-            canvas.drawText(
-                "Subpage ${pageNum + 1}", 20f - scroll.x, yPosScaled + 30f, textPaint
-            )
-        } else {
-            log.d("Skipping line at $yPos (above visible area)")
-        }
-        yPos += pageHeight
+        canvas.drawText(
+            "Subpage ${pageNum + 1}",
+            20f - residualScrollX,
+            yPos + 30f,
+            textPaint
+        )
+
+        yPos += sheetHeightPixels
         pageNum++
     }
 }

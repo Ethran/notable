@@ -12,9 +12,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.A4_HEIGHT
-import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.db.BookRepository
@@ -134,13 +133,14 @@ class ExportEngine @Inject constructor(
         target: ExportTarget, folderUri: Uri, baseFileName: String, options: ExportOptions
     ): String {
         val writeAction: suspend (OutputStream) -> Unit
+        val exportPageSize = PageMode.A4 // TODO hardcoded to export to A4, when exporting is revamped-> ask user which size
         when (target) {
             is ExportTarget.Book -> {
                 val book = bookRepo.getById(target.bookId) ?: return "Book ID not found"
                 writeAction = { out ->
                     PdfDocument().use { doc ->
                         book.pageIds.forEachIndexed { index, pageId ->
-                            writePageToPdfDocument(doc, pageId, pageNumber = index + 1)
+                            writePageToPdfDocument(doc, pageId, pageNumber = index + 1, exportPageSize = exportPageSize)
                         }
                         doc.writeTo(out)
                     }
@@ -150,7 +150,7 @@ class ExportEngine @Inject constructor(
             is ExportTarget.Page -> {
                 writeAction = { out ->
                     PdfDocument().use { doc ->
-                        writePageToPdfDocument(doc, target.pageId, pageNumber = 1)
+                        writePageToPdfDocument(doc, target.pageId, pageNumber = 1, exportPageSize = exportPageSize)
                         doc.writeTo(out)
                     }
                 }
@@ -391,12 +391,15 @@ class ExportEngine @Inject constructor(
 
     /* -------------------- Shared Drawing & PDF Helpers -------------------- */
 
-    private suspend fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int) {
+    private suspend fun writePageToPdfDocument(doc: PdfDocument, pageId: String, pageNumber: Int, exportPageSize : PageMode) {
         ensureNotMainThread("ExportPdf")
         val data = pageContentRenderer.loadPageContent(pageId) ?: return
         val (_, contentHeightPx) = pageContentRenderer.computeContentDimensions(data)
 
-        val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH.toFloat()
+        val pageWidth = exportPageSize.width
+        val pageHeight = exportPageSize.width
+
+        val scaleFactor = pageWidth.toFloat() / SCREEN_WIDTH.toFloat()
         val scaledHeight = (contentHeightPx * scaleFactor).toInt()
 
         if (GlobalAppSettings.current.paginatePdf) {
@@ -404,12 +407,12 @@ class ExportEngine @Inject constructor(
             // canvas.scale). So the vertical step and the loop bound must be in content pixels too.
             // One A4 page shows A4_HEIGHT/scaleFactor content px; stepping by A4_HEIGHT (output px)
             // instead advanced only ~scaleFactor of a page each time, so consecutive pages overlapped.
-            val pageContentHeightPx = A4_HEIGHT / scaleFactor
+            val pageContentHeightPx = pageHeight / scaleFactor
             var currentTop = 0f
             var logicalPageNumber = pageNumber
             while (currentTop < contentHeightPx) {
                 val pageInfo =
-                    PdfDocument.PageInfo.Builder(A4_WIDTH, A4_HEIGHT, logicalPageNumber).create()
+                    PdfDocument.PageInfo.Builder(pageWidth, pageHeight, logicalPageNumber).create()
                 val page = doc.startPage(pageInfo)
                 pageContentRenderer.drawPage(
                     canvas = page.canvas,
@@ -422,7 +425,7 @@ class ExportEngine @Inject constructor(
                 logicalPageNumber++
             }
         } else {
-            val pageInfo = PdfDocument.PageInfo.Builder(A4_WIDTH, scaledHeight, pageNumber).create()
+            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, scaledHeight, pageNumber).create()
             val page = doc.startPage(pageInfo)
             pageContentRenderer.drawPage(
                 canvas = page.canvas,

@@ -168,6 +168,7 @@ class CanvasObserverRegistry(
             page.zoomLevel.drop(1).collect {
                 log.v("zoom level change: ${page.zoomLevel.value}")
                 pageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
+                inputHandler.updateActiveSurface() // Needed to update where the user can and cannot write
                 inputHandler.updatePenAndStroke()
             }
         }

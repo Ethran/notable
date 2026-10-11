@@ -187,7 +187,6 @@ class EditorControlTower(
 
     fun resetZoomAndScroll() {
         scope.launch {
-            page.scroll = Offset(0f, page.scroll.y)
             page.applyZoomAndRedraw(1f)
             // Request UI update
             CanvasEventBus.refreshUiImmediately.emit(Unit)

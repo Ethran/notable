@@ -263,7 +263,7 @@ class OnyxInputHandler(
                         copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
                     handleSelect(
                         scope = coroutineScope,
-                        page = drawCanvas.page,
+                        page = drawCanvas.pageView,
                         viewModel = viewModel,
                         points = points
                     )
@@ -294,7 +294,7 @@ class OnyxInputHandler(
                         val linePoints = transformToLine(startPoint, endPoint)
 
                         handleDraw(
-                            drawCanvas.page,
+                            drawCanvas.pageView,
                             strokeHistoryBatch,
                             toolbarState.activePenSetting.strokeSize,
                             toolbarState.activePenSetting.color,
@@ -340,7 +340,7 @@ class OnyxInputHandler(
                             log.d("Drawing...")
                             // draw the stroke
                             handleDraw(
-                                drawCanvas.page,
+                                drawCanvas.pageView,
                                 strokeHistoryBatch,
                                 toolbarState.activePenSetting.strokeSize,
                                 toolbarState.activePenSetting.color,
@@ -392,7 +392,7 @@ class OnyxInputHandler(
             boundingBox.bottom + padding
         )
         val zoneEffected = handleErase(
-            drawCanvas.page,
+            drawCanvas.pageView,
             history,
             points,
             eraser = toolbarState.eraser

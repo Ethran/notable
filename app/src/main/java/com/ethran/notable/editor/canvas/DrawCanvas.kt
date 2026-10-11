@@ -25,7 +25,7 @@ class DrawCanvas(
     context: Context,
     val coroutineScope: CoroutineScope,
     val viewModel: EditorViewModel,
-    val page: PageView,
+    val pageView: PageView,
     val history: History
 ) : SurfaceView(context) {
     private val log = ShipBook.getLogger("DrawCanvas")
@@ -89,12 +89,12 @@ class DrawCanvas(
 
 
     val inputHandler =
-        OnyxInputHandler(this, page, viewModel, history, coroutineScope, strokeHistoryBatch)
-    val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
+        OnyxInputHandler(this, pageView, viewModel, history, coroutineScope, strokeHistoryBatch)
+    val refreshManager = CanvasRefreshManager(this, pageView, viewModel, inputHandler.touchHelper)
 
 
     private val observers = CanvasObserverRegistry(
-        coroutineScope, this, page, viewModel, history, inputHandler, refreshManager
+        coroutineScope, this, pageView, viewModel, history, inputHandler, refreshManager
     )
 
     fun registerObservers() = observers.registerAll()
@@ -120,13 +120,15 @@ class DrawCanvas(
             override fun surfaceChanged(
                 holder: SurfaceHolder, format: Int, width: Int, height: Int
             ) {
-                // Only act if actual dimensions changed
-                if (page.viewWidth == width && page.viewHeight == height) return
+                log.v("PageView OLD: ${pageView.viewWidth} x ${pageView.viewHeight}, NEW: $width x $height")
 
-                log.v("Surface dimension changed!")
+                // Ignore if dimensions have not actually changed
+                if (pageView.viewWidth == width && pageView.viewHeight == height) return
+
+                log.v("PageView changed from ${pageView.viewWidth} x ${pageView.viewHeight} to $width x $height")
 
                 // Update page dimensions, redraw and refresh
-                page.updateDimensions(width, height)
+                pageView.updateDimensions(width, height)
                 inputHandler.updateActiveSurface()
                 onSurfaceChanged(this@DrawCanvas)
             }

@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
@@ -1081,6 +1082,10 @@ class PageDataManager @Inject constructor(
 
     fun getBackgroundName(): String {
         return pageFromDb?.background ?: "blank"
+    }
+
+    fun getPageMode(): PageMode? {
+        return pageFromDb?.pageMode
     }
 
     fun setCurrentBackground(background: CachedBackground) {

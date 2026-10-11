@@ -15,12 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
-import com.ethran.notable.ui.convertDpToPixel
 import kotlin.math.max
 
 /**
@@ -35,7 +34,7 @@ fun ScrollIndicator(viewModel: EditorViewModel, page: PageView) {
             .width(5.dp)
             .fillMaxHeight()
     ) {
-        val viewportHeightPx = convertDpToPixel(this.maxHeight, LocalContext.current).toInt()
+        val viewportHeightPx = with(LocalDensity.current) { maxHeight.toPx().toInt() }
 
         // Total scrollable height approximation:
         // page.height is the total content height (page coordinates)
@@ -74,7 +73,7 @@ fun HorizontalScrollIndicator(viewModel: EditorViewModel, page: PageView) {
                 .height(5.dp)
                 .fillMaxWidth()
         ) {
-            val viewportWidthPx = convertDpToPixel(this.maxWidth, LocalContext.current).toInt()
+            val viewportWidthPx = with(LocalDensity.current) { maxWidth.toPx().toInt() }
 
             // Total scrollable width approximation:
             // page.width is the total content width (page coordinates)

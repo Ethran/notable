@@ -92,6 +92,7 @@ import compose.icons.feathericons.Loader
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -102,35 +103,70 @@ fun BackgroundSelector(
     initialPageBackgroundType: String,
     initialPageBackground: String,
     initialPageNumberInPdf: Int = 0,
-    isNotebookBgSelector: Boolean = false, // for notebook default background
+    isNotebookBgSelector: Boolean = false,
     notebookId: String? = null,
     pageNumberInBook: Int = -1,
-    onChange: (backgroundType: String, background: String?) -> Unit,
+    onChange: (backgroundType: String, background: String) -> Unit,
     onClose: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var pageBackground by remember { mutableStateOf(initialPageBackground) }
-    var maxPages: Int? by remember { mutableStateOf(getPdfPageCount(pageBackground)) }
-    val currentPage: Int? by remember { mutableIntStateOf(initialPageNumberInPdf) }
+
+    // -------------------------------------------------------------------------
+    // Draft state - nothing is persisted until Confirm is pressed
+    // -------------------------------------------------------------------------
+    var pageBackground by remember {
+        mutableStateOf(initialPageBackground)
+    }
 
     var pageBackgroundType: BackgroundType by remember {
         mutableStateOf(
-            BackgroundType.fromKey(
-                initialPageBackgroundType
-            )
+            BackgroundType.fromKey(initialPageBackgroundType)
         )
+    }
+
+    var maxPages: Int? by remember {
+        mutableStateOf(getPdfPageCount(initialPageBackground))
+    }
+
+    val currentPage: Int by remember {
+        mutableIntStateOf(initialPageNumberInPdf)
     }
 
     var selectedBackgroundMode by remember {
         mutableStateOf(
             when (pageBackgroundType) {
                 is BackgroundType.CoverImage -> "Cover"
-                is BackgroundType.Image, is BackgroundType.ImageRepeating -> "Image"
-                is BackgroundType.Pdf, is BackgroundType.AutoPdf -> "PDF"
+                is BackgroundType.Image,
+                is BackgroundType.ImageRepeating -> "Image"
+
+                is BackgroundType.Pdf,
+                is BackgroundType.AutoPdf -> "PDF"
+
                 else -> "Native"
             }
         )
+    }
+
+    // Prevent Confirm while a selected image/PDF is still being copied.
+    var isCopyingFile by remember {
+        mutableStateOf(false)
+    }
+
+    /**
+     * Update only the local draft.
+     * No call to onChange() happens here.
+     */
+    fun updateDraft(
+        type: BackgroundType,
+        background: String
+    ) {
+        pageBackgroundType = type
+        pageBackground = background
+
+        if (type is BackgroundType.Pdf || type is BackgroundType.AutoPdf) {
+            maxPages = getPdfPageCount(background)
+        }
     }
 
     fun selectedToType(): BackgroundType {
@@ -139,76 +175,181 @@ fun BackgroundSelector(
             "Image" -> BackgroundType.Image
             "PDF" -> BackgroundType.Pdf(1)
             else -> {
-                throw Exception("Unknown BackgroundType for selection $selectedBackgroundMode")
+                throw Exception(
+                    "Unknown BackgroundType for selection $selectedBackgroundMode"
+                )
             }
-
         }
     }
 
-    // Create an activity result launcher for picking visual media (images in this case)
+    // -------------------------------------------------------------------------
+    // Image picker
+    // -------------------------------------------------------------------------
     val pickMedia =
-        rememberLauncherForActivityResult(contract = PickVisualMedia()) { uri ->
+        rememberLauncherForActivityResult(
+            contract = PickVisualMedia()
+        ) { uri ->
             if (uri == null) {
-                log.w("PickVisualMedia: uri is null (user cancelled or provider returned null)")
+                log.w("PickVisualMedia: uri is null (user cancelled)")
                 return@rememberLauncherForActivityResult
             }
 
             val currentType = selectedToType()
-            log.d("PickVisualMedia: will copy to subfolder=\"$currentType\"")
+
+            log.d(
+                "PickVisualMedia: will copy to subfolder=${currentType.folderName}"
+            )
+
+            isCopyingFile = true
 
             scope.launch(Dispatchers.IO) {
                 try {
-                    val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
+                    // TODO the following copies file in db regardless of user cancelling or confirming the choice
+                    val copiedFile = copyBackgroundToDatabase(
+                        context,
+                        uri,
+                        currentType.folderName
+                    )
 
-                    log.i("PickVisualMedia: copied -> ${copiedFile.absolutePath}")
-                    onChange(currentType.key, copiedFile.toString())
-                    scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
-                    pageBackground = copiedFile.toString()
-                    log.d("PickVisualMedia: UI updated, pageBackground=$pageBackground, type=${currentType.key}")
+                    log.i(
+                        "PickVisualMedia: copied -> ${copiedFile.absolutePath}"
+                    )
 
+                    withContext(Dispatchers.Main) {
+                        // Only update draft state.
+                        updateDraft(
+                            type = currentType,
+                            background = copiedFile.toString()
+                        )
+                    }
+
+                    log.d(
+                        "PickVisualMedia: draft updated, " +
+                                "pageBackground=$pageBackground, " +
+                                "type=${currentType.key}"
+                    )
                 } catch (e: Exception) {
-                    log.e("PickVisualMedia: copy failed: ${e.message}", e)
+                    log.e(
+                        "PickVisualMedia: copy failed: ${e.message}",
+                        e
+                    )
+                } finally {
+                    withContext(Dispatchers.Main) {
+                        isCopyingFile = false
+                    }
                 }
             }
         }
-    // PDF picker for backgrounds
-    val pickPdf = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri == null) {
-            log.w("PickPdf: uri is null (user cancelled or provider returned null)")
-            return@rememberLauncherForActivityResult
-        }
 
-        val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
-        context.contentResolver.takePersistableUriPermission(uri, flag)
+    // -------------------------------------------------------------------------
+    // PDF picker
+    // -------------------------------------------------------------------------
+    val pickPdf =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument()
+        ) { uri: Uri? ->
+            if (uri == null) {
+                log.w("PickPdf: uri is null (user cancelled)")
+                return@rememberLauncherForActivityResult
+            }
 
-        val currentType = selectedToType()
-        log.d("PickPdf: will copy to subfolder=\"$currentType\"")
-        scope.launch(Dispatchers.IO) {
+            val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
+
             try {
-                val copiedFile = copyBackgroundToDatabase(context, uri, currentType.folderName)
-                onChange(currentType.key, copiedFile.toString())
-                scope.launch { CanvasEventBus.refreshUi.emit(Unit) }
-                pageBackground = copiedFile.toString()
-                pageBackgroundType = currentType
-                log.i("PDF was received and copied, it is now at:${copiedFile.toUri()}")
-                log.i("PageSettingsModal: $pageBackgroundType")
-            } catch (e: Exception) {
-                log.e("PdfPicker: copy failed: ${e.message}", e)
+                context.contentResolver.takePersistableUriPermission(uri, flag)
+            } catch (e: SecurityException) {
+                log.w("Could not take persistable URI permission: ${e.message}")
+            }
+
+            val currentType = selectedToType()
+
+            log.d(
+                "PickPdf: will copy to subfolder=${currentType.folderName}"
+            )
+
+            isCopyingFile = true
+
+            scope.launch(Dispatchers.IO) {
+                try {
+                    // TODO the following copies file in db regardless of user cancelling or confirming the choice
+                    val copiedFile = copyBackgroundToDatabase(
+                        context,
+                        uri,
+                        currentType.folderName
+                    )
+
+                    withContext(Dispatchers.Main) {
+                        // Only update draft state.
+                        updateDraft(
+                            type = currentType,
+                            background = copiedFile.toString()
+                        )
+                    }
+
+                    log.i(
+                        "PDF was received and copied: " +
+                                copiedFile.toUri()
+                    )
+                } catch (e: Exception) {
+                    log.e(
+                        "PdfPicker: copy failed: ${e.message}",
+                        e
+                    )
+                } finally {
+                    withContext(Dispatchers.Main) {
+                        isCopyingFile = false
+                    }
+                }
             }
         }
+
+    // -------------------------------------------------------------------------
+    // Confirm / Cancel
+    // -------------------------------------------------------------------------
+    fun confirm() {
+        if (isCopyingFile) return
+
+        // Persist the final draft only here.
+        onChange(
+            pageBackgroundType.key,
+            pageBackground
+        )
+
+        scope.launch {
+            CanvasEventBus.refreshUi.emit(Unit)
+        }
+
+        onClose()
+    }
+
+    fun cancel() {
+        // We intentionally do not call onChange().
+        // Local draft state is discarded when the dialog closes.
+        onClose()
     }
 
     val modalHeight = 550.dp
-    ScaledDialog(onDismissRequest = { onClose() }) {
+
+    ScaledDialog(
+        onDismissRequest = {
+            cancel()
+        }
+    ) {
         Column(
             modifier = Modifier
                 .background(Color.White)
                 .fillMaxWidth()
                 .height(modalHeight)
-                .border(2.dp, Color.Black, RectangleShape)
+                .border(
+                    2.dp,
+                    Color.Black,
+                    RectangleShape
+                )
         ) {
+
+            // -----------------------------------------------------------------
+            // Background mode buttons
+            // -----------------------------------------------------------------
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -218,18 +359,31 @@ fun BackgroundSelector(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                        .padding(
+                            horizontal = 20.dp,
+                            vertical = 10.dp
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Background Mode Buttons
-                    listOf("Native", "Image", "Cover", "PDF").forEach { modeName ->
+                    listOf(
+                        "Native",
+                        "Image",
+                        "Cover",
+                        "PDF"
+                    ).forEach { modeName ->
+
                         Button(
                             onClick = {
                                 selectedBackgroundMode = modeName
                             },
                             modifier = Modifier.padding(horizontal = 5.dp),
                             colors = ButtonDefaults.buttonColors(
-                                backgroundColor = if (selectedBackgroundMode == modeName) Color.Gray else Color.LightGray
+                                backgroundColor =
+                                    if (selectedBackgroundMode == modeName) {
+                                        Color.Gray
+                                    } else {
+                                        Color.LightGray
+                                    }
                             )
                         ) {
                             Text(modeName)
@@ -237,117 +391,273 @@ fun BackgroundSelector(
                     }
                 }
             }
+
             Box(
-                Modifier
+                modifier = Modifier
                     .height(0.5.dp)
                     .fillMaxWidth()
                     .background(Color.Black)
             )
-            Column(Modifier.padding(20.dp, 10.dp)) {
+
+            // -----------------------------------------------------------------
+            // Main content
+            // -----------------------------------------------------------------
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(
+                        horizontal = 20.dp,
+                        vertical = 10.dp
+                    )
+            ) {
                 when (selectedBackgroundMode) {
+
+                    // ---------------------------------------------------------
+                    // IMAGE
+                    // ---------------------------------------------------------
                     "Image" -> {
                         val currentBackgroundType =
-                            if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image)
-                                pageBackgroundType else BackgroundType.Image
+                            if (
+                                pageBackgroundType ==
+                                BackgroundType.ImageRepeating ||
+                                pageBackgroundType ==
+                                BackgroundType.Image
+                            ) {
+                                pageBackgroundType
+                            } else {
+                                BackgroundType.Image
+                            }
+
                         ShowImageOption(
                             currentBackground = pageBackground,
                             currentBackgroundType = currentBackgroundType,
+
                             onBackgroundChange = { background, type ->
-                                onChange(type.key, background)
-                                pageBackground = background
-                                pageBackgroundType = type
+                                // Draft only
+                                updateDraft(
+                                    type = type,
+                                    background = background
+                                )
                             },
+
                             onRequestFilePicker = {
-                                pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+                                pickMedia.launch(
+                                    PickVisualMediaRequest(
+                                        PickVisualMedia.ImageOnly
+                                    )
+                                )
                             }
                         )
-                        if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image) {
-                            Spacer(Modifier.height(10.dp))
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.repeat_background))
-                                Spacer(Modifier.width(10.dp))
+                        if (
+                            pageBackgroundType ==
+                            BackgroundType.ImageRepeating ||
+                            pageBackgroundType ==
+                            BackgroundType.Image
+                        ) {
+                            Spacer(
+                                Modifier.height(10.dp)
+                            )
+
+                            Row(
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    stringResource(
+                                        R.string.repeat_background
+                                    )
+                                )
+
+                                Spacer(
+                                    Modifier.width(10.dp)
+                                )
+
                                 OnOffSwitch(
-                                    checked = pageBackgroundType == BackgroundType.ImageRepeating,
-                                    onCheckedChange = { isChecked ->
-                                        pageBackgroundType =
-                                            if (isChecked) BackgroundType.ImageRepeating else BackgroundType.Image
+                                    checked =
+                                        pageBackgroundType ==
+                                                BackgroundType.ImageRepeating,
 
-                                        onChange(pageBackgroundType.key, null)
+                                    onCheckedChange = { isChecked ->
+                                        val newType =
+                                            if (isChecked) {
+                                                BackgroundType.ImageRepeating
+                                            } else {
+                                                BackgroundType.Image
+                                            }
+
+                                        // Keep the selected image while changing
+                                        // only the type.
+                                        updateDraft(
+                                            type = newType,
+                                            background = pageBackground
+                                        )
                                     }
                                 )
                             }
                         }
                     }
 
+                    // ---------------------------------------------------------
+                    // COVER
+                    // ---------------------------------------------------------
                     "Cover" -> {
                         ShowImageOption(
                             currentBackground = pageBackground,
-                            currentBackgroundType = BackgroundType.CoverImage,
+                            currentBackgroundType =
+                                BackgroundType.CoverImage,
+
                             onBackgroundChange = { background, type ->
-                                onChange(type.key, background)
-                                pageBackground = background
-                                log.e("onBackgroundChange: $type")
-                                pageBackgroundType = type
+                                // Draft only
+                                updateDraft(
+                                    type = type,
+                                    background = background
+                                )
                             },
+
                             onRequestFilePicker = {
-                                log.e("onRequestFilePicker: $pageBackgroundType")
-                                pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+                                pickMedia.launch(
+                                    PickVisualMediaRequest(
+                                        PickVisualMedia.ImageOnly
+                                    )
+                                )
                             }
                         )
                     }
 
+                    // ---------------------------------------------------------
+                    // NATIVE
+                    // ---------------------------------------------------------
                     "Native" -> {
                         ShowNativeOption(
                             currentBackground = pageBackground,
-                            currentBackgroundType = BackgroundType.Native,
+                            currentBackgroundType =
+                                BackgroundType.Native,
+
                             onBackgroundChange = { background, type ->
-                                onChange(type.key, background)
-                                pageBackground = background
-                                pageBackgroundType = type
-                            },
-                        )
-                    }
-
-                    "PDF" -> {
-                        val currentBackgroundType =
-                            if (pageBackgroundType == BackgroundType.AutoPdf || pageBackgroundType is BackgroundType.Pdf)
-                                pageBackgroundType else BackgroundType.Pdf(1)
-
-                        fun onBackgroundChange(type: BackgroundType, background: String) {
-                            onChange(type.key, background)
-                            pageBackground = background
-                            pageBackgroundType = type
-                            maxPages = getPdfPageCount(background)
-                        }
-                        ShowPdfOption(
-                            currentBackground = pageBackground,
-                            currentBackgroundType = currentBackgroundType,
-                            onBackgroundChange = ::onBackgroundChange,
-                            onRequestFilePicker = {
-                                log.e("onRequestFilePicker: $pageBackgroundType")
-                                pickPdf.launch(arrayOf("application/pdf"))
+                                // Draft only
+                                updateDraft(
+                                    type = type,
+                                    background = background
+                                )
                             }
                         )
-                        PageNumberSelector(
-                            currentBackground = pageBackground,
-                            currentBackgroundType = pageBackgroundType,
-                            maxPages = maxPages,
-                            currentPage = currentPage,
-                            onBackgroundChange = ::onBackgroundChange,
-                            showAutoPdfOption = (notebookId != null) && ((maxPages
-                                ?: 0) > pageNumberInBook),
-                            isNotebookBgSelector = isNotebookBgSelector
-                        )
-
                     }
 
+                    // ---------------------------------------------------------
+                    // PDF
+                    // ---------------------------------------------------------
+                    "PDF" -> {
+                        val currentBackgroundType =
+                            if (
+                                pageBackgroundType ==
+                                BackgroundType.AutoPdf ||
+                                pageBackgroundType is BackgroundType.Pdf
+                            ) {
+                                pageBackgroundType
+                            } else {
+                                BackgroundType.Pdf(1)
+                            }
+
+                        fun onBackgroundChange(
+                            type: BackgroundType,
+                            background: String
+                        ) {
+                            // Draft only
+                            updateDraft(
+                                type = type,
+                                background = background
+                            )
+                        }
+
+                        ShowPdfOption(
+                            currentBackground = pageBackground,
+                            currentBackgroundType =
+                                currentBackgroundType,
+
+                            onBackgroundChange =
+                                ::onBackgroundChange,
+
+                            onRequestFilePicker = {
+                                pickPdf.launch(
+                                    arrayOf("application/pdf")
+                                )
+                            }
+                        )
+
+                        PageNumberSelector(
+                            currentBackground = pageBackground,
+                            currentBackgroundType =
+                                pageBackgroundType,
+                            maxPages = maxPages,
+                            currentPage = currentPage,
+
+                            onBackgroundChange =
+                                ::onBackgroundChange,
+
+                            showAutoPdfOption =
+                                (notebookId != null) &&
+                                        ((maxPages ?: 0) > pageNumberInBook),
+
+                            isNotebookBgSelector =
+                                isNotebookBgSelector
+                        )
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // Bottom action buttons
+            // -----------------------------------------------------------------
+            Box(
+                modifier = Modifier
+                    .height(0.5.dp)
+                    .fillMaxWidth()
+                    .background(Color.Black)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 20.dp,
+                        vertical = 12.dp
+                    ),
+                horizontalArrangement =
+                    Arrangement.End,
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = {
+                        cancel()
+                    }
+                ) {
+                    Text("Cancel")
+                }
+
+                Spacer(
+                    modifier = Modifier.width(12.dp)
+                )
+
+                Button(
+                    onClick = {
+                        confirm()
+                    },
+                    enabled = !isCopyingFile
+                ) {
+                    Text(
+                        if (isCopyingFile) {
+                            "Loading..."
+                        } else {
+                            "Confirm"
+                        }
+                    )
                 }
             }
         }
     }
 }
-
 
 @Composable
 fun ShowNativeOption(

@@ -9,7 +9,6 @@ import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.canvas.DrawCanvas
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.SelectionState
 import io.shipbook.shipbooksdk.ShipBook
 
 private val log = ShipBook.getLogger("EditorSurface")
@@ -29,7 +28,7 @@ fun EditorSurface(
                 context = ctx,
                 coroutineScope = coroutineScope,
                 viewModel = viewModel,
-                page = page,
+                pageView = page,
                 history = history
             ).apply {
                 init()

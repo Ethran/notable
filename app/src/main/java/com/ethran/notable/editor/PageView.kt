@@ -22,6 +22,7 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.BackgroundType
@@ -29,13 +30,22 @@ import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.canvas.CanvasEventBus.drawingInProgress
 import com.ethran.notable.editor.canvas.CanvasEventBus.waitForDrawing
-import com.ethran.notable.editor.drawing.drawBg
+import com.ethran.notable.editor.drawing.drawBitmapToCanvas
+import com.ethran.notable.editor.drawing.drawDotPattern
+import com.ethran.notable.editor.drawing.drawDottedBg
+import com.ethran.notable.editor.drawing.drawHexedBg
+import com.ethran.notable.editor.drawing.drawLinedBg
+import com.ethran.notable.editor.drawing.drawMargin
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
+import com.ethran.notable.editor.drawing.drawPaginationLine
+import com.ethran.notable.editor.drawing.drawSquaredBg
+import com.ethran.notable.editor.drawing.drawTitleBox
 import com.ethran.notable.editor.utils.div
 import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.loadHQPagePreview
 import com.ethran.notable.editor.utils.minus
 import com.ethran.notable.editor.utils.plus
+import com.ethran.notable.editor.utils.scaleRect
 import com.ethran.notable.editor.utils.strokeBounds
 import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
@@ -45,6 +55,8 @@ import com.ethran.notable.gestures.ZOOM_SENSITIVITY
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.ui.sheetAdjustedWidth
+import com.ethran.notable.ui.sideBarsRectangles
 import com.ethran.notable.utils.onError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -91,6 +103,12 @@ class PageView(
     private val logCache = ShipBook.getLogger("PageViewCache")
 
     private var loadingJob: Job? = null
+
+    private var pageMode: PageMode? = null
+
+    // The coroutine that loads the initial page. Read-only outside the class so tests can wait for
+    // the page to be ready deterministically (see [awaitPageReady]) instead of polling internals.
+    internal val initJob: Job
 
     @Volatile
     var windowedBitmap = createBitmap(viewWidth, viewHeight)
@@ -171,26 +189,31 @@ class PageView(
     }
 
     fun getBackgroundPageNumber(): Int {
-        // There might be a bug here -- check it again.
+        // TODO There might be a bug here -- check it again.
         return currentBackground.pageNumber
     }
 
 
     init {
-        coroutineScope.launch(Dispatchers.IO) {
+        initJob = coroutineScope.launch(Dispatchers.IO) {
             // set page, and retrieve page data from db
             pageDataManager.setPage(initialPageId)
-            log.i("PageView init with initial pageId: $initialPageId" )
-            if(currentPageId.isEmpty())
+            log.i("PageView init with initial pageId: $initialPageId")
+            if (currentPageId.isEmpty())
                 log.e("Current page id is empty")
 
+            pageMode = pageDataManager.getPageMode()
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
+            scroll = pageDataManager.getPageScroll(currentPageId)
+            // Center the sheet before the first draw.
+            scroll = Offset(residualScroll(), scroll.y)
             pageDataManager.getCachedBitmap(currentPageId)?.let { cached ->
-                log.i("PageView: using cached bitmap")
+                log.i("Opening document page: using cached bitmap")
+                log.d("Current zoom: ${zoomLevel.value} and scroll: $scroll")
                 windowedBitmap = cached
                 windowedCanvas = Canvas(windowedBitmap)
             } ?: run {
-                log.i("PageView.init: creating new bitmap")
+                log.i("Opening document page: creating new bitmap")
                 recreateCanvas()
                 pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
             }
@@ -203,6 +226,17 @@ class PageView(
             log.d("Page loaded (Init with id: $currentPageId)")
             pageDataManager.collectAndPersistBitmapsBatch(context, coroutineScope)
         }
+    }
+
+    /**
+     * Suspends until the initial page load, and the stroke/image load it starts, have finished.
+     *
+     * Internal for tests: production code never needs it, because the UI is refreshed by the events
+     * this class emits. [loadingJob] is only joined if [loadPage] already started it.
+     */
+    internal suspend fun awaitPageReady() {
+        initJob.join()
+        loadingJob?.join()
     }
 
     /**
@@ -231,8 +265,9 @@ class PageView(
             pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
             pageDataManager.setPage(newPageId)
             zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
+            scroll = Offset(residualScroll(), scroll.y)
             pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
-                log.i("PageView: using cached bitmap")
+                log.i("ChangePage: using cached bitmap")
                 windowedBitmap = cached
                 windowedCanvas = Canvas(windowedBitmap)
                 // Check if we have correct size of canvas
@@ -259,6 +294,7 @@ class PageView(
     private fun recreateCanvas() {
         windowedBitmap = createBitmap(viewWidth, viewHeight)
         windowedCanvas = Canvas(windowedBitmap)
+        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
         loadInitialBitmap()
     }
 
@@ -564,11 +600,73 @@ class PageView(
         return Rect(left, top, right, bottom)
     }
 
+    /**
+     * Computes the horizontal scroll offset required to center the sheet within the viewport.
+     *
+     * When the sheet is narrower than the viewport, a negative scroll is applied
+     * to center the sheet horizontally within the viewport.
+     */
+    private fun scrollToCenterSheet(pageMode: PageMode?): Float {
+        var scrollToCenterSheet = 0f
+        if (pageMode != null && pageMode != PageMode.INFINITE) {
+
+            val viewportWidth = viewWidth
+            val viewportHeight = viewHeight
+
+            log.d("Viewport size: $viewportWidth x $viewportHeight")
+//            val viewPortReference = max(viewportWidth, viewportHeight)
+            val sheetAdjustedWidth = sheetAdjustedWidth(
+                viewportWidth, pageMode.width, context
+            )
+            val adjustedViewportWidth = viewportWidth / zoomLevel.value
+            val scrollAvailable = sheetAdjustedWidth - adjustedViewportWidth
+            scrollToCenterSheet = if (scrollAvailable >= 0) scrollAvailable else scrollAvailable / 2
+
+            log.d(
+                """
+                    Scroll available : $scrollAvailable
+                    Scroll needed on X to center sheet: $scrollToCenterSheet
+                    Zoom level: ${zoomLevel.value}
+                """.trimIndent()
+            )
+        }
+
+        return scrollToCenterSheet
+    }
+
+
+    /**
+     * Calculate the max allowed delta scroll on x given the current sheet size
+     */
+    private fun maxAllowedScrollX(deltaInX: Float): Float
+    {
+        var deltaOutX: Float = 0f
+        if (pageMode != null && pageMode != PageMode.INFINITE) {
+            val scrollToCenterSheet = scrollToCenterSheet(pageMode)
+            // Block scrolling in x direction outside sheet size bounds
+            deltaOutX = if (scroll.x + deltaInX > scrollToCenterSheet) {
+                scrollToCenterSheet - scroll.x
+            } else{
+                deltaInX
+            }
+        }
+        log.d(
+            """
+                    Scroll x: ${scroll.x}
+                    Delta in x: $deltaInX
+                    Delta out x: $deltaOutX
+        """.trimIndent()
+        )
+        return deltaOutX
+    }
+
     suspend fun updateScroll(dragDelta: Offset) {
 //        log.d("Update scroll, dragDelta: $dragDelta, scroll: $scroll, zoomLevel.value: $zoomLevel.value")
         // drag delta is in screen coordinates,
         // so we have to scale it back to page coordinates.
         var deltaInPage = Offset(dragDelta.x / zoomLevel.value, dragDelta.y / zoomLevel.value)
+
+        log.d("Delta in page coordinates: $deltaInPage")
 
         // Cut, so we won't shift outside the screen.
         if (scroll.x + deltaInPage.x < 0) {
@@ -576,6 +674,12 @@ class PageView(
         }
         if (scroll.y + deltaInPage.y < 0) {
             deltaInPage = deltaInPage.copy(y = -scroll.y)
+        }
+
+        if (pageMode != null && pageMode != PageMode.INFINITE) {
+            deltaInPage = deltaInPage.copy(
+                x = maxAllowedScrollX(deltaInPage.x)
+            )
         }
 
         // There is nothing to do, return.
@@ -597,7 +701,7 @@ class PageView(
             it.width == width && it.height == height && it.config == windowedBitmap.config
         } ?: createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
-        shiftedCanvas.drawColor(Color.RED) //for debugging.
+//        shiftedCanvas.drawColor(Color.RED) // used for debug
         shiftedCanvas.drawBitmap(windowedBitmap, -movement.x, -movement.y, null)
 
         // Swap in the shifted bitmap; the old live buffer becomes the next spare.
@@ -699,6 +803,10 @@ class PageView(
 
         log.d("Redrawing full logical rect: $redrawRect")
         windowedCanvas.drawColor(Color.GREEN)
+
+        // Calculate the scroll required to recenter the sheet after zoom
+        scroll = Offset(scrollToCenterSheet(pageMode), scroll.y)
+
         drawBgToCanvas(redrawRect)
         pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
 
@@ -708,6 +816,14 @@ class PageView(
         log.i("Zoom and redraw completed")
     }
 
+
+    /**
+     * Calculate the delta needed on x-axis to center the sheet if sheet width is smaller
+     * than screen width.
+     */
+    private fun calculateDeltaNeededToCenterSheet(): Float {
+        return maxAllowedScrollX(0f)
+    }
 
     /**
      * Update zoom by reusing the existing screen bitmap.
@@ -741,7 +857,7 @@ class PageView(
         // Draw scaled snapshot into a fresh screen-sized bitmap
         val scaledBitmap = createBitmap(screenW, screenH, windowedBitmap.config!!)
         val scaledCanvas = Canvas(scaledBitmap)
-        scaledCanvas.drawColor(Color.RED) // clear
+//        scaledCanvas.drawColor(Color.RED) // used for debug
 
         val matrix = Matrix().apply {
             postScale(scaleFactor, scaleFactor, pivotX, pivotY)
@@ -753,7 +869,6 @@ class PageView(
         val dstRect = RectF()
         matrix.mapRect(dstRect, srcRect)
 
-
         //make sure that we won't go outside canvas.
         val dx = (scroll.x - dstRect.left).coerceAtMost(0f)
         val dy = (scroll.y - dstRect.top).coerceAtMost(0f)
@@ -764,13 +879,6 @@ class PageView(
         scaledCanvas.drawBitmap(windowedBitmap, matrix, null)
 
 
-        val deltaScrollPage = Offset(-dstRect.left / newZoom, -dstRect.top / newZoom)
-
-
-        val newScrollX = (scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
-        val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
-        scroll = Offset(newScrollX, newScrollY)
-
         // Swap in the new bitmap and update zoom on the windowed canvas
         windowedBitmap = scaledBitmap
         windowedCanvas.setBitmap(windowedBitmap)
@@ -778,16 +886,27 @@ class PageView(
         zoomLevel.value = newZoom
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
 
+        val deltaScrollPage = Offset(-dstRect.left / newZoom, -dstRect.top / newZoom)
+        val newScrollX = (scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
+        val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
+        scroll = Offset(newScrollX, newScrollY)
+        scroll += Offset(calculateDeltaNeededToCenterSheet(), 0f)
+
         if (scaleFactor < 1f) redrawOutsideRect(dstRect.toRect(), screenW, screenH)
 
 //        persistBitmapDebounced()
         saveToPersistLayer()
-        log.i(
-            "Zoom updated using snapshot scaling. " +
-                    "oldZoom=$oldZoom newZoom=$newZoom " +
-                    "scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) " +
-                    "bounds=$dstRect" +
-                    "scrollDelta=$deltaScrollPage newScroll=$scroll"
+        log.d(
+            """
+                    Zoom updated using snapshot scaling.
+                    oldZoom=$oldZoom
+                    newZoom=$newZoom
+                    scaleFactor=$scaleFactor
+                    pivot=($pivotX,$pivotY)
+                    bounds=$dstRect
+                    scrollDelta=$deltaScrollPage
+                    newScroll=$scroll
+                    """.trimIndent()
         )
     }
 
@@ -868,24 +987,111 @@ class PageView(
                     null
                 }
             }
-        drawBg(
-            canvas = windowedCanvas,
-            backgroundType = backgroundType,
-            background = bg,
-            scroll = scroll,
-            resourceBitmap = bgImage,
-            scale = scale,
-            repeat = false,
-            clipRect = clipRect
-        )
+
+        val repeat = false // TODO use value passed from UI, do not hardcode it
+
+        log.v("Loading the background")
+        clipRect?.let {
+            windowedCanvas.save()
+            windowedCanvas.clipRect(scaleRect(it, scale))
+        }
+
+        when (backgroundType) {
+            // draw native background for it we don't need a resource
+            is BackgroundType.Native -> {
+                when (bg) {
+                    "blank" -> windowedCanvas.drawColor(Color.WHITE)
+                    "dotted" -> drawDottedBg(windowedCanvas, scroll, scale)
+                    "lined" -> drawLinedBg(windowedCanvas, scroll, scale)
+                    "squared" -> drawSquaredBg(windowedCanvas, scroll, scale)
+                    "hexed" -> drawHexedBg(windowedCanvas, scroll, scale)
+                    else -> {
+                        // Reaching the Native branch with an unknown value usually means the *type*
+                        // detection misclassified a non-native background (e.g. a .pdf) as Native, not
+                        // that the string is merely unknown — surface the type so it's obvious.
+                        throw IllegalArgumentException(
+                            "Unknown native background '$bg' (type=$backgroundType)"
+                        )
+                    }
+                }
+                for (rect in sideBarsRectangles(
+                    pageMode,
+                    windowedCanvas.width,
+                    windowedCanvas.height,
+                    zoomLevel.value,
+                    context
+                )) {// Draw sidebars
+                    drawDotPattern(windowedCanvas, rect, zoomLevel.value)
+                }
+            }
+
+            else -> {
+                if (bgImage != null) {
+                    drawBitmapToCanvas(windowedCanvas, bgImage, scroll, scale, repeat)
+                    if (backgroundType is BackgroundType.CoverImage) {
+                        drawTitleBox(windowedCanvas)
+                    }
+                } else {
+                    log.i("No resource provided to draw, maybe out of pages in pdf?")
+                    windowedCanvas.drawColor(Color.WHITE)
+                }
+            }
+        }
+        if (pageMode == PageMode.INFINITE) {
+            drawMargin(windowedCanvas, scroll, scale)
+        }
+
+        // Draw the page line if using a page with defined size
+        drawPaginationLine(windowedCanvas, scroll, scale, context, pageMode)
+
+        if (clipRect != null) {
+            windowedCanvas.restore()
+        }
     }
 
+    fun residualScroll(): Float {
+        var residualScroll = scroll.x
+
+//        val pageMode = pageDataManager.getPageMode()
+
+        log.d("Picked up pageMode $pageMode")
+
+        // Handle case when not using infinite sheet mode
+        if (pageMode != null && pageMode != PageMode.INFINITE) {
+
+
+            val sheetAdjustedWidth = sheetAdjustedWidth(
+                viewWidth, pageMode!!.width, context
+            )
+
+            val viewWidthAdj = viewWidth / zoomLevel.value
+            if (sheetAdjustedWidth < viewWidthAdj) { // If sheet smaller than viewWidth
+                residualScroll = -(viewWidthAdj - sheetAdjustedWidth) / 2
+                log.d("Sheet width smaller than vieWidth")
+            } else if (sheetAdjustedWidth == viewWidthAdj) { // If equal to viewWidth
+                residualScroll = 0f
+                log.d("Sheet width equal to vieWidth")
+            } else { // If sheet bigger than viewWidth
+                val maxScrollAvailable =
+                    max(0f, sheetAdjustedWidth - viewWidthAdj)
+                residualScroll = min(scroll.x, maxScrollAvailable)
+                log.d("Sheet width bigger than vieWidth")
+            }
+        }
+        log.v("residualScroll: $residualScroll, redisidualZoom: ${zoomLevel.value}")
+        return residualScroll
+    }
 
     fun updateDimensions(newWidth: Int, newHeight: Int) {
         if (newWidth != viewWidth || newHeight != viewHeight) {
-            log.d("Updating dimensions: $newWidth x $newHeight")
+            log.d("Updating dimensions from: $viewWidth x $viewHeight, to: $newWidth x $newHeight")
+
             viewWidth = newWidth
             viewHeight = newHeight
+            val residualScroll = residualScroll()
+            scroll = Offset(residualScroll, scroll.y)
+
+
             updateCanvasDimensions()
         }
     }
@@ -893,8 +1099,7 @@ class PageView(
     private fun updateCanvasDimensions() {
         // Recreate bitmap and canvas with new dimensions
         recreateCanvas()
-        //Reset zoom level.
-        zoomLevel.value = 1.0f
+
         // TODO: it might be worth to do it
         //  by redrawing only part of the screen, like in scroll and zoom.
         coroutineScope.launch {

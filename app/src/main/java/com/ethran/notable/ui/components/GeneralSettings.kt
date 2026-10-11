@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.PageMode
 
 
 @Composable
@@ -22,6 +23,18 @@ fun GeneralSettings(
             ), value = settings.defaultNativeTemplate, onValueChange = {
                 onSettingsChange(settings.copy(defaultNativeTemplate = it))
             })
+        SelectorRow(
+            label = stringResource(R.string.default_page_mode),
+            options = PageMode.entries.map {
+                it to stringResource(it.displayNameId)
+            },
+            value = settings.defaultPageMode,
+            onValueChange = {
+                onSettingsChange(
+                    settings.copy(defaultPageMode = it)
+                )
+            }
+        )
         SelectorRow(
             label = stringResource(R.string.toolbar_position), options = listOf(
                 AppSettings.Position.Top to stringResource(R.string.toolbar_position_top),
@@ -58,25 +71,12 @@ fun GeneralSettings(
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(continuousStrokeSlider = isChecked))
             })
-        SettingToggleRow(
-            label = stringResource(R.string.rename_on_create),
-            value = settings.renameOnCreate,
-            onToggle = { isChecked ->
-                onSettingsChange(settings.copy(renameOnCreate = isChecked))
-            })
 
         SettingToggleRow(
             label = stringResource(R.string.paginate_pdf),
             value = settings.paginatePdf,
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(paginatePdf = isChecked))
-            })
-
-        SettingToggleRow(
-            label = stringResource(R.string.preview_pdf_pagination),
-            value = settings.visualizePdfPagination,
-            onToggle = { isChecked ->
-                onSettingsChange(settings.copy(visualizePdfPagination = isChecked))
             })
 
         // Zoom Level (UI Scale)

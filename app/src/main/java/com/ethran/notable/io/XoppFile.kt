@@ -12,7 +12,7 @@ import androidx.core.net.toUri
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.data.datastore.A4_WIDTH
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
@@ -62,7 +62,9 @@ class XoppFile @Inject constructor(
     private val appEventBus: AppEventBus,
 ) {
     private val log = ShipBook.getLogger("XoppFile")
-    private val scaleFactor = A4_WIDTH.toFloat() / SCREEN_WIDTH
+
+    private val pageWidth = PageMode.A4.width // TODO hardcoded to export to A4, when exporting is revamped-> ask user which size
+    private val scaleFactor = pageWidth.toFloat() / SCREEN_WIDTH
 
     /**
      * Holds mutable buffers that are allocated once per import operation and reused across
@@ -147,7 +149,7 @@ class XoppFile @Inject constructor(
             val height = strokeHeight.coerceAtLeast(SCREEN_HEIGHT) * scaleFactor
 
             writer.write("<page width=\"")
-            writer.write(A4_WIDTH.toString())
+            writer.write(pageWidth.toString())
             writer.write("\" height=\"")
             writer.write(height.toString())
             writer.write("\">\n")
