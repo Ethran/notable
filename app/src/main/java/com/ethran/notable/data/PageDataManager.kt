@@ -570,7 +570,10 @@ class PageDataManager @Inject constructor(
         ensureBackgroundLoaded(pageId)
     }
 
-    /** Cancels and removes every page still loading, except those in [keep] and leased ones. */
+    /**
+     * Cancels and removes every page still loading, except those in [keep] and leased ones: a
+     * caller that has not caught up with a page change must not stop the load of a shown page.
+     */
     fun cancelLoadsExcept(keep: Set<String>) {
         synchronized(lock) {
             val toCancel = entries
