@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -181,6 +182,7 @@ class EditorViewModel @Inject constructor(
     private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,
+    private val pageSaver: PageSaver,
     private val syncOrchestrator: SyncOrchestrator,
     val snackDispatcher: SnackDispatcher,
     private val historyFactory: History.Factory,
@@ -275,6 +277,10 @@ class EditorViewModel @Inject constructor(
 
         // 3. Cleanup page resources
         page.disposeOldPage()
+
+        // Save the edits now rather than after the usual delay: the screens shown next, page
+        // previews and duplication, read pages from the database.
+        pageSaver.saveSoon()
 
         // 4. Sync-on-close. syncFromPageId honors the "Sync when closing notes" setting. Run on the
         //    application scope so it survives this view's teardown. Downloading here is safe: the

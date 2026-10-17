@@ -1,6 +1,7 @@
 package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
@@ -26,6 +27,7 @@ import javax.inject.Singleton
 @Singleton
 class SyncOrchestrator @Inject constructor(
     private val appRepository: AppRepository,
+    private val pageSaver: PageSaver,
     private val kvProxy: KvProxy,
     private val syncPreflightService: SyncPreflightService,
     private val folderSyncService: FolderSyncService,
@@ -52,6 +54,7 @@ class SyncOrchestrator @Inject constructor(
 
         try {
             log.i(TAG, "Starting full sync...")
+            saveEdits()
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
 
             val settings = kvProxy.getSyncSettings()
@@ -293,6 +296,7 @@ class SyncOrchestrator @Inject constructor(
     private suspend fun runSingleNotebookSync(notebookId: String): AppResult<Unit, DomainError> {
         val settings = kvProxy.getSyncSettings()
         if (!settings.syncEnabled) return AppResult.Success(Unit)
+        saveEdits()
         // Wifi constraint not satisfied -> planned no-op, the same policy as any other sync.
         if (syncPreflightService.checkWifiConstraint() is AppResult.Error) return AppResult.Success(Unit)
         if (settings.username.isBlank() || settings.password.isBlank()) {
@@ -306,6 +310,14 @@ class SyncOrchestrator @Inject constructor(
             settings.uploadOnly,
             settings.downloadOnly
         )
+    }
+
+    /**
+     * Writes the editor's pending edits to the database. Sync reads pages and their edit timestamps
+     * from there, so every sync calls this before it starts.
+     */
+    private suspend fun saveEdits() {
+        pageSaver.saveAll()
     }
 
     suspend fun syncFromPageId(pageId: String) {
@@ -416,6 +428,7 @@ class SyncOrchestrator @Inject constructor(
         if (!syncMutex.tryLock()) return@withContext AppResult.Error(DomainError.SyncInProgress)
         try {
             reporter.beginStep(SyncStep.SYNCING_NOTEBOOKS, PROGRESS_SYNCING_NOTEBOOKS, details)
+            saveEdits()
             block().also { result ->
                 when (result) {
                     is AppResult.Success -> reporter.finishSuccess(SyncSummary(0, 0, 0, 0))

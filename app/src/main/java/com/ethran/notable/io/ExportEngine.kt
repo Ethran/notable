@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -63,6 +64,7 @@ class ExportEngine @Inject constructor(
     private val bookRepo: BookRepository,
     private val pageContentRenderer: PageContentRenderer,
     private val appEventBus: AppEventBus,
+    private val pageSaver: PageSaver,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
@@ -74,6 +76,8 @@ class ExportEngine @Inject constructor(
     suspend fun export(
         target: ExportTarget, format: ExportFormat, options: ExportOptions = ExportOptions()
     ): String {
+        // Exporters read pages from the database, so it must have every edit made so far.
+        pageSaver.saveAll()
         // prepare file name and folder
         val (folderUri, baseFileName) = createFileNameAndFolder(target, format, options)
         // TODO: Retrieve all necessary data from the target, so that specific format exporter does not need to handle reading from db.
