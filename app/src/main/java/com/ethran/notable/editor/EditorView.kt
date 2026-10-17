@@ -100,6 +100,7 @@ fun EditorView(
                 viewWidth = width,
                 viewHeight = height,
                 snackManager = snackManager,
+                onPageShown = viewModel::onPageShown,
             )
         }
 

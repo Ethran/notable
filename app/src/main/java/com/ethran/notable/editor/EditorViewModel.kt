@@ -44,6 +44,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -51,6 +53,7 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 private val log = ShipBook.getLogger("EditorViewModel")
 
@@ -192,6 +195,9 @@ class EditorViewModel @Inject constructor(
     private val _toolbarState = MutableStateFlow(ToolbarUiState())
     val toolbarState: StateFlow<ToolbarUiState> = _toolbarState.asStateFlow()
 
+    // The page the [PageView] shows, set by [onPageShown]; drives [prefetchAround].
+    private val shownPageId = MutableStateFlow<String?>(null)
+
     init {
         viewModelScope.launch {
             ClipboardStore.content.collect { setHasClipboard(it != null) }
@@ -216,6 +222,9 @@ class EditorViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            shownPageId.filterNotNull().collectLatest { prefetchAround(it) }
         }
     }
 
@@ -684,6 +693,48 @@ class EditorViewModel @Inject constructor(
                 pageId = currentPageId, notebookId = bookId!!
             )
         } else null
+    }
+
+    /**
+     * Called by the [PageView] once it shows [pageId] and holds its lease, so the page it left is
+     * no longer leased when [prefetchAround] cancels loads of pages left behind.
+     */
+    fun onPageShown(pageId: String) {
+        shownPageId.value = pageId
+    }
+
+    /**
+     * Loads the pages next to the shown [pageId] ahead of a page turn. Loads of pages left behind
+     * stop first, so they don't compete with it; the neighbours load once the shown page has, into
+     * the budget it leaves.
+     */
+    private suspend fun prefetchAround(pageId: String) {
+        try {
+            val neighborIds = neighborsOf(pageId)
+            pageDataManager.cancelLoadsExcept(neighborIds.toSet() + pageId)
+            pageDataManager.requestPageLoadJoin(pageId)
+            // Admission control evicts to fit before a load; this only catches an under-estimate.
+            pageDataManager.trimToBudget()
+            pageDataManager.prefetch(neighborIds)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.e("Loading pages around $pageId failed", e)
+        }
+    }
+
+    /**
+     * The next and previous pages in [pageId]'s notebook, next first; empty for a loose page. The
+     * notebook is read from the page record, as the page can be shown before [loadToolbarState]
+     * sets [bookId].
+     */
+    private suspend fun neighborsOf(pageId: String): List<String> {
+        val pageIds = appRepository.pageRepository.getById(pageId)?.notebookId
+            ?.let { appRepository.bookRepository.getById(it)?.pageIds }
+            .orEmpty()
+        val index = pageIds.indexOf(pageId)
+        if (index == -1) return emptyList()
+        return listOfNotNull(pageIds.getOrNull(index + 1), pageIds.getOrNull(index - 1))
     }
 
     fun goToNextPage() {
