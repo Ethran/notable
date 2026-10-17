@@ -16,7 +16,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
 
-private const val MAX_UNDO_STEPS: Int = 20 // Maximum number of strokes stored in the undo/redo history.
+private const val MAX_UNDO_STEPS: Int = 20 // Maximum number of operations stored in the undo/redo history.
 
 sealed class Operation {
     data class DeleteStroke(val strokeIds: List<String>) : Operation()
