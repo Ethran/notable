@@ -695,7 +695,7 @@ class PageDataManager @Inject constructor(
             recomputeHeight(pageId)
         } catch (e: CancellationException) {
             log.w("Loading of page $pageId was cancelled.")
-            if (!validatePageDataLoaded(pageId)) removePage(pageId)
+            dropUnfinishedLoad(pageId, myJob)
             throw e  // rethrow cancellation
         } catch (e: Exception) {
             // Anything else (a Room error, a corrupt stroke blob, an OOM decoding a background)
@@ -711,10 +711,20 @@ class PageDataManager @Inject constructor(
                 )
             )
             appEventBus.tryEmit(AppEvent.ActionHint("Could not load page", 3000))
-            removePage(pageId)
+            dropUnfinishedLoad(pageId, myJob)
         } finally {
             log.d("Finished load attempt for page $pageId")
         }
+    }
+
+    /**
+     * Removes [pageId]'s entry after its load [job] failed or was cancelled, so the next request
+     * starts a clean load. Leaves it alone once a newer load owns it: a cancelled read of the
+     * database still runs to its end, and may finish after the page was requested again.
+     */
+    private fun dropUnfinishedLoad(pageId: String, job: Job?) = synchronized(lock) {
+        val entry = entries[pageId]
+        if (entry != null && entry.loadJob === job && !entry.loaded) removePageLocked(pageId)
     }
 
     /**
@@ -1239,7 +1249,7 @@ class PageDataManager @Inject constructor(
         return true
     }
 
-    /** Locking wrapper for [removePageLocked]; used by the load-cancellation path in [loadPageFromDb]. */
+    /** Locking wrapper for [removePageLocked]. */
     fun removePage(pageId: String): Boolean = synchronized(lock) { removePageLocked(pageId) }
 
     /**
