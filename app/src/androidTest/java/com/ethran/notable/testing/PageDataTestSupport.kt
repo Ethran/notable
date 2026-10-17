@@ -14,6 +14,7 @@ import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.KvRepository
+import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.NotebookSyncStateRepository
 import com.ethran.notable.data.db.PageDao
 import com.ethran.notable.data.db.PageRepository
@@ -55,8 +56,8 @@ internal fun createAppRepositoryForTest(
  * [pageSaver] is created on first use. It starts saving on its own a second after an edit, so a
  * test that hands edits around itself ([PageDataManager.takeUnsaved]) must not touch it.
  *
- * [beforePageRead], [afterPageRead] and [beforeStrokeWrite] let a test act at a chosen point of a
- * load or a save.
+ * [beforePageRead], [afterPageRead], [beforePageRecordRead] and [beforeStrokeWrite] let a test act at
+ * a chosen point of a load, a page change or a save.
  */
 internal class PageDataTestHarness(context: Context) {
     val db: AppDatabase = TestDatabaseFactory.createInMemory(context)
@@ -69,6 +70,13 @@ internal class PageDataTestHarness(context: Context) {
     @Volatile
     var afterPageRead: suspend (pageId: String) -> Unit = {}
 
+    /**
+     * Runs when a page's record alone is about to be read: by a view changing page, and by a load
+     * before it reads the page's content.
+     */
+    @Volatile
+    var beforePageRecordRead: suspend (pageId: String) -> Unit = {}
+
     /** Runs before strokes are written to the database. */
     @Volatile
     var beforeStrokeWrite: suspend () -> Unit = {}
@@ -77,6 +85,11 @@ internal class PageDataTestHarness(context: Context) {
         override suspend fun getPageWithDataById(pageId: String): PageWithData? {
             beforePageRead(pageId)
             return db.pageDao().getPageWithDataById(pageId).also { afterPageRead(pageId) }
+        }
+
+        override suspend fun getById(pageId: String): Page? {
+            beforePageRecordRead(pageId)
+            return db.pageDao().getById(pageId)
         }
     }
     private val strokeDao = object : StrokeDao by db.strokeDao() {

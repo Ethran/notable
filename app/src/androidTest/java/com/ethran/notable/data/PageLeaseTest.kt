@@ -7,16 +7,22 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.testing.PageDataTestHarness
 import com.ethran.notable.testing.TestNotebookSeeder
 import com.ethran.notable.testing.rows
+import com.ethran.notable.testing.waitForCondition
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.atomic.AtomicInteger
 
 /** A page leased by the views that show it stays in [PageDataManager] until all of them let go. */
 @RunWith(AndroidJUnit4::class)
@@ -86,4 +92,47 @@ class PageLeaseTest {
         assertEquals(data.storedStrokes(pageId).rows(), pageDataManager.getStrokes(pageId).rows())
         lease.close()
     }
+
+    @Test(timeout = 30000)
+    fun cancelledLoadFinishingLate_leavesTheNewerLoadOfItsPageAlone() = runBlocking {
+        val (pageId) = seedPages(1)
+        val firstReadStarted = CompletableDeferred<Unit>()
+        val firstReadMayEnd = CompletableDeferred<Unit>()
+        val secondReadStarted = CompletableDeferred<Unit>()
+        val secondReadMayEnd = CompletableDeferred<Unit>()
+        val reads = AtomicInteger()
+        data.beforePageRead = {
+            if (reads.incrementAndGet() == 1) {
+                firstReadStarted.complete(Unit)
+                // A database read runs to its end even once its load is cancelled, then the load
+                // finds out it was cancelled.
+                withContext(NonCancellable) { firstReadMayEnd.await() }
+                currentCoroutineContext().ensureActive()
+            } else {
+                secondReadStarted.complete(Unit)
+                secondReadMayEnd.await()
+            }
+        }
+
+        // A neighbour is prefetched, the user jumps elsewhere, which cancels it, and comes back
+        // before the cancelled read has finished, so the neighbour is prefetched again.
+        pageDataManager.prefetch(listOf(pageId))
+        firstReadStarted.await()
+        pageDataManager.cancelLoadsExcept(keep = emptySet())
+        pageDataManager.prefetch(listOf(pageId))
+        secondReadStarted.await()
+
+        firstReadMayEnd.complete(Unit)
+        // The cancelled load is done once it has handled its cancellation; wait for it, or for the
+        // newer load to be gone.
+        waitForCondition(timeoutMs = 1000) { pageRow(pageId) == null }
+        assertTrue("newer load is gone: ${pageRow(pageId)}", pageRow(pageId)?.loading == true)
+
+        secondReadMayEnd.complete(Unit)
+        assertTrue(waitForCondition(timeoutMs = 5000) { pageRow(pageId)?.loaded == true })
+        assertEquals(data.storedStrokes(pageId).rows(), pageDataManager.getStrokes(pageId).rows())
+    }
+
+    private fun pageRow(pageId: String) =
+        pageDataManager.memorySnapshot().pages.firstOrNull { it.pageId == pageId }
 }

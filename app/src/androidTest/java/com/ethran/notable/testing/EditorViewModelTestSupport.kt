@@ -32,12 +32,15 @@ import java.util.concurrent.ConcurrentLinkedQueue
  */
 
 /** Builds a real [EditorViewModel] backed by an in-memory Room DB, mocking side-effecting deps. */
-internal fun createEditorViewModelForTest(context: Context, db: AppDatabase): EditorViewModel {
+internal fun createEditorViewModelForTest(
+    context: Context,
+    db: AppDatabase,
+    pageDataManager: PageDataManager = mockk(relaxed = true),
+): EditorViewModel {
     val appRepository = createAppRepositoryForTest(context, db)
     val editorSettingCacheManager = EditorSettingCacheManager(KvRepository(db.kvDao(), context))
 
     val exportEngine = mockk<ExportEngine>(relaxed = true)
-    val pageDataManager = mockk<PageDataManager>(relaxed = true)
     val pageSaver = mockk<PageSaver>(relaxed = true)
     val syncOrchestrator = mockk<SyncOrchestrator>(relaxed = true).also {
         coEvery { it.syncFromPageId(any()) } returns Unit
