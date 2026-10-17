@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -63,6 +64,7 @@ class ExportEngine @Inject constructor(
     private val bookRepo: BookRepository,
     private val pageContentRenderer: PageContentRenderer,
     private val appEventBus: AppEventBus,
+    private val pageSaver: PageSaver,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
@@ -74,6 +76,10 @@ class ExportEngine @Inject constructor(
     suspend fun export(
         target: ExportTarget, format: ExportFormat, options: ExportOptions = ExportOptions()
     ): String {
+        // Exporters read pages from the database, so it must have every edit made so far. Without
+        // them the export would be missing recent edits, and a linked export would overwrite its
+        // file with that older version.
+        if (!pageSaver.saveAll()) return "Export cancelled: recent edits could not be saved"
         // prepare file name and folder
         val (folderUri, baseFileName) = createFileNameAndFolder(target, format, options)
         // TODO: Retrieve all necessary data from the target, so that specific format exporter does not need to handle reading from db.
@@ -106,7 +112,7 @@ class ExportEngine @Inject constructor(
 
             try {
                 log.i("Exporting book to linked file, uri: $uriStr")
-                export(
+                val result = export(
                     target = ExportTarget.Book(bookId),
                     format = ExportFormat.XOPP,
                     options = ExportOptions(
@@ -115,7 +121,7 @@ class ExportEngine @Inject constructor(
                         overwrite = true
                     )
                 )
-                log.i("Linked export successful")
+                log.i("Linked export finished: $result")
             } catch (e: Exception) {
                 appEventBus.emit(
                     AppEvent.LogMessage(

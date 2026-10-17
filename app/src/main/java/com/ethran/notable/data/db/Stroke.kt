@@ -95,6 +95,9 @@ interface StrokeDao {
     @Update
     suspend fun update(strokes: List<Stroke>)
 
+    @Upsert
+    suspend fun upsert(strokes: List<Stroke>)
+
     @Query("DELETE FROM stroke WHERE id IN (:ids)")
     suspend fun deleteAll(ids: List<String>)
 
@@ -128,6 +131,11 @@ class StrokeRepository @Inject constructor(
 
     suspend fun update(strokes: List<Stroke>) {
         return db.update(strokes)
+    }
+
+    /** Inserts [strokes], replacing the stored ones with the same ids. */
+    suspend fun upsert(strokes: List<Stroke>) {
+        return db.upsert(strokes)
     }
 
     suspend fun deleteAll(ids: List<String>) {

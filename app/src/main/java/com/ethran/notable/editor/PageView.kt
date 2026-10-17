@@ -108,14 +108,11 @@ class PageView(
     // when the canvas size/config changes (zoom, dimension change, page switch).
     private var scrollBackBuffer: Bitmap? = null
 
-    //    var strokes = listOf<Stroke>()
-    var strokes: List<Stroke>
+    val strokes: List<Stroke>
         get() = pageDataManager.getStrokes(currentPageId)
-        set(value) = pageDataManager.setStrokes(currentPageId, value)
 
-    var images: List<Image>
+    val images: List<Image>
         get() = pageDataManager.getImages(currentPageId)
-        set(value) = pageDataManager.setImages(currentPageId, value)
 
     // warning: The setter is delayed!
     private var currentBackground: CachedBackground
@@ -339,10 +336,8 @@ class PageView(
 
 
     fun addStrokes(strokesToAdd: List<Stroke>) {
-        strokes += strokesToAdd
+        pageDataManager.addStrokes(currentPageId, strokesToAdd)
         updateHeightForChange(strokesToAdd)
-
-        saveStrokesToPersistLayer(strokesToAdd)
 
 //        persistBitmapDebounced()
     }
@@ -377,20 +372,15 @@ class PageView(
 
     // Completely updates strokes
     fun updateStrokes(strokesToUpdate: List<Stroke>) {
-        // TODO: Clean it up, move some logic to pageDataManager
-        val strokeUpdateById = strokesToUpdate.associateBy { it.id }
-        strokes = strokes.map { stroke ->
-            strokeUpdateById[stroke.id] ?: stroke
-        }
+        pageDataManager.updateStrokes(currentPageId, strokesToUpdate)
         updateHeightForChange(strokesToUpdate)
-        pageDataManager.updateStrokesInDb(currentPageId, strokesToUpdate)
 //        persistBitmapDebounced()
     }
 
     fun removeStrokes(strokeIds: List<String>) {
-        strokes = strokes.filter { s -> !strokeIds.contains(s.id) }
-        removeStrokesFromPersistLayer(strokeIds)
-        pageDataManager.recomputeHeight(currentPageId)
+        val pageId = currentPageId
+        pageDataManager.removeStrokes(pageId, strokeIds)
+        pageDataManager.recomputeHeight(pageId)
 
 //        persistBitmapDebounced()
     }
@@ -406,63 +396,44 @@ class PageView(
         }
     }
 
-    private fun saveStrokesToPersistLayer(strokes: List<Stroke>) =
-        pageDataManager.saveStrokesToDb(currentPageId, strokes)
-
-
-    private fun saveImagesToPersistLayer(image: List<Image>) =
-        pageDataManager.saveImagesToDb(currentPageId, image)
-
-
     fun addImage(imageToAdd: Image) {
-        images += listOf(imageToAdd)
+        pageDataManager.addImages(currentPageId, listOf(imageToAdd))
         val bottomPlusPadding = imageToAdd.x + imageToAdd.height + 50
         if (bottomPlusPadding > height) height = bottomPlusPadding
-
-        saveImagesToPersistLayer(listOf(imageToAdd))
 
 //        persistBitmapDebounced()
     }
 
     fun addImage(imageToAdd: List<Image>) {
-        images += imageToAdd
+        pageDataManager.addImages(currentPageId, imageToAdd)
         imageToAdd.forEach {
             val bottomPlusPadding = it.x + it.height + 50
             if (bottomPlusPadding > height) height = bottomPlusPadding
         }
-        saveImagesToPersistLayer(imageToAdd)
 
 //        persistBitmapDebounced()
     }
 
     fun removeImages(imageIds: List<String>) {
-        images = images.filter { s -> !imageIds.contains(s.id) }
-        removeImagesFromPersistLayer(imageIds)
-        pageDataManager.recomputeHeight(currentPageId)
+        val pageId = currentPageId
+        pageDataManager.removeImages(pageId, imageIds)
+        pageDataManager.recomputeHeight(pageId)
 //        persistBitmapDebounced()
     }
 
     // Moves/updates existing images in place (same ids). Mirrors updateStrokes — used for a Move
-    // displacement so we never delete-then-reinsert the same id (which raced to a UNIQUE crash).
+    // displacement.
     fun updateImages(imagesToUpdate: List<Image>) {
-        val imageUpdateById = imagesToUpdate.associateBy { it.id }
-        images = images.map { image -> imageUpdateById[image.id] ?: image }
+        pageDataManager.updateImages(currentPageId, imagesToUpdate)
         imagesToUpdate.forEach {
             val bottomPlusPadding = it.x + it.height + 50
             if (bottomPlusPadding > height) height = bottomPlusPadding
         }
-        pageDataManager.updateImagesInDb(currentPageId, imagesToUpdate)
     }
 
     fun getImages(imageIds: List<String>): List<Image?> =
         pageDataManager.getImages(imageIds, currentPageId)
 
-
-    private fun removeStrokesFromPersistLayer(strokeIds: List<String>) =
-        pageDataManager.removeStrokesFromDb(currentPageId, strokeIds)
-
-    private fun removeImagesFromPersistLayer(imageIds: List<String>) =
-        pageDataManager.removeImagesFromDb(currentPageId, imageIds)
 
     // load background, fast, if it is accurate enough.
     private fun loadInitialBitmap(): Boolean {
@@ -946,7 +917,7 @@ class PageView(
     }
 
 
-    private fun saveToPersistLayer() = pageDataManager.setScrollInDb(currentPageId)
+    private fun saveToPersistLayer() = pageDataManager.saveScroll(currentPageId)
 
     fun applyZoom(point: IntOffset): IntOffset {
         return point * zoomLevel.value

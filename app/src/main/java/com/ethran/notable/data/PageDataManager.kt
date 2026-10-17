@@ -3,8 +3,6 @@ package com.ethran.notable.data
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
-import android.database.SQLException
-import android.database.sqlite.SQLiteConstraintException
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Debug
@@ -33,6 +31,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
@@ -77,8 +77,10 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
  * Nullable collections: null == not loaded, empty list == loaded-but-empty.
  */
 internal class PageCacheEntry(val pageId: String) {
-    var strokes: MutableList<Stroke>? = null
-    var images: MutableList<Image>? = null
+    // Replaced on every change, never modified in place: readers keep the list they got without
+    // holding the lock.
+    var strokes: List<Stroke>? = null
+    var images: List<Image>? = null
 
     // Resident bytes of strokes+images only (backgrounds and windowed bitmaps excluded).
     var sizeBytes: Long = 0L
@@ -103,6 +105,33 @@ internal class PageCacheEntry(val pageId: String) {
     val loaded: Boolean get() = strokes != null && images != null && sizeComputed
 }
 
+/**
+ * Changes to one page that are not in the database yet: the latest version of each changed stroke
+ * and image by id, or null for one that was removed. Only the outcome per id is kept, so edits that
+ * touch the same ids repeatedly — a page cut and its undo, a move — reduce to their result, and
+ * writing them doesn't depend on the order the edits were made in.
+ *
+ * Guarded by [PageDataManager]'s lock while it collects edits. Once handed to [PageSaver] by
+ * [PageDataManager.takeUnsaved] it is only read, until [PageDataManager.finishSaving].
+ */
+internal class PageChanges {
+    val strokes = HashMap<String, Stroke?>()
+    val images = HashMap<String, Image?>()
+
+    /** Scroll to persist, or null if unchanged. Not an edit: it doesn't advance edit timestamps. */
+    var scrollY: Int? = null
+
+    /** Whether strokes or images changed, not only the scroll. */
+    val hasEdits: Boolean get() = strokes.isNotEmpty() || images.isNotEmpty()
+
+    /** Adds [newer] on top of these changes; where both changed an id, [newer] wins. */
+    fun putAll(newer: PageChanges) {
+        strokes.putAll(newer.strokes)
+        images.putAll(newer.images)
+        newer.scrollY?.let { scrollY = it }
+    }
+}
+
 // Cache manager companion object
 @Singleton
 class PageDataManager @Inject constructor(
@@ -121,9 +150,9 @@ class PageDataManager @Inject constructor(
     private var currentPage: String = ""
 
     /**
-     * Single lock for all cached page state ([entries], [entriesTotalBytes], [backgroundCache] and
-     * per-entry fields). A plain monitor (not a suspending Mutex) so hot non-suspend accessors
-     * (drawing, selection) can take it.
+     * Single lock for all cached page state ([entries], [entriesTotalBytes], [backgroundCache],
+     * per-entry fields, and the unsaved edits in [unsaved] and [saving]). A plain monitor (not a
+     * suspending Mutex) so hot non-suspend accessors (drawing, selection) can take it.
      *
      * **Invariant: nothing blocking or re-entrant runs inside `synchronized(lock)`.**
      * The drawing thread blocks on this monitor, so anything slow or re-entrant held across it is a
@@ -159,6 +188,16 @@ class PageDataManager @Inject constructor(
     // a page full of cheap strokes is never evicted just because backgrounds are big.
     private val backgroundCache = LinkedHashMap<String, CachedBackground>()
     private var bgAccessSeq = 0L
+
+    // Edits not in the database yet, per page: [unsaved] collects new ones, [saving] holds the ones
+    // [PageSaver] is writing. Kept apart from [entries] so evicting a page never drops its edits; a
+    // page loaded again gets them laid over its rows (see [mergeLoadedLocked]).
+    private val unsaved = HashMap<String, PageChanges>()
+    private val saving = HashMap<String, PageChanges>()
+
+    // Wakes [PageSaver] when [unsaved] gains changes. Conflated: one pending signal is enough.
+    private val unsavedSignal = Channel<Unit>(Channel.CONFLATED)
+    internal val unsavedChanges: ReceiveChannel<Unit> get() = unsavedSignal
 
     // Fraction of the ART app-heap that stroke pages + backgrounds may use together. The rest is
     // left uncounted for the windowed bitmap, Compose/UI objects, and a load's transient stroke
@@ -614,6 +653,13 @@ class PageDataManager @Inject constructor(
             log.d("Loading page $pageId")
             preLoadBackground(pageId)
 
+            // A save running now may commit before the read below or after it, and once it
+            // finishes its changes are no longer pending. Taken now, they are laid over the rows
+            // whichever way it goes. Edits made from here on land in the entry itself.
+            val (strokesBeforeRead, imagesBeforeRead) = synchronized(lock) {
+                pendingLocked(pageId) { it.strokes } to pendingLocked(pageId) { it.images }
+            }
+
             // Suspend I/O happens OUTSIDE the lock.
             val pageWithData = appRepository.pageRepository.getWithDataById(pageId)
             if (pageWithData == null) {
@@ -632,9 +678,16 @@ class PageDataManager @Inject constructor(
                     log.d("Discarding stale/cancelled load result for $pageId")
                     return
                 }
-                // Join with any strokes/images drawn during loading (append, don't replace).
-                appendStrokesLocked(entry, pageWithData.strokes)
-                appendImagesLocked(entry, pageWithData.images)
+                if (entry.strokes != null || entry.images != null)
+                    log.d("Joining edits made during page loading with the loaded page")
+                entry.strokes = mergeLoadedLocked(
+                    entry.strokes, pageWithData.strokes,
+                    strokesBeforeRead + pendingLocked(pageId) { it.strokes }, Stroke::id
+                )
+                entry.images = mergeLoadedLocked(
+                    entry.images, pageWithData.images,
+                    imagesBeforeRead + pendingLocked(pageId) { it.images }, Image::id
+                )
                 recomputeEntrySizeLocked(entry)
                 touchLocked(entry)
                 logEstimateVsActualLocked(entry)
@@ -674,29 +727,32 @@ class PageDataManager @Inject constructor(
         if (entry != null && entry.loadJob === job && !entry.loaded) removePageLocked(pageId)
     }
 
-    // Copy-on-write: build a new list and swap the reference under [lock] instead of mutating in
-    // place, so a reader that took the old reference from getStrokes/getImages (lock-free, on the
-    // drawing thread) iterates an immutable snapshot — no ConcurrentModification on join-during-load.
-    private fun appendStrokesLocked(entry: PageCacheEntry, newStrokes: List<Stroke>) {
-        val existing = entry.strokes
-        entry.strokes = if (existing == null) newStrokes.toMutableList()
-        else {
-            log.d("Joining strokes drawn during page loading and existing strokes")
-            ArrayList<Stroke>(existing.size + newStrokes.size).apply {
-                addAll(existing); addAll(newStrokes)
-            }
-        }
+    /**
+     * The page as loaded: its database [rows] with the edits the database doesn't have yet laid
+     * over them. Those are [current], the edits made while the page was loading, and [pending], the
+     * page's unsaved edits by id, which also include edits made before the page was last evicted.
+     * Each id appears once, in its latest version, and removed ones are left out. Must hold [lock].
+     */
+    private fun <T> mergeLoadedLocked(
+        current: List<T>?, rows: List<T>, pending: Map<String, T?>, id: (T) -> String,
+    ): List<T> {
+        val currentList = current.orEmpty()
+        val currentIds = currentList.mapTo(HashSet(), id)
+        val merged = ArrayList<T>(rows.size + currentList.size)
+        rows.filterTo(merged) { id(it) !in pending && id(it) !in currentIds }
+        merged.addAll(currentList)
+        pending.values.forEach { if (it != null && id(it) !in currentIds) merged.add(it) }
+        return merged
     }
 
-    private fun appendImagesLocked(entry: PageCacheEntry, newImages: List<Image>) {
-        val existing = entry.images
-        entry.images = if (existing == null) newImages.toMutableList()
-        else {
-            log.d("Joining images drawn during page loading and existing images")
-            ArrayList<Image>(existing.size + newImages.size).apply {
-                addAll(existing); addAll(newImages)
-            }
-        }
+    /** [pageId]'s edits not in the database yet, being saved or not, by id. Must hold [lock]. */
+    private fun <T> pendingLocked(
+        pageId: String, changesOf: (PageChanges) -> Map<String, T?>,
+    ): Map<String, T?> {
+        val pending = HashMap<String, T?>()
+        saving[pageId]?.let { pending.putAll(changesOf(it)) }
+        unsaved[pageId]?.let { pending.putAll(changesOf(it)) }
+        return pending
     }
 
     /** Emits the estimate/actual ratio used to calibrate [PageMemoryModel.BLOB_EXPANSION_K]. */
@@ -882,20 +938,113 @@ class PageDataManager @Inject constructor(
         entries[pageId]?.strokes ?: emptyList()
     }
 
-    fun setStrokes(pageId: String, strokes: List<Stroke>) = synchronized(lock) {
-        val entry = getOrCreateEntryLocked(pageId)
-        entry.strokes = strokes.toMutableList()
-        recomputeEntrySizeLocked(entry)
-    }
-
     fun getImages(pageId: String): List<Image> = synchronized(lock) {
         entries[pageId]?.images ?: emptyList()
     }
 
-    fun setImages(pageId: String, images: List<Image>) = synchronized(lock) {
-        val entry = getOrCreateEntryLocked(pageId)
-        entry.images = images.toMutableList()
-        recomputeEntrySizeLocked(entry)
+    /* ---------------- edits and saving ---------------- */
+
+    // Each edit changes the cached page and records the change for [PageSaver] in one critical
+    // section, so the database ends up with exactly what the cache shows.
+
+    /** Adds [strokes] to [pageId], replacing those it has with the same ids. */
+    fun addStrokes(pageId: String, strokes: List<Stroke>) = editPage(pageId) { entry, changes ->
+        entry.strokes = withAdded(entry.strokes, strokes, Stroke::id, changes.strokes)
+    }
+
+    /** Replaces [pageId]'s strokes that share an id with [strokes]; others in [strokes] are ignored. */
+    fun updateStrokes(pageId: String, strokes: List<Stroke>) = editPage(pageId) { entry, changes ->
+        entry.strokes = entry.strokes?.let { withUpdated(it, strokes, Stroke::id, changes.strokes) }
+    }
+
+    fun removeStrokes(pageId: String, strokeIds: List<String>) = editPage(pageId) { entry, changes ->
+        entry.strokes = withRemoved(entry.strokes, strokeIds, Stroke::id, changes.strokes)
+    }
+
+    /** Adds [images] to [pageId], replacing those it has with the same ids. */
+    fun addImages(pageId: String, images: List<Image>) = editPage(pageId) { entry, changes ->
+        entry.images = withAdded(entry.images, images, Image::id, changes.images)
+    }
+
+    /** Replaces [pageId]'s images that share an id with [images]; others in [images] are ignored. */
+    fun updateImages(pageId: String, images: List<Image>) = editPage(pageId) { entry, changes ->
+        entry.images = entry.images?.let { withUpdated(it, images, Image::id, changes.images) }
+    }
+
+    fun removeImages(pageId: String, imageIds: List<String>) = editPage(pageId) { entry, changes ->
+        entry.images = withRemoved(entry.images, imageIds, Image::id, changes.images)
+    }
+
+    /** Records [pageId]'s stored scroll for saving; does nothing if it has none. */
+    fun saveScroll(pageId: String) {
+        if (pageId.isEmpty()) return
+        val scroll = viewport.scroll(pageId) ?: return
+        synchronized(lock) { unsavedLocked(pageId).scrollY = scroll.y.toInt() }
+        unsavedSignal.trySend(Unit)
+    }
+
+    /** Applies [edit] to [pageId]'s cache entry and its unsaved changes, then wakes [PageSaver]. */
+    private inline fun editPage(pageId: String, edit: (PageCacheEntry, PageChanges) -> Unit) {
+        synchronized(lock) {
+            val entry = getOrCreateEntryLocked(pageId)
+            edit(entry, unsavedLocked(pageId))
+            recomputeEntrySizeLocked(entry)
+        }
+        unsavedSignal.trySend(Unit)
+    }
+
+    private fun unsavedLocked(pageId: String): PageChanges =
+        unsaved.getOrPut(pageId) { PageChanges() }
+
+    private fun <T> withAdded(
+        current: List<T>?, added: List<T>, id: (T) -> String, changes: MutableMap<String, T?>,
+    ): List<T> {
+        val ids = added.mapTo(HashSet(), id)
+        added.forEach { changes[id(it)] = it }
+        return current.orEmpty().filter { id(it) !in ids } + added
+    }
+
+    private fun <T> withUpdated(
+        current: List<T>, updated: List<T>, id: (T) -> String, changes: MutableMap<String, T?>,
+    ): List<T> {
+        val byId = updated.associateBy(id)
+        return current.map { old -> byId[id(old)]?.also { changes[id(it)] = it } ?: old }
+    }
+
+    private fun <T> withRemoved(
+        current: List<T>?, removedIds: List<String>, id: (T) -> String,
+        changes: MutableMap<String, T?>,
+    ): List<T>? {
+        val ids = removedIds.toHashSet()
+        ids.forEach { changes[it] = null }
+        return current?.filter { id(it) !in ids }
+    }
+
+    /**
+     * Hands every page's unsaved changes to [PageSaver] to write. Until [finishSaving], loads still
+     * lay them over the database rows, which may or may not include them yet.
+     */
+    internal fun takeUnsaved(): Map<String, PageChanges> = synchronized(lock) {
+        for ((pageId, changes) in unsaved) {
+            saving.getOrPut(pageId) { PageChanges() }.putAll(changes)
+        }
+        unsaved.clear()
+        HashMap(saving)
+    }
+
+    /**
+     * Ends the save started by [takeUnsaved]. The changes of [failedPageIds] become unsaved again,
+     * under any newer ones made meanwhile, to be written by a later save.
+     */
+    internal fun finishSaving(failedPageIds: Set<String>) {
+        synchronized(lock) {
+            for (pageId in failedPageIds) {
+                val failed = saving[pageId] ?: continue
+                unsaved[pageId]?.let { failed.putAll(it) }
+                unsaved[pageId] = failed
+            }
+            saving.clear()
+        }
     }
 
     // Id -> object resolution for the undo/redo path only. Builds a transient lookup from the list
@@ -936,96 +1085,6 @@ class PageDataManager @Inject constructor(
             return strokeList.filter { stroke ->
                 stroke.right > inPageCoordinates.left && stroke.left < inPageCoordinates.right && stroke.bottom > inPageCoordinates.top && stroke.top < inPageCoordinates.bottom
             }
-        }
-    }
-
-    /**
-     * Runs a DB content-write on [dataScope], catching SQL errors so a storage/device failure
-     * (e.g. SQLiteDiskIOException on endTransaction) is logged with context instead of
-     * escaping the coroutine and killing the process. For now this only logs and no-ops: the
-     * in-memory state is untouched, so the next successful write re-persists it.
-     */
-    private fun launchDbWrite(op: String, pageId: String, block: suspend () -> Unit) {
-        dataScope.launch {
-            try {
-                block()
-            } catch (e: SQLException) {
-                log.e("DB write '$op' failed on page $pageId: ${e.message}", e)
-            }
-        }
-    }
-
-    fun updateStrokesInDb(pageId: String, strokes: List<Stroke>) {
-        launchDbWrite("updateStrokes(${strokes.size})", pageId) {
-            appRepository.strokeRepository.update(strokes)
-            bumpEditTimestamps(pageId)
-        }
-    }
-
-    fun updateImagesInDb(pageId: String, images: List<Image>) {
-        launchDbWrite("updateImages(${images.size})", pageId) {
-            appRepository.imageRepository.update(images)
-            bumpEditTimestamps(pageId)
-        }
-    }
-
-    fun saveStrokesToDb(pageId: String, strokes: List<Stroke>) {
-        launchDbWrite("saveStrokes(${strokes.size})", pageId) {
-            try {
-                appRepository.strokeRepository.create(strokes)
-            } catch (_: SQLiteConstraintException) {
-                // There were some rare bugs when strokes weren't unique when inserting from history
-                // I'm not sure if it's still a problem, let's just show the message
-                appEventBus.tryEmit(
-                    AppEvent.LogMessage(
-                        reason = "saveStrokesToPersistLayer",
-                        message = "Attempted to create strokes that already exist"
-                    )
-                )
-                appRepository.strokeRepository.update(strokes)
-            }
-            bumpEditTimestamps(pageId)
-        }
-    }
-
-    fun saveImagesToDb(pageId: String, images: List<Image>) {
-        launchDbWrite("saveImages(${images.size})", pageId) {
-            appRepository.imageRepository.create(images)
-            bumpEditTimestamps(pageId)
-        }
-    }
-
-    fun removeStrokesFromDb(pageId: String, strokes: List<String>) {
-        launchDbWrite("removeStrokes(${strokes.size})", pageId) {
-            appRepository.strokeRepository.deleteAll(strokes)
-            bumpEditTimestamps(pageId)
-        }
-    }
-
-    fun removeImagesFromDb(pageId: String, images: List<String>) {
-        launchDbWrite("removeImages(${images.size})", pageId) {
-            appRepository.imageRepository.deleteAll(images)
-            bumpEditTimestamps(pageId)
-        }
-    }
-
-    // Bump the edit timestamps after a content write on [pageId]. The page timestamp is the
-    // per-page dirty signal (for incremental upload); the notebook timestamp drives the
-    // per-notebook sync Upload/Download decision. Both advance together on any stroke/image edit.
-    private suspend fun bumpEditTimestamps(pageId: String) {
-        if (pageId.isEmpty()) return
-        appRepository.pageRepository.touchUpdatedAt(pageId)
-        val notebookId = appRepository.pageRepository.getById(pageId)?.notebookId ?: return
-        val notebook = appRepository.bookRepository.getById(notebookId) ?: return
-        appRepository.bookRepository.update(notebook)
-    }
-
-    /** Persists [pageId]'s stored scroll; does nothing if it has none, keeping the persisted one. */
-    fun setScrollInDb(pageId: String) {
-        if (pageId.isEmpty()) return
-        val scroll = viewport.scroll(pageId) ?: return
-        launchDbWrite("scroll", pageId) {
-            appRepository.pageRepository.updateScroll(pageId, scroll.y.toInt())
         }
     }
 
@@ -1152,7 +1211,7 @@ class PageDataManager @Inject constructor(
                 saveTopic.emit(targetPageId)
             }
             recomputeHeight(targetPageId)
-            // Size accounting is kept current on every setStrokes/setImages, so no recompute here.
+            // Size accounting is kept current on every edit, so no recompute here.
         }
     }
 
