@@ -846,14 +846,19 @@ class PageView(
      * for prefetch and eviction; the view's own page is [openPage].
      */
     private suspend fun showPage(pageId: String) {
-        pageDataManager.setPage(pageId)
+        val record = pageDataManager.setPage(pageId)
         openPageRef.set(OpenPage(pageId))
-        loadOpenPage(pageId)
+        publishLoaded(OpenPage.load(pageDataManager, pageId, record))
     }
 
-    /** Loads [pageId]'s record and publishes it, unless this view has moved to another page meanwhile. */
+    /** Reads [pageId]'s record again and publishes it, for example after its background changed. */
     private suspend fun loadOpenPage(pageId: String) {
-        val loaded = OpenPage.load(pageDataManager, pageId)
+        val record = pageDataManager.getPageRecord(pageId)
+        publishLoaded(OpenPage.load(pageDataManager, pageId, record))
+    }
+
+    /** Publishes [loaded], unless this view has moved to another page meanwhile. */
+    private fun publishLoaded(loaded: OpenPage) {
         openPageRef.updateAndGet { it.withLoaded(loaded) }
     }
 

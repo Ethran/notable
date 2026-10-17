@@ -42,9 +42,8 @@ data class OpenPage(
     companion object {
         private val log = ShipBook.getLogger("OpenPage")
 
-        /** Read the page record and its position in the notebook. */
-        suspend fun load(pageDataManager: PageDataManager, pageId: String): OpenPage {
-            val record = pageDataManager.getPageRecord(pageId)
+        /** Snapshot of [pageId] from its already-read [record]; looks up its position in the notebook. */
+        suspend fun load(pageDataManager: PageDataManager, pageId: String, record: Page?): OpenPage {
             if (record == null) {
                 log.e("Page($pageId) not found")
                 return OpenPage(pageId)

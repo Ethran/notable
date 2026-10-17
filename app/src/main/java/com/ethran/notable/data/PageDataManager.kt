@@ -825,17 +825,20 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    /*
-     * Sets current page, and starts loading it from db.
+    /**
+     * Marks [pageId] as the page in front, for prefetch and eviction. Returns its record, or null if
+     * the page is not in the database.
      */
-    suspend fun setPage(pageId: String) {
-        pageFromDb = appRepository.pageRepository.getById(pageId)
-        if (pageFromDb == null) {
+    suspend fun setPage(pageId: String): Page? {
+        val page = appRepository.pageRepository.getById(pageId)
+        pageFromDb = page
+        if (page == null) {
             log.e("Page($pageId) not found;")
             appEventBus.tryEmit(AppEvent.ActionHint("Page not found", 2000))
-            return
+            return null
         }
         synchronized(lock) { entries[pageId]?.let { touchLocked(it) } }
+        return page
     }
 
     fun getCachedBitmap(pageId: String): Bitmap? = synchronized(lock) {
