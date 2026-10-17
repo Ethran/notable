@@ -842,8 +842,9 @@ class PageView(
 
 
     /**
-     * Makes [pageId] this view's page. [PageDataManager.setPage] only marks it as the page in front,
-     * for prefetch and eviction; the view's own page is [openPage].
+     * Makes [pageId] this view's page, published through [openPage]. [PageDataManager.setPage] marks
+     * it as the page in front, which [PageDataManager] still uses for loading, prefetch, eviction and
+     * edit timestamps.
      */
     private suspend fun showPage(pageId: String) {
         val record = pageDataManager.setPage(pageId)

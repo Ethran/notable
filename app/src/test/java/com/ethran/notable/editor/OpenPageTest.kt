@@ -25,9 +25,10 @@ class OpenPageTest {
     }
 
     @Test
-    fun loads_finishing_out_of_order_leave_the_last_page_shown() {
-        // Two quick page turns, a -> b -> c, as PageView.changePage runs them: each sets an
-        // unloaded snapshot, then publishes its load. c's load finishes before b's.
+    fun late_load_for_a_left_page_does_not_replace_the_current_one() {
+        // Two page turns, a -> b -> c, whose unloaded snapshots are set in order and whose loads
+        // finish out of order: c's before b's. Only the load step is checked here; the order in
+        // which concurrent page turns set their unloaded snapshots is not.
         val ref = AtomicReference(loaded("a", "blank"))
         ref.set(OpenPage("b"))
         ref.set(OpenPage("c"))

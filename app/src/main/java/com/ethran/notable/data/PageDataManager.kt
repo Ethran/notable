@@ -826,8 +826,8 @@ class PageDataManager @Inject constructor(
     }
 
     /**
-     * Marks [pageId] as the page in front, for prefetch and eviction. Returns its record, or null if
-     * the page is not in the database.
+     * Marks [pageId] as the page in front, used for loading, prefetch, eviction and edit timestamps.
+     * Returns its record, or null if the page is not in the database.
      */
     suspend fun setPage(pageId: String): Page? {
         val page = appRepository.pageRepository.getById(pageId)
