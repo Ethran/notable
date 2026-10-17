@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+tone_instructions: "Be helpful and encouraging. Explain why changes are suggested. Be strict about PR scope: if a PR mixes concerns or is too large to review, say so first and propose a concrete split."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
+
+  suggested_labels: true
+  auto_apply_labels: true
+  labeling_instructions:
+    - label: "needs-split"
+      instructions: "Apply when the \"Focused, reviewable scope\" pre-merge check fails."
+    - label: "database"
+      instructions: "Apply when the PR changes a Room @Entity, Db.kt, Migrations.kt, or adds a file under app/schemas/."
+    - label: "translation"
+      instructions: "Apply when the PR only changes files under app/src/main/res/values-*/."
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "draft"
+    ignore_usernames:
+      - "dependabot[bot]"
+
+  path_filters:
+    - "!**/build/**"
+    - "!**/*.png"
+    - "!**/*.webp"
+    - "!gradle/wrapper/**"
+
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        This is an open source project. Contributors may be first-time contributors.
+        Be constructive and explain the reasoning behind suggestions.
+        Before line-level comments, judge whether this PR should be split: a feature mixed with
+        a refactor, rename, or formatting pass; unrelated fixes bundled together; preparatory
+        refactors that could land first; independent layers (data model, logic, UI) that could be
+        separate PRs. If a split makes sense, post one comment listing the proposed PRs in merge
+        order. Don't propose splits that would leave an intermediate PR broken or pointless.
+        Smaller PRs don't require splitting.
+        Flag files that are only reformatted with no functional change.
+    - path: "app/src/test/**"
+      instructions: |
+        Verify that tests have meaningful assertions.
+        Flag tests that test implementation details rather than behavior.
+    - path: "app/src/androidTest/**"
+      instructions: |
+        Verify that tests have meaningful assertions.
+        Flag tests that test implementation details rather than behavior.
+    - path: "app/src/main/java/com/ethran/notable/editor/**"
+      instructions: |
+        Drawing and input path on Onyx BOOX e-ink devices; latency matters most here.
+        Flag I/O, database access, or other blocking work on the main or render thread.
+        Flag object allocations inside per-point or per-frame loops (touch handling, stroke
+        drawing). Flag screen refresh or Onyx SDK calls that could cause extra full-screen
+        refreshes or flicker.
+    - path: "app/src/main/res/values-*/strings.xml"
+      instructions: |
+        Translations. Check that every string keeps the same format placeholders (%s, %d, %1$s)
+        and markup as the matching string in values/strings.xml. Don't comment on wording.
+    - path: ".github/workflows/**"
+      instructions: |
+        Workflows using pull_request_target must never check out or run code from the PR.
+        Flag secrets or write-scoped tokens exposed to steps that handle PR-controlled input.
+    - path: "app/src/main/java/com/ethran/notable/data/db/**"
+      instructions: |
+        Any change to a Room @Entity requires a DB version bump in Db.kt, an AutoMigration there or
+        a manual migration in Migrations.kt, and a new schema snapshot under app/schemas/.
+        Flag a missing piece as a blocking issue.
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    custom_checks:
+      - name: "Focused, reviewable scope"
+        mode: "warning"
+        instructions: |
+          Count changed lines as additions + deletions, excluding app/src/test/**,
+          app/src/androidTest/**, app/schemas/**, docs/** and Markdown files.
+          FAIL if the PR mixes unrelated concerns (e.g. a feature plus an unrelated refactor,
+          rename, or formatting pass, or several unrelated fixes), or if it has more than 500
+          changed lines and could be split into smaller PRs that each build and make sense on
+          their own. When failing, list the proposed PRs in merge order. PASS otherwise.
+
+  tools:
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
+    detekt:
+      enabled: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CONTRIBUTING.md"
+      - files: "docs/file-structure.md"
+        applyTo: "app/src/main/**"

@@ -1,0 +1,62 @@
+name: PR Size
+# Size limits and the "first PR must be small" rule are described in CONTRIBUTING.md.
+# pull_request_target lets this label and close fork PRs; no PR code is checked out or run.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      size: ${{ steps.size.outputs.sizeLabel }}
+    steps:
+      - id: size
+        uses: pascalgn/size-label-action@v0.5.7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IGNORED: |
+            app/schemas/**
+            docs/**
+            **/*.md
+            **/src/test/**
+            **/src/androidTest/**
+        with:
+          sizes: >
+            {
+              "0": "XS",
+              "10": "S",
+              "100": "M",
+              "300": "L",
+              "1000": "XL"
+            }
+
+  close-large-first-pr:
+    needs: label
+    # FIRST_TIMER / FIRST_TIME_CONTRIBUTOR / NONE: the author has no commits in this repo yet.
+    # The size action only reads the first 30 changed files, so a PR touching more than 30 files is treated as large.
+    # Add the "allow-large" label to a PR to exempt it.
+    if: >
+      github.event.pull_request.user.type != 'Bot'
+      && contains(fromJSON('["FIRST_TIMER","FIRST_TIME_CONTRIBUTOR","NONE"]'), github.event.pull_request.author_association)
+      && (contains(needs.label.outputs.size, 'size/L') || contains(needs.label.outputs.size, 'size/XL')
+          || github.event.pull_request.changed_files > 30)
+      && !contains(github.event.pull_request.labels.*.name, 'allow-large')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - run: gh pr close "$PR" --repo "$REPO" --comment "$MESSAGE"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          MESSAGE: |
+            Thanks for wanting to contribute to Notable!
+
+            This PR was closed automatically: a first contribution here has to be small (up to ~300 changed lines, not counting tests, schemas and docs, and at most 30 files). See [CONTRIBUTING.md](https://github.com/Ethran/notable/blob/main/CONTRIBUTING.md#pull-request-size).
+
+            Please split out a small, self-contained part and open that first. Once you've had a PR merged, larger ones are welcome. If you think this PR should be an exception, ask in a comment or open an issue.
