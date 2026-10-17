@@ -177,7 +177,7 @@ sealed class EditorUiEvent {
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val appRepository: AppRepository,
+    val appRepository: AppRepository,
     private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,

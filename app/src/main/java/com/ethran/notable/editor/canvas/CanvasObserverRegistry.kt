@@ -343,7 +343,8 @@ class CanvasObserverRegistry(
         observerScope.launch {
             CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
                 if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — scrub already ended
-                val pageNumber = pageDataManager.getPageNumberInCurrentNotebook(pageId)
+                val pageNumber = page.openPage.record?.notebookId
+                    ?.let { viewModel.appRepository.getPageNumber(it, pageId) }
                 val pageUpdatedAtMs = pageDataManager.getPageUpdatedAt(pageId)
 
                 log.d("QuickNav IO load started for page $pageId")
