@@ -22,6 +22,7 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageLease
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
@@ -87,6 +88,8 @@ class PageView(
     var viewWidth: Int,
     var viewHeight: Int,
     val snackManager: SnackState,
+    /** Called with each page this view starts showing, once it holds the page's lease. */
+    private val onPageShown: (pageId: String) -> Unit = {},
 ) {
     // TODO: unify width height variable
 
@@ -120,6 +123,11 @@ class PageView(
         set(value) = pageDataManager.setBackground(currentPageId, value)
 
     private val openPageRef = AtomicReference(OpenPage(initialPageId))
+
+    // The lease on the shown page, taken by [setOpenPage] and dropped by [releasePage].
+    private val pageLock = Any()
+    private var lease: PageLease? = null // guarded by pageLock
+    private var disposed = false // guarded by pageLock
 
     /** Current snapshot of this view's page. Read it once into a local to use several fields together. */
     val openPage: OpenPage
@@ -273,6 +281,7 @@ class PageView(
     fun disposeOldPage() {
         log.d("Dispose old page")
         pageDataManager.onExit(currentPageId, windowedBitmap, coroutineScope)
+        releasePage()
         cleanJob()
     }
 
@@ -285,17 +294,14 @@ class PageView(
         }
     }
 
-    /** Loads [page]'s strokes and images, then prefetches its neighbors. */
+    /** Loads [page]'s strokes and images. */
     private fun loadPage(page: OpenPage) {
 //        loadingJob?.cancel()
         val pageId = page.pageId
-        val neighborIds = page.neighborIds
         logCache.i("Init from persist layer, pageId: $pageId")
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
             try {
-                // Stop loading pages flipped past, so they don't compete with this one.
-                pageDataManager.cancelLoadsExcept(neighborIds.toSet() + pageId)
                 snackManager.showSnackDuring(text = "Loading strokes...") {
                     val timeToLoad = measureTimeMillis {
                         logCache.d("Start page loading, id $pageId")
@@ -315,13 +321,6 @@ class PageView(
                 logCache.d("Loaded page from persistent layer $pageId")
                 if (!pageDataManager.validatePageDataLoaded(pageId))
                     logCache.e("Page should be loaded, but it is not. $pageId")
-                // Admission control already evicts to fit before this load, so this trim is only a
-                // safety net for an under-estimate (actual > estimate); run it at load completion,
-                // not after a magic delay. Then prefetch neighbors into whatever budget is left.
-                coroutineScope.launch(Dispatchers.Default) {
-                    pageDataManager.trimToBudget()
-                    pageDataManager.prefetch(neighborIds)
-                }
 //                sleep(10000)
 
             } catch (_: CancellationException) {
@@ -822,16 +821,42 @@ class PageView(
 
     /**
      * Makes [pageId] this view's page, published through [openPage], and returns its loaded
-     * snapshot. [PageDataManager.setPage] marks it as the page in front, which [PageDataManager]
-     * never evicts.
+     * snapshot.
      */
     private suspend fun showPage(pageId: String): OpenPage {
-        val record = pageDataManager.setPage(pageId)
+        val record = pageDataManager.getPageRecord(pageId)
+        if (record == null)
+            snackManager.showOrUpdateSnack(SnackConf(text = "Page not found", duration = 2000))
         record?.let { pageDataManager.restorePageScroll(pageId, it.scroll) }
-        openPageRef.set(OpenPage(pageId))
+        setOpenPage(pageId)
         val loaded = OpenPage.load(appRepository, pageId, record)
         publishLoaded(loaded)
         return loaded
+    }
+
+    /**
+     * Publishes [pageId] as this view's page and leases it in place of the page shown before, so
+     * [PageDataManager] keeps it while it is shown, then reports it to [onPageShown]. Does nothing
+     * once the view is disposed.
+     */
+    private fun setOpenPage(pageId: String) {
+        synchronized(pageLock) {
+            if (disposed) return
+            val previous = lease
+            lease = pageDataManager.acquire(pageId)
+            previous?.close()
+            openPageRef.set(OpenPage(pageId))
+        }
+        onPageShown(pageId)
+    }
+
+    /** Releases the shown page; the view shows no page after this. */
+    private fun releasePage() {
+        synchronized(pageLock) {
+            disposed = true
+            lease?.close()
+            lease = null
+        }
     }
 
     /** Reads [pageId]'s record again and publishes it, for example after its background changed. */
