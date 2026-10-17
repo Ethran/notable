@@ -54,7 +54,7 @@ class SyncOrchestrator @Inject constructor(
 
         try {
             log.i(TAG, "Starting full sync...")
-            saveEdits()
+            saveEdits().onFailure { return@withContext failStep(it) }
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
 
             val settings = kvProxy.getSyncSettings()
@@ -296,7 +296,7 @@ class SyncOrchestrator @Inject constructor(
     private suspend fun runSingleNotebookSync(notebookId: String): AppResult<Unit, DomainError> {
         val settings = kvProxy.getSyncSettings()
         if (!settings.syncEnabled) return AppResult.Success(Unit)
-        saveEdits()
+        saveEdits().onFailure { return AppResult.Error(it) }
         // Wifi constraint not satisfied -> planned no-op, the same policy as any other sync.
         if (syncPreflightService.checkWifiConstraint() is AppResult.Error) return AppResult.Success(Unit)
         if (settings.username.isBlank() || settings.password.isBlank()) {
@@ -314,11 +314,13 @@ class SyncOrchestrator @Inject constructor(
 
     /**
      * Writes the editor's pending edits to the database. Sync reads pages and their edit timestamps
-     * from there, so every sync calls this before it starts.
+     * from there, so every sync calls this before it starts, and stops if it fails: [PageSaver]
+     * retries the edits it could not write, and a retry after the sync would write them over what
+     * the sync downloaded.
      */
-    private suspend fun saveEdits() {
-        pageSaver.saveAll()
-    }
+    private suspend fun saveEdits(): AppResult<Unit, DomainError> =
+        if (pageSaver.saveAll()) AppResult.Success(Unit)
+        else AppResult.Error(DomainError.SyncError("Recent edits could not be saved; sync will try again later"))
 
     suspend fun syncFromPageId(pageId: String) {
         val settings = kvProxy.getSyncSettings()
@@ -428,7 +430,10 @@ class SyncOrchestrator @Inject constructor(
         if (!syncMutex.tryLock()) return@withContext AppResult.Error(DomainError.SyncInProgress)
         try {
             reporter.beginStep(SyncStep.SYNCING_NOTEBOOKS, PROGRESS_SYNCING_NOTEBOOKS, details)
-            saveEdits()
+            saveEdits().onFailure {
+                reporter.finishError(it, false)
+                return@withContext AppResult.Error(it)
+            }
             block().also { result ->
                 when (result) {
                     is AppResult.Success -> reporter.finishSuccess(SyncSummary(0, 0, 0, 0))
@@ -546,6 +551,7 @@ class SyncOrchestrator @Inject constructor(
             webDavClientFactory.create(settings.serverUrl, settings.username, settings.password)
         syncPreflightService.checkWifiConstraint().onFailure { return AppResult.Error(it) }
         syncPreflightService.checkClockSkew(client).onFailure { return AppResult.Error(it) }
+        saveEdits().onFailure { return AppResult.Error(it) }
         return AppResult.Success(client)
     }
 
