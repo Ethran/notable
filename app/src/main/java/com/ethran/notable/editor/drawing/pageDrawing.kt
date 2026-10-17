@@ -146,8 +146,9 @@ fun drawOnCanvasFromPage(
     ignoredImageIds: List<String> = listOf(),
 ): AppResult<Unit, DomainError> {
     val zoomLevel = page.zoomLevel.value
-    val backgroundType = page.pageDataManager.getBackgroundType() ?: BackgroundType.Native
-    val background = page.pageDataManager.getBackgroundName()
+    val shown = page.openPage
+    val backgroundType = shown.backgroundType ?: BackgroundType.Native
+    val background = shown.backgroundName
     pageDrawingLog.d("drawOnCanvasFromPage, zoom: $zoomLevel, background: $background, type: $backgroundType")
 
     var persistentError: DomainError? = null

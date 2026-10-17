@@ -189,13 +189,6 @@ class PageDataManager @Inject constructor(
     private val currentPage: String
         get() = pageFromDb?.id.orEmpty()
 
-    @Volatile
-    private var currentPageNumber = -1
-
-    fun getCurrentPageId(): String {
-        return currentPage
-    }
-
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val saveTopic = MutableSharedFlow<String>()
@@ -832,26 +825,20 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    /*
-     * Sets current page, and starts loading it from db.
+    /**
+     * Marks [pageId] as the page in front, used for loading, prefetch, eviction and edit timestamps.
+     * Returns its record, or null if the page is not in the database.
      */
-    suspend fun setPage(pageId: String) {
-        pageFromDb = appRepository.pageRepository.getById(pageId)
-        if (pageFromDb == null) {
+    suspend fun setPage(pageId: String): Page? {
+        val page = appRepository.pageRepository.getById(pageId)
+        pageFromDb = page
+        if (page == null) {
             log.e("Page($pageId) not found;")
             appEventBus.tryEmit(AppEvent.ActionHint("Page not found", 2000))
-            currentPageNumber = -1
-            return
-        }
-        pageFromDb?.notebookId?.let { notebookId ->
-            currentPageNumber = appRepository.getPageNumber(notebookId, pageId)
+            return null
         }
         synchronized(lock) { entries[pageId]?.let { touchLocked(it) } }
-    }
-
-    suspend fun refreshPageFromDb(pageId: String) {
-        pageFromDb = appRepository.pageRepository.getById(pageId)
-        log.i("Refresh current page, background: ${pageFromDb?.background}")
+        return page
     }
 
     fun getCachedBitmap(pageId: String): Bitmap? = synchronized(lock) {
@@ -898,21 +885,6 @@ class PageDataManager @Inject constructor(
 
     fun setPageZoom(pageId: String, zoom: Float) {
         viewport.setZoom(pageId, zoom)
-    }
-
-
-    fun isTransformationAllowedForCurrentPage(): Boolean {
-        return when (pageFromDb?.backgroundType) {
-            "native", null -> true
-            "coverImage" -> false
-            else -> true
-        }
-    }
-
-    fun getCurrentPageNumber(): Int {
-        if (currentPageNumber == -1)
-            log.d("Current page number: $currentPageNumber")
-        return currentPageNumber
     }
 
     fun getStrokes(pageId: String): List<Stroke> = synchronized(lock) {
@@ -1062,29 +1034,26 @@ class PageDataManager @Inject constructor(
         appRepository.bookRepository.update(notebook)
     }
 
-    fun setScrollInDb() {
+    fun setScrollInDb(pageId: String) {
+        if (pageId.isEmpty()) return
         launchDbWrite("scroll") {
             appRepository.pageRepository.updateScroll(
-                currentPage,
-                getPageScroll(currentPage).y.toInt()
+                pageId,
+                getPageScroll(pageId).y.toInt()
             )
         }
     }
 
-    fun getBackgroundType(): BackgroundType? {
-        return pageFromDb?.getBackgroundType()
-    }
+    /** The page record for [pageId]. [pageFromDb] only holds the page set last by any view. */
+    suspend fun getPageRecord(pageId: String): Page? =
+        appRepository.pageRepository.getById(pageId)
+
+    /** Position of [pageId] within [notebookId]. */
+    suspend fun getPageNumber(notebookId: String, pageId: String): Int =
+        appRepository.getPageNumber(notebookId, pageId)
 
     suspend fun getPageUpdatedAt(pageId: String): Long? {
         return appRepository.pageRepository.getById(pageId)?.updatedAt?.time
-    }
-
-    fun getBackgroundName(): String {
-        return pageFromDb?.background ?: "blank"
-    }
-
-    fun setCurrentBackground(background: CachedBackground) {
-        setBackground(currentPage, background)
     }
 
     fun setBackground(pageId: String, background: CachedBackground) {
@@ -1136,15 +1105,15 @@ class PageDataManager @Inject constructor(
     }
 
     /**
-     * Retrieves the cached background for the current page, or a default empty [CachedBackground]
-     * if none is linked (prevents null-pointer crashes downstream).
+     * Retrieves the cached background for [pageId], or a default empty [CachedBackground] if none
+     * is linked (prevents null-pointer crashes downstream).
      */
-    fun getCurrentBackground(): CachedBackground {
+    fun getBackground(pageId: String): CachedBackground {
         return synchronized(lock) {
-            val key = entries[currentPage]?.backgroundKey
+            val key = entries[pageId]?.backgroundKey
             val bg = if (key != null) backgroundCache[key] else null
             bg?.let { it.lastAccessSeq = ++bgAccessSeq }
-            log.d("Background for page $currentPage (no. $currentPageNumber): $bg")
+            log.d("Background for page $pageId: $bg")
             bg ?: CachedBackground("", 0, 1.0f)
         }
     }
