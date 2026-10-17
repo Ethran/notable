@@ -28,7 +28,8 @@ data class PageMemoryRow(
     val loaded: Boolean,
     val loading: Boolean,
     val pinned: Boolean,
-    val isCurrent: Boolean,
+    /** Shown somewhere: held by a [PageLease]. */
+    val leased: Boolean,
     /** LRU stamp. Lowest among unpinned pages is evicted first. */
     val lastAccessSeq: Long,
 )
@@ -77,7 +78,7 @@ data class MemorySnapshot(
     val entryBytes: Long,
     val backgroundCapBytes: Long,
     val backgroundBytes: Long,
-    val currentPageId: String?,
+    val leasedPageIds: List<String>,
     val pages: List<PageMemoryRow>,
     val backgrounds: List<BackgroundMemoryRow>,
 ) {

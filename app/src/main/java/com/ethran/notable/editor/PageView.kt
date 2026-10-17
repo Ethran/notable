@@ -22,6 +22,7 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageLease
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
@@ -87,6 +88,8 @@ class PageView(
     var viewWidth: Int,
     var viewHeight: Int,
     val snackManager: SnackState,
+    /** Called with each page this view starts showing, once it holds the page's lease. */
+    private val onPageShown: (pageId: String) -> Unit = {},
 ) {
     // TODO: unify width height variable
 
@@ -120,6 +123,15 @@ class PageView(
         set(value) = pageDataManager.setBackground(currentPageId, value)
 
     private val openPageRef = AtomicReference(OpenPage(initialPageId))
+
+    // The page [changePage] last asked for. Requests are shown one at a time, in order, and one
+    // replaced by a newer request before its turn is skipped.
+    private val requestedPageId = MutableStateFlow(initialPageId)
+
+    // The lease on the shown page, taken by [setOpenPage] and dropped by [releasePage].
+    private val pageLock = Any()
+    private var lease: PageLease? = null // guarded by pageLock
+    private var disposed = false // guarded by pageLock
 
     /** Current snapshot of this view's page. Read it once into a local to use several fields together. */
     val openPage: OpenPage
@@ -207,6 +219,10 @@ class PageView(
             loadPage(shown)
             log.d("Page loaded (Init with id: $currentPageId)")
             pageDataManager.collectAndPersistBitmapsBatch(context, coroutineScope)
+
+            requestedPageId.collect { pageId ->
+                if (pageId != currentPageId) switchToPage(pageId)
+            }
         }
     }
 
@@ -226,39 +242,44 @@ class PageView(
      * 7.  If no cached bitmap is available, it creates a new bitmap and canvas from scratch.
      * 8.  Launches a coroutine to load the page's content (strokes, images) asynchronously and refreshes the UI.
      *
+     * Page changes run one at a time, in the order they are asked for; when several are asked for
+     * while one runs, only the last of them is shown.
+     *
      * @param newPageId The unique identifier of the page to switch to.
      */
     fun changePage(newPageId: String) {
+        log.d("changePage requested: $currentPageId -> $newPageId")
+        requestedPageId.value = newPageId
+    }
+
+    private suspend fun switchToPage(newPageId: String) {
         val oldId = currentPageId
         log.d("changePage Entry: $oldId -> $newPageId")
-
-        coroutineScope.launch(Dispatchers.IO) {
-            pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
-            val shown = showPage(newPageId)
-            zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
-            pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
-                log.i("PageView: using cached bitmap")
-                windowedBitmap = cached
-                windowedCanvas = Canvas(windowedBitmap)
-                // Check if we have correct size of canvas
-                if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
-                    updateCanvasDimensions()
-            } ?: run {
-                log.i("PageView.changePage: creating new bitmap")
-                recreateCanvas()
-                pageDataManager.cacheBitmap(newPageId, windowedBitmap)
-            }
-
-            log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
-
-            // Refresh UI without waiting for drawing.
-            // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
-            //  using function that does not wait for drawing mostly solved the problem.
-            //  but there might be still bugs with it.
-            CanvasEventBus.refreshUiImmediately.emit(Unit)
-            loadPage(shown)
-            log.d("Page loaded (updatePageID($currentPageId))")
+        pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
+        val shown = showPage(newPageId)
+        zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
+        pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
+            log.i("PageView: using cached bitmap")
+            windowedBitmap = cached
+            windowedCanvas = Canvas(windowedBitmap)
+            // Check if we have correct size of canvas
+            if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
+                updateCanvasDimensions()
+        } ?: run {
+            log.i("PageView.changePage: creating new bitmap")
+            recreateCanvas()
+            pageDataManager.cacheBitmap(newPageId, windowedBitmap)
         }
+
+        log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
+
+        // Refresh UI without waiting for drawing.
+        // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
+        //  using function that does not wait for drawing mostly solved the problem.
+        //  but there might be still bugs with it.
+        CanvasEventBus.refreshUiImmediately.emit(Unit)
+        loadPage(shown)
+        log.d("Page loaded (updatePageID($currentPageId))")
     }
 
     private fun recreateCanvas() {
@@ -273,6 +294,7 @@ class PageView(
     fun disposeOldPage() {
         log.d("Dispose old page")
         pageDataManager.onExit(currentPageId, windowedBitmap, coroutineScope)
+        releasePage()
         cleanJob()
     }
 
@@ -285,17 +307,15 @@ class PageView(
         }
     }
 
-    /** Loads [page]'s strokes and images, then prefetches its neighbors. */
+    /** Loads [page]'s strokes and images, and stops waiting for the page shown before. */
     private fun loadPage(page: OpenPage) {
-//        loadingJob?.cancel()
+        // Only the wait is cancelled; [PageDataManager] decides whether the load itself goes on.
+        loadingJob?.cancel()
         val pageId = page.pageId
-        val neighborIds = page.neighborIds
         logCache.i("Init from persist layer, pageId: $pageId")
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
         loadingJob = coroutineScope.launch(Dispatchers.IO) {
             try {
-                // Stop loading pages flipped past, so they don't compete with this one.
-                pageDataManager.cancelLoadsExcept(neighborIds.toSet() + pageId)
                 snackManager.showSnackDuring(text = "Loading strokes...") {
                     val timeToLoad = measureTimeMillis {
                         logCache.d("Start page loading, id $pageId")
@@ -315,13 +335,6 @@ class PageView(
                 logCache.d("Loaded page from persistent layer $pageId")
                 if (!pageDataManager.validatePageDataLoaded(pageId))
                     logCache.e("Page should be loaded, but it is not. $pageId")
-                // Admission control already evicts to fit before this load, so this trim is only a
-                // safety net for an under-estimate (actual > estimate); run it at load completion,
-                // not after a magic delay. Then prefetch neighbors into whatever budget is left.
-                coroutineScope.launch(Dispatchers.Default) {
-                    pageDataManager.trimToBudget()
-                    pageDataManager.prefetch(neighborIds)
-                }
 //                sleep(10000)
 
             } catch (_: CancellationException) {
@@ -822,16 +835,42 @@ class PageView(
 
     /**
      * Makes [pageId] this view's page, published through [openPage], and returns its loaded
-     * snapshot. [PageDataManager.setPage] marks it as the page in front, which [PageDataManager]
-     * never evicts.
+     * snapshot.
      */
     private suspend fun showPage(pageId: String): OpenPage {
-        val record = pageDataManager.setPage(pageId)
+        val record = pageDataManager.getPageRecord(pageId)
+        if (record == null)
+            snackManager.showOrUpdateSnack(SnackConf(text = "Page not found", duration = 2000))
         record?.let { pageDataManager.restorePageScroll(pageId, it.scroll) }
-        openPageRef.set(OpenPage(pageId))
+        setOpenPage(pageId)
         val loaded = OpenPage.load(appRepository, pageId, record)
         publishLoaded(loaded)
         return loaded
+    }
+
+    /**
+     * Publishes [pageId] as this view's page and leases it in place of the page shown before, so
+     * [PageDataManager] keeps it while it is shown, then reports it to [onPageShown]. Does nothing
+     * once the view is disposed.
+     */
+    private fun setOpenPage(pageId: String) {
+        synchronized(pageLock) {
+            if (disposed) return
+            val previous = lease
+            lease = pageDataManager.acquire(pageId)
+            previous?.close()
+            openPageRef.set(OpenPage(pageId))
+        }
+        onPageShown(pageId)
+    }
+
+    /** Releases the shown page; the view shows no page after this. */
+    private fun releasePage() {
+        synchronized(pageLock) {
+            disposed = true
+            lease?.close()
+            lease = null
+        }
     }
 
     /** Reads [pageId]'s record again and publishes it, for example after its background changed. */
