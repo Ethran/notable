@@ -32,6 +32,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.LastOpenedPageTarget
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.AppSettings
@@ -162,10 +163,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var isInitialized by remember { mutableStateOf(false) }
+            var lastOpenedPageTarget by remember { mutableStateOf<LastOpenedPageTarget?>(null) }
 
             LaunchedEffect(Unit) {
                 if (hasUsableStorage(this@MainActivity)) {
-                    withContext(Dispatchers.IO) {
+                    lastOpenedPageTarget = withContext(Dispatchers.IO) {
                         // Init app settings, also do migration
                         val savedSettings =
                             kvProxy.get().getOrDefault(
@@ -179,6 +181,7 @@ class MainActivity : ComponentActivity() {
                         pageDataManager.get()
                             .registerComponentCallbacks(this@MainActivity.applicationContext)
                         editorSettingCacheManager.get().init()
+                        appRepositoryLazy.get().resolveLastOpenedPage()
                     }
                     restorePeriodicSyncSchedule()
                     // Trigger initial sync on app startup (fails silently if offline)
@@ -197,6 +200,8 @@ class MainActivity : ComponentActivity() {
                             appRepository = appRepositoryLazy.get(),
                             deepLinks = deepLinkFlow,
                             deepLinkResolver = deepLinkResolver.get(),
+                            initialPageId = lastOpenedPageTarget?.pageId,
+                            initialNotebookId = lastOpenedPageTarget?.notebookId,
                         )
                     } else {
                         ShowInitMessage()

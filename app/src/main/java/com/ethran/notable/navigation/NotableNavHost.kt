@@ -5,6 +5,8 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -29,6 +31,7 @@ import com.ethran.notable.ui.views.SystemInformationView
 import com.ethran.notable.ui.views.WelcomeDestination
 import com.ethran.notable.ui.views.WelcomeView
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.launch
 
 private val log = ShipBook.getLogger("NotableNavHost")
 
@@ -39,6 +42,7 @@ fun NotableNavHost(
     modifier: Modifier = Modifier,
     appNavigator: NotableNavigator
 ) {
+    val coroutineScope = rememberCoroutineScope()
 
     Box(modifier = modifier.fillMaxSize()) {
         NavHost(
@@ -111,6 +115,9 @@ fun NotableNavHost(
                 val bookId = backStackEntry.arguments?.getString(EditorDestination.BOOK_ID_ARG)
 
                 val currentPageId = appNavigator.resolveAndSyncPageId(backStackEntry)
+                LaunchedEffect(currentPageId) {
+                    appRepository.recordLastOpenedPage(currentPageId)
+                }
 
                 EditorView(
                     goToLibrary = {appNavigator.goToLibrary(it)},
@@ -125,6 +132,9 @@ fun NotableNavHost(
                             backStackEntry,
                             newPageId
                         )
+                        coroutineScope.launch {
+                            appRepository.recordLastOpenedPage(newPageId)
+                        }
                     }
                 )
             }

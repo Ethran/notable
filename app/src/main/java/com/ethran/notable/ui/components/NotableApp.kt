@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.gestures.quickNavGesture
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.navigation.DeepLinkHandler
 import com.ethran.notable.navigation.DeepLinkResolver
@@ -31,8 +32,12 @@ fun NotableApp(
     appRepository: AppRepository,
     deepLinks: Flow<DeepLink>,
     deepLinkResolver: DeepLinkResolver,
+    initialPageId: String? = null,
+    initialNotebookId: String? = null,
 ) {
-    val appNavState = rememberNotableAppState()
+    val appNavState = rememberNotableAppState(
+        initialRoute = initialPageId?.let { EditorDestination.createRoute(it, initialNotebookId) }
+    )
     DeepLinkHandler(deepLinks, deepLinkResolver, appNavState, snackDispatcher)
     Box(
         Modifier
