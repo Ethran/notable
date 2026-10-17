@@ -3,22 +3,13 @@ package com.ethran.notable.testing
 import android.content.Context
 import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
-import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.db.AppDatabase
-import com.ethran.notable.data.db.BookRepository
-import com.ethran.notable.data.db.CryptoHelper
-import com.ethran.notable.data.db.FolderRepository
-import com.ethran.notable.data.db.ImageRepository
-import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.KvRepository
-import com.ethran.notable.data.db.NotebookSyncStateRepository
-import com.ethran.notable.data.db.PageRepository
-import com.ethran.notable.data.db.PageSyncStateRepository
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
-import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.SelectionState
@@ -42,33 +33,12 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 /** Builds a real [EditorViewModel] backed by an in-memory Room DB, mocking side-effecting deps. */
 internal fun createEditorViewModelForTest(context: Context, db: AppDatabase): EditorViewModel {
-    val bookRepository = BookRepository(db.notebookDao(), db.pageDao())
-    val pageRepository = PageRepository(db.pageDao())
-    val strokeRepository = StrokeRepository(db.strokeDao())
-    val imageRepository = ImageRepository(db.ImageDao())
-    val folderRepository = FolderRepository(db.folderDao())
-
-    val kvRepository = KvRepository(db.kvDao(), context)
-    val kvProxy = KvProxy(kvRepository, CryptoHelper())
-
-    val notebookSyncStateRepository = NotebookSyncStateRepository(db.notebookSyncStateDao())
-    val pageSyncStateRepository = PageSyncStateRepository(db.pageSyncStateDao())
-    val appRepository = AppRepository(
-        bookRepository = bookRepository,
-        pageRepository = pageRepository,
-        strokeRepository = strokeRepository,
-        imageRepository = imageRepository,
-        folderRepository = folderRepository,
-        notebookSyncStateRepository = notebookSyncStateRepository,
-        pageSyncStateRepository = pageSyncStateRepository,
-        kvProxy = kvProxy,
-        db = db,
-    )
-
-    val editorSettingCacheManager = EditorSettingCacheManager(kvRepository)
+    val appRepository = createAppRepositoryForTest(context, db)
+    val editorSettingCacheManager = EditorSettingCacheManager(KvRepository(db.kvDao(), context))
 
     val exportEngine = mockk<ExportEngine>(relaxed = true)
     val pageDataManager = mockk<PageDataManager>(relaxed = true)
+    val pageSaver = mockk<PageSaver>(relaxed = true)
     val syncOrchestrator = mockk<SyncOrchestrator>(relaxed = true).also {
         coEvery { it.syncFromPageId(any()) } returns Unit
     }
@@ -86,6 +56,7 @@ internal fun createEditorViewModelForTest(context: Context, db: AppDatabase): Ed
         editorSettingCacheManager = editorSettingCacheManager,
         exportEngine = exportEngine,
         pageDataManager = pageDataManager,
+        pageSaver = pageSaver,
         syncOrchestrator = syncOrchestrator,
         snackDispatcher = snackDispatcher,
         historyFactory = historyFactory,
