@@ -555,11 +555,14 @@ class PageDataManager @Inject constructor(
         ensureBackgroundLoaded(pageId)
     }
 
-    /** Cancels and removes every page still loading, except those in [keep]. */
+    /**
+     * Cancels and removes every page still loading, except those in [keep] and [currentPage]: a
+     * caller that has not caught up with a page change must not stop the load of the page in front.
+     */
     fun cancelLoadsExcept(keep: Set<String>) {
         synchronized(lock) {
             val toCancel = entries
-                .filter { (id, e) -> e.loadJob?.isActive == true && id !in keep }
+                .filter { (id, e) -> e.loadJob?.isActive == true && id !in keep && id != currentPage }
                 .keys.toList()
             for (id in toCancel) {
                 entries[id]?.loadJob?.cancel()
