@@ -248,20 +248,33 @@ fun getPdfPageCount(uri: String): Int {
     }
 }
 
+/**
+ * Wait until [filePath] exists, is non-empty and its size has stopped changing for
+ * [settleMs]. A writer that recreates the file (delete + write) makes it non-empty long before it
+ * is complete; returning on the first byte hands a truncated PDF to the renderer.
+ */
 suspend fun waitForFileAvailable(
     filePath: String,
-    timeoutMs: Long = 5000
+    timeoutMs: Long = 5000,
+    settleMs: Long = 150,
 ): Boolean {
     val file = File(filePath)
     val start = System.currentTimeMillis()
     var intervalMs: Long = 5
     var count = 1
+    var lastLength = -1L
+    var stableSince = 0L
     while (System.currentTimeMillis() - start < timeoutMs) {
-        if (file.exists() && file.length() > 0) {
-            return true
+        val length = if (file.exists()) file.length() else 0L
+        val now = System.currentTimeMillis()
+        if (length > 0 && length == lastLength) {
+            if (now - stableSince >= settleMs) return true
+        } else {
+            lastLength = length
+            stableSince = now
         }
         delay(intervalMs.milliseconds)
-        intervalMs += count * count // Quadratic growth
+        intervalMs = (intervalMs + count * count).coerceAtMost(settleMs) // Quadratic growth
         count++
     }
     return false
