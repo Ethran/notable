@@ -189,13 +189,6 @@ class PageDataManager @Inject constructor(
     private val currentPage: String
         get() = pageFromDb?.id.orEmpty()
 
-    @Volatile
-    private var currentPageNumber = -1
-
-    fun getCurrentPageId(): String {
-        return currentPage
-    }
-
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val saveTopic = MutableSharedFlow<String>()
@@ -840,18 +833,9 @@ class PageDataManager @Inject constructor(
         if (pageFromDb == null) {
             log.e("Page($pageId) not found;")
             appEventBus.tryEmit(AppEvent.ActionHint("Page not found", 2000))
-            currentPageNumber = -1
             return
         }
-        pageFromDb?.notebookId?.let { notebookId ->
-            currentPageNumber = appRepository.getPageNumber(notebookId, pageId)
-        }
         synchronized(lock) { entries[pageId]?.let { touchLocked(it) } }
-    }
-
-    suspend fun refreshPageFromDb(pageId: String) {
-        pageFromDb = appRepository.pageRepository.getById(pageId)
-        log.i("Refresh current page, background: ${pageFromDb?.background}")
     }
 
     fun getCachedBitmap(pageId: String): Bitmap? = synchronized(lock) {
@@ -898,21 +882,6 @@ class PageDataManager @Inject constructor(
 
     fun setPageZoom(pageId: String, zoom: Float) {
         viewport.setZoom(pageId, zoom)
-    }
-
-
-    fun isTransformationAllowedForCurrentPage(): Boolean {
-        return when (pageFromDb?.backgroundType) {
-            "native", null -> true
-            "coverImage" -> false
-            else -> true
-        }
-    }
-
-    fun getCurrentPageNumber(): Int {
-        if (currentPageNumber == -1)
-            log.d("Current page number: $currentPageNumber")
-        return currentPageNumber
     }
 
     fun getStrokes(pageId: String): List<Stroke> = synchronized(lock) {
@@ -1062,9 +1031,6 @@ class PageDataManager @Inject constructor(
         appRepository.bookRepository.update(notebook)
     }
 
-    fun setScrollInDb() = setScrollInDb(currentPage)
-
-    /** Keyed variant. The no-arg form writes [currentPage], the page set last by any view. */
     fun setScrollInDb(pageId: String) {
         if (pageId.isEmpty()) return
         launchDbWrite("scroll") {
@@ -1075,28 +1041,16 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    fun getBackgroundType(): BackgroundType? {
-        return pageFromDb?.getBackgroundType()
-    }
-
     /** The page record for [pageId]. [pageFromDb] only holds the page set last by any view. */
     suspend fun getPageRecord(pageId: String): Page? =
         appRepository.pageRepository.getById(pageId)
 
-    /** Position of [pageId] within [notebookId]. Keyed counterpart to [getCurrentPageNumber]. */
+    /** Position of [pageId] within [notebookId]. */
     suspend fun getPageNumber(notebookId: String, pageId: String): Int =
         appRepository.getPageNumber(notebookId, pageId)
 
     suspend fun getPageUpdatedAt(pageId: String): Long? {
         return appRepository.pageRepository.getById(pageId)?.updatedAt?.time
-    }
-
-    fun getBackgroundName(): String {
-        return pageFromDb?.background ?: "blank"
-    }
-
-    fun setCurrentBackground(background: CachedBackground) {
-        setBackground(currentPage, background)
     }
 
     fun setBackground(pageId: String, background: CachedBackground) {
@@ -1148,12 +1102,9 @@ class PageDataManager @Inject constructor(
     }
 
     /**
-     * Retrieves the cached background for the current page, or a default empty [CachedBackground]
-     * if none is linked (prevents null-pointer crashes downstream).
+     * Retrieves the cached background for [pageId], or a default empty [CachedBackground] if none
+     * is linked (prevents null-pointer crashes downstream).
      */
-    fun getCurrentBackground(): CachedBackground = getBackground(currentPage)
-
-    /** Keyed variant. Backgrounds are already stored per page and pooled, so only the key changes. */
     fun getBackground(pageId: String): CachedBackground {
         return synchronized(lock) {
             val key = entries[pageId]?.backgroundKey
