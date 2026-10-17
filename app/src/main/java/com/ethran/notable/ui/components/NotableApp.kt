@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.gestures.quickNavGesture
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.editor.EditorDestination
 import com.ethran.notable.navigation.NotableNavHost
 import com.ethran.notable.navigation.rememberNotableAppState
 import com.ethran.notable.ui.SnackBar
@@ -24,9 +25,13 @@ fun NotableApp(
     exportEngine: ExportEngine,
     snackState: SnackState,
     snackDispatcher: SnackDispatcher,
-    appRepository: AppRepository
+    appRepository: AppRepository,
+    initialPageId: String? = null,
+    initialNotebookId: String? = null,
 ) {
-    val appNavState = rememberNotableAppState()
+    val appNavState = rememberNotableAppState(
+        initialRoute = initialPageId?.let { EditorDestination.createRoute(it, initialNotebookId) }
+    )
     Box(
         Modifier
             .background(Color.White)

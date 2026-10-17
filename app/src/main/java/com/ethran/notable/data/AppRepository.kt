@@ -39,6 +39,27 @@ class AppRepository @Inject constructor(
     val kvProxy: KvProxy,
     private val db: AppDatabase
 ) {
+    suspend fun resolveLastOpenedPage(): LastOpenedPageTarget? {
+        val settings = GlobalAppSettings.current
+        val pageId = settings.lastOpenedPageId ?: return null
+        val target = resolveLastOpenedPage(settings, pageRepository.getById(pageId))
+        if (target == null && settings.reopenLastNoteOnLaunch) {
+            val updated = settings.copy(lastOpenedPageId = null)
+            GlobalAppSettings.update(updated)
+            kvProxy.setAppSettings(updated)
+        }
+        return target
+    }
+
+    suspend fun recordLastOpenedPage(pageId: String) {
+        val settings = GlobalAppSettings.current
+        if (!settings.reopenLastNoteOnLaunch) return
+        if (pageId.isBlank() || settings.lastOpenedPageId == pageId) return
+        val updated = settings.copy(lastOpenedPageId = pageId)
+        GlobalAppSettings.update(updated)
+        kvProxy.setAppSettings(updated)
+    }
+
     /**
      * The atomic sync commit point, at page granularity. In one Room
      * transaction: mark the notebook synced, upsert the freshly transferred pages' [PageSyncState]
