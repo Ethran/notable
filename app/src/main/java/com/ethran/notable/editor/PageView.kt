@@ -124,6 +124,10 @@ class PageView(
 
     private val openPageRef = AtomicReference(OpenPage(initialPageId))
 
+    // The page [changePage] last asked for. Requests are shown one at a time, in order, and one
+    // replaced by a newer request before its turn is skipped.
+    private val requestedPageId = MutableStateFlow(initialPageId)
+
     // The lease on the shown page, taken by [setOpenPage] and dropped by [releasePage].
     private val pageLock = Any()
     private var lease: PageLease? = null // guarded by pageLock
@@ -215,6 +219,10 @@ class PageView(
             loadPage(shown)
             log.d("Page loaded (Init with id: $currentPageId)")
             pageDataManager.collectAndPersistBitmapsBatch(context, coroutineScope)
+
+            requestedPageId.collect { pageId ->
+                if (pageId != currentPageId) switchToPage(pageId)
+            }
         }
     }
 
@@ -234,39 +242,44 @@ class PageView(
      * 7.  If no cached bitmap is available, it creates a new bitmap and canvas from scratch.
      * 8.  Launches a coroutine to load the page's content (strokes, images) asynchronously and refreshes the UI.
      *
+     * Page changes run one at a time, in the order they are asked for; when several are asked for
+     * while one runs, only the last of them is shown.
+     *
      * @param newPageId The unique identifier of the page to switch to.
      */
     fun changePage(newPageId: String) {
+        log.d("changePage requested: $currentPageId -> $newPageId")
+        requestedPageId.value = newPageId
+    }
+
+    private suspend fun switchToPage(newPageId: String) {
         val oldId = currentPageId
         log.d("changePage Entry: $oldId -> $newPageId")
-
-        coroutineScope.launch(Dispatchers.IO) {
-            pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
-            val shown = showPage(newPageId)
-            zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
-            pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
-                log.i("PageView: using cached bitmap")
-                windowedBitmap = cached
-                windowedCanvas = Canvas(windowedBitmap)
-                // Check if we have correct size of canvas
-                if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
-                    updateCanvasDimensions()
-            } ?: run {
-                log.i("PageView.changePage: creating new bitmap")
-                recreateCanvas()
-                pageDataManager.cacheBitmap(newPageId, windowedBitmap)
-            }
-
-            log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
-
-            // Refresh UI without waiting for drawing.
-            // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
-            //  using function that does not wait for drawing mostly solved the problem.
-            //  but there might be still bugs with it.
-            CanvasEventBus.refreshUiImmediately.emit(Unit)
-            loadPage(shown)
-            log.d("Page loaded (updatePageID($currentPageId))")
+        pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
+        val shown = showPage(newPageId)
+        zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
+        pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
+            log.i("PageView: using cached bitmap")
+            windowedBitmap = cached
+            windowedCanvas = Canvas(windowedBitmap)
+            // Check if we have correct size of canvas
+            if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
+                updateCanvasDimensions()
+        } ?: run {
+            log.i("PageView.changePage: creating new bitmap")
+            recreateCanvas()
+            pageDataManager.cacheBitmap(newPageId, windowedBitmap)
         }
+
+        log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
+
+        // Refresh UI without waiting for drawing.
+        // TODO: Problem: Sometimes refreshUi had a problem with proper refreshing screen,
+        //  using function that does not wait for drawing mostly solved the problem.
+        //  but there might be still bugs with it.
+        CanvasEventBus.refreshUiImmediately.emit(Unit)
+        loadPage(shown)
+        log.d("Page loaded (updatePageID($currentPageId))")
     }
 
     private fun recreateCanvas() {
@@ -294,9 +307,10 @@ class PageView(
         }
     }
 
-    /** Loads [page]'s strokes and images. */
+    /** Loads [page]'s strokes and images, and stops waiting for the page shown before. */
     private fun loadPage(page: OpenPage) {
-//        loadingJob?.cancel()
+        // Only the wait is cancelled; [PageDataManager] decides whether the load itself goes on.
+        loadingJob?.cancel()
         val pageId = page.pageId
         logCache.i("Init from persist layer, pageId: $pageId")
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
