@@ -66,6 +66,13 @@ fun GeneralSettings(
             })
 
         SettingToggleRow(
+            label = stringResource(R.string.reopen_last_note_on_launch),
+            value = settings.reopenLastNoteOnLaunch,
+            onToggle = { isChecked ->
+                onSettingsChange(settings.copy(reopenLastNoteOnLaunch = isChecked))
+            })
+
+        SettingToggleRow(
             label = stringResource(R.string.paginate_pdf),
             value = settings.paginatePdf,
             onToggle = { isChecked ->
