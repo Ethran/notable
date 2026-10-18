@@ -5,6 +5,8 @@ import androidx.room.withTransaction
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,16 +32,16 @@ import kotlin.time.Duration.Companion.milliseconds
  * collected in one transaction, together with the edit timestamps of the pages and notebooks.
  *
  * Code that reads page content from the database — export, sync — calls [saveAll] first, so it
- * sees every edit made so far, and stops if it returns false. The editor never needs to:
+ * sees every edit made so far, and stops if it returns an error. The editor never needs to:
  * [PageDataManager] lays unsaved edits over whatever it loads. Other readers (duplicating a page,
  * thumbnails) don't call it. They miss the edits not saved yet — usually those of the last
  * [IDLE_DELAY_MS], up to [MAX_DELAY_MS] of them during continuous editing, more while writes fail —
  * and a thumbnail rendered before the save counts as stale after it, since the save bumps the page's
  * edit timestamp.
  *
- * A failed write keeps its changes unsaved, is reported to the user and is retried, at most a minute
- * apart, for as long as the app runs. Changes still unsaved when the process ends are lost. Changes
- * to a page deleted meanwhile are dropped.
+ * A failed write keeps its changes unsaved and is retried, at most a minute apart, for as long as
+ * the app runs. Until a save succeeds a warning stays on screen: edits still unsaved when the process
+ * ends are lost. Changes to a page deleted meanwhile are dropped.
  *
  * A singleton injected into the editor, the only source of edits, so it exists whenever edits do;
  * once created it runs for the rest of the process.
@@ -58,24 +60,42 @@ class PageSaver @Inject constructor(
     // order their changes were taken and an older version of a stroke never overwrites a newer one.
     private val saveMutex = Mutex()
 
+    // Whether the warning that edits can't be saved is up. Guarded by [saveMutex].
+    private var warningShown = false
+
     init {
         scope.launch { saveAfterEdits() }
     }
 
     /**
      * Writes every edit made so far and returns once it is in the database, or has failed to be
-     * written and stays unsaved. Returns whether everything was saved.
+     * written and stays unsaved. Returns an error if any page could not be saved.
      */
-    suspend fun saveAll(): Boolean = saveMutex.withLock {
+    suspend fun saveAll(): AppResult<Unit, DomainError> = saveMutex.withLock {
         val changes = pageDataManager.takeUnsaved()
-        if (changes.isEmpty()) return@withLock true
-        var failed: Set<String> = changes.keys
-        try {
-            failed = write(changes)
-        } finally {
-            pageDataManager.finishSaving(failed)
+        if (changes.isEmpty()) return@withLock AppResult.Success(Unit)
+        val failed = try {
+            write(changes)
+        } catch (e: Throwable) {
+            pageDataManager.finishSaving(changes.keys)
+            throw e
         }
-        failed.isEmpty()
+        pageDataManager.finishSaving(failed.keys)
+
+        val cause = failed.values.firstOrNull()
+        if (cause == null) {
+            if (warningShown) appEventBus.tryEmit(AppEvent.DismissMessage(AppEvent.EDITS_NOT_SAVED_ID))
+            warningShown = false
+            return@withLock AppResult.Success(Unit)
+        }
+        val error = DomainError.DatabaseError(
+            "Edits of ${failed.size} page(s) could not be saved: ${cause.message ?: cause::class.simpleName}"
+        )
+        // Shown on every failure and kept until a save succeeds, so edits that are not being saved
+        // never go unnoticed, even if the warning was dismissed.
+        appEventBus.tryEmit(AppEvent.EditsNotSaved(error.userMessage))
+        warningShown = true
+        AppResult.Error(error)
     }
 
     /** Starts [saveAll] without waiting for it, for when the app may be stopped soon. */
@@ -94,9 +114,7 @@ class PageSaver @Inject constructor(
                 if (wait <= 0 || withTimeoutOrNull(wait.milliseconds) { edited.receive() } == null) break
             }
             var retryDelay = RETRY_MIN_DELAY_MS
-            while (!saveAll()) {
-                if (retryDelay == RETRY_MIN_DELAY_MS)
-                    appEventBus.tryEmit(AppEvent.ActionHint("Could not save changes, retrying", 3000))
+            while (saveAll() is AppResult.Error) {
                 delay(retryDelay.milliseconds)
                 retryDelay = (retryDelay * 2).coerceAtMost(RETRY_MAX_DELAY_MS)
             }
@@ -105,21 +123,21 @@ class PageSaver @Inject constructor(
 
     /**
      * Writes [changes] in one transaction, or page by page if that fails, so one failing page
-     * doesn't hold back the others. Returns the pages whose changes could not be written.
+     * doesn't hold back the others. Returns the pages whose changes could not be written, with why.
      */
-    private suspend fun write(changes: Map<String, PageChanges>): Set<String> {
+    private suspend fun write(changes: Map<String, PageChanges>): Map<String, Exception> {
         try {
             db.withTransaction {
                 changes.forEach { (pageId, pageChanges) -> writePage(pageId, pageChanges) }
             }
-            return emptySet()
+            return emptyMap()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             log.w("Saving ${changes.size} page(s) together failed, saving them one by one: ${e.message}")
         }
 
-        val failed = HashSet<String>()
+        val failed = HashMap<String, Exception>()
         for ((pageId, pageChanges) in changes) {
             try {
                 db.withTransaction { writePage(pageId, pageChanges) }
@@ -127,14 +145,8 @@ class PageSaver @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 if (pageExists(pageId)) {
-                    failed += pageId
+                    failed[pageId] = e
                     log.e("Saving page $pageId failed: ${e.message}", e)
-                    appEventBus.tryEmit(
-                        AppEvent.LogMessage(
-                            reason = "PageSaver.write",
-                            message = "Saving page $pageId failed: ${e::class.simpleName}: ${e.message}"
-                        )
-                    )
                 } else {
                     log.w("Page $pageId was deleted, dropping its unsaved changes")
                 }

@@ -13,6 +13,7 @@ import com.ethran.notable.testing.movedDown
 import com.ethran.notable.testing.testImage
 import com.ethran.notable.testing.testStroke
 import com.ethran.notable.testing.waitForCondition
+import com.ethran.notable.utils.AppResult
 import com.ethran.notable.ui.SnackState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -104,7 +105,7 @@ class PageViewportTest {
         }
 
         view.disposeOldPage()
-        assertTrue(data.pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
         for (pageId in pages) {
             assertEquals(
                 "saved scroll of $pageId",
@@ -166,7 +167,7 @@ class PageViewportTest {
 
         assertEquals(PageViewport(scroll = Offset(0f, 300f)), view.viewport.value)
         view.disposeOldPage()
-        assertTrue(data.pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
         assertEquals(300, data.db.pageDao().getById(pageId)!!.scroll)
     }
 
