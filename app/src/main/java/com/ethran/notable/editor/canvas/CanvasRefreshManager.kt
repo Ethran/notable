@@ -30,7 +30,7 @@ class CanvasRefreshManager(
     private val log = ShipBook.getLogger("DrawCanvas")
 
     fun refreshUi(dirtyRect: Rect?) {
-        log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoomLevel.value}")
+        log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoom}")
 
         // post what page drawn to visible surface
         drawCanvasToView(dirtyRect)
