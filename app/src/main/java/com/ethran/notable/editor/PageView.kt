@@ -92,7 +92,10 @@ class PageView(
     var viewWidth: Int,
     var viewHeight: Int,
     val snackManager: SnackState,
-    /** Called with each page this view starts showing, once it holds the page's lease. */
+    /**
+     * Called with each page this view starts showing, once it holds the page's lease. It runs under
+     * the view's page lock, so it must only hand the id on.
+     */
     private val onPageShown: (pageId: String) -> Unit = {},
 ) {
     // TODO: unify width height variable
@@ -132,7 +135,7 @@ class PageView(
     // replaced by a newer request before its turn is skipped.
     private val requestedPageId = MutableStateFlow(initialPageId)
 
-    // The lease on the shown page, taken by [setOpenPage] and dropped by [releasePage].
+    // The lease on the shown page, taken by [setOpenPage] and dropped by [markDisposed].
     private val pageLock = Any()
     private var lease: PageLease? = null // guarded by pageLock
     private var disposed = false // guarded by pageLock
@@ -232,31 +235,27 @@ class PageView(
     }
 
     /**
-     * Switches the `PageView` to display a different page.
-     * **It doesn't notify the UI about the change.**
-     *
-     * This function handles the entire process of transitioning from the current page to a new one specified by `newPageId`.
-     * It performs the following steps:
-     * 1.  Saves the state of the old page, including persisting its bitmap representation to disk.
-     * 2.  Updates the internal `currentPageId` to `newPageId`.
-     * 3.  Fetches the new page's data from the repository.
-     * 4.  Updates the `pageDataManager` to the new page context.
-     * 5.  Restores the zoom level for the new page.
-     * 6.  Attempts to load a cached bitmap for the new page. If a cached bitmap exists and its dimensions
-     *     match the current view, it's used directly. If dimensions differ, the canvas is resized.
-     * 7.  If no cached bitmap is available, it creates a new bitmap and canvas from scratch.
-     * 8.  Launches a coroutine to load the page's content (strokes, images) asynchronously and refreshes the UI.
+     * Asks the view to show [newPageId]. **It doesn't notify the UI about the change.**
      *
      * Page changes run one at a time, in the order they are asked for; when several are asked for
-     * while one runs, only the last of them is shown.
-     *
-     * @param newPageId The unique identifier of the page to switch to.
+     * while one runs, only the last of them is shown (see [switchToPage]).
      */
     fun changePage(newPageId: String) {
         log.d("changePage requested: $currentPageId -> $newPageId")
         requestedPageId.value = newPageId
     }
 
+    /**
+     * Shows [newPageId] in place of the current page:
+     * 1.  Keeps the old page's bitmap in [PageDataManager] for its next showing and its preview.
+     * 2.  Reads the new page's record and shows the page (see [setOpenPage]): it takes the page's
+     *     lease and the viewport the page had when this view left it, or else its saved scroll.
+     * 3.  Uses the page's cached bitmap if it shows that viewport, resizing the canvas if the view
+     *     size changed; otherwise draws a new bitmap.
+     * 4.  Loads the page's strokes and images in the background and redraws once they are in.
+     *
+     * Stops after step 1 once the view is disposed.
+     */
     private suspend fun switchToPage(newPageId: String) {
         val oldId = currentPageId
         log.d("changePage Entry: $oldId -> $newPageId")
@@ -301,7 +300,7 @@ class PageView(
     fun disposeOldPage() {
         log.d("Dispose old page")
         pageDataManager.onExit(currentPageId, windowedBitmap, viewport.value, coroutineScope)
-        releasePage()
+        markDisposed()
         cleanJob()
     }
 
@@ -343,16 +342,12 @@ class PageView(
             // TODO: If we put it in loadPage(…) sometimes it will try to refresh
             //  without seeing strokes, I have no idea why.
             coroutineScope.launch(Dispatchers.Main) {
-//                delay(100)
                 CanvasEventBus.forceUpdate.emit(null)
             }
-//            sleep(5000)
 
             logCache.d("Loaded page from persistent layer $pageId")
             if (!pageDataManager.validatePageDataLoaded(pageId))
                 logCache.e("Page should be loaded, but it is not. $pageId")
-//            sleep(10000)
-
         } catch (_: CancellationException) {
             val dataStatus = pageDataManager.validatePageDataLoaded(pageId)
             logCache.d("Page loading cancelled, data was loaded correctly: $dataStatus")
@@ -879,14 +874,18 @@ class PageView(
             openPageRef.set(OpenPage(pageId))
             viewportFlow.value =
                 leftPages.remove(pageId) ?: PageViewport(scroll = Offset(0f, savedScrollY.toFloat()))
+            // Under the lock, so no page is reported after [disposeOldPage] returns.
+            onPageShown(pageId)
         }
         updateContentHeight()
-        onPageShown(pageId)
         return true
     }
 
-    /** Releases the shown page; the view shows no page after this. */
-    private fun releasePage() {
+    /**
+     * Marks the view disposed and closes its lease. A disposed view shows, draws and loads nothing
+     * more; [openPage] keeps the last page it showed.
+     */
+    private fun markDisposed() {
         synchronized(pageLock) {
             disposed = true
             lease?.close()

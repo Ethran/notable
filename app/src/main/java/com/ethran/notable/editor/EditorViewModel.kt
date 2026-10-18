@@ -45,7 +45,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -195,7 +194,8 @@ class EditorViewModel @Inject constructor(
     private val _toolbarState = MutableStateFlow(ToolbarUiState())
     val toolbarState: StateFlow<ToolbarUiState> = _toolbarState.asStateFlow()
 
-    // The page the [PageView] shows, set by [onPageShown]; drives [prefetchAround].
+    // The page the [PageView] shows, set by [onPageShown], or null while no view is open; drives
+    // [prefetchAround].
     private val shownPageId = MutableStateFlow<String?>(null)
 
     init {
@@ -224,7 +224,7 @@ class EditorViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch(Dispatchers.IO) {
-            shownPageId.filterNotNull().collectLatest { prefetchAround(it) }
+            shownPageId.collectLatest { pageId -> pageId?.let { prefetchAround(it) } }
         }
     }
 
@@ -286,6 +286,8 @@ class EditorViewModel @Inject constructor(
 
         // 3. Cleanup page resources
         page.disposeOldPage()
+        // Stops loading pages around it; a view opened again starts over, even on the same page.
+        shownPageId.value = null
 
         // Save the edits now rather than after the usual delay: the screens shown next, page
         // previews and duplication, read pages from the database.

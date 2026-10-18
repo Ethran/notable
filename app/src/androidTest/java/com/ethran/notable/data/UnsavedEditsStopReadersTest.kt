@@ -16,6 +16,7 @@ import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportOptions
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.io.PageContentRenderer
+import com.ethran.notable.io.XoppFile
 import com.ethran.notable.sync.FolderSyncService
 import com.ethran.notable.sync.NotebookConflictResolution
 import com.ethran.notable.sync.NotebookReconciliationService
@@ -40,6 +41,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -48,6 +50,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.IOException
 
 /**
  * Export and sync read pages from the database, so when [PageSaver] cannot write the editor's edits
@@ -89,38 +92,79 @@ class UnsavedEditsStopReadersTest {
     /** A linked export runs in the background, so whatever keeps it from updating its file must be told. */
     @Test(timeout = 30000)
     fun linkedExport_tellsTheUser_wheneverItsFileIsNotUpdated() {
+        val folder = File(context.cacheDir, "linked-folder").also { it.mkdirs() }
         val deletedFolder = File(context.cacheDir, "deleted-linked-folder").also { it.deleteRecursively() }
-        val notebook = Notebook(id = "book", linkedExternalUri = deletedFolder.toUri().toString())
-        val failures = listOf<Pair<String, (BookRepository, PageSaver) -> Unit>>(
-            "edits cannot be saved" to { books, saver ->
-                coEvery { books.getById("book") } returns notebook
+        fun linkedTo(dir: File) = Notebook(id = "book", linkedExternalUri = dir.toUri().toString())
+        // Each failure keeps everything else working, so only that one can stop the file update.
+        val failures = listOf<Pair<String, (BookRepository, PageSaver, XoppFile) -> Unit>>(
+            "edits cannot be saved" to { books, saver, _ ->
+                coEvery { books.getById("book") } returns linkedTo(folder)
                 coEvery { saver.saveAll() } returns false
             },
-            "linked folder is gone" to { books, saver ->
-                coEvery { books.getById("book") } returns notebook
+            "linked folder is gone" to { books, saver, _ ->
+                coEvery { books.getById("book") } returns linkedTo(deletedFolder)
                 coEvery { saver.saveAll() } returns true
             },
-            "notebook cannot be read" to { books, _ ->
+            "file cannot be written" to { books, saver, xopp ->
+                coEvery { books.getById("book") } returns linkedTo(folder)
+                coEvery { saver.saveAll() } returns true
+                coEvery { xopp.writeToXoppStream(any(), any()) } throws IOException("disk full")
+            },
+            "notebook cannot be read" to { books, _, _ ->
                 coEvery { books.getById("book") } throws IllegalStateException("database closed")
             },
         )
-        for ((name, failure) in failures) {
-            val bookRepository = mockk<BookRepository>(relaxed = true)
-            val saver = mockk<PageSaver>()
-            failure(bookRepository, saver)
+        try {
+            for ((name, failure) in failures) {
+                val bookRepository = mockk<BookRepository>(relaxed = true)
+                val saver = mockk<PageSaver>()
+                val xoppFile = mockk<XoppFile>(relaxed = true)
+                failure(bookRepository, saver, xoppFile)
+                val eventBus = mockk<AppEventBus>(relaxed = true)
+                val exportEngine = ExportEngine(
+                    context, mockk(relaxed = true), mockk(relaxed = true), bookRepository,
+                    mockk(relaxed = true), eventBus, saver, Dispatchers.IO, scope,
+                ).also { it.xoppFile = xoppFile }
+
+                exportEngine.exportToLinkedFileAsync("book")
+
+                try {
+                    coVerify(timeout = 5000) { eventBus.emit(match { it is AppEvent.LogMessage && it.isError }) }
+                } catch (e: AssertionError) {
+                    throw AssertionError("$name: not reported", e)
+                }
+            }
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
+    @Test(timeout = 30000)
+    fun linkedExport_reportsNothing_whenItsFileIsUpdated() = runBlocking {
+        val folder = File(context.cacheDir, "linked-folder").also { it.mkdirs() }
+        val exportScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val bookRepository = mockk<BookRepository>(relaxed = true).also {
+                coEvery { it.getById("book") } returns
+                    Notebook(id = "book", linkedExternalUri = folder.toUri().toString())
+            }
+            val saver = mockk<PageSaver>().also { coEvery { it.saveAll() } returns true }
+            val xoppFile = mockk<XoppFile>(relaxed = true)
             val eventBus = mockk<AppEventBus>(relaxed = true)
             val exportEngine = ExportEngine(
                 context, mockk(relaxed = true), mockk(relaxed = true), bookRepository,
-                mockk(relaxed = true), eventBus, saver, Dispatchers.IO, scope,
-            )
+                mockk(relaxed = true), eventBus, saver, Dispatchers.IO, exportScope,
+            ).also { it.xoppFile = xoppFile }
 
             exportEngine.exportToLinkedFileAsync("book")
+            withTimeout(5000) { exportScope.coroutineContext.job.children.forEach { it.join() } }
 
-            try {
-                coVerify(timeout = 5000) { eventBus.emit(match { it is AppEvent.LogMessage && it.isError }) }
-            } catch (e: AssertionError) {
-                throw AssertionError("$name: not reported", e)
-            }
+            coVerify { xoppFile.writeToXoppStream(any(), any()) }
+            assertTrue(folder.listFiles().orEmpty().any { it.extension == "xopp" })
+            coVerify(exactly = 0) { eventBus.emit(any()) }
+        } finally {
+            exportScope.cancel()
+            folder.deleteRecursively()
         }
     }
 

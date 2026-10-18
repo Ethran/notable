@@ -121,10 +121,11 @@ class ExportEngine @Inject constructor(
                         overwrite = true
                     )
                 )
-                if (result == EXPORT_CANCELLED_UNSAVED_EDITS)
-                    appEventBus.emit(AppEvent.LogMessage("exportToLinkedFileAsync", "Linked file not updated: $result"))
-                else
+                // An XOPP export returns the message of the one file it writes.
+                if (result.startsWith(SAVED))
                     log.i("Linked export finished: $result")
+                else
+                    appEventBus.emit(AppEvent.LogMessage("exportToLinkedFileAsync", "Linked file not updated: $result"))
             } catch (e: Exception) {
                 appEventBus.emit(
                     AppEvent.LogMessage(
@@ -537,7 +538,7 @@ class ExportEngine @Inject constructor(
                 else -> throw IOException("Unsupported Uri scheme: ${dest.scheme}")
             }
 
-            "Saved $displayName"
+            "$SAVED$displayName"
         } catch (e: OutOfMemoryError) {
             log.e("Save error (OOM): ${e.message}")
             "Not enough memory to save $displayName"
@@ -778,5 +779,8 @@ class ExportEngine @Inject constructor(
     companion object {
         /** What [export] returns when it stops because pending edits could not be saved. */
         const val EXPORT_CANCELLED_UNSAVED_EDITS = "Export cancelled: recent edits could not be saved"
+
+        /** How a message from [saveStream] starts when the file was written. */
+        private const val SAVED = "Saved "
     }
 }

@@ -77,7 +77,7 @@ class PageChangeTest {
 
     @Test(timeout = 30000)
     fun pagesAskedForWhileAPageChangeRuns_onlyTheLastIsShown_andOnlyItIsLeased() = runBlocking {
-        val (first, slow, skipped, last) = seedPages(4)
+        val (first, slow, skipped, last, after) = seedPages(5)
         val shown = ConcurrentLinkedQueue<String>()
         val slowShown = CountDownLatch(1)
         val slowMayFinish = CountDownLatch(1)
@@ -96,14 +96,13 @@ class PageChangeTest {
         view.changePage(last)
         slowMayFinish.countDown()
 
-        waitForCondition(5000) { view.currentPageId == last && isLoaded(last) }
-        // Give a page change that is still running the chance to show its page.
-        Thread.sleep(300)
-        assertEquals(listOf(first, slow, last), shown.toList())
-        assertEquals(last, view.currentPageId)
-        assertEquals(listOf(last), pageDataManager.memorySnapshot().leasedPageIds)
-        assertTrue(isLoaded(last))
-        assertEquals(data.storedStrokes(last).rows(), view.strokes.rows())
+        assertTrue(waitForCondition(5000) { view.currentPageId == last && isLoaded(last) })
+        // Page changes run in order, so one still pending would show its page before this one.
+        view.changePage(after)
+        assertTrue(waitForCondition(5000) { view.currentPageId == after && isLoaded(after) })
+        assertEquals(listOf(first, slow, last, after), shown.toList())
+        assertEquals(listOf(after), pageDataManager.memorySnapshot().leasedPageIds)
+        assertEquals(data.storedStrokes(after).rows(), view.strokes.rows())
     }
 
     private enum class CloseStep { ReadingFirstPage, ReadingNextPage, LeasingNextPage, LoadingNextPage }
@@ -136,7 +135,7 @@ class PageChangeTest {
             val closed = withTimeout(5000) { atClose.await() }
             // Let the interrupted step run to its end.
             Thread.sleep(500)
-            waitForCondition(5000) { pageDataManager.memorySnapshot().pages.none { it.loading } }
+            assertTrue(waitForCondition(5000) { pageDataManager.memorySnapshot().pages.none { it.loading } })
 
             val now = pageDataManager.memorySnapshot()
             fun MemorySnapshot.pagesWhere(has: (PageMemoryRow) -> Boolean) =
