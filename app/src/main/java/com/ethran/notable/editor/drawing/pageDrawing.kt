@@ -145,7 +145,7 @@ fun drawOnCanvasFromPage(
     ignoredStrokeIds: List<String> = listOf(),
     ignoredImageIds: List<String> = listOf(),
 ): AppResult<Unit, DomainError> {
-    val zoomLevel = page.zoomLevel.value
+    val zoomLevel = page.zoom
     val shown = page.openPage
     val backgroundType = shown.backgroundType ?: BackgroundType.Native
     val background = shown.backgroundName

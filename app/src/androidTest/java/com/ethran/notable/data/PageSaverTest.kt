@@ -1,6 +1,5 @@
 package com.ethran.notable.data
 
-import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.data.db.Image
@@ -202,8 +201,7 @@ class PageSaverTest {
         suspend fun pageUpdatedAt(id: String) = data.db.pageDao().getById(id)!!.updatedAt
         suspend fun notebookUpdatedAt(id: String) = data.db.notebookDao().getById(id)!!.updatedAt
 
-        pageDataManager.setPageScroll(pageId, Offset(0f, 750f))
-        pageDataManager.saveScroll(pageId)
+        pageDataManager.recordScroll(pageId, 750)
         assertTrue(pageSaver.saveAll())
         assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
         assertEquals(longAgo, pageUpdatedAt(pageId))

@@ -25,26 +25,29 @@ import kotlin.math.max
 
 /**
  * Vertical scroll indicator (right side).
- * Uses page.scroll.y (IntOffset) for the vertical position.
+ * Uses the vertical scroll of [PageView.viewport] and [PageView.contentHeight].
  */
 @Composable
 fun ScrollIndicator(viewModel: EditorViewModel, page: PageView) {
     val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
+    val viewport by page.viewport.collectAsStateWithLifecycle()
+    val contentHeight by page.contentHeight.collectAsStateWithLifecycle()
     BoxWithConstraints(
         modifier = Modifier
             .width(5.dp)
             .fillMaxHeight()
     ) {
         val viewportHeightPx = convertDpToPixel(this.maxHeight, LocalContext.current).toInt()
+        val scrollY = viewport.scroll.y
 
         // Total scrollable height approximation:
-        // page.height is the total content height (page coordinates)
-        // page.scroll.y + viewportHeightPx ensures indicator still shows while near bottom
-        val virtualHeight = max(page.height, page.scroll.y.toInt() + viewportHeightPx)
+        // contentHeight is the total content height (page coordinates)
+        // scrollY + viewportHeightPx ensures indicator still shows while near bottom
+        val virtualHeight = max(contentHeight, scrollY.toInt() + viewportHeightPx)
         if (virtualHeight <= viewportHeightPx) return@BoxWithConstraints
 
         val indicatorSizeDp = (viewportHeightPx / virtualHeight.toFloat()) * this.maxHeight.value
-        val indicatorPositionDp = (page.scroll.y / virtualHeight.toFloat()) * this.maxHeight.value
+        val indicatorPositionDp = (scrollY / virtualHeight.toFloat()) * this.maxHeight.value
 
         if (!toolbarState.isToolbarOpen) return@BoxWithConstraints
 
@@ -62,11 +65,12 @@ fun ScrollIndicator(viewModel: EditorViewModel, page: PageView) {
 
 /**
  * Horizontal scroll indicator (bottom).
- * Uses page.scroll.x (IntOffset) for the horizontal position.
+ * Uses the horizontal scroll of [PageView.viewport].
  */
 @Composable
 fun HorizontalScrollIndicator(viewModel: EditorViewModel, page: PageView) {
     val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
+    val viewport by page.viewport.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
         BoxWithConstraints(
@@ -75,15 +79,16 @@ fun HorizontalScrollIndicator(viewModel: EditorViewModel, page: PageView) {
                 .fillMaxWidth()
         ) {
             val viewportWidthPx = convertDpToPixel(this.maxWidth, LocalContext.current).toInt()
+            val scrollX = viewport.scroll.x
 
             // Total scrollable width approximation:
-            // page.width is the total content width (page coordinates)
-            // page.scroll.x + viewportWidthPx ensures indicator still shows while near right edge
-            val virtualWidth = max(page.viewWidth, page.scroll.x.toInt() + viewportWidthPx)
+            // page.viewWidth is the total content width (page coordinates)
+            // scrollX + viewportWidthPx ensures indicator still shows while near right edge
+            val virtualWidth = max(page.viewWidth, scrollX.toInt() + viewportWidthPx)
             if (virtualWidth <= viewportWidthPx) return@BoxWithConstraints
 
             val indicatorSizeDp = (viewportWidthPx / virtualWidth.toFloat()) * this.maxWidth.value
-            val indicatorPositionDp = (page.scroll.x / virtualWidth.toFloat()) * this.maxWidth.value
+            val indicatorPositionDp = (scrollX / virtualWidth.toFloat()) * this.maxWidth.value
 
             if (!toolbarState.isToolbarOpen) return@BoxWithConstraints
 

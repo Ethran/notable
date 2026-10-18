@@ -33,6 +33,7 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 
 private val log = ShipBook.getLogger("EditorView")
 
@@ -215,7 +216,9 @@ fun EditorView(
         }
 
         // Sync PageView state to ViewModel for Toolbar rendering
-        val zoomLevel by page.zoomLevel.collectAsStateWithLifecycle()
+        // Only zoom matters here; collecting the whole viewport would recompose on every scroll.
+        val zoomFlow = remember(page) { page.viewport.map { it.zoom }.distinctUntilChanged() }
+        val zoomLevel by zoomFlow.collectAsStateWithLifecycle(page.zoom)
         val selectionActive = viewModel.selectionState.isNonEmpty()
         LaunchedEffect(
             zoomLevel, selectionActive

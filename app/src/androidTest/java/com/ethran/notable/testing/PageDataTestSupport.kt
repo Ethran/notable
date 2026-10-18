@@ -5,7 +5,6 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.BackgroundFileWatcher
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.PageSaver
-import com.ethran.notable.data.PageViewportState
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.CryptoHelper
@@ -104,7 +103,6 @@ internal class PageDataTestHarness(context: Context) {
         appRepository = appRepository,
         appEventBus = appEventBus,
         backgroundFileWatcher = BackgroundFileWatcher(appEventBus),
-        viewport = PageViewportState(),
     )
     val pageSaver by lazy { PageSaver(pageDataManager, appRepository, db, appEventBus) }
 
