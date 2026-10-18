@@ -37,8 +37,9 @@ import kotlin.time.Duration.Companion.milliseconds
  * and a thumbnail rendered before the save counts as stale after it, since the save bumps the page's
  * edit timestamp.
  *
- * A failed write keeps its changes unsaved and is retried. Changes to a page deleted meanwhile are
- * dropped.
+ * A failed write keeps its changes unsaved, is reported to the user and is retried, at most a minute
+ * apart, for as long as the app runs. Changes still unsaved when the process ends are lost. Changes
+ * to a page deleted meanwhile are dropped.
  *
  * A singleton injected into the editor, the only source of edits, so it exists whenever edits do;
  * once created it runs for the rest of the process.
@@ -154,7 +155,8 @@ class PageSaver @Inject constructor(
         if (removedImageIds.isNotEmpty()) appRepository.imageRepository.deleteAll(removedImageIds)
 
         // The page timestamp is the per-page dirty signal for incremental upload; the notebook
-        // timestamp drives the per-notebook sync Upload/Download decision.
+        // timestamp drives the per-notebook sync Upload/Download decision. A scroll alone is saved
+        // below without them, so scrolling never makes sync upload a page.
         if (changes.hasEdits) {
             val now = Date()
             appRepository.pageRepository.touchUpdatedAt(pageId, now.time)
