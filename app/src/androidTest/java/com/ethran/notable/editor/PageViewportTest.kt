@@ -65,10 +65,14 @@ class PageViewportTest {
     private suspend fun seedPages(count: Int): List<String> =
         TestNotebookSeeder.seedNotebook(data.db, pageCount = count, strokesPerPage = 5).pageIds
 
+    // Shared by every view of a test, as the app shares one.
+    private val pageLeases by lazy { PageLeases(data.pageDataManager) }
+
     private fun createPageView(pageId: String, snack: SnackState = SnackState()) = PageView(
         context = app,
         coroutineScope = viewScope,
         pageDataManager = data.pageDataManager,
+        pageLeases = pageLeases,
         appRepository = data.appRepository,
         initialPageId = pageId,
         viewWidth = 400,

@@ -69,7 +69,7 @@ class PageView(
 
 - **Responsibilities**:
     - **The shown page.** `openPage` is an immutable `OpenPage` snapshot (page id, `Page` record, position in the notebook), replaced whole on a page change. Read it once into a local to use several fields together. `changePage(pageId)` requests a page; changes run one at a time, and only the last of several requests is shown.
-    - **Holding the page.** While a page is shown, `PageView` holds its `PageLease`, so `PageDataManager` never evicts it. `disposeOldPage()` releases it; a disposed view shows, draws and loads nothing more.
+    - **Holding the page.** While a page is shown, `PageView` holds its `PageLease` from `PageLeases`, so `PageDataManager` holds the page and never evicts it. `disposeOldPage()` releases it; a disposed view shows, draws and loads nothing more.
     - **Scroll and zoom.** `viewport` is a `StateFlow<PageViewport>` (`scroll`, `zoom`) of the shown page; `scroll` and `zoom` read its current value. Pages left in this editor keep their viewport and get it back when shown again; a page shown for the first time opens unzoomed at its saved vertical scroll. Scroll and zoom are ignored until the page record is loaded, and a step running while the page changes is dropped.
     - **Content height.** `contentHeight` is a `StateFlow<Int>` with the bottom of the page's strokes and images, for the scroll indicator.
     - **Editing.** Adds, updates and removes strokes and images of the shown page through `PageDataManager`, always naming the page id.

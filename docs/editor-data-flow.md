@@ -22,6 +22,7 @@ Contents:
 | Edits not yet in the database | `PageDataManager` (`PageChanges` per page) | until `PageSaver` writes them |
 | Writing edits to the database | `PageSaver` (singleton) | the process |
 | Which page an editor shows | `PageView` (`OpenPage` snapshot) | the editor |
+| Keeping shown pages cached | `PageLeases` (views per page), through `PageDataManager.hold` | while any view shows the page |
 | Scroll and zoom | `PageView` (`PageViewport`) | the editor; vertical scroll also in `Page.scroll` |
 
 `PageDataManager` holds page data only. It knows nothing about which page is in front, nor how a
@@ -40,13 +41,14 @@ editor and the code around it.
 - **Addressed by page id.** Reads (`getStrokes(pageId)`, `getImages(pageId)`, spatial queries) and
   edits (`addStrokes(pageId, …)`, `updateImages(pageId, …)`, …) all take the page id, so a call
   made for one page can never touch another page that was shown meanwhile.
-- **Leases.** `acquire(pageId)` returns a `PageLease`. A leased page is shown somewhere: it is
-  never evicted, keeps its background when the background pool is trimmed, and is repainted when
-  its background file changes. Closing the lease releases the hold; closing it twice does nothing.
+- **Held pages.** `hold(pageId)` keeps a page until `release(pageId)`: it is never evicted, keeps
+  its background when the background pool is trimmed, and is repainted when its background file
+  changes. Which pages to hold is up to the caller: `PageLeases` (`editor/PageLeases.kt`) counts
+  the views showing each page, as `PageLease`s, and holds the page while any of them is open.
 - **Loading.** `requestPageLoadJoin(pageId)` loads a page for showing and waits for it;
   `prefetch(pageIds)` loads neighbours into spare budget without waiting. Concurrent requests for
   the same page share one load job. `cancelLoadsExcept(keep)` stops loads of pages left behind,
-  but never of a leased page.
+  but never of a held page.
 
 ---
 
@@ -117,7 +119,7 @@ editor and the code around it.
 
 - **Pages.** One `PageCacheEntry` per page holds its strokes, images, background key and the last
   screen bitmap (a `SoftReference`, tagged with its viewport). Eviction picks the least recently
-  used pages that are neither leased nor loading.
+  used pages that are neither held nor loading.
 - **Budget.** Stroke and image pages may use a fraction of the app heap. A page's cost is
   estimated before loading from its stored stroke size. A page loaded for showing evicts unpinned
   pages to fit and loads even if it still doesn't; a prefetched page is loaded only into spare
@@ -125,7 +127,7 @@ editor and the code around it.
 - **Backgrounds.** Background bitmaps are pooled and shared between pages, on their own budget
   line, so a page full of cheap strokes is never evicted because backgrounds are large.
   `BackgroundFileWatcher` watches background files and reports changed pages; their backgrounds are
-  reloaded and leased pages repainted.
+  reloaded and held pages repainted.
 - **Memory signals.** `onTrimMemory` shrinks the cache back to its budget, or drops every
   unpinned page when the app is hidden; `onLowMemory` drops every unpinned page.
 - **Previews.** The bitmaps kept on page exit are written off the main thread as thumbnails and

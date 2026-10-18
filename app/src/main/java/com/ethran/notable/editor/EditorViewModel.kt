@@ -184,6 +184,7 @@ class EditorViewModel @Inject constructor(
     private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,
+    val pageLeases: PageLeases,
     private val pageSaver: PageSaver,
     private val syncOrchestrator: SyncOrchestrator,
     val snackDispatcher: SnackDispatcher,

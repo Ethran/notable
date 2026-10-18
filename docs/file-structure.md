@@ -11,7 +11,7 @@ com.ethran.notable/
     - datastore/ — App settings and editor cache (AppSettings.kt).
     - model/ — Common data types (BackgroundType, SimplePointF).
     - AppRepository.kt — Main entry point for data operations, coordinating multiple repositories.
-    - PageDataManager.kt — In-memory page content (strokes, images, backgrounds) by page id: loading, page leases, unsaved edits.
+    - PageDataManager.kt — In-memory page content (strokes, images, backgrounds) by page id: loading, held pages, unsaved edits.
     - PageCache.kt — Cache sizing and eviction policy for PageDataManager.
     - PageSaver.kt — Writes unsaved page edits to the database.
 
@@ -30,6 +30,7 @@ com.ethran.notable/
     - EditorControlTower.kt — High-level coordination of editor components.
     - PageView.kt — The editor's view of the shown page: page changes, scroll and zoom, the screen bitmap.
     - OpenPage.kt — Snapshot of the page a PageView shows.
+    - PageLeases.kt — Leases on the pages the views show; keeps them held in PageDataManager.
     - PageViewport.kt — Scroll and zoom of a page.
 
 - io/ — File and bitmap I/O

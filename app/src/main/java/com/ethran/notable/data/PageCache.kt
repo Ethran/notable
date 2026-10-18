@@ -78,7 +78,7 @@ data class EvictCandidate(
 /**
  * Choose which pages to evict so that `currentResident - evicted + incoming <= cap`.
  *
- * Evicts only **unpinned** pages (pinned = a leased page or a page with an active load), least
+ * Evicts only **unpinned** pages (pinned = a held page or a page with an active load), least
  * recently used first (smallest [EvictCandidate.seq]). Stops as soon as the budget fits, or when no
  * unpinned candidates remain — in which case it returns *every* unpinned page and the caller loads
  * anyway (a shown page is never refused). Pure: no side effects, order is deterministic.
