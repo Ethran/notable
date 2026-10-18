@@ -71,8 +71,7 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
 
 /**
  * All in-memory state for a single cached page, owned by [PageDataManager] behind its single
- * [PageDataManager.lock]. One object per page replaces the old parallel maps and removes the
- * multi-map consistency hazard.
+ * [PageDataManager.lock]. One object per page, so a page's fields can't disagree with each other.
  *
  * Nullable collections: null == not loaded, empty list == loaded-but-empty.
  */
@@ -231,9 +230,9 @@ class PageDataManager @Inject constructor(
      * Measured from the backgrounds actually resident rather than assumed from the screen. A
      * background is rendered at screen width and the source PDF's own aspect ratio, so it is
      * routinely taller than the screen — on a 2560-wide panel a single page measured ~42 MB against
-     * a 17.6 MB screen bitmap. The previous fixed 32 MB floor was therefore smaller than one
-     * background: the cap pinned to it, every non-current background was evicted on sight, and each
-     * page turn paid a fresh render. Bounded by [maxBackgroundFloorFraction]. Must hold [lock].
+     * a 17.6 MB screen bitmap. A fixed floor can be smaller than one background: the cap would pin
+     * to it, every non-current background would be evicted on sight, and each page turn would pay a
+     * fresh render. Bounded by [maxBackgroundFloorFraction]. Must hold [lock].
      */
     private fun minBackgroundBytesLocked(): Long {
         val largestResident = backgroundCache.values.maxOfOrNull { it.bitmapBytes() } ?: 0L
@@ -1210,7 +1209,8 @@ class PageDataManager @Inject constructor(
     }
 
     /**
-     * Cancels and removes all currently loading pages, optionally ignoring [ignoredPageIds].
+     * Cancels and removes every page still loading, except [ignoredPageIds] and the page in front
+     * (see [cancelLoadsExcept]).
      */
     fun cancelLoadingPages(ignoredPageIds: List<String> = listOf()) {
         dataLoadingScope.launch {
