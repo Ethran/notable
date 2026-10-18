@@ -166,6 +166,57 @@ class AppRepository @Inject constructor(
         }
     }
 
+    /** Copies a notebook and its contents, excluding its external link. */
+    suspend fun duplicateNotebook(notebookId: String): String? = db.withTransaction {
+        val source = bookRepository.getById(notebookId) ?: return@withTransaction null
+        val duplicatedNotebook = source.copy(
+            id = UUID.randomUUID().toString(),
+            title = "${source.title} (copy)",
+            pageIds = listOf(),
+            openPageId = null,
+            linkedExternalUri = null,
+            createdAt = Date(),
+            updatedAt = Date()
+        )
+        bookRepository.createEmpty(duplicatedNotebook)
+        val newPageIds = source.pageIds.map { sourcePageId ->
+            val pageWithData = pageRepository.getWithDataById(sourcePageId)
+                ?: error("duplicateNotebook: source page $sourcePageId, referenced by notebook $notebookId, is missing; aborting copy.")
+            val duplicatedPage = pageWithData.page.copy(
+                id = UUID.randomUUID().toString(),
+                notebookId = duplicatedNotebook.id,
+                scroll = 0,
+                createdAt = Date(),
+                updatedAt = Date()
+            )
+            pageRepository.create(duplicatedPage)
+            strokeRepository.create(pageWithData.strokes.map {
+                it.copy(
+                    id = UUID.randomUUID().toString(),
+                    pageId = duplicatedPage.id,
+                    createdAt = Date(),
+                    updatedAt = Date()
+                )
+            })
+            imageRepository.create(pageWithData.images.map {
+                it.copy(
+                    id = UUID.randomUUID().toString(),
+                    pageId = duplicatedPage.id,
+                    createdAt = Date(),
+                    updatedAt = Date()
+                )
+            })
+            duplicatedPage.id
+        }
+        bookRepository.update(
+            duplicatedNotebook.copy(
+                pageIds = newPageIds,
+                openPageId = newPageIds.firstOrNull()
+            )
+        )
+        duplicatedNotebook.id
+    }
+
     suspend fun isObservable(notebookId: String?): Boolean {
         if (notebookId == null) return false
         val book = bookRepository.getById(notebookId = notebookId) ?: return false
