@@ -714,7 +714,8 @@ class EditorViewModel @Inject constructor(
         try {
             val neighborIds = neighborsOf(pageId)
             pageDataManager.cancelLoadsExcept(neighborIds.toSet() + pageId)
-            pageDataManager.requestPageLoadJoin(pageId)
+            // The view reloads the shown page's background; here only its load is waited for.
+            pageDataManager.awaitPageLoad(pageId)
             // Admission control evicts to fit before a load; this only catches an under-estimate.
             pageDataManager.trimToBudget()
             pageDataManager.prefetch(neighborIds)

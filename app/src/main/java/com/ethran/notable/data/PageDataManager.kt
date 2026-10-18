@@ -568,10 +568,19 @@ class PageDataManager @Inject constructor(
     /** Ensures that [pageId] is loaded as a shown page; suspends until load is finished. */
     suspend fun requestPageLoadJoin(pageId: String) {
         log.d("requestPageLoadJoin($pageId)")
-        getOrStartLoadingJob(pageId, isPrefetch = false)?.join()
+        awaitPageLoad(pageId)
         // Strokes may be cached from a prior visit while the background pool evicted its bitmap;
         // reload it so a shown page never draws blank.
         ensureBackgroundLoaded(pageId)
+    }
+
+    /**
+     * Loads [pageId] as a shown page and waits for its strokes and images. Unlike
+     * [requestPageLoadJoin], doesn't reload its background, so a caller that only waits for the
+     * page doesn't decode the background a second time alongside the view that draws it.
+     */
+    suspend fun awaitPageLoad(pageId: String) {
+        getOrStartLoadingJob(pageId, isPrefetch = false)?.join()
     }
 
     /**
