@@ -1,6 +1,7 @@
 package com.ethran.notable.data
 
 import android.content.Context
+import androidx.core.net.toUri
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.data.db.BookRepository
@@ -46,6 +47,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
  * Export and sync read pages from the database, so when [PageSaver] cannot write the editor's edits
@@ -84,25 +86,41 @@ class UnsavedEditsStopReadersTest {
         verify { listOf(appRepository, pageRepository, bookRepository, renderer) wasNot Called }
     }
 
+    /** A linked export runs in the background, so whatever keeps it from updating its file must be told. */
     @Test(timeout = 30000)
-    fun linkedExport_reportsThatItsFileWasNotUpdated_whenEditsCannotBeSaved() {
-        val bookRepository = mockk<BookRepository>().also {
-            coEvery { it.getById("book") } returns
-                Notebook(id = "book", linkedExternalUri = "content://linked/book.xopp")
-        }
-        val eventBus = mockk<AppEventBus>(relaxed = true)
-        val exportEngine = ExportEngine(
-            context, mockk(relaxed = true), mockk(relaxed = true), bookRepository,
-            mockk(relaxed = true), eventBus, pageSaver, Dispatchers.IO, scope,
+    fun linkedExport_tellsTheUser_wheneverItsFileIsNotUpdated() {
+        val deletedFolder = File(context.cacheDir, "deleted-linked-folder").also { it.deleteRecursively() }
+        val notebook = Notebook(id = "book", linkedExternalUri = deletedFolder.toUri().toString())
+        val failures = listOf<Pair<String, (BookRepository, PageSaver) -> Unit>>(
+            "edits cannot be saved" to { books, saver ->
+                coEvery { books.getById("book") } returns notebook
+                coEvery { saver.saveAll() } returns false
+            },
+            "linked folder is gone" to { books, saver ->
+                coEvery { books.getById("book") } returns notebook
+                coEvery { saver.saveAll() } returns true
+            },
+            "notebook cannot be read" to { books, _ ->
+                coEvery { books.getById("book") } throws IllegalStateException("database closed")
+            },
         )
+        for ((name, failure) in failures) {
+            val bookRepository = mockk<BookRepository>(relaxed = true)
+            val saver = mockk<PageSaver>()
+            failure(bookRepository, saver)
+            val eventBus = mockk<AppEventBus>(relaxed = true)
+            val exportEngine = ExportEngine(
+                context, mockk(relaxed = true), mockk(relaxed = true), bookRepository,
+                mockk(relaxed = true), eventBus, saver, Dispatchers.IO, scope,
+            )
 
-        exportEngine.exportToLinkedFileAsync("book")
+            exportEngine.exportToLinkedFileAsync("book")
 
-        coVerify(timeout = 5000) {
-            eventBus.emit(match {
-                it is AppEvent.LogMessage && it.isError &&
-                    it.message.contains(ExportEngine.EXPORT_CANCELLED_UNSAVED_EDITS)
-            })
+            try {
+                coVerify(timeout = 5000) { eventBus.emit(match { it is AppEvent.LogMessage && it.isError }) }
+            } catch (e: AssertionError) {
+                throw AssertionError("$name: not reported", e)
+            }
         }
     }
 
