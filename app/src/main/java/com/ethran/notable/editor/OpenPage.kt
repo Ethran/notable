@@ -29,8 +29,8 @@ data class OpenPage(
         get() = record?.getBackgroundType()
 
     /**
-     * Whether scroll and zoom are allowed: only once the page is loaded, so its viewport is in
-     * place, and never on a cover image, which is a fixed page.
+     * Whether scroll and zoom are allowed: only once [load] has read the page's record, so its
+     * viewport is in place, and never on a cover image, which is a fixed page.
      */
     val isTransformationAllowed: Boolean
         get() = record != null && backgroundType != BackgroundType.CoverImage
