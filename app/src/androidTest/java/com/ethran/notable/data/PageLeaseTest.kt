@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ComponentCallbacks2
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ethran.notable.editor.PageLeases
 import com.ethran.notable.testing.PageDataTestHarness
 import com.ethran.notable.testing.TestNotebookSeeder
 import com.ethran.notable.testing.rows
@@ -31,6 +32,7 @@ class PageLeaseTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
     private lateinit var data: PageDataTestHarness
     private val pageDataManager get() = data.pageDataManager
+    private val pageLeases by lazy { PageLeases(pageDataManager) }
 
     @Before
     fun setUp() {
@@ -57,8 +59,8 @@ class PageLeaseTest {
         pageDataManager.requestPageLoadJoin(leftBehind)
 
         // Two views show the page; one of them leaves it, and closes its lease twice.
-        val leaving = pageDataManager.acquire(shown)
-        val staying = pageDataManager.acquire(shown)
+        val leaving = pageLeases.acquire(shown)
+        val staying = pageLeases.acquire(shown)
         leaving.close()
         leaving.close()
 
@@ -74,7 +76,7 @@ class PageLeaseTest {
     @Test(timeout = 30000)
     fun loadOfAShownPage_isNotCancelledWhenLoadsOfOtherPagesAre() = runBlocking {
         val (pageId) = seedPages(1)
-        val lease = pageDataManager.acquire(pageId)
+        val lease = pageLeases.acquire(pageId)
         val reading = CompletableDeferred<Unit>()
         val readAllowed = CompletableDeferred<Unit>()
         data.beforePageRead = {

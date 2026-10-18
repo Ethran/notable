@@ -95,6 +95,7 @@ fun EditorView(
                 context = context,
                 coroutineScope = scope,
                 pageDataManager = viewModel.pageDataManager,
+                pageLeases = viewModel.pageLeases,
                 appRepository = viewModel.appRepository,
                 initialPageId = initialPageId,
                 viewWidth = width,

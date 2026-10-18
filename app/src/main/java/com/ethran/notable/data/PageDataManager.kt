@@ -36,11 +36,9 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
-import java.io.Closeable
 import java.io.File
 import java.lang.ref.SoftReference
 import java.security.MessageDigest
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -138,21 +136,6 @@ internal class PageChanges {
     }
 }
 
-/**
- * A hold on [pageId] taken with [PageDataManager.acquire], released by [close]. Closing it again
- * does nothing.
- */
-class PageLease internal constructor(
-    val pageId: String,
-    private val release: (pageId: String) -> Unit,
-) : Closeable {
-    private val closed = AtomicBoolean(false)
-
-    override fun close() {
-        if (closed.compareAndSet(false, true)) release(pageId)
-    }
-}
-
 // Cache manager companion object
 @Singleton
 class PageDataManager @Inject constructor(
@@ -166,7 +149,7 @@ class PageDataManager @Inject constructor(
 
     /**
      * Single lock for all cached page state ([entries], [entriesTotalBytes], [backgroundCache],
-     * per-entry fields, [leases], and the unsaved edits in [unsaved] and [saving]). A plain monitor
+     * per-entry fields, [held], and the unsaved edits in [unsaved] and [saving]). A plain monitor
      * (not a suspending Mutex) so hot non-suspend accessors (drawing, selection) can take it.
      *
      * **Invariant: nothing blocking or re-entrant runs inside `synchronized(lock)`.**
@@ -193,10 +176,10 @@ class PageDataManager @Inject constructor(
     // Insertion-ordered for stable iteration/logging; LRU is driven by [PageCacheEntry.lastAccessSeq].
     private val entries = LinkedHashMap<String, PageCacheEntry>()
 
-    // Open [PageLease]s per page id. A leased page is shown somewhere: it is never evicted, keeps its
-    // background when the pool is trimmed, and is repainted when its background file changes. Kept
-    // apart from [entries] so a lease taken before the page loads holds it from the start.
-    private val leases = HashMap<String, Int>()
+    // Pages held with [hold]: never evicted, keep their background when the pool is trimmed, and
+    // repainted when their background file changes. Kept apart from [entries] so a page held before
+    // it loads is held from the start.
+    private val held = HashSet<String>()
 
     // Running total; invariant (enforced by construction + [assertTotalsLocked]):
     //   entriesTotalBytes == entries.values.sumOf { it.sizeBytes }
@@ -263,9 +246,9 @@ class PageDataManager @Inject constructor(
         entry.lastAccessSeq = ++accessSeq
     }
 
-    /** A page is pinned (never evicted) while it is leased or has an active load. */
+    /** A page is pinned (never evicted) while it is held or has an active load. */
     private fun isPinnedLocked(pageId: String, entry: PageCacheEntry): Boolean =
-        pageId in leases || entry.loadJob?.isActive == true
+        pageId in held || entry.loadJob?.isActive == true
 
     /** Distinct background bitmaps, counted once (dedup pool) — the background budget line. */
     private fun backgroundBytesLocked(): Long =
@@ -315,7 +298,7 @@ class PageDataManager @Inject constructor(
 
     /**
      * Evict least-recently-used pooled backgrounds until the pool fits [backgroundCapLocked].
-     * Backgrounds of leased pages are never evicted. An evicted background leaves its page's
+     * Backgrounds of held pages are never evicted. An evicted background leaves its page's
      * [PageCacheEntry.backgroundKey] intact and is transparently reloaded on demand by
      * [ensureBackgroundLoaded] when that page is next shown — so this is safe for still-resident
      * pages. Must hold [lock].
@@ -324,10 +307,10 @@ class PageDataManager @Inject constructor(
         val cap = backgroundCapLocked(pendingEntryBytes)
         var total = backgroundBytesLocked()
         if (total <= cap) return
-        val leasedKeys = leases.keys.mapNotNullTo(HashSet()) { entries[it]?.backgroundKey }
+        val heldKeys = held.mapNotNullTo(HashSet()) { entries[it]?.backgroundKey }
         val victims = backgroundCache.values
             .asSequence()
-            .filter { it.id !in leasedKeys }
+            .filter { it.id !in heldKeys }
             .sortedBy { it.lastAccessSeq }
             .toList()
         var evicted = 0
@@ -420,7 +403,7 @@ class PageDataManager @Inject constructor(
                 loaded = e.loaded,
                 loading = e.loadJob?.isActive == true,
                 pinned = isPinnedLocked(id, e),
-                leased = id in leases,
+                held = id in held,
                 lastAccessSeq = e.lastAccessSeq,
             )
         }.sortedByDescending { it.sizeBytes }
@@ -447,7 +430,7 @@ class PageDataManager @Inject constructor(
             entryBytes = entriesTotalBytes,
             backgroundCapBytes = backgroundCapLocked(),
             backgroundBytes = backgroundBytesLocked(),
-            leasedPageIds = leases.keys.toList(),
+            heldPageIds = held.toList(),
             pages = pages,
             backgrounds = backgrounds,
         )
@@ -584,13 +567,13 @@ class PageDataManager @Inject constructor(
     }
 
     /**
-     * Cancels and removes every page still loading, except those in [keep] and leased ones: a
+     * Cancels and removes every page still loading, except those in [keep] and held ones: a
      * caller that has not caught up with a page change must not stop the load of a shown page.
      */
     fun cancelLoadsExcept(keep: Set<String>) {
         synchronized(lock) {
             val toCancel = entries
-                .filter { (id, e) -> e.loadJob?.isActive == true && id !in keep && id !in leases }
+                .filter { (id, e) -> e.loadJob?.isActive == true && id !in keep && id !in held }
                 .keys.toList()
             for (id in toCancel) {
                 entries[id]?.loadJob?.cancel()
@@ -758,7 +741,7 @@ class PageDataManager @Inject constructor(
 
     /**
      * Removes [pageId]'s entry after its load [job] failed or was cancelled, so the next request
-     * starts a clean load. A leased page can't be removed and keeps its unfinished entry. Leaves it
+     * starts a clean load. A held page can't be removed and keeps its unfinished entry. Leaves it
      * alone once a newer load owns it: a cancelled read of the database still runs to its end, and
      * may finish after the page was requested again.
      */
@@ -896,26 +879,21 @@ class PageDataManager @Inject constructor(
     }
 
     /**
-     * Leases [pageId] for as long as it is shown: until the lease is closed, the page is never
-     * evicted, keeps its background, and is repainted when its background file changes. A page can
-     * be leased by several holders at once. Doesn't load the page.
+     * Holds [pageId] until [release]: it is never evicted, keeps its background, and is repainted
+     * when its background file changes. Doesn't load the page.
      */
-    fun acquire(pageId: String): PageLease {
+    fun hold(pageId: String) {
         synchronized(lock) {
-            leases[pageId] = (leases[pageId] ?: 0) + 1
+            held += pageId
             entries[pageId]?.let { touchLocked(it) }
         }
-        return PageLease(pageId, ::release)
     }
 
-    private fun release(pageId: String) {
-        synchronized(lock) {
-            val count = leases[pageId] ?: return
-            if (count > 1) leases[pageId] = count - 1 else leases.remove(pageId)
-        }
+    fun release(pageId: String) {
+        synchronized(lock) { held -= pageId }
     }
 
-    private fun isLeased(pageId: String): Boolean = synchronized(lock) { pageId in leases }
+    private fun isHeld(pageId: String): Boolean = synchronized(lock) { pageId in held }
 
     fun getCachedBitmap(pageId: String): Bitmap? = synchronized(lock) {
         entries[pageId]?.bitmap?.get()?.takeIf { !it.isRecycled && it.isMutable }
@@ -1201,7 +1179,7 @@ class PageDataManager @Inject constructor(
 
     /**
      * Drops the cached background of every page whose file changed on disk, and repaints if a
-     * leased page was among them.
+     * held page was among them.
      *
      * The watcher reports page ids (already batched and de-duplicated), so the file→pages mapping
      * and its lock stay inside [BackgroundFileWatcher] instead of being read from here without one.
@@ -1213,7 +1191,7 @@ class PageDataManager @Inject constructor(
                 log.i("Background file(s) changed, invalidating pages: $pageIds")
                 for (pageId in pageIds) {
                     invalidateBackground(pageId)
-                    if (isLeased(pageId)) {
+                    if (isHeld(pageId)) {
                         CanvasEventBus.forceUpdate.emit(null)
                         appEventBus.tryEmit(
                             AppEvent.ActionHint("Background file changed", 4000)
@@ -1260,14 +1238,14 @@ class PageDataManager @Inject constructor(
 
     /**
      * Removes a page and all its resources; subtracts its bytes from the running total. Refuses to
-     * remove a leased page. Must hold [lock].
+     * remove a held page. Must hold [lock].
      */
     private fun removePageLocked(pageId: String): Boolean {
-        if (pageId in leases) {
+        if (pageId in held) {
             appEventBus.tryEmit(
                 AppEvent.LogMessage(
                     reason = "PageDataManager.removePage",
-                    message = "Cannot remove leased page, there is a bug in code"
+                    message = "Cannot remove held page, there is a bug in code"
                 )
             )
             return false
@@ -1294,14 +1272,14 @@ class PageDataManager @Inject constructor(
     fun removePage(pageId: String): Boolean = synchronized(lock) { removePageLocked(pageId) }
 
     /**
-     * Cancels and removes a currently loading page, unless it is leased.
+     * Cancels and removes a currently loading page, unless it is held.
      */
     fun cancelLoadingPage(pageId: String) {
         dataLoadingScope.launch {
             log.d("Cancelling loading page: pageId=$pageId")
             synchronized(lock) {
                 val entry = entries[pageId]
-                if (entry?.loadJob?.isActive == true && pageId !in leases) {
+                if (entry?.loadJob?.isActive == true && pageId !in held) {
                     entry.loadJob?.cancel()
                     removePageLocked(pageId)
                 }
