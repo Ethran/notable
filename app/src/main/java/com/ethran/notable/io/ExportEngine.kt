@@ -76,10 +76,8 @@ class ExportEngine @Inject constructor(
     suspend fun export(
         target: ExportTarget, format: ExportFormat, options: ExportOptions = ExportOptions()
     ): String {
-        // Exporters read pages from the database, so it must have every edit made so far. Without
-        // them the export would be missing recent edits, and a linked export would overwrite its
-        // file with that older version.
-        if (!pageSaver.saveAll()) return EXPORT_CANCELLED_UNSAVED_EDITS
+        // Exporters read pages from the database, so it must have every edit made so far.
+        if (!pageSaver.saveAll()) return "Export cancelled: recent edits could not be saved"
         // prepare file name and folder
         val (folderUri, baseFileName) = createFileNameAndFolder(target, format, options)
         // TODO: Retrieve all necessary data from the target, so that specific format exporter does not need to handle reading from db.
@@ -112,20 +110,18 @@ class ExportEngine @Inject constructor(
 
             try {
                 log.i("Exporting book to linked file, uri: $uriStr")
-                val result = export(
-                    target = ExportTarget.Book(bookId),
-                    format = ExportFormat.XOPP,
-                    options = ExportOptions(
-                        copyToClipboard = false,
-                        targetFolderUri = uriStr.toUri(),
-                        overwrite = true
-                    )
+                // The file is written from the database, so without every edit saved it would be
+                // overwritten with an older version of the book.
+                if (!pageSaver.saveAll()) throw IOException("recent edits could not be saved")
+                val target = ExportTarget.Book(bookId)
+                val (folderUri, fileName) = createFileNameAndFolder(
+                    target, ExportFormat.XOPP,
+                    ExportOptions(copyToClipboard = false, targetFolderUri = uriStr.toUri()),
                 )
-                // An XOPP export returns the message of the one file it writes.
-                if (result.startsWith(SAVED))
-                    log.i("Linked export finished: $result")
-                else
-                    appEventBus.emit(AppEvent.LogMessage("exportToLinkedFileAsync", "Linked file not updated: $result"))
+                writeFile(folderUri, "$fileName.xopp", "application/x-xopp", overwrite = true) { out ->
+                    xoppFile.writeToXoppStream(target, out)
+                }
+                log.i("Linked export finished: $fileName.xopp")
             } catch (e: Exception) {
                 appEventBus.emit(
                     AppEvent.LogMessage(
@@ -503,11 +499,6 @@ class ExportEngine @Inject constructor(
         writer = writer
     )
 
-    /**
-     * Central writer that handles directory types:
-     * - SAF directory Uris (tree/document) via DocumentsContract
-     * - file:// directory Uris via java.io.File
-     */
     private suspend fun saveInternal(
         folderUri: Uri,
         fileName: String,
@@ -515,36 +506,50 @@ class ExportEngine @Inject constructor(
         mimeType: String,
         overwrite: Boolean,
         writer: suspend (OutputStream) -> Unit
-    ): String = withContext(ioDispatcher) {
+    ): String {
         val displayName = if (extension.isBlank()) fileName else "$fileName.$extension"
-        try {
-            val dest = createOrGetFileInDir(folderUri, displayName, mimeType, overwrite)
-                ?: throw IOException(
-                    "Unable to create or access destination file in target directory, $folderUri, file: $displayName"
-                )
-
-            when (dest.scheme) {
-                ContentResolver.SCHEME_CONTENT -> {
-                    val resolver = context.contentResolver
-                    resolver.openOutputStream(dest, "w")?.use { out -> writer(out) }
-                        ?: throw IOException("Failed to open output stream for $displayName")
-                }
-
-                "file" -> {
-                    val file = File(requireNotNull(dest.path) { "Missing file path" })
-                    FileOutputStream(file, false).use { out -> writer(out) }
-                }
-
-                else -> throw IOException("Unsupported Uri scheme: ${dest.scheme}")
-            }
-
-            "$SAVED$displayName"
+        return try {
+            writeFile(folderUri, displayName, mimeType, overwrite, writer)
+            "Saved $displayName"
         } catch (e: OutOfMemoryError) {
             log.e("Save error (OOM): ${e.message}")
             "Not enough memory to save $displayName"
         } catch (e: Exception) {
             log.e("Save error: ${e.message}")
             "Error saving $displayName"
+        }
+    }
+
+    /**
+     * Writes [displayName] into [folderUri], throwing if it can't. Handles both directory types:
+     * - SAF directory Uris (tree/document) via DocumentsContract
+     * - file:// directory Uris via java.io.File
+     */
+    private suspend fun writeFile(
+        folderUri: Uri,
+        displayName: String,
+        mimeType: String,
+        overwrite: Boolean,
+        writer: suspend (OutputStream) -> Unit
+    ) = withContext(ioDispatcher) {
+        val dest = createOrGetFileInDir(folderUri, displayName, mimeType, overwrite)
+            ?: throw IOException(
+                "Unable to create or access destination file in target directory, $folderUri, file: $displayName"
+            )
+
+        when (dest.scheme) {
+            ContentResolver.SCHEME_CONTENT -> {
+                val resolver = context.contentResolver
+                resolver.openOutputStream(dest, "w")?.use { out -> writer(out) }
+                    ?: throw IOException("Failed to open output stream for $displayName")
+            }
+
+            "file" -> {
+                val file = File(requireNotNull(dest.path) { "Missing file path" })
+                FileOutputStream(file, false).use { out -> writer(out) }
+            }
+
+            else -> throw IOException("Unsupported Uri scheme: ${dest.scheme}")
         }
     }
 
@@ -776,11 +781,4 @@ class ExportEngine @Inject constructor(
 
     }
 
-    companion object {
-        /** What [export] returns when it stops because pending edits could not be saved. */
-        const val EXPORT_CANCELLED_UNSAVED_EDITS = "Export cancelled: recent edits could not be saved"
-
-        /** How a message from [saveStream] starts when the file was written. */
-        private const val SAVED = "Saved "
-    }
 }
