@@ -3,7 +3,9 @@ package com.ethran.notable.editor
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ethran.notable.data.MemorySnapshot
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageMemoryRow
 import com.ethran.notable.testing.PageDataTestHarness
 import com.ethran.notable.testing.TestNotebookSeeder
 import com.ethran.notable.testing.createEditorViewModelForTest
@@ -104,31 +106,54 @@ class PageChangeTest {
         assertEquals(data.storedStrokes(last).rows(), view.strokes.rows())
     }
 
-    @Test(timeout = 30000)
-    fun viewClosedDuringAPageChange_leavesNoPageLeased() = runBlocking {
-        val (first, next) = seedPages(2)
-        val shown = ConcurrentLinkedQueue<String>()
-        val view = createPageView(first) { shown += it }
-        assertTrue(waitForCondition(5000) { first in shown })
-        val recordReading = CompletableDeferred<Unit>()
-        val recordMayBeRead = CompletableDeferred<Unit>()
-        data.beforePageRecordRead = { pageId ->
-            if (pageId == next && !recordReading.isCompleted) {
-                recordReading.complete(Unit)
-                recordMayBeRead.await()
+    private enum class CloseStep { ReadingFirstPage, ReadingNextPage, LeasingNextPage, LoadingNextPage }
+
+    @Test(timeout = 60000)
+    fun viewClosedAtAnyStepOfShowingAPage_leavesNothingBehind() = runBlocking {
+        for (step in CloseStep.entries) {
+            val (first, next) = seedPages(2)
+            val view = CompletableDeferred<PageView>()
+            val atClose = CompletableDeferred<MemorySnapshot>()
+            suspend fun closeAt(at: CloseStep, pageId: String) {
+                val pageOfStep = if (at == CloseStep.ReadingFirstPage) first else next
+                if (at != step || pageId != pageOfStep || atClose.isCompleted) return
+                view.await().disposeOldPage()
+                atClose.complete(pageDataManager.memorySnapshot())
             }
+            data.beforePageRecordRead = { pageId ->
+                closeAt(CloseStep.ReadingFirstPage, pageId)
+                closeAt(CloseStep.ReadingNextPage, pageId)
+            }
+            data.beforePageRead = { pageId -> closeAt(CloseStep.LoadingNextPage, pageId) }
+            view.complete(createPageView(first) { pageId ->
+                runBlocking { closeAt(CloseStep.LeasingNextPage, pageId) }
+            })
+            if (step != CloseStep.ReadingFirstPage) {
+                assertTrue(waitForCondition(5000) { isLoaded(first) })
+                view.await().changePage(next)
+            }
+
+            val closed = withTimeout(5000) { atClose.await() }
+            // Let the interrupted step run to its end.
+            Thread.sleep(500)
+            waitForCondition(5000) { pageDataManager.memorySnapshot().pages.none { it.loading } }
+
+            val now = pageDataManager.memorySnapshot()
+            fun MemorySnapshot.pagesWhere(has: (PageMemoryRow) -> Boolean) =
+                pages.filter(has).map { it.pageId }.toSet()
+            assertEquals("$step: leases", emptyList<String>(), now.leasedPageIds)
+            assertEquals("$step: loads", emptySet<String>(), now.pagesWhere { it.loading })
+            assertTrue(
+                "$step: pages loaded after the view closed",
+                closed.pagesWhere { it.loaded }.containsAll(now.pagesWhere { it.loaded }),
+            )
+            assertTrue(
+                "$step: bitmaps cached after the view closed",
+                closed.pagesWhere { it.bitmapBytes > 0 }.containsAll(now.pagesWhere { it.bitmapBytes > 0 }),
+            )
+            data.beforePageRecordRead = {}
+            data.beforePageRead = {}
         }
-
-        view.changePage(next)
-        withTimeout(5000) { recordReading.await() }
-        view.disposeOldPage()
-        recordMayBeRead.complete(Unit)
-
-        // The interrupted change goes on to load the page; once it has, it is done.
-        assertTrue(waitForCondition(5000) { isLoaded(next) })
-        Thread.sleep(300)
-        assertEquals(emptyList<String>(), pageDataManager.memorySnapshot().leasedPageIds)
-        assertEquals(listOf(first), shown.toList())
     }
 
     @Test(timeout = 30000)
