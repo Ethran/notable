@@ -286,7 +286,8 @@ class EditorViewModel @Inject constructor(
 
         // 3. Cleanup page resources
         page.disposeOldPage()
-        // Stops loading pages around it; a view opened again starts over, even on the same page.
+        // Stops loading the pages around it. Reset, so a view opened again on the same page
+        // prefetches again.
         shownPageId.value = null
 
         // Save the edits now rather than after the usual delay: the screens shown next, page
@@ -698,8 +699,8 @@ class EditorViewModel @Inject constructor(
     }
 
     /**
-     * Called by the [PageView] once it shows [pageId] and holds its lease, so the page it left is
-     * no longer leased when [prefetchAround] cancels loads of pages left behind.
+     * Called by the [PageView] once it shows [pageId] and holds its lease. The page it left has lost
+     * its lease by then, so [prefetchAround] can cancel that page's load.
      */
     fun onPageShown(pageId: String) {
         shownPageId.value = pageId
