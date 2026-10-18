@@ -11,6 +11,7 @@ import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.getOrElse
 import com.ethran.notable.utils.getOrNull
+import com.ethran.notable.utils.mapError
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
@@ -319,8 +320,7 @@ class SyncOrchestrator @Inject constructor(
      * the sync downloaded.
      */
     private suspend fun saveEdits(): AppResult<Unit, DomainError> =
-        if (pageSaver.saveAll()) AppResult.Success(Unit)
-        else AppResult.Error(DomainError.SyncError("Recent edits could not be saved; sync will try again later"))
+        pageSaver.saveAll().mapError { DomainError.SyncError("${it.userMessage}; sync will try again later") }
 
     suspend fun syncFromPageId(pageId: String) {
         val settings = kvProxy.getSyncSettings()

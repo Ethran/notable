@@ -60,7 +60,7 @@ class UnsavedEditsStopReadersTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val pageSaver = mockk<PageSaver>().also { coEvery { it.saveAll() } returns false }
+    private val pageSaver = mockk<PageSaver>().also { coEvery { it.saveAll() } returns AppResult.Error(DomainError.DatabaseError("disk full")) }
 
     @After
     fun tearDown() {
@@ -98,15 +98,15 @@ class UnsavedEditsStopReadersTest {
         val failures = listOf<Pair<String, (BookRepository, PageSaver, XoppFile) -> Unit>>(
             "edits cannot be saved" to { books, saver, _ ->
                 coEvery { books.getById("book") } returns linkedTo(folder)
-                coEvery { saver.saveAll() } returns false
+                coEvery { saver.saveAll() } returns AppResult.Error(DomainError.DatabaseError("disk full"))
             },
             "linked folder is gone" to { books, saver, _ ->
                 coEvery { books.getById("book") } returns linkedTo(deletedFolder)
-                coEvery { saver.saveAll() } returns true
+                coEvery { saver.saveAll() } returns AppResult.Success(Unit)
             },
             "file cannot be written" to { books, saver, xopp ->
                 coEvery { books.getById("book") } returns linkedTo(folder)
-                coEvery { saver.saveAll() } returns true
+                coEvery { saver.saveAll() } returns AppResult.Success(Unit)
                 coEvery { xopp.writeToXoppStream(any(), any()) } throws IOException("disk full")
             },
             "notebook cannot be read" to { books, _, _ ->
@@ -147,7 +147,7 @@ class UnsavedEditsStopReadersTest {
                 coEvery { it.getById("book") } returns
                     Notebook(id = "book", linkedExternalUri = folder.toUri().toString())
             }
-            val saver = mockk<PageSaver>().also { coEvery { it.saveAll() } returns true }
+            val saver = mockk<PageSaver>().also { coEvery { it.saveAll() } returns AppResult.Success(Unit) }
             val xoppFile = mockk<XoppFile>(relaxed = true)
             val eventBus = mockk<AppEventBus>(relaxed = true)
             val exportEngine = ExportEngine(

@@ -14,10 +14,10 @@ import com.ethran.notable.testing.row
 import com.ethran.notable.testing.rows
 import com.ethran.notable.testing.testImage
 import com.ethran.notable.testing.testStroke
+import com.ethran.notable.utils.AppResult
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -129,7 +129,7 @@ class PageSaverTest {
                 else removedImages.removeLastOrNull()?.let { addImages(listOf(it)) }
 
                 9 -> {
-                    assertTrue(pageSaver.saveAll())
+                    assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
                     assertEquals(expectedStrokes.values.toList().rows(), data.storedStrokes(pageId).rows())
                     assertEquals(expectedImages.values.toList().imageRows(), data.storedImages(pageId).imageRows())
                 }
@@ -143,7 +143,7 @@ class PageSaverTest {
             assertEquals("step $step", expectedImages.values.toList().imageRows(), pageDataManager.getImages(pageId).imageRows())
         }
 
-        assertTrue(pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
         assertEquals(expectedStrokes.values.toList().rows(), data.storedStrokes(pageId).rows())
         assertEquals(expectedImages.values.toList().imageRows(), data.storedImages(pageId).imageRows())
     }
@@ -161,10 +161,10 @@ class PageSaverTest {
             data.beforeStrokeWrite = {}
             pageDataManager.updateStrokes(pageId, listOf(newer))
         }
-        assertFalse(pageSaver.saveAll())
+        assertTrue(pageSaver.saveAll() is AppResult.Error)
 
         data.db.pageDao().create(Page(id = pageCreatedLater))
-        assertTrue(pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
 
         assertEquals(listOf(newer.row()), data.storedStrokes(pageCreatedLater).map { it.row() })
     }
@@ -181,7 +181,7 @@ class PageSaverTest {
         pageDataManager.addStrokes(keptPage, listOf(kept))
 
         data.db.pageDao().delete(deletedPage)
-        assertTrue(pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
 
         assertTrue(kept.row() in data.storedStrokes(keptPage).rows())
         // Not kept around for a retry that could never succeed.
@@ -204,13 +204,13 @@ class PageSaverTest {
 
         pageDataManager.setPageScroll(pageId, Offset(0f, 750f))
         pageDataManager.saveScroll(pageId)
-        assertTrue(pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
         assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
         assertEquals(longAgo, pageUpdatedAt(pageId))
         assertEquals(longAgo, notebookUpdatedAt(notebook.notebookId))
 
         pageDataManager.addStrokes(pageId, listOf(testStroke(pageId)))
-        assertTrue(pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
         assertTrue(pageUpdatedAt(pageId).after(longAgo))
         assertTrue(notebookUpdatedAt(notebook.notebookId).after(longAgo))
         assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)

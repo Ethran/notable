@@ -5,6 +5,8 @@ import androidx.room.withTransaction
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +32,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * collected in one transaction, together with the edit timestamps of the pages and notebooks.
  *
  * Code that reads page content from the database — export, sync — calls [saveAll] first, so it
- * sees every edit made so far, and stops if it returns false. The editor never needs to:
+ * sees every edit made so far, and stops if it returns an error. The editor never needs to:
  * [PageDataManager] lays unsaved edits over whatever it loads. Other readers (duplicating a page,
  * thumbnails) don't call it. They miss the edits not saved yet — usually those of the last
  * [IDLE_DELAY_MS], up to [MAX_DELAY_MS] of them during continuous editing, more while writes fail —
@@ -64,18 +66,19 @@ class PageSaver @Inject constructor(
 
     /**
      * Writes every edit made so far and returns once it is in the database, or has failed to be
-     * written and stays unsaved. Returns whether everything was saved.
+     * written and stays unsaved. Returns an error if any page could not be saved.
      */
-    suspend fun saveAll(): Boolean = saveMutex.withLock {
+    suspend fun saveAll(): AppResult<Unit, DomainError> = saveMutex.withLock {
         val changes = pageDataManager.takeUnsaved()
-        if (changes.isEmpty()) return@withLock true
+        if (changes.isEmpty()) return@withLock AppResult.Success(Unit)
         var failed: Set<String> = changes.keys
         try {
             failed = write(changes)
         } finally {
             pageDataManager.finishSaving(failed)
         }
-        failed.isEmpty()
+        if (failed.isEmpty()) AppResult.Success(Unit)
+        else AppResult.Error(DomainError.DatabaseError("Recent edits of ${failed.size} page(s) could not be saved"))
     }
 
     /** Starts [saveAll] without waiting for it, for when the app may be stopped soon. */
@@ -94,7 +97,7 @@ class PageSaver @Inject constructor(
                 if (wait <= 0 || withTimeoutOrNull(wait.milliseconds) { edited.receive() } == null) break
             }
             var retryDelay = RETRY_MIN_DELAY_MS
-            while (!saveAll()) {
+            while (saveAll() is AppResult.Error) {
                 if (retryDelay == RETRY_MIN_DELAY_MS)
                     appEventBus.tryEmit(AppEvent.ActionHint("Could not save changes, retrying", 3000))
                 delay(retryDelay.milliseconds)
