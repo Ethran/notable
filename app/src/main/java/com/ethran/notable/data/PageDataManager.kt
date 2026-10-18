@@ -190,7 +190,7 @@ class PageDataManager @Inject constructor(
 
     // Edits not in the database yet, per page: [unsaved] collects new ones, [saving] holds the ones
     // [PageSaver] is writing. Kept apart from [entries] so evicting a page never drops its edits; a
-    // page loaded again gets them laid over its rows (see [mergeLoadedLocked]).
+    // page loaded again gets them laid over its rows (see [mergeLoadedLocked]). Guarded by [lock].
     private val unsaved = HashMap<String, PageChanges>()
     private val saving = HashMap<String, PageChanges>()
 
@@ -652,9 +652,8 @@ class PageDataManager @Inject constructor(
             log.d("Loading page $pageId")
             preLoadBackground(pageId)
 
-            // A save running now may commit before the read below or after it, and once it
-            // finishes its changes are no longer pending. Taken now, they are laid over the rows
-            // whichever way it goes. Edits made from here on land in the entry itself.
+            // Taken before the read: a save committing after the read clears them from pending, so
+            // taken later they would be in neither. Edits made from here on land in the entry.
             val (strokesBeforeRead, imagesBeforeRead) = synchronized(lock) {
                 pendingLocked(pageId) { it.strokes } to pendingLocked(pageId) { it.images }
             }
