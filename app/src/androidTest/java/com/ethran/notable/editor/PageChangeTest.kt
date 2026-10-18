@@ -160,7 +160,7 @@ class PageChangeTest {
         val pages = seedPages(5)
         val pdm = mockk<PageDataManager>(relaxed = true)
         val firstJoinStarted = CompletableDeferred<Unit>()
-        coEvery { pdm.requestPageLoadJoin(pages[1]) } coAnswers {
+        coEvery { pdm.awaitPageLoad(pages[1]) } coAnswers {
             firstJoinStarted.complete(Unit)
             awaitCancellation()
         }
@@ -175,9 +175,9 @@ class PageChangeTest {
         assertEquals(listOf(pages[4], pages[2]), withTimeout(5000) { prefetched.await() })
         coVerifyOrder {
             pdm.cancelLoadsExcept(setOf(pages[2], pages[0], pages[1]))
-            pdm.requestPageLoadJoin(pages[1])
+            pdm.awaitPageLoad(pages[1])
             pdm.cancelLoadsExcept(setOf(pages[4], pages[2], pages[3]))
-            pdm.requestPageLoadJoin(pages[3])
+            pdm.awaitPageLoad(pages[3])
             pdm.trimToBudget()
             pdm.prefetch(listOf(pages[4], pages[2]))
         }
