@@ -32,8 +32,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * Code that reads page content from the database — export, sync — calls [saveAll] first, so it
  * sees every edit made so far, and stops if it returns false. The editor never needs to:
  * [PageDataManager] lays unsaved edits over whatever it loads. Other readers (duplicating a page,
- * thumbnails) don't call it; they miss only edits made in the last [IDLE_DELAY_MS], and a thumbnail
- * rendered before the save counts as stale after it, since the save bumps the page's edit timestamp.
+ * thumbnails) don't call it. They miss the edits not saved yet — usually those of the last
+ * [IDLE_DELAY_MS], up to [MAX_DELAY_MS] of them during continuous editing, more while writes fail —
+ * and a thumbnail rendered before the save counts as stale after it, since the save bumps the page's
+ * edit timestamp.
  *
  * A failed write keeps its changes unsaved and is retried. Changes to a page deleted meanwhile are
  * dropped.
