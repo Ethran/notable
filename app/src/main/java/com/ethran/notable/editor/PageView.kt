@@ -853,7 +853,8 @@ class PageView(
         if (!setOpenPage(pageId)) return null
         val loaded = OpenPage.load(appRepository, pageId, record)
         publishLoaded(loaded)
-        return loaded
+        // The view may have been disposed while the page was being read.
+        return loaded.takeUnless { synchronized(pageLock) { disposed } }
     }
 
     /**
