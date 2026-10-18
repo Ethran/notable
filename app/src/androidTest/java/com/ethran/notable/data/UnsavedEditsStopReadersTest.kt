@@ -5,7 +5,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.KvProxy
+import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.data.events.AppEvent
+import com.ethran.notable.data.events.AppEventBus
 import com.ethran.notable.data.events.DefaultAppEventBus
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
@@ -77,8 +80,30 @@ class UnsavedEditsStopReadersTest {
             ExportOptions(copyToClipboard = false, overwrite = true),
         )
 
-        assertEquals("Export cancelled: recent edits could not be saved", result)
+        assertEquals(ExportEngine.EXPORT_CANCELLED_UNSAVED_EDITS, result)
         verify { listOf(appRepository, pageRepository, bookRepository, renderer) wasNot Called }
+    }
+
+    @Test(timeout = 30000)
+    fun linkedExport_reportsThatItsFileWasNotUpdated_whenEditsCannotBeSaved() {
+        val bookRepository = mockk<BookRepository>().also {
+            coEvery { it.getById("book") } returns
+                Notebook(id = "book", linkedExternalUri = "content://linked/book.xopp")
+        }
+        val eventBus = mockk<AppEventBus>(relaxed = true)
+        val exportEngine = ExportEngine(
+            context, mockk(relaxed = true), mockk(relaxed = true), bookRepository,
+            mockk(relaxed = true), eventBus, pageSaver, Dispatchers.IO, scope,
+        )
+
+        exportEngine.exportToLinkedFileAsync("book")
+
+        coVerify(timeout = 5000) {
+            eventBus.emit(match {
+                it is AppEvent.LogMessage && it.isError &&
+                    it.message.contains(ExportEngine.EXPORT_CANCELLED_UNSAVED_EDITS)
+            })
+        }
     }
 
     @Test(timeout = 30000)
