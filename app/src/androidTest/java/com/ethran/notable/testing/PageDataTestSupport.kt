@@ -86,7 +86,7 @@ internal class PageDataTestHarness(context: Context) {
         }
     }
     val appRepository = createAppRepositoryForTest(context, db, pageDao, strokeDao)
-    private val appEventBus = DefaultAppEventBus()
+    val appEventBus = DefaultAppEventBus()
     val pageDataManager = PageDataManager(
         appRepository = appRepository,
         appEventBus = appEventBus,

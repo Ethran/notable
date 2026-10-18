@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.testing.PageDataTestHarness
 import com.ethran.notable.testing.TestNotebookSeeder
 import com.ethran.notable.testing.imageRows
@@ -14,7 +15,11 @@ import com.ethran.notable.testing.row
 import com.ethran.notable.testing.rows
 import com.ethran.notable.testing.testImage
 import com.ethran.notable.testing.testStroke
+import com.ethran.notable.testing.waitForCondition
 import com.ethran.notable.utils.AppResult
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -167,6 +172,34 @@ class PageSaverTest {
         assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
 
         assertEquals(listOf(newer.row()), data.storedStrokes(pageCreatedLater).map { it.row() })
+    }
+
+    /** Edits that can't be saved keep a warning up, so they never go unnoticed, until they are saved. */
+    @Test(timeout = 30000)
+    fun warningStaysUp_whileEditsCannotBeSaved() = runBlocking {
+        val warnings = mutableListOf<AppEvent>()
+        val collector = launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+            data.appEventBus.events.collect {
+                if (it is AppEvent.EditsNotSaved || it == AppEvent.DismissMessage(AppEvent.EDITS_NOT_SAVED_ID))
+                    synchronized(warnings) { warnings += it }
+            }
+        }
+        fun lastWarning() = synchronized(warnings) { warnings.lastOrNull() }
+        try {
+            val pageId = seedLoadedPage(strokes = 1)
+            // A stroke whose row can't be written yet: it refers to a page not in the database.
+            val pageCreatedLater = "page-created-later"
+            pageDataManager.addStrokes(pageId, listOf(testStroke(pageCreatedLater)))
+
+            assertTrue(pageSaver.saveAll() is AppResult.Error)
+            assertTrue(waitForCondition(5000) { lastWarning() is AppEvent.EditsNotSaved })
+
+            data.db.pageDao().create(Page(id = pageCreatedLater))
+            assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
+            assertTrue(waitForCondition(5000) { lastWarning() is AppEvent.DismissMessage })
+        } finally {
+            collector.cancel()
+        }
     }
 
     @Test(timeout = 30000)
