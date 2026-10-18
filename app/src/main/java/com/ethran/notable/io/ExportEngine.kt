@@ -79,7 +79,7 @@ class ExportEngine @Inject constructor(
         // Exporters read pages from the database, so it must have every edit made so far. Without
         // them the export would be missing recent edits, and a linked export would overwrite its
         // file with that older version.
-        if (!pageSaver.saveAll()) return "Export cancelled: recent edits could not be saved"
+        if (!pageSaver.saveAll()) return EXPORT_CANCELLED_UNSAVED_EDITS
         // prepare file name and folder
         val (folderUri, baseFileName) = createFileNameAndFolder(target, format, options)
         // TODO: Retrieve all necessary data from the target, so that specific format exporter does not need to handle reading from db.
@@ -121,7 +121,10 @@ class ExportEngine @Inject constructor(
                         overwrite = true
                     )
                 )
-                log.i("Linked export finished: $result")
+                if (result == EXPORT_CANCELLED_UNSAVED_EDITS)
+                    appEventBus.emit(AppEvent.LogMessage("exportToLinkedFileAsync", "Linked file not updated: $result"))
+                else
+                    log.i("Linked export finished: $result")
             } catch (e: Exception) {
                 appEventBus.emit(
                     AppEvent.LogMessage(
@@ -772,4 +775,8 @@ class ExportEngine @Inject constructor(
 
     }
 
+    companion object {
+        /** What [export] returns when it stops because pending edits could not be saved. */
+        const val EXPORT_CANCELLED_UNSAVED_EDITS = "Export cancelled: recent edits could not be saved"
+    }
 }
