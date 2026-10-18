@@ -758,8 +758,9 @@ class PageDataManager @Inject constructor(
 
     /**
      * Removes [pageId]'s entry after its load [job] failed or was cancelled, so the next request
-     * starts a clean load. Leaves it alone once a newer load owns it: a cancelled read of the
-     * database still runs to its end, and may finish after the page was requested again.
+     * starts a clean load. A leased page can't be removed and keeps its unfinished entry. Leaves it
+     * alone once a newer load owns it: a cancelled read of the database still runs to its end, and
+     * may finish after the page was requested again.
      */
     private fun dropUnfinishedLoad(pageId: String, job: Job?) = synchronized(lock) {
         val entry = entries[pageId]

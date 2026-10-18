@@ -127,8 +127,8 @@ class PageView(
 
     private val openPageRef = AtomicReference(OpenPage(initialPageId))
 
-    // The page [changePage] last asked for. Requests are shown one at a time, in order, and one
-    // replaced by a newer request before its turn is skipped.
+    // The page [changePage] last asked for. Only the latest request is shown: one superseded while
+    // a page change runs is skipped.
     private val requestedPageId = MutableStateFlow(initialPageId)
 
     // The lease on the shown page, taken by [setOpenPage] and dropped by [markDisposed].
@@ -314,8 +314,7 @@ class PageView(
         logCache.i("Init from persist layer, pageId: $pageId")
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
         synchronized(pageLock) {
-            // [disposeOldPage] cancels [loadingJob] after it marks the view disposed, so a wait
-            // started after that would never be cancelled.
+            // Nothing would cancel a wait started after [disposeOldPage], so none starts then.
             if (disposed) return
             loadingJob = coroutineScope.launch(Dispatchers.IO) { awaitPageData(pageId) }
         }
