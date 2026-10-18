@@ -78,10 +78,10 @@ data class EvictCandidate(
 /**
  * Choose which pages to evict so that `currentResident - evicted + incoming <= cap`.
  *
- * Evicts only **unpinned** pages (pinned = current page or a page with an active load), least
+ * Evicts only **unpinned** pages (pinned = a leased page or a page with an active load), least
  * recently used first (smallest [EvictCandidate.seq]). Stops as soon as the budget fits, or when no
  * unpinned candidates remain — in which case it returns *every* unpinned page and the caller loads
- * anyway (the current page is never refused). Pure: no side effects, order is deterministic.
+ * anyway (a shown page is never refused). Pure: no side effects, order is deterministic.
  *
  * Note (intended): a victim's exclusive pooled background is freed by the caller when the page is
  * removed, but that byte credit is NOT modeled here — [EvictCandidate.bytes] is stroke/image bytes
@@ -110,14 +110,14 @@ sealed interface AdmissionDecision {
     /** Do not load (a prefetch that doesn't fit, or whose cost is unknown). */
     data object Skip : AdmissionDecision
 
-    /** Load after evicting [evict]; [overBudget] true if it still won't fit (current page only). */
+    /** Load after evicting [evict]; [overBudget] true if it still won't fit (a shown page only). */
     data class Load(val evict: List<String>, val overBudget: Boolean) : AdmissionDecision
 }
 
 /**
  * Pure admission policy.
  *
- * - The **current page** ([isPrefetch] = false) is never refused: it evicts unpinned LRU pages to
+ * - A **shown page** ([isPrefetch] = false) is never refused: it evicts unpinned LRU pages to
  *   fit and, if it still doesn't fit, loads anyway with [AdmissionDecision.Load.overBudget] set. On
  *   an unknown cost ([estimateBytes] null) it fails **open** — loads with a zero gating cost.
  * - A **prefetch** ([isPrefetch] = true) is opportunistic: it loads only into spare budget and
@@ -143,7 +143,7 @@ fun decideAdmission(
         else AdmissionDecision.Skip
     }
 
-    val inc = incremental ?: 0L // current page fails open
+    val inc = incremental ?: 0L // a shown page fails open
     val evict = selectEvictions(candidates, residentBytes, inc, cap)
     val evicted = evict.toHashSet()
     val freed = candidates.asSequence().filter { it.pageId in evicted }.sumOf { it.bytes }
