@@ -86,11 +86,12 @@ editor and the code around it.
    page loaded again gets them laid over its database rows.
 3. `PageSaver` (`data/PageSaver.kt`) writes everything collected in one transaction once editing
    pauses, and no later than a few seconds after the first unsaved edit. A failed write keeps its
-   changes unsaved and is retried; changes to a page deleted meanwhile are dropped.
+   changes unsaved and is retried, and a warning stays on screen until a save succeeds; changes to
+   a page deleted meanwhile are dropped.
 4. Saving is forced sooner when it matters:
    - `saveSoon()` when the editor closes and when the app goes to the background;
-   - `saveAll()` before export and sync, which read pages from the database; they stop if it
-     returns false.
+   - `saveAll()` before export and sync, which read pages from the database; they stop, and
+     report why, if it returns an error.
 
 ---
 
