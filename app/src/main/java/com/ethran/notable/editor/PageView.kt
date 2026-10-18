@@ -148,8 +148,8 @@ class PageView(
         get() = openPage.pageId
 
 
-    // The shown page's viewport. [setOpenPage] replaces it together with the page, scroll and zoom
-    // steps change it through [commitViewport], and a resize resets its zoom.
+    // The shown page's viewport. [setOpenPage] replaces it together with the page. Scroll and zoom
+    // steps change it through [commitViewport]. A resize resets its zoom.
     private val viewportFlow = MutableStateFlow(PageViewport())
     val viewport: StateFlow<PageViewport> = viewportFlow.asStateFlow()
 
@@ -260,7 +260,8 @@ class PageView(
         val oldId = currentPageId
         log.d("changePage Entry: $oldId -> $newPageId")
         pageDataManager.onExit(oldId, windowedBitmap, viewport.value, coroutineScope)
-        // The spare buffer may be a bitmap now cached for another page.
+        // The spare buffer may be a bitmap the cache keeps for a page left earlier; scrolling would
+        // draw over it.
         scrollBackBuffer = null
         // A disposed view draws and loads nothing more.
         val shown = showPage(newPageId) ?: return
