@@ -435,11 +435,10 @@ class PageView(
         updateContentHeight()
     }
 
+    // Measured and published in one step, so a measurement never overwrites a newer one.
     private fun updateContentHeight() {
-        val pageId = currentPageId
-        val height = pageDataManager.contentHeight(pageId)
         synchronized(pageLock) {
-            if (currentPageId == pageId) contentHeightFlow.value = height
+            contentHeightFlow.value = pageDataManager.contentHeight(currentPageId)
         }
     }
 
@@ -794,7 +793,7 @@ class PageView(
                     "oldZoom=$oldZoom newZoom=$newZoom " +
                     "scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) " +
                     "bounds=$dstRect" +
-                    "scrollDelta=$deltaScrollPage newScroll=$scroll"
+                    "scrollDelta=$deltaScrollPage newScroll=${next.scroll}"
         )
     }
 
