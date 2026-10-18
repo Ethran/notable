@@ -14,12 +14,17 @@ Contents:
 
 ## `EditorViewModel`
 
-The `EditorViewModel` is an Android `ViewModel` that holds the editor UI state and integrates with the `PageDataManager` to manage data loading and saving.
+The `EditorViewModel` is an Android `ViewModel` that holds the editor UI state.
 
 - **Role**:
     - Manages state flows for UI such as currently selected pen, eraser settings, and editor mode.
     - Tracks the current `pageId` and `notebookId` being edited.
     - Injects required global state components and caches user preferences.
+    - Once the `PageView` shows a page (`onPageShown`), cancels loads of pages left behind and
+      prefetches the neighbouring pages through `PageDataManager`.
+    - When the editor closes, asks `PageSaver` to write the remaining edits right away.
+
+See [editor-data-flow.md](editor-data-flow.md) for how page content is loaded, cached and saved.
 
 ---
 
@@ -46,24 +51,30 @@ class EditorControlTower(
 
 ## `PageView`
 
-`PageView` manages the data representing the current visual frame of the document being edited. It is responsible for setting up the spatial properties and handling interactions in coordinate space.
+`PageView` is the editor's view of one page at a time: which page is shown, how it is scrolled and zoomed, and the screen bitmap it is drawn into.
 
 ```kotlin
 class PageView(
     val context: Context,
     val coroutineScope: CoroutineScope,
     val pageDataManager: PageDataManager,
+    private val appRepository: AppRepository,
     val initialPageId: String,
     var viewWidth: Int,
     var viewHeight: Int,
     val snackManager: SnackState,
+    private val onPageShown: (pageId: String) -> Unit = {},
 )
 ```
 
 - **Responsibilities**:
-    - Translates screen inputs to logical coordinates on the page.
-    - Manages the size and offset (pan/zoom level) of the page view.
-    - Serves as the middle layer that provides the current geometry structure to the actual drawing surface (`DrawCanvas`).
+    - **The shown page.** `openPage` is an immutable `OpenPage` snapshot (page id, `Page` record, position in the notebook), replaced whole on a page change. Read it once into a local to use several fields together. `changePage(pageId)` requests a page; changes run one at a time, and only the last of several requests is shown.
+    - **Holding the page.** While a page is shown, `PageView` holds its `PageLease`, so `PageDataManager` never evicts it. `disposeOldPage()` releases it; a disposed view shows, draws and loads nothing more.
+    - **Scroll and zoom.** `viewport` is a `StateFlow<PageViewport>` (`scroll`, `zoom`) of the shown page; `scroll` and `zoom` read its current value. Pages left in this editor keep their viewport and get it back when shown again; a page shown for the first time opens unzoomed at its saved vertical scroll. Scroll and zoom are ignored until the page record is loaded, and a step running while the page changes is dropped.
+    - **Content height.** `contentHeight` is a `StateFlow<Int>` with the bottom of the page's strokes and images, for the scroll indicator.
+    - **Editing.** Adds, updates and removes strokes and images of the shown page through `PageDataManager`, always naming the page id.
+    - **Coordinates.** Translates between screen and page coordinates using the viewport.
+    - Provides the screen bitmap (`windowedBitmap`) that the drawing surface (`DrawCanvas`) shows.
 
 ---
 
