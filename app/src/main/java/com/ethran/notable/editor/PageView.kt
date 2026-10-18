@@ -196,7 +196,7 @@ class PageView(
 
     init {
         coroutineScope.launch(Dispatchers.IO) {
-            val shown = showPage(initialPageId)
+            val shown = showPage(initialPageId) ?: return@launch
             log.i("PageView init with initial pageId: $initialPageId" )
             if(currentPageId.isEmpty())
                 log.e("Current page id is empty")
@@ -256,7 +256,8 @@ class PageView(
         val oldId = currentPageId
         log.d("changePage Entry: $oldId -> $newPageId")
         pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
-        val shown = showPage(newPageId)
+        // A disposed view draws and loads nothing more.
+        val shown = showPage(newPageId) ?: return
         zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
         pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
             log.i("PageView: using cached bitmap")
@@ -314,36 +315,43 @@ class PageView(
         val pageId = page.pageId
         logCache.i("Init from persist layer, pageId: $pageId")
         windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
-        loadingJob = coroutineScope.launch(Dispatchers.IO) {
-            try {
-                snackManager.showSnackDuring(text = "Loading strokes...") {
-                    val timeToLoad = measureTimeMillis {
-                        logCache.d("Start page loading, id $pageId")
-                        pageDataManager.requestPageLoadJoin(pageId)
-                        logCache.d("Got page data (PageView.loadPage). id $pageId")
-                    }
-                    logCache.d("All strokes loaded in $timeToLoad ms")
-                }
-                // TODO: If we put it in loadPage(…) sometimes it will try to refresh
-                //  without seeing strokes, I have no idea why.
-                coroutineScope.launch(Dispatchers.Main) {
-//                    delay(100)
-                    CanvasEventBus.forceUpdate.emit(null)
-                }
-//                sleep(5000)
+        synchronized(pageLock) {
+            // [disposeOldPage] cancels [loadingJob] after it marks the view disposed, so a wait
+            // started after that would never be cancelled.
+            if (disposed) return
+            loadingJob = coroutineScope.launch(Dispatchers.IO) { awaitPageData(pageId) }
+        }
+    }
 
-                logCache.d("Loaded page from persistent layer $pageId")
-                if (!pageDataManager.validatePageDataLoaded(pageId))
-                    logCache.e("Page should be loaded, but it is not. $pageId")
-//                sleep(10000)
-
-            } catch (_: CancellationException) {
-                val dataStatus = pageDataManager.validatePageDataLoaded(pageId)
-                logCache.d("Page loading cancelled, data was loaded correctly: $dataStatus")
-            } catch (e: Exception) {
-                val dataStatus = pageDataManager.validatePageDataLoaded(pageId)
-                logCache.e("Page loading cancelled, data was loaded correctly: $dataStatus", e)
+    private suspend fun awaitPageData(pageId: String) {
+        try {
+            snackManager.showSnackDuring(text = "Loading strokes...") {
+                val timeToLoad = measureTimeMillis {
+                    logCache.d("Start page loading, id $pageId")
+                    pageDataManager.requestPageLoadJoin(pageId)
+                    logCache.d("Got page data (PageView.loadPage). id $pageId")
+                }
+                logCache.d("All strokes loaded in $timeToLoad ms")
             }
+            // TODO: If we put it in loadPage(…) sometimes it will try to refresh
+            //  without seeing strokes, I have no idea why.
+            coroutineScope.launch(Dispatchers.Main) {
+//                delay(100)
+                CanvasEventBus.forceUpdate.emit(null)
+            }
+//            sleep(5000)
+
+            logCache.d("Loaded page from persistent layer $pageId")
+            if (!pageDataManager.validatePageDataLoaded(pageId))
+                logCache.e("Page should be loaded, but it is not. $pageId")
+//            sleep(10000)
+
+        } catch (_: CancellationException) {
+            val dataStatus = pageDataManager.validatePageDataLoaded(pageId)
+            logCache.d("Page loading cancelled, data was loaded correctly: $dataStatus")
+        } catch (e: Exception) {
+            val dataStatus = pageDataManager.validatePageDataLoaded(pageId)
+            logCache.e("Page loading cancelled, data was loaded correctly: $dataStatus", e)
         }
     }
 
@@ -835,14 +843,14 @@ class PageView(
 
     /**
      * Makes [pageId] this view's page, published through [openPage], and returns its loaded
-     * snapshot.
+     * snapshot, or null once the view is disposed.
      */
-    private suspend fun showPage(pageId: String): OpenPage {
+    private suspend fun showPage(pageId: String): OpenPage? {
         val record = pageDataManager.getPageRecord(pageId)
         if (record == null)
             snackManager.showOrUpdateSnack(SnackConf(text = "Page not found", duration = 2000))
         record?.let { pageDataManager.restorePageScroll(pageId, it.scroll) }
-        setOpenPage(pageId)
+        if (!setOpenPage(pageId)) return null
         val loaded = OpenPage.load(appRepository, pageId, record)
         publishLoaded(loaded)
         return loaded
@@ -851,17 +859,18 @@ class PageView(
     /**
      * Publishes [pageId] as this view's page and leases it in place of the page shown before, so
      * [PageDataManager] keeps it while it is shown, then reports it to [onPageShown]. Does nothing
-     * once the view is disposed.
+     * and returns false once the view is disposed.
      */
-    private fun setOpenPage(pageId: String) {
+    private fun setOpenPage(pageId: String): Boolean {
         synchronized(pageLock) {
-            if (disposed) return
+            if (disposed) return false
             val previous = lease
             lease = pageDataManager.acquire(pageId)
             previous?.close()
             openPageRef.set(OpenPage(pageId))
         }
         onPageShown(pageId)
+        return true
     }
 
     /** Releases the shown page; the view shows no page after this. */
