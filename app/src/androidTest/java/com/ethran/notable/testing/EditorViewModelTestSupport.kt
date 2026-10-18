@@ -11,6 +11,7 @@ import com.ethran.notable.data.db.KvRepository
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.EditorViewModel
+import com.ethran.notable.editor.PageLeases
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.Pen
@@ -59,6 +60,7 @@ internal fun createEditorViewModelForTest(
         editorSettingCacheManager = editorSettingCacheManager,
         exportEngine = exportEngine,
         pageDataManager = pageDataManager,
+        pageLeases = PageLeases(pageDataManager),
         pageSaver = pageSaver,
         syncOrchestrator = syncOrchestrator,
         snackDispatcher = snackDispatcher,

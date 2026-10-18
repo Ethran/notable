@@ -22,7 +22,6 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.PageLease
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
@@ -83,6 +82,7 @@ class PageView(
     val context: Context,
     val coroutineScope: CoroutineScope,
     val pageDataManager: PageDataManager,
+    private val pageLeases: PageLeases,
     private val appRepository: AppRepository,
     val initialPageId: String,
     var viewWidth: Int,
@@ -859,7 +859,7 @@ class PageView(
         synchronized(pageLock) {
             if (disposed) return false
             val previous = lease
-            lease = pageDataManager.acquire(pageId)
+            lease = pageLeases.acquire(pageId)
             previous?.close()
             openPageRef.set(OpenPage(pageId))
             // Under the lock, so no page is reported after [disposeOldPage] returns.

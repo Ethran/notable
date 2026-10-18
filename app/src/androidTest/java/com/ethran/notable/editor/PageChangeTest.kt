@@ -60,10 +60,14 @@ class PageChangeTest {
     private suspend fun seedPages(count: Int): List<String> =
         TestNotebookSeeder.seedNotebook(data.db, pageCount = count, strokesPerPage = 5).pageIds
 
+    // Shared by every view of a test, as the app shares one.
+    private val pageLeases by lazy { PageLeases(pageDataManager) }
+
     private fun createPageView(pageId: String, onPageShown: (String) -> Unit) = PageView(
         context = app,
         coroutineScope = viewScope,
         pageDataManager = pageDataManager,
+        pageLeases = pageLeases,
         appRepository = data.appRepository,
         initialPageId = pageId,
         viewWidth = 400,
@@ -101,7 +105,7 @@ class PageChangeTest {
         view.changePage(after)
         assertTrue(waitForCondition(5000) { view.currentPageId == after && isLoaded(after) })
         assertEquals(listOf(first, slow, last, after), shown.toList())
-        assertEquals(listOf(after), pageDataManager.memorySnapshot().leasedPageIds)
+        assertEquals(listOf(after), pageDataManager.memorySnapshot().heldPageIds)
         assertEquals(data.storedStrokes(after).rows(), view.strokes.rows())
     }
 
@@ -140,7 +144,7 @@ class PageChangeTest {
             val now = pageDataManager.memorySnapshot()
             fun MemorySnapshot.pagesWhere(has: (PageMemoryRow) -> Boolean) =
                 pages.filter(has).map { it.pageId }.toSet()
-            assertEquals("$step: leases", emptyList<String>(), now.leasedPageIds)
+            assertEquals("$step: leases", emptyList<String>(), now.heldPageIds)
             assertEquals("$step: loads", emptySet<String>(), now.pagesWhere { it.loading })
             assertTrue(
                 "$step: pages loaded after the view closed",
