@@ -37,7 +37,7 @@ class NotableApp : Application() {
 
     private fun checkHiddenApiBypass() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            HiddenApiBypass.addHiddenApiExemptions("")
+            HiddenApiBypass.setHiddenApiExemptions("")
         }
     }
 
