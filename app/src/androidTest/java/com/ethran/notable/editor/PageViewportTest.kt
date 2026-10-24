@@ -178,6 +178,9 @@ class PageViewportTest {
     @Test(timeout = 30000)
     fun contentHeightCoversEveryStrokeAndImage_afterAnyEdit() = runBlocking {
         val (pageId) = seedPages(1)
+        // Stored below the first screen, so the page is taller than the height shown before it loads.
+        data.db.strokeDao().create(testStroke(pageId, y = (SCREEN_HEIGHT + 500).toFloat()))
+        data.db.ImageDao().create(testImage(pageId, y = SCREEN_HEIGHT + 1000))
         val view = createPageView(pageId)
         assertTrue(waitForCondition(5000) { view.isTransformationAllowed })
         fun expected(): Int {
@@ -187,10 +190,12 @@ class PageViewportTest {
             )
             return max(bottom + 50, SCREEN_HEIGHT)
         }
-        // The seeded strokes are loaded and measured before any edit.
+        // The stored strokes and images are loaded and measured before any edit.
         assertTrue(waitForCondition(5000) {
-            view.strokes.size == 5 && view.contentHeight.value == expected()
+            view.strokes.size == 6 && view.images.size == 1 &&
+                view.contentHeight.value == expected()
         })
+        assertTrue(view.contentHeight.value > SCREEN_HEIGHT)
 
         val low = SCREEN_HEIGHT + 2000
         val stroke = testStroke(pageId, y = low.toFloat())

@@ -58,6 +58,7 @@ class PageView(
     val context: Context,
     val coroutineScope: CoroutineScope,
     val pageDataManager: PageDataManager,
+    private val pageLeases: PageLeases,
     private val appRepository: AppRepository,
     val initialPageId: String,
     var viewWidth: Int,

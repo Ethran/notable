@@ -261,8 +261,9 @@ class OnyxInputHandler(
             Mode.Erase -> onRawErasingList(plist)
             Mode.Select -> {
                 thread {
+                    val viewport = page.viewport.value
                     val points =
-                        copyInputToSimplePointF(plist.points, page.scroll, page.zoom)
+                        copyInputToSimplePointF(plist.points, viewport.scroll, viewport.zoom)
                     handleSelect(
                         scope = coroutineScope,
                         page = drawCanvas.page,
@@ -288,10 +289,11 @@ class OnyxInputHandler(
                         log.d("lock obtained in ${lock - startTime} ms")
 
 
+                        val viewport = page.viewport.value
                         val (startPoint, endPoint) = getModifiedStrokeEndpoints(
                             plist.points,
-                            page.scroll,
-                            page.zoom
+                            viewport.scroll,
+                            viewport.zoom
                         )
                         val linePoints = transformToLine(startPoint, endPoint)
 
@@ -325,8 +327,9 @@ class OnyxInputHandler(
                         val lock = System.currentTimeMillis()
                         log.d("lock obtained in ${lock - startTime} ms")
 
+                        val viewport = page.viewport.value
                         val scaledPoints =
-                            copyInput(plist.points, page.scroll, page.zoom)
+                            copyInput(plist.points, viewport.scroll, viewport.zoom)
                         val firstPointTime = plist.points.first().timestamp
                         val erasedByScribbleDirtyRect = handleScribbleToErase(
                             page,
@@ -383,7 +386,8 @@ class OnyxInputHandler(
         isErasing = false
 
         if (plist == null) return
-        val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoom)
+        val viewport = page.viewport.value
+        val points = copyInputToSimplePointF(plist.points, viewport.scroll, viewport.zoom)
 
         val padding = 10
         val boundingBox = (calculateBoundingBox(plist.points) { Pair(it.x, it.y) }).toRect()

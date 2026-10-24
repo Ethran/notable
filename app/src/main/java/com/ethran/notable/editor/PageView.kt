@@ -210,15 +210,7 @@ class PageView(
             if(currentPageId.isEmpty())
                 log.e("Current page id is empty")
 
-            pageDataManager.getCachedBitmap(currentPageId, viewport.value)?.let { cached ->
-                log.i("PageView: using cached bitmap")
-                windowedBitmap = cached
-                windowedCanvas = Canvas(windowedBitmap)
-            } ?: run {
-                log.i("PageView.init: creating new bitmap")
-                recreateCanvas()
-                pageDataManager.cacheBitmap(currentPageId, windowedBitmap, viewport.value)
-            }
+            useCachedOrNewBitmap(currentPageId)
 
             coroutineScope.launch(Dispatchers.Main) {
                 // If we do it with main.immediate then it wont work.
@@ -250,8 +242,8 @@ class PageView(
      * 1.  Keeps the old page's bitmap in [PageDataManager] for its next showing and its preview.
      * 2.  Reads the new page's record and shows the page (see [setOpenPage]): it takes the page's
      *     lease and the viewport the page had when this view left it, or else its saved scroll.
-     * 3.  Uses the page's cached bitmap if it shows that viewport, resizing the canvas if the view
-     *     size changed; otherwise draws a new bitmap.
+     * 3.  Uses the page's cached bitmap if it shows that viewport at the view's size; otherwise
+     *     draws a new bitmap.
      * 4.  Loads the page's strokes and images in the background and redraws once they are in.
      *
      * A disposed view loads nothing more: a page change interrupted by the disposal stops after
@@ -261,23 +253,13 @@ class PageView(
         val oldId = currentPageId
         log.d("changePage Entry: $oldId -> $newPageId")
         pageDataManager.onExit(oldId, windowedBitmap, viewport.value, coroutineScope)
-        // The spare buffer may be a bitmap the cache keeps for a page left earlier; scrolling would
-        // draw over it.
-        scrollBackBuffer = null
         // A disposed view draws and loads nothing more.
         val shown = showPage(newPageId) ?: return
-        pageDataManager.getCachedBitmap(newPageId, viewport.value)?.let { cached ->
-            log.i("PageView: using cached bitmap")
-            windowedBitmap = cached
-            windowedCanvas = Canvas(windowedBitmap)
-            // Check if we have correct size of canvas
-            if (windowedCanvas.width != viewWidth || windowedCanvas.height != viewHeight)
-                updateCanvasDimensions()
-        } ?: run {
-            log.i("PageView.changePage: creating new bitmap")
-            recreateCanvas()
-            pageDataManager.cacheBitmap(newPageId, windowedBitmap, viewport.value)
-        }
+        // The spare buffer may be a bitmap the cache keeps for a page left earlier; scrolling would
+        // draw over it. Dropped only now: until the new page is shown, a scroll step of the old one
+        // can still put its bitmap there.
+        scrollBackBuffer = null
+        useCachedOrNewBitmap(newPageId)
 
         log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
 
@@ -288,6 +270,24 @@ class PageView(
         CanvasEventBus.refreshUiImmediately.emit(Unit)
         loadPage(shown)
         log.d("Page loaded (updatePageID($currentPageId))")
+    }
+
+    /**
+     * Shows [pageId] from its cached bitmap if that shows the current viewport at the view's size,
+     * or else from a new bitmap, which it caches.
+     */
+    private fun useCachedOrNewBitmap(pageId: String) {
+        val cached = pageDataManager.getCachedBitmap(pageId, viewport.value)
+            ?.takeIf { it.width == viewWidth && it.height == viewHeight }
+        if (cached != null) {
+            log.i("PageView: using cached bitmap")
+            windowedBitmap = cached
+            windowedCanvas = Canvas(windowedBitmap)
+        } else {
+            log.i("PageView: creating new bitmap")
+            recreateCanvas()
+            pageDataManager.cacheBitmap(pageId, windowedBitmap, viewport.value)
+        }
     }
 
     private fun recreateCanvas() {

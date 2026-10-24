@@ -276,7 +276,8 @@ fun selectRectangle(
     viewModel: EditorViewModel,
     rectToSelect: Rect
 ) {
-    val inPageCoordinates = toPageCoordinates(rectToSelect, page.zoom, page.scroll)
+    val viewport = page.viewport.value
+    val inPageCoordinates = toPageCoordinates(rectToSelect, viewport.zoom, viewport.scroll)
 
     val imagesToSelect =
         page.pageDataManager.getImagesInRectangle(inPageCoordinates, page.currentPageId)

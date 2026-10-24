@@ -25,8 +25,9 @@ Contents:
 | Keeping shown pages cached | `PageLeases` (views per page), through `PageDataManager.hold` | while any view shows the page |
 | Scroll and zoom | `PageView` (`PageViewport`) | the editor; vertical scroll also in `Page.scroll` |
 
-`PageDataManager` holds page data only. It knows nothing about which page is in front, nor how a
-page is scrolled or zoomed; every call names the page it is about.
+`PageDataManager` holds page data only. It knows nothing about which page is in front, nor tracks
+how a page is scrolled or zoomed: it only keeps the viewport a cached bitmap shows and the scroll
+to save. Every call names the page it is about.
 
 ---
 
@@ -103,9 +104,9 @@ editor and the code around it.
   the viewports of pages this editor has left, so returning to a page brings back its scroll and
   zoom.
 - A scroll or zoom step reads the shown page and its viewport together, works from them, and
-  commits only if the same page is still shown and loaded. A step running while the page changes
-  is dropped instead of being applied to the new page. Scroll and zoom are ignored until the page
-  record is loaded.
+  commits only if the same page is still shown and its record is read. A step running while the
+  page changes is dropped instead of being applied to the new page. Scroll and zoom are ignored
+  until the page record is read.
 - Each committed step records the vertical scroll with `PageDataManager.recordScroll(pageId, y)`;
   `PageSaver` writes it to `Page.scroll` with the other edits. A page shown for the first time in
   an editor opens at that saved scroll, unzoomed.
