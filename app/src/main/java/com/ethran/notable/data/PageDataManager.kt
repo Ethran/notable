@@ -227,7 +227,7 @@ class PageDataManager @Inject constructor(
 
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val saveTopic = MutableSharedFlow<String>()
+    private val saveTopic = MutableSharedFlow<String>()
 
     init {
         collectBackgroundFileChanges()
@@ -861,18 +861,13 @@ class PageDataManager @Inject constructor(
                 log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
 
                 for (pageId in uniquePageIds) {
-                    val (bitmap, shown) = synchronized(lock) {
-                        entries[pageId].let { it?.bitmap?.get() to it?.bitmapViewport }
-                    }
-
-                    if (bitmap == null || bitmap.isRecycled) {
-                        log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
-                        continue
-                    }
-
-                    scope.launch(Dispatchers.IO) {
-                        saveHQPagePreview(context, bitmap, pageId, shown?.scroll, shown?.zoom)
+                    // Off the shelf while it is saved, so no view draws into it meanwhile.
+                    val (bitmap, shown) = takeBitmapToSave(pageId) ?: continue
+                    try {
+                        saveHQPagePreview(context, bitmap, pageId, shown.scroll, shown.zoom)
                         savePageThumbnail(context, bitmap, pageId)
+                    } finally {
+                        putBackBitmap(pageId, bitmap, shown)
                     }
                 }
             }
@@ -896,18 +891,55 @@ class PageDataManager @Inject constructor(
 
     private fun isHeld(pageId: String): Boolean = synchronized(lock) { pageId in held }
 
-    /** [pageId]'s cached bitmap, if it shows [viewport]. */
-    fun getCachedBitmap(pageId: String, viewport: PageViewport): Bitmap? = synchronized(lock) {
+    // A page's screen bitmap sits on a shelf here while no one uses it. A view takes it to draw
+    // into, and the preview save to read it; each puts it back when done. So no one draws into a
+    // bitmap someone else is reading.
+
+    /**
+     * Takes [pageId]'s bitmap off the shelf, if it shows [viewport]. The caller owns it from then
+     * on; a view puts it back through [onExit].
+     */
+    fun takeCachedBitmap(pageId: String, viewport: PageViewport): Bitmap? = synchronized(lock) {
         val entry = entries[pageId] ?: return null
         if (entry.bitmapViewport?.matches(viewport) != true) return null
-        entry.bitmap?.get()?.takeIf { !it.isRecycled && it.isMutable }
+        val bitmap = entry.bitmap?.get()?.takeIf { !it.isRecycled && it.isMutable }
+        clearBitmapLocked(entry)
+        bitmap
     }
 
-    /** Caches [bitmap] as [pageId]'s view at [viewport]. */
-    fun cacheBitmap(pageId: String, bitmap: Bitmap, viewport: PageViewport) = synchronized(lock) {
-        val entry = getOrCreateEntryLocked(pageId)
+    /** [pageId]'s bitmap on the shelf, with the viewport it shows, left there. For tests. */
+    fun peekCachedBitmap(pageId: String): Pair<Bitmap, PageViewport>? = synchronized(lock) {
+        val entry = entries[pageId] ?: return null
+        val bitmap = entry.bitmap?.get() ?: return null
+        bitmap to (entry.bitmapViewport ?: return null)
+    }
+
+    private fun takeBitmapToSave(pageId: String): Pair<Bitmap, PageViewport>? = synchronized(lock) {
+        val entry = entries[pageId] ?: return null
+        val bitmap = entry.bitmap?.get()?.takeIf { !it.isRecycled } ?: return null
+        val viewport = entry.bitmapViewport ?: return null
+        clearBitmapLocked(entry)
+        bitmap to viewport
+    }
+
+    /**
+     * Puts back [bitmap], taken off [pageId]'s shelf and still showing [viewport], unless a newer
+     * bitmap has been put there meanwhile or the page was dropped.
+     */
+    fun putBackBitmap(pageId: String, bitmap: Bitmap, viewport: PageViewport) =
+        synchronized(lock) {
+            val entry = entries[pageId] ?: return
+            if (entry.bitmap?.get() == null) shelveBitmapLocked(entry, bitmap, viewport)
+        }
+
+    private fun shelveBitmapLocked(entry: PageCacheEntry, bitmap: Bitmap, viewport: PageViewport) {
         entry.bitmap = SoftReference(bitmap)
         entry.bitmapViewport = viewport
+    }
+
+    private fun clearBitmapLocked(entry: PageCacheEntry) {
+        entry.bitmap = null
+        entry.bitmapViewport = null
     }
 
     /** Height [pageId]'s strokes and images need, with padding below; at least one screen. */
@@ -1193,14 +1225,14 @@ class PageDataManager @Inject constructor(
                     log.d("Unlinked page $pageId from background key=$key (still used elsewhere)")
                 }
             }
-            entry?.bitmap = null // windowed bitmap for this page stays per-page
+            entry?.let { clearBitmapLocked(it) } // its screen bitmap shows the old background
             log.d("Invalidated background cache for page: $pageId")
         }
     }
 
     /**
-     * Keeps [windowedBitmap], showing [targetPageId] at [viewport], for the page's next showing and
-     * its preview, if the page's data is loaded.
+     * Puts [windowedBitmap], showing [targetPageId] at [viewport], on the shelf for the page's next
+     * showing and its preview, if the page's data is loaded. The view no longer draws into it.
      */
     fun onExit(
         targetPageId: String,
@@ -1210,7 +1242,7 @@ class PageDataManager @Inject constructor(
     ) {
         log.i("Page exit, is page loaded: ${validatePageDataLoaded(targetPageId)}")
         if (validatePageDataLoaded(targetPageId)) {
-            cacheBitmap(targetPageId, windowedBitmap, viewport)
+            synchronized(lock) { shelveBitmapLocked(getOrCreateEntryLocked(targetPageId), windowedBitmap, viewport) }
             scope.launch {
                 saveTopic.emit(targetPageId)
             }

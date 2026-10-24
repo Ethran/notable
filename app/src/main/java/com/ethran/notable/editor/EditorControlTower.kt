@@ -108,7 +108,8 @@ class EditorControlTower(
                     if (viewModel.toolbarState.value.mode == Mode.Select &&
                         viewModel.selectionState.firstPageCut != null
                     ) {
-                        onOpenPageCut(delta / page.zoom)
+                        // Dropped if queued on a page left; the cut belongs to that page.
+                        if (pageId == page.currentPageId) onOpenPageCut(delta / page.zoom)
                     } else {
                         onPageScroll(pageId, -delta)
                     }

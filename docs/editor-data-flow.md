@@ -59,11 +59,12 @@ editor and the code around it.
    time in the order asked for; when several are asked for while one runs, only the last is shown.
 2. **Reading the new page.** Off the main thread, `PageView` reads the page record and gets the
    bitmap for the viewport the page will be shown at: the viewport it had when this editor left it,
-   or else unzoomed at its saved vertical scroll. The cached bitmap is reused if it shows that
-   viewport at the view's size; otherwise a new one is drawn from the page's preview or background.
+   or else unzoomed at its saved vertical scroll. It takes the page's bitmap off the shelf in
+   `PageDataManager` if that shows this viewport at the view's size; otherwise it draws a new one
+   from the page's preview or background.
 3. **Swapping pages.** On the main thread, in one step under its page lock, `PageView`:
-   - keeps the old page's screen bitmap in `PageDataManager` (`onExit`), tagged with the viewport
-     it shows, for the page's next showing and its preview, if the page's data is loaded;
+   - puts the old page's screen bitmap on the shelf (`onExit`), tagged with the viewport it shows,
+     for the page's next showing and its preview, if the page's data is loaded;
    - takes the new page's lease and closes the old one;
    - puts in the new page's `OpenPage` snapshot (record and page number), its viewport and its
      bitmap.
@@ -74,7 +75,7 @@ editor and the code around it.
    they are in.
 5. **Neighbours.** `EditorViewModel.onPageShown` is called once the page holds its lease; it
    cancels loads of pages left behind and prefetches the neighbours.
-6. **Closing.** `PageView.disposeOldPage` keeps the shown page's bitmap, releases the lease and
+6. **Closing.** `PageView.disposeOldPage` puts the shown page's bitmap on the shelf, releases the lease and
    marks the view disposed. A disposed view shows, draws and loads nothing more, even if a page
    change was running. `EditorViewModel.onDispose` then stops loading the pages around it.
 
@@ -88,11 +89,12 @@ editor and the code around it.
    `PageSaver`. The edits are kept apart from the cache, so evicting a page never drops them, and a
    page loaded again gets them laid over its database rows.
 3. `PageSaver` (`data/PageSaver.kt`) writes everything collected in one transaction once editing
-   pauses, and no later than a few seconds after the first unsaved edit. A failed write keeps its
-   changes unsaved and is retried, and a warning stays on screen until a save succeeds; changes to
-   a page deleted meanwhile are dropped.
+   pauses, and, while the process runs, no later than a few seconds after the first unsaved edit.
+   A failed write keeps its changes unsaved and is retried, and a warning stays on screen until a
+   save succeeds; changes to a page deleted meanwhile are dropped.
 4. Saving is forced sooner when it matters:
-   - `saveSoon()` when the editor closes and when the app goes to the background;
+   - `saveSoon()` when the editor closes and when the app goes to the background. It starts the
+     save without waiting, so a process killed right after may not finish it;
    - `saveAll()` before export and sync, which read pages from the database; they stop, and
      report why, if it returns an error.
 
@@ -119,9 +121,14 @@ editor and the code around it.
 
 ## Caching and memory
 
-- **Pages.** One `PageCacheEntry` per page holds its strokes, images, background key and the last
-  screen bitmap (a `SoftReference`, tagged with its viewport). Eviction picks the least recently
-  used pages that are neither held nor loading.
+- **Pages.** One `PageCacheEntry` per page holds its strokes, images, background key and the
+  screen bitmap the view left the page with (a `SoftReference`, tagged with its viewport).
+  Eviction picks the least recently used pages that are neither held nor loading.
+- **Screen bitmaps on a shelf.** A screen bitmap has one user at a time. While no one uses it, it
+  sits on the page's shelf in `PageDataManager`. A view takes it off to draw into it and puts it
+  back when it leaves the page; the preview save takes it off while it reads it and puts it back
+  after. A view that finds the shelf empty draws a new bitmap. So no one draws into a bitmap that
+  someone else is reading.
 - **Budget.** Stroke and image pages may use a fraction of the app heap. A page's cost is
   estimated before loading from its stored stroke size. A page loaded for showing evicts unpinned
   pages to fit and loads even if it still doesn't; a prefetched page is loaded only into spare
@@ -132,6 +139,6 @@ editor and the code around it.
   reloaded and held pages repainted.
 - **Memory signals.** `onTrimMemory` shrinks the cache back to its budget, or drops every
   unpinned page when the app is hidden; `onLowMemory` drops every unpinned page.
-- **Previews.** The bitmaps kept on page exit are written off the main thread as thumbnails and
-  page previews. A preview is written only for an unzoomed page scrolled to its left edge, and its
+- **Previews.** The bitmaps put on the shelf on page exit are written off the main thread, one at a
+  time, as thumbnails and page previews. A preview is written only for an unzoomed page scrolled to its left edge, and its
   file name carries the vertical scroll it was captured at.

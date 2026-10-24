@@ -1,7 +1,9 @@
 package com.ethran.notable.editor
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -87,19 +89,59 @@ class PageViewportTest {
     // Scroll and zoom steps run on the main thread, as in the editor.
     private suspend fun onMain(step: suspend () -> Unit) = withContext(Dispatchers.Main) { step() }
 
-    // Waits until the view shows [pageId]. The page is shown from the bitmap cached for it at its
-    // viewport, drawn at its zoom.
-    private fun PageView.showAndWait(pageId: String) {
+    // What the view showed when it last left each page: its screen and viewport.
+    private val leftScreens = HashMap<String, Pair<Bitmap, PageViewport>>()
+
+    // Strokes all down [pageId], so whatever part of it a screen shows has some.
+    private suspend fun drawDownThePage(pageId: String) {
+        data.db.strokeDao().create((0 until 30).map { k -> testStroke(pageId, x = 150f + k % 5 * 40, y = 100f * k) })
+    }
+
+    private fun PageView.screen(): Pair<Bitmap, PageViewport> =
+        windowedBitmap.copy(Bitmap.Config.ARGB_8888, false) to viewport.value
+
+    // Waits until the view shows [pageId], drawn at its zoom, and draws it whole once it has loaded,
+    // as the editor does. A loaded page left is kept for its next showing and its preview.
+    private suspend fun PageView.showAndWait(pageId: String) {
+        val left = currentPageId
+        val leftScreen = screen()
+        val leaving = left != pageId && isTransformationAllowed &&
+            data.pageDataManager.validatePageDataLoaded(left)
         changePage(pageId)
         assertTrue(waitForCondition(5000) { currentPageId == pageId && isTransformationAllowed })
-        assertSame("bitmap of $pageId", data.pageDataManager.getCachedBitmap(pageId, viewport.value), windowedBitmap)
+        if (leaving) {
+            leftScreens[left] = leftScreen
+            assertTrue("$left kept", waitForCondition(5000) { data.pageDataManager.peekCachedBitmap(left) != null })
+        }
+        assertKeptScreensUnchanged()
         val scale = FloatArray(9).also { windowedCanvas.matrix.getValues(it) }[Matrix.MSCALE_X]
         assertEquals("canvas scale of $pageId", zoom, scale, 0f)
+        assertTrue(waitForCondition(5000) { data.pageDataManager.validatePageDataLoaded(pageId) })
+        onMain { drawAreaScreenCoordinates(Rect(0, 0, viewWidth, viewHeight)) }
+    }
+
+    // Closes the view, which keeps the page it shows as it was.
+    private fun PageView.disposeAndKeep() {
+        val shown = currentPageId
+        val shownScreen = screen()
+        disposeOldPage()
+        leftScreens[shown] = shownScreen
+    }
+
+    // A bitmap kept for a page shows the page as the view left it, at the viewport it was left at:
+    // drawing since, on that page or another, never changes it.
+    private fun assertKeptScreensUnchanged() {
+        for ((pageId, left) in leftScreens) {
+            val (kept, keptViewport) = data.pageDataManager.peekCachedBitmap(pageId) ?: continue
+            assertEquals("viewport kept for $pageId", left.second, keptViewport)
+            assertTrue("screen kept for $pageId", kept.sameAs(left.first))
+        }
     }
 
     @Test(timeout = 60000)
     fun eachPageKeepsItsOwnViewport_andOnlyItsVerticalScrollOutlivesTheView() = runBlocking {
         val pages = seedPages(4)
+        for (pageId in pages) drawDownThePage(pageId)
         val view = createPageView(pages[0])
         val left = HashMap<String, PageViewport>()
         for ((i, pageId) in pages.withIndex()) {
@@ -110,6 +152,7 @@ class PageViewportTest {
                 onMain { view.simpleUpdateZoom(pageId, -0.5f) }
                 assertNotEquals("zoom of $pageId", 1f, view.zoom)
             }
+            assertKeptScreensUnchanged()
             left[pageId] = view.viewport.value
         }
         assertEquals("every page has its own viewport", pages.size, left.values.toSet().size)
@@ -117,9 +160,14 @@ class PageViewportTest {
         for (pageId in listOf(pages[0], pages[2], pages[1], pages[3], pages[0])) {
             view.showAndWait(pageId)
             assertEquals(pageId, left[pageId], view.viewport.value)
+            // Drawing on a page shown again, while its preview may still be being saved. Two
+            // scrolls, as each reuses the screen buffer of the one before.
+            repeat(2) { onMain { view.updateScroll(pageId, Offset(0f, 50f)) } }
+            assertKeptScreensUnchanged()
+            left[pageId] = view.viewport.value
         }
 
-        view.disposeOldPage()
+        view.disposeAndKeep()
         assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
         for (pageId in pages) {
             assertEquals(
@@ -170,6 +218,34 @@ class PageViewportTest {
         assertEquals(PageViewport(), view.viewport.value)
         assertSame(bitmap, view.windowedBitmap)
         view.disposeOldPage()
+    }
+
+    @Test(timeout = 30000)
+    fun stepRunningWhileTheViewIsDisposed_changesNothing() = runBlocking {
+        val (pageId) = seedPages(1)
+        val snack = SnackState()
+        val view = createPageView(pageId, snack)
+        view.showAndWait(pageId)
+        val bitmap = view.windowedBitmap
+
+        // Holding the drawing lock keeps the scroll step waiting until the view is disposed.
+        val step = try {
+            CanvasEventBus.drawingInProgress.lock()
+            val step = viewScope.launch(Dispatchers.Main) { view.updateScroll(pageId, Offset(0f, 100f)) }
+            assertTrue("the step waits for drawing", waitForCondition(5000) {
+                snack.activeSnacks.value.any { it.text?.startsWith("Waiting for drawing") == true }
+            })
+            view.disposeOldPage()
+            step
+        } finally {
+            if (CanvasEventBus.drawingInProgress.isLocked) CanvasEventBus.drawingInProgress.unlock()
+        }
+        withTimeout(5000) { step.join() }
+
+        assertEquals(PageViewport(), view.viewport.value)
+        assertSame(bitmap, view.windowedBitmap)
+        assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
+        assertEquals(0, data.db.pageDao().getById(pageId)!!.scroll)
     }
 
     @Test(timeout = 30000)

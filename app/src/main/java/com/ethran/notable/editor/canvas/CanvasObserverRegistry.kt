@@ -89,7 +89,6 @@ class CanvasObserverRegistry(
         observeToolbar()
         observeMode()
         observeHistory()
-        observeSaveCurrent()
         observeQuickNav()
         observeRestoreCanvas()
     }
@@ -325,16 +324,6 @@ class CanvasObserverRegistry(
         }
     }
 
-
-    private fun observeSaveCurrent() {
-        observerScope.launch {
-            CanvasEventBus.saveCurrent.collect {
-                // Push current bitmap to persist layer so preview has something to load
-                pageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap, page.viewport.value)
-                pageDataManager.saveTopic.tryEmit(page.currentPageId)
-            }
-        }
-    }
 
     @OptIn(FlowPreview::class)
     private fun observeQuickNav() {
