@@ -21,10 +21,7 @@ import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
 import com.ethran.notable.editor.PageViewport
 import com.ethran.notable.editor.canvas.CanvasEventBus
-import com.ethran.notable.editor.utils.saveHQPagePreview
-import com.ethran.notable.editor.utils.savePageThumbnail
 import com.ethran.notable.io.loadBackgroundBitmap
-import com.ethran.notable.utils.chunked
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -33,8 +30,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.launch
 import java.io.File
 import java.lang.ref.SoftReference
@@ -131,11 +126,15 @@ internal class PageChanges {
     /** Whether strokes or images changed, not only the scroll. */
     val hasEdits: Boolean get() = strokes.isNotEmpty() || images.isNotEmpty()
 
+    /** When strokes or images last changed, in epoch millis; 0 if they didn't. */
+    var editedAtMs: Long = 0
+
     /** Adds [newer] on top of these changes; where both changed an id, [newer] wins. */
     fun putAll(newer: PageChanges) {
         strokes.putAll(newer.strokes)
         images.putAll(newer.images)
         newer.scrollY?.let { scrollY = it }
+        editedAtMs = max(editedAtMs, newer.editedAtMs)
     }
 }
 
@@ -203,6 +202,18 @@ class PageDataManager @Inject constructor(
     private val unsavedSignal = Channel<Unit>(Channel.CONFLATED)
     internal val unsavedChanges: ReceiveChannel<Unit> get() = unsavedSignal
 
+    // Pages whose bitmap was put on the shelf since [PagePreviewStore] last took them, to write
+    // their previews from. Guarded by [lock]. [previewSignal] wakes the store; conflated, like
+    // [unsavedSignal].
+    private val previewRequests = LinkedHashSet<String>()
+    private val previewSignal = Channel<Unit>(Channel.CONFLATED)
+    internal val previewsRequested: ReceiveChannel<Unit> get() = previewSignal
+
+    /** Takes the pages whose previews to write, each once, in the order they were left. */
+    internal fun takePreviewRequests(): List<String> = synchronized(lock) {
+        previewRequests.toList().also { previewRequests.clear() }
+    }
+
     // Fraction of the ART app-heap that stroke pages + backgrounds may use together. The rest is
     // left uncounted for the windowed bitmap, Compose/UI objects, and a load's transient stroke
     // copy. Tune down first if the app OOMs.
@@ -226,8 +237,6 @@ class PageDataManager @Inject constructor(
     // it reports page ids to invalidate through a flow, collected in [init].
 
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    private val saveTopic = MutableSharedFlow<String>()
 
     init {
         collectBackgroundFileChanges()
@@ -850,30 +859,6 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    fun collectAndPersistBitmapsBatch(
-        context: Context, scope: CoroutineScope
-    ) {
-        scope.launch(Dispatchers.IO) {
-            saveTopic.buffer(10).chunked(1000).collect { pageIdBatch ->
-                val uniquePageIds = pageIdBatch.distinct()
-                if (uniquePageIds.isEmpty()) return@collect
-
-                log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
-
-                for (pageId in uniquePageIds) {
-                    // Off the shelf while it is saved, so no view draws into it meanwhile.
-                    val (bitmap, shown) = takeBitmapToSave(pageId) ?: continue
-                    try {
-                        saveHQPagePreview(context, bitmap, pageId, shown.scroll, shown.zoom)
-                        savePageThumbnail(context, bitmap, pageId)
-                    } finally {
-                        putBackBitmap(pageId, bitmap, shown)
-                    }
-                }
-            }
-        }
-    }
-
     /**
      * Holds [pageId] until [release]: it is never evicted, keeps its background, and is repainted
      * when its background file changes. Doesn't load the page.
@@ -914,7 +899,11 @@ class PageDataManager @Inject constructor(
         bitmap to (entry.bitmapViewport ?: return null)
     }
 
-    private fun takeBitmapToSave(pageId: String): Pair<Bitmap, PageViewport>? = synchronized(lock) {
+    /**
+     * Takes [pageId]'s bitmap off the shelf, with the viewport it shows, to write its preview; the
+     * caller puts it back with [putBackBitmap]. Null if no bitmap is on the shelf.
+     */
+    internal fun takeBitmapToSave(pageId: String): Pair<Bitmap, PageViewport>? = synchronized(lock) {
         val entry = entries[pageId] ?: return null
         val bitmap = entry.bitmap?.get()?.takeIf { !it.isRecycled } ?: return null
         val viewport = entry.bitmapViewport ?: return null
@@ -1010,7 +999,9 @@ class PageDataManager @Inject constructor(
     private inline fun editPage(pageId: String, edit: (PageCacheEntry, PageChanges) -> Unit) {
         synchronized(lock) {
             val entry = getOrCreateEntryLocked(pageId)
-            edit(entry, unsavedLocked(pageId))
+            val changes = unsavedLocked(pageId)
+            edit(entry, changes)
+            changes.editedAtMs = System.currentTimeMillis()
             recomputeEntrySizeLocked(entry)
         }
         unsavedSignal.trySend(Unit)
@@ -1232,20 +1223,17 @@ class PageDataManager @Inject constructor(
 
     /**
      * Puts [windowedBitmap], showing [targetPageId] at [viewport], on the shelf for the page's next
-     * showing and its preview, if the page's data is loaded. The view no longer draws into it.
+     * showing, and asks [PagePreviewStore] to write the page's preview from it, if the page's data
+     * is loaded. The view no longer draws into it.
      */
-    fun onExit(
-        targetPageId: String,
-        windowedBitmap: Bitmap,
-        viewport: PageViewport,
-        scope: CoroutineScope,
-    ) {
+    fun onExit(targetPageId: String, windowedBitmap: Bitmap, viewport: PageViewport) {
         log.i("Page exit, is page loaded: ${validatePageDataLoaded(targetPageId)}")
         if (validatePageDataLoaded(targetPageId)) {
-            synchronized(lock) { shelveBitmapLocked(getOrCreateEntryLocked(targetPageId), windowedBitmap, viewport) }
-            scope.launch {
-                saveTopic.emit(targetPageId)
+            synchronized(lock) {
+                shelveBitmapLocked(getOrCreateEntryLocked(targetPageId), windowedBitmap, viewport)
+                previewRequests += targetPageId
             }
+            previewSignal.trySend(Unit)
             // Size accounting is kept current on every edit, so no recompute here.
         }
     }

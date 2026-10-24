@@ -217,7 +217,6 @@ class PageView(
         coroutineScope.launch(Dispatchers.IO) {
             log.i("PageView init with initial pageId: $initialPageId")
             if (!switchToPage(initialPageId)) return@launch
-            pageDataManager.collectAndPersistBitmapsBatch(context, coroutineScope)
 
             requestedPageId.collect { pageId ->
                 if (pageId != currentPageId) switchToPage(pageId)
@@ -325,7 +324,7 @@ class PageView(
             val previous = lease
             if (previous != null) {
                 leftPages[previous.pageId] = viewportFlow.value
-                pageDataManager.onExit(previous.pageId, windowedBitmap, viewportFlow.value, coroutineScope)
+                pageDataManager.onExit(previous.pageId, windowedBitmap, viewportFlow.value)
             }
             lease = pageLeases.acquire(page.pageId)
             previous?.close()
@@ -366,7 +365,7 @@ class PageView(
     fun disposeOldPage() {
         log.d("Dispose old page")
         synchronized(pageLock) {
-            lease?.let { pageDataManager.onExit(it.pageId, windowedBitmap, viewportFlow.value, coroutineScope) }
+            lease?.let { pageDataManager.onExit(it.pageId, windowedBitmap, viewportFlow.value) }
             disposed = true
             lease?.close()
             lease = null

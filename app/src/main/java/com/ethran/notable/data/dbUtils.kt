@@ -5,12 +5,11 @@ import android.net.Uri
 import android.os.Environment
 import com.ethran.notable.APP_SETTINGS_KEY
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.editor.utils.deletePagePreviews
 import com.ethran.notable.io.createFileFromContentUri
 import com.ethran.notable.io.isImageUri
 import com.ethran.notable.io.saveImageFromContentUri
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -114,17 +113,5 @@ suspend fun deletePage(appRepository: AppRepository, pageId: String, filesDir: F
         )
     }
     appRepository.pageRepository.delete(pageId)
-    coroutineScope {
-        launch {
-            val imgFileThumb = File(filesDir, "pages/previews/thumbs/$pageId")
-            if (imgFileThumb.exists()) {
-                imgFileThumb.delete()
-            }
-            val imgFileFull = File(filesDir, "pages/previews/full/$pageId")
-            if (imgFileFull.exists()) {
-                imgFileFull.delete()
-            }
-        }
-
-    }
+    deletePagePreviews(filesDir, pageId)
 }

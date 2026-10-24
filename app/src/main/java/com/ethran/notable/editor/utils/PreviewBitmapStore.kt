@@ -84,8 +84,17 @@ private fun optimizeBitmapForStorage(
     return StorageOptimization(bitmap, webpLossyFormat, quality)
 }
 
-fun getThumbnailFile(context: Context, pageID: String): File =
-    File(context.filesDir, "pages/previews/thumbs/$pageID.webp")
+fun getThumbnailFile(context: Context, pageID: String): File = thumbnailFile(context.filesDir, pageID)
+
+private fun thumbnailFile(filesDir: File, pageID: String): File =
+    File(filesDir, "pages/previews/thumbs/$pageID.webp")
+
+/** Deletes [pageID]'s thumbnail and previews, whatever scroll they were captured at. */
+fun deletePagePreviews(filesDir: File, pageID: String) {
+    thumbnailFile(filesDir, pageID).delete()
+    File(filesDir, "pages/previews/full").listFiles { f -> f.name.startsWith("$pageID-sy") }
+        ?.forEach { it.delete() }
+}
 
 private fun isEqApprox(a: Float, b: Float): Boolean = abs(a - b) <= EQUALITY_THRESHOLD
 

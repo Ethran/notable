@@ -74,7 +74,9 @@ interface PageDao {
 
     // Bump only the edit timestamp, without a read-modify-write of the whole row. updatedAt is
     // stored as epoch millis (Date <-> Long converter), so a Long here matches the column format.
-    @Query("UPDATE page SET updatedAt=:updatedAt WHERE id =:pageId")
+    // It only moves forward: past a later time stamped meanwhile, such as one sync anchored an
+    // upload to, so the page stays dirty for sync.
+    @Query("UPDATE page SET updatedAt=MAX(:updatedAt, updatedAt + 1) WHERE id =:pageId")
     suspend fun touchUpdatedAt(pageId: String, updatedAt: Long)
 
     @Query("SELECT * FROM page WHERE notebookId is null AND parentFolderId is :folderId")

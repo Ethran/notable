@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PagePreviewStore
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.db.AppDatabase
@@ -202,6 +203,7 @@ class EditorSelectionThreadSafetyTests {
             pageDataManager = pageDataManager,
             pageLeases = PageLeases(pageDataManager),
             pageSaver = pageSaver,
+            pagePreviewStore = PagePreviewStore(context, pageDataManager, appRepository),
             syncOrchestrator = syncOrchestrator,
             snackDispatcher = snackDispatcher,
             historyFactory = historyFactory,

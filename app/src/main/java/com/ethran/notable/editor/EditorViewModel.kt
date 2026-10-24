@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PagePreviewStore
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
@@ -186,6 +187,8 @@ class EditorViewModel @Inject constructor(
     val pageDataManager: PageDataManager,
     val pageLeases: PageLeases,
     private val pageSaver: PageSaver,
+    // Only needs to exist: it writes the previews of the pages this editor leaves.
+    @Suppress("unused") private val pagePreviewStore: PagePreviewStore,
     private val syncOrchestrator: SyncOrchestrator,
     val snackDispatcher: SnackDispatcher,
     private val historyFactory: History.Factory,
