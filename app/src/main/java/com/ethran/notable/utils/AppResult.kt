@@ -45,6 +45,8 @@ sealed class DomainError(
 
     data class DatabaseError(val message: String) : DomainError(message)
 
+    data class FileError(val message: String) : DomainError(message)
+
     data class DrawingError(val message: String) : DomainError(message)
 
     // Sync Errors

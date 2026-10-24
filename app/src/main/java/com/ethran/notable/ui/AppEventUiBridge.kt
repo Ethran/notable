@@ -150,6 +150,16 @@ class AppEventUiBridge @Inject constructor(
                 )
             }
 
+            is AppEvent.EditsNotSaved -> {
+                snackDispatcher.showOrUpdateSnack(
+                    SnackConf(
+                        id = AppEvent.EDITS_NOT_SAVED_ID,
+                        text = "${event.reason}. Retrying; changes made now are lost if the app is closed.",
+                        duration = null
+                    )
+                )
+            }
+
             is AppEvent.DismissMessage -> {
                 snackDispatcher.removeSnack(event.id)
             }

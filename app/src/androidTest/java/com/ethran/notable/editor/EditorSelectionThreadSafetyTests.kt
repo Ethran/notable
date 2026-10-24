@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
@@ -181,6 +182,7 @@ class EditorSelectionThreadSafetyTests {
 
         val exportEngine = mockk<ExportEngine>(relaxed = true)
         val pageDataManager = mockk<PageDataManager>(relaxed = true)
+        val pageSaver = mockk<PageSaver>(relaxed = true)
         val syncOrchestrator = mockk<SyncOrchestrator>(relaxed = true).also {
             coEvery { it.syncFromPageId(any()) } returns Unit
         }
@@ -198,6 +200,7 @@ class EditorSelectionThreadSafetyTests {
             editorSettingCacheManager = editorSettingCacheManager,
             exportEngine = exportEngine,
             pageDataManager = pageDataManager,
+            pageSaver = pageSaver,
             syncOrchestrator = syncOrchestrator,
             snackDispatcher = snackDispatcher,
             historyFactory = historyFactory,

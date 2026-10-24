@@ -7,6 +7,9 @@ sealed interface AppEvent {
 
     data class ActionHint(val message: String, val duration: Int = 3000) : AppEvent
     data class LogMessage(val reason: String, val message: String, val isError: Boolean = true) : AppEvent
+
+    /** Edits can't be saved. Stays on screen until [DismissMessage] with [EDITS_NOT_SAVED_ID]. */
+    data class EditsNotSaved(val reason: String) : AppEvent
     
     data class ExportProgress(val current: Int, val total: Int, val prefix: String) : AppEvent
     data class ExportCompleted(val resultText: String?) : AppEvent
@@ -31,5 +34,6 @@ sealed interface AppEvent {
         const val PREVIEW_BACKFILL_PROGRESS_ID = "preview_backfill_progress"
         const val EXPORT_PROGRESS_ID = "export_progress"
         const val IMPORT_PROGRESS_ID = "import_progress"
+        const val EDITS_NOT_SAVED_ID = "edits_not_saved"
     }
 }

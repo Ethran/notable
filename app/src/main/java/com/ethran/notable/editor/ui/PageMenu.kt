@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,11 +19,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.deletePage
 import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
+import com.ethran.notable.utils.onSuccess
+import dagger.hilt.EntryPoint
+import dagger.hilt.EntryPoints
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.launch
 
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface PageMenuEntryPoint {
+    fun pageSaver(): PageSaver
+}
 
 @Composable
 fun PageMenu(
@@ -35,6 +47,9 @@ fun PageMenu(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val pageSaver = remember(context) {
+        EntryPoints.get(context.applicationContext, PageMenuEntryPoint::class.java).pageSaver()
+    }
     ScaledPopup(
         alignment = Alignment.TopStart,
         onDismissRequest = { onClose() },
@@ -94,7 +109,7 @@ fun PageMenu(
                     .padding(10.dp)
                     .noRippleClickable {
                         scope.launch {
-                            appRepository.duplicatePage(pageId)
+                            pageSaver.saveAll().onSuccess { appRepository.duplicatePage(pageId) }
                         }
                     }) {
                 Text("Duplicate")

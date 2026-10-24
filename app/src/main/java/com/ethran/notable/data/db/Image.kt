@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.Upsert
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -57,6 +58,9 @@ interface ImageDao {
 
     @Update
     suspend fun update(images: List<Image>)
+
+    @Upsert
+    suspend fun upsert(images: List<Image>)
 
     @Query("DELETE FROM Image WHERE id IN (:ids)")
     suspend fun deleteAll(ids: List<String>)
@@ -116,8 +120,15 @@ class ImageRepository @Inject constructor(
         db.update(images)
     }
 
+    /** Inserts [images], replacing the stored ones with the same ids. */
+    suspend fun upsert(images: List<Image>) {
+        db.upsert(images)
+    }
+
     suspend fun deleteAll(ids: List<String>) {
-        db.deleteAll(ids)
+        ids.chunked(900).forEach { batch ->
+            db.deleteAll(batch)
+        }
     }
 
     suspend fun getUrisForPage(pageId: String): List<String?> {

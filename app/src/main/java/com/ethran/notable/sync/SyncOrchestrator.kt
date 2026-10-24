@@ -1,6 +1,7 @@
 package com.ethran.notable.sync
 
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
@@ -10,6 +11,7 @@ import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.flatMap
 import com.ethran.notable.utils.getOrElse
 import com.ethran.notable.utils.getOrNull
+import com.ethran.notable.utils.mapError
 import com.ethran.notable.utils.onError
 import com.ethran.notable.utils.onFailure
 import com.ethran.notable.utils.onSuccess
@@ -26,6 +28,7 @@ import javax.inject.Singleton
 @Singleton
 class SyncOrchestrator @Inject constructor(
     private val appRepository: AppRepository,
+    private val pageSaver: PageSaver,
     private val kvProxy: KvProxy,
     private val syncPreflightService: SyncPreflightService,
     private val folderSyncService: FolderSyncService,
@@ -52,6 +55,7 @@ class SyncOrchestrator @Inject constructor(
 
         try {
             log.i(TAG, "Starting full sync...")
+            saveEdits().onFailure { return@withContext failStep(it) }
             reporter.beginStep(SyncStep.INITIALIZING, PROGRESS_INITIALIZING, "Initializing sync...")
 
             val settings = kvProxy.getSyncSettings()
@@ -293,6 +297,7 @@ class SyncOrchestrator @Inject constructor(
     private suspend fun runSingleNotebookSync(notebookId: String): AppResult<Unit, DomainError> {
         val settings = kvProxy.getSyncSettings()
         if (!settings.syncEnabled) return AppResult.Success(Unit)
+        saveEdits().onFailure { return AppResult.Error(it) }
         // Wifi constraint not satisfied -> planned no-op, the same policy as any other sync.
         if (syncPreflightService.checkWifiConstraint() is AppResult.Error) return AppResult.Success(Unit)
         if (settings.username.isBlank() || settings.password.isBlank()) {
@@ -307,6 +312,15 @@ class SyncOrchestrator @Inject constructor(
             settings.downloadOnly
         )
     }
+
+    /**
+     * Writes the editor's pending edits to the database. Sync reads pages and their edit timestamps
+     * from there, so every sync calls this before it starts, and stops if it fails: [PageSaver]
+     * retries the edits it could not write, and a retry after the sync would write them over what
+     * the sync downloaded.
+     */
+    private suspend fun saveEdits(): AppResult<Unit, DomainError> =
+        pageSaver.saveAll().mapError { DomainError.SyncError("${it.userMessage}; sync will try again later") }
 
     suspend fun syncFromPageId(pageId: String) {
         val settings = kvProxy.getSyncSettings()
@@ -416,6 +430,10 @@ class SyncOrchestrator @Inject constructor(
         if (!syncMutex.tryLock()) return@withContext AppResult.Error(DomainError.SyncInProgress)
         try {
             reporter.beginStep(SyncStep.SYNCING_NOTEBOOKS, PROGRESS_SYNCING_NOTEBOOKS, details)
+            saveEdits().onFailure {
+                reporter.finishError(it, false)
+                return@withContext AppResult.Error(it)
+            }
             block().also { result ->
                 when (result) {
                     is AppResult.Success -> reporter.finishSuccess(SyncSummary(0, 0, 0, 0))
@@ -533,6 +551,7 @@ class SyncOrchestrator @Inject constructor(
             webDavClientFactory.create(settings.serverUrl, settings.username, settings.password)
         syncPreflightService.checkWifiConstraint().onFailure { return AppResult.Error(it) }
         syncPreflightService.checkClockSkew(client).onFailure { return AppResult.Error(it) }
+        saveEdits().onFailure { return AppResult.Error(it) }
         return AppResult.Success(client)
     }
 
