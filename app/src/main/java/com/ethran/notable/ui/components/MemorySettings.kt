@@ -380,9 +380,9 @@ private fun breakdownText(snap: MemorySnapshot): String = buildString {
     appendLine(headerRow(PAGE_COLUMNS))
     if (snap.pages.isEmpty()) appendLine("  <none>")
     for (p in snap.pages) {
-        // C=current, P=pinned, L=loading, ?=metadata only (not fully loaded).
+        // S=shown (held), P=pinned, L=loading, ?=metadata only (not fully loaded).
         val flags = buildString {
-            append(if (p.isCurrent) "C" else "-")
+            append(if (p.held) "S" else "-")
             append(if (p.pinned) "P" else "-")
             append(if (p.loading) "L" else "-")
             append(if (p.loaded) "-" else "?")
@@ -451,7 +451,7 @@ private fun reportText(snap: MemorySnapshot): String = buildString {
     appendLine("  other            ${mb(snap.untrackedNativeBytes)}")
     if (snap.nativeOverAccounted) appendLine("  ** counted bitmaps exceed measured native heap: split unreliable **")
     appendLine()
-    appendLine("Current page: ${snap.currentPageId ?: "<none>"}")
+    appendLine("Shown pages: ${snap.heldPageIds.ifEmpty { listOf("<none>") }.joinToString()}")
     appendLine()
     append(breakdownText(snap))
 }
@@ -494,7 +494,7 @@ private fun previewPage(
     loaded: Boolean = true,
     loading: Boolean = false,
     pinned: Boolean = false,
-    current: Boolean = false,
+    held: Boolean = false,
     seq: Long = 0L,
 ) = PageMemoryRow(
     pageId = id,
@@ -508,7 +508,7 @@ private fun previewPage(
     loaded = loaded,
     loading = loading,
     pinned = pinned,
-    isCurrent = current,
+    held = held,
     lastAccessSeq = seq,
 )
 
@@ -516,7 +516,7 @@ private val PREVIEW_PAGES = listOf(
     previewPage(
         id = "a3f19c2e77", sizeMb = 18, estimateMb = 20, strokes = 12_400, points = 1_912_000,
         images = 2, withBitmap = true, background = "a1b2c3d4e5f60718",
-        pinned = true, current = true, seq = 1042,
+        pinned = true, held = true, seq = 1042,
     ),
     previewPage(
         id = "b7c04d1a90", sizeMb = 14, estimateMb = 12, strokes = 9_800, points = 1_403_500,
@@ -559,7 +559,7 @@ private fun previewSnapshot(
     entryBytes = entryMb * MB,
     backgroundCapBytes = backgroundCapMb * MB,
     backgroundBytes = backgroundMb * MB,
-    currentPageId = pages.firstOrNull { it.isCurrent }?.pageId,
+    heldPageIds = pages.filter { it.held }.map { it.pageId },
     pages = pages,
     backgrounds = backgrounds,
 )

@@ -200,6 +200,7 @@ class EditorSelectionThreadSafetyTests {
             editorSettingCacheManager = editorSettingCacheManager,
             exportEngine = exportEngine,
             pageDataManager = pageDataManager,
+            pageLeases = PageLeases(pageDataManager),
             pageSaver = pageSaver,
             syncOrchestrator = syncOrchestrator,
             snackDispatcher = snackDispatcher,
