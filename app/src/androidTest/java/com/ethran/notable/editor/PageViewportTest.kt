@@ -1,6 +1,7 @@
 package com.ethran.notable.editor
 
 import android.app.Application
+import android.graphics.Matrix
 import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -22,11 +23,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -81,9 +84,17 @@ class PageViewportTest {
         onPageShown = {},
     )
 
+    // Scroll and zoom steps run on the main thread, as in the editor.
+    private suspend fun onMain(step: suspend () -> Unit) = withContext(Dispatchers.Main) { step() }
+
+    // Waits until the view shows [pageId]. The page is shown from the bitmap cached for it at its
+    // viewport, drawn at its zoom.
     private fun PageView.showAndWait(pageId: String) {
         changePage(pageId)
         assertTrue(waitForCondition(5000) { currentPageId == pageId && isTransformationAllowed })
+        assertSame("bitmap of $pageId", data.pageDataManager.getCachedBitmap(pageId, viewport.value), windowedBitmap)
+        val scale = FloatArray(9).also { windowedCanvas.matrix.getValues(it) }[Matrix.MSCALE_X]
+        assertEquals("canvas scale of $pageId", zoom, scale, 0f)
     }
 
     @Test(timeout = 60000)
@@ -94,9 +105,9 @@ class PageViewportTest {
         for ((i, pageId) in pages.withIndex()) {
             view.showAndWait(pageId)
             assertEquals("first show of $pageId", 1f, view.zoom)
-            view.updateScroll(Offset(30f * (i + 1), 200.4f * (i + 1)))
+            onMain { view.updateScroll(pageId, Offset(30f * (i + 1), 200.4f * (i + 1))) }
             if (i % 2 == 0) {
-                view.simpleUpdateZoom(-0.5f)
+                onMain { view.simpleUpdateZoom(pageId, -0.5f) }
                 assertNotEquals("zoom of $pageId", 1f, view.zoom)
             }
             left[pageId] = view.viewport.value
@@ -138,7 +149,7 @@ class PageViewportTest {
         // Holding the drawing lock keeps the zoom step waiting until the page has changed.
         val step = try {
             CanvasEventBus.drawingInProgress.lock()
-            val step = viewScope.launch { view.simpleUpdateZoom(-0.5f) }
+            val step = viewScope.launch(Dispatchers.Main) { view.simpleUpdateZoom(first, -0.5f) }
             assertTrue("the step waits for drawing", waitForCondition(5000) {
                 snack.activeSnacks.value.any { it.text?.startsWith("Waiting for drawing") == true }
             })
@@ -152,6 +163,12 @@ class PageViewportTest {
         assertEquals(PageViewport(), view.viewport.value)
         view.showAndWait(first)
         assertEquals(PageViewport(), view.viewport.value)
+
+        // A step for a page that is not shown changes nothing.
+        val bitmap = view.windowedBitmap
+        onMain { view.updateScroll(second, Offset(0f, 100f)) }
+        assertEquals(PageViewport(), view.viewport.value)
+        assertSame(bitmap, view.windowedBitmap)
         view.disposeOldPage()
     }
 
@@ -164,8 +181,8 @@ class PageViewportTest {
         val view = createPageView(pageId)
 
         assertFalse(view.isTransformationAllowed)
-        view.updateScroll(Offset(0f, 500f))
-        view.simpleUpdateZoom(-0.5f)
+        onMain { view.updateScroll(pageId, Offset(0f, 500f)) }
+        onMain { view.simpleUpdateZoom(pageId, -0.5f) }
         mayRead.complete(Unit)
         assertTrue(waitForCondition(5000) { view.isTransformationAllowed })
 

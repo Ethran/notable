@@ -105,10 +105,9 @@ class CanvasObserverRegistry(
                 // Dedup by content: the collector drains in bursts on Main, so several scroll
                 // steps that settled to the same scroll get drained back-to-back. Pushing the
                 // identical bitmap to the EPD (and freezing the screen) again is wasted work, so
-                // skip when the bitmap and the viewport are unchanged. The bitmap, not the page
-                // id: a page change publishes the new page before its bitmap replaces the old
-                // one, and the refresh after the swap must not be skipped. Select mode is exempt:
-                // page-cut drag changes content without moving scroll.
+                // skip when the bitmap and the viewport are unchanged; two pages at the same
+                // viewport differ only in their bitmap. Select mode is exempt: page-cut drag
+                // changes content without moving scroll.
                 val shown = page.windowedBitmap to page.viewport.value
                 val inSelect = viewModel.toolbarState.value.mode == Mode.Select
                 if (!inSelect && shown == lastImmediate) {

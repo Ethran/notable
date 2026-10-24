@@ -10,10 +10,10 @@ import io.shipbook.shipbooksdk.ShipBook
  * Immutable snapshot of the page a [PageView] displays: its id, a copy of its [Page] record, and
  * its position in the notebook.
  *
- * [PageView] holds the current snapshot in one atomic reference and replaces it whole: with an
- * unloaded snapshot when it changes page, then with the result of [load]. [withLoaded] drops a
- * load that finishes after the view has moved to another page, so [pageId] and [record] always
- * describe the same page.
+ * [PageView] holds the current snapshot in one atomic reference and replaces it whole with the
+ * result of [load]: when it shows a page, and when it reads the shown page again. [withLoaded]
+ * drops such a read that finishes after the view has moved to another page, so [pageId] and
+ * [record] always describe the same page.
  */
 data class OpenPage(
     val pageId: String,

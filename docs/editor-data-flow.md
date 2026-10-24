@@ -57,26 +57,26 @@ editor and the code around it.
 
 1. **Request.** `PageView.changePage(pageId)` sets the requested page. Page changes run one at a
    time in the order asked for; when several are asked for while one runs, only the last is shown.
-2. **Leaving the old page.** `PageDataManager.onExit` keeps the old page's screen bitmap, tagged
-   with the viewport it shows, for the page's next showing and for its preview.
-3. **Publishing the new page.** `PageView` reads the page record, then in one step under its page
-   lock it:
+2. **Reading the new page.** Off the main thread, `PageView` reads the page record and gets the
+   bitmap for the viewport the page will be shown at: the viewport it had when this editor left it,
+   or else unzoomed at its saved vertical scroll. The cached bitmap is reused if it shows that
+   viewport at the view's size; otherwise a new one is drawn from the page's preview or background.
+3. **Swapping pages.** On the main thread, in one step under its page lock, `PageView`:
+   - keeps the old page's screen bitmap in `PageDataManager` (`onExit`), tagged with the viewport
+     it shows, for the page's next showing and its preview, if the page's data is loaded;
    - takes the new page's lease and closes the old one;
-   - publishes an `OpenPage` snapshot for the new page (record not loaded yet);
-   - sets the viewport the new page had when this editor left it, or else unzoomed at the saved
-     vertical scroll.
+   - puts in the new page's `OpenPage` snapshot (record and page number), its viewport and its
+     bitmap.
 
-   It then publishes the loaded snapshot (record and page number). A snapshot that finishes
-   loading after the view has moved on is dropped, so `OpenPage.pageId` and `OpenPage.record`
-   always describe the same page.
-4. **Drawing.** The cached bitmap is reused if it shows the same viewport at the view's size;
-   otherwise a new one is drawn. The page's strokes and images load in the background and the
-   screen is redrawn once they are in.
+   Scroll and zoom steps run on the main thread too, so a step never sees one page with another
+   page's viewport or bitmap.
+4. **Drawing.** The page's strokes and images load in the background and the screen is redrawn once
+   they are in.
 5. **Neighbours.** `EditorViewModel.onPageShown` is called once the page holds its lease; it
    cancels loads of pages left behind and prefetches the neighbours.
-6. **Closing.** `PageView.disposeOldPage` keeps the bitmap, releases the lease and marks the view
-   disposed. A disposed view shows, draws and loads nothing more, even if a page change was
-   running. `EditorViewModel.onDispose` then stops loading the pages around it.
+6. **Closing.** `PageView.disposeOldPage` keeps the shown page's bitmap, releases the lease and
+   marks the view disposed. A disposed view shows, draws and loads nothing more, even if a page
+   change was running. `EditorViewModel.onDispose` then stops loading the pages around it.
 
 ---
 
@@ -103,11 +103,10 @@ editor and the code around it.
 - `PageView` owns a `StateFlow<PageViewport>` (`scroll`, `zoom`) for the shown page, and a map of
   the viewports of pages this editor has left, so returning to a page brings back its scroll and
   zoom.
-- A scroll or zoom step reads the shown page and its viewport together, works from them, and
-  commits only if the same page is still shown, its record is read, and its viewport hasn't
-  changed since the step started. A step running while the page changes is dropped instead of
-  being applied to the new page, and so are pinch steps still queued from before the change.
-  Scroll and zoom are ignored until the page record is read.
+- Each scroll or zoom step is for the page its gesture was made on. It starts from that page's
+  viewport and commits only if the page is still shown and its viewport hasn't changed since the
+  step started. A step running or still queued while the page changes is dropped instead of being
+  applied to the new page. Scroll and zoom are ignored until the first page is shown.
 - Each committed step records the vertical scroll with `PageDataManager.recordScroll(pageId, y)`;
   `PageSaver` writes it to `Page.scroll` with the other edits. A page shown for the first time in
   an editor opens at that saved scroll, unzoomed.

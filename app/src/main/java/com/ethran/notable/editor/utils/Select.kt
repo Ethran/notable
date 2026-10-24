@@ -96,11 +96,12 @@ fun selectImagesAndStrokes(
     pageBounds.inset(-padding, -padding)
 
     // create bitmap and draw images and strokes
-    val selectedBitmap = page.toScreenCoordinates(pageBounds).let { boundsScreen ->
+    val viewport = page.viewport.value
+    val selectedBitmap = ((pageBounds - viewport.scroll) * viewport.zoom).let { boundsScreen ->
         createBitmap(boundsScreen.width(), boundsScreen.height())
     }
     val selectedCanvas = Canvas(selectedBitmap)
-    selectedCanvas.scale(page.zoom, page.zoom)
+    selectedCanvas.scale(viewport.zoom, viewport.zoom)
 
     imagesToSelect.forEach {
         drawImage(
@@ -117,7 +118,7 @@ fun selectImagesAndStrokes(
             -pageBounds.takeTopLeftCornel().toOffset()
         )
     }
-    val startOffset = IntOffset(pageBounds.left, pageBounds.top) - page.scroll.toIntOffset()
+    val startOffset = IntOffset(pageBounds.left, pageBounds.top) - viewport.scroll.toIntOffset()
 
     // set state
     viewModel.selectionState.selectedImages = imagesToSelect

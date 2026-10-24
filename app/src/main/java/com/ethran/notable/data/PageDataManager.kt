@@ -1198,7 +1198,10 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    /** Keeps [windowedBitmap], showing [targetPageId] at [viewport], for the page's next showing. */
+    /**
+     * Keeps [windowedBitmap], showing [targetPageId] at [viewport], for the page's next showing and
+     * its preview, if the page's data is loaded.
+     */
     fun onExit(
         targetPageId: String,
         windowedBitmap: Bitmap,
