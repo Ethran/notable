@@ -44,6 +44,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -51,6 +52,7 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 private val log = ShipBook.getLogger("EditorViewModel")
 
@@ -182,6 +184,7 @@ class EditorViewModel @Inject constructor(
     private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
     val pageDataManager: PageDataManager,
+    val pageLeases: PageLeases,
     private val pageSaver: PageSaver,
     private val syncOrchestrator: SyncOrchestrator,
     val snackDispatcher: SnackDispatcher,
@@ -191,6 +194,10 @@ class EditorViewModel @Inject constructor(
     // ---- Toolbar / UI State (single flat flow) ----
     private val _toolbarState = MutableStateFlow(ToolbarUiState())
     val toolbarState: StateFlow<ToolbarUiState> = _toolbarState.asStateFlow()
+
+    // The page the [PageView] shows, set by [onPageShown], or null while no view is open; drives
+    // [prefetchAround].
+    private val shownPageId = MutableStateFlow<String?>(null)
 
     init {
         viewModelScope.launch {
@@ -216,6 +223,9 @@ class EditorViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            shownPageId.collectLatest { pageId -> pageId?.let { prefetchAround(it) } }
         }
     }
 
@@ -277,6 +287,9 @@ class EditorViewModel @Inject constructor(
 
         // 3. Cleanup page resources
         page.disposeOldPage()
+        // Stops loading the pages around it. Reset, so a view opened again on the same page
+        // prefetches again.
+        shownPageId.value = null
 
         // Save the edits now rather than after the usual delay: the page previews shown next are
         // rendered from the database.
@@ -684,6 +697,49 @@ class EditorViewModel @Inject constructor(
                 pageId = currentPageId, notebookId = bookId!!
             )
         } else null
+    }
+
+    /**
+     * Called by the [PageView] once it shows [pageId] and holds its lease. The page it left has lost
+     * its lease by then, so [prefetchAround] can cancel that page's load.
+     */
+    fun onPageShown(pageId: String) {
+        shownPageId.value = pageId
+    }
+
+    /**
+     * Loads the pages next to the shown [pageId] ahead of a page turn. Loads of pages left behind
+     * stop first, so they don't compete with it; the neighbours load once the shown page has, into
+     * the budget it leaves.
+     */
+    private suspend fun prefetchAround(pageId: String) {
+        try {
+            val neighborIds = neighborsOf(pageId)
+            pageDataManager.cancelLoadsExcept(neighborIds.toSet() + pageId)
+            // The view reloads the shown page's background; here only its load is waited for.
+            pageDataManager.awaitPageLoad(pageId)
+            // Admission control evicts to fit before a load; this only catches an under-estimate.
+            pageDataManager.trimToBudget()
+            pageDataManager.prefetch(neighborIds)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.e("Loading pages around $pageId failed", e)
+        }
+    }
+
+    /**
+     * The next and previous pages in [pageId]'s notebook, next first; empty for a loose page. The
+     * notebook is read from the page record, as the page can be shown before [loadToolbarState]
+     * sets [bookId].
+     */
+    private suspend fun neighborsOf(pageId: String): List<String> {
+        val pageIds = appRepository.pageRepository.getById(pageId)?.notebookId
+            ?.let { appRepository.bookRepository.getById(it)?.pageIds }
+            .orEmpty()
+        val index = pageIds.indexOf(pageId)
+        if (index == -1) return emptyList()
+        return listOfNotNull(pageIds.getOrNull(index + 1), pageIds.getOrNull(index - 1))
     }
 
     fun goToNextPage() {
