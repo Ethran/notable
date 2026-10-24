@@ -174,8 +174,12 @@ class EditorControlTower(
         // with the select tool merely armed, zooming is fine.
         if (viewModel.selectionState.isNonEmpty() || viewModel.selectionState.firstPageCut != null)
             return
+        // Steps queue up behind slower ones; those still queued when the page changes are dropped,
+        // so a pinch never zooms the page shown after it.
+        val pageId = page.currentPageId
         scope.launch {
             scrollInProgress.withLock {
+                if (page.currentPageId != pageId) return@withLock
                 if (GlobalAppSettings.current.simpleRendering || !GlobalAppSettings.current.continuousZoom)
                     page.simpleUpdateZoom(delta)
                 else

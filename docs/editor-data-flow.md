@@ -69,9 +69,9 @@ editor and the code around it.
    It then publishes the loaded snapshot (record and page number). A snapshot that finishes
    loading after the view has moved on is dropped, so `OpenPage.pageId` and `OpenPage.record`
    always describe the same page.
-4. **Drawing.** The cached bitmap is reused if it shows the same viewport; otherwise a new one is
-   drawn. The page's strokes and images load in the background and the screen is redrawn once they
-   are in.
+4. **Drawing.** The cached bitmap is reused if it shows the same viewport at the view's size;
+   otherwise a new one is drawn. The page's strokes and images load in the background and the
+   screen is redrawn once they are in.
 5. **Neighbours.** `EditorViewModel.onPageShown` is called once the page holds its lease; it
    cancels loads of pages left behind and prefetches the neighbours.
 6. **Closing.** `PageView.disposeOldPage` keeps the bitmap, releases the lease and marks the view
@@ -104,9 +104,10 @@ editor and the code around it.
   the viewports of pages this editor has left, so returning to a page brings back its scroll and
   zoom.
 - A scroll or zoom step reads the shown page and its viewport together, works from them, and
-  commits only if the same page is still shown and its record is read. A step running while the
-  page changes is dropped instead of being applied to the new page. Scroll and zoom are ignored
-  until the page record is read.
+  commits only if the same page is still shown, its record is read, and its viewport hasn't
+  changed since the step started. A step running while the page changes is dropped instead of
+  being applied to the new page, and so are pinch steps still queued from before the change.
+  Scroll and zoom are ignored until the page record is read.
 - Each committed step records the vertical scroll with `PageDataManager.recordScroll(pageId, y)`;
   `PageSaver` writes it to `Page.scroll` with the other edits. A page shown for the first time in
   an editor opens at that saved scroll, unzoomed.

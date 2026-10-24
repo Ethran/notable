@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.canvas
 
+import android.graphics.Bitmap
 import android.graphics.Rect
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
@@ -93,9 +94,9 @@ class CanvasObserverRegistry(
         observeRestoreCanvas()
     }
 
-    // Last page and viewport actually pushed by an immediate refresh. Used to drop redundant
+    // Last bitmap and viewport actually pushed by an immediate refresh. Used to drop redundant
     // refreshes — see observeRefreshUiImmediately.
-    private var lastImmediate: Pair<String, PageViewport>? = null
+    private var lastImmediate: Pair<Bitmap, PageViewport>? = null
 
     private fun observeRefreshUiImmediately() {
         observerScope.launch(Dispatchers.Main) {
@@ -104,9 +105,11 @@ class CanvasObserverRegistry(
                 // Dedup by content: the collector drains in bursts on Main, so several scroll
                 // steps that settled to the same scroll get drained back-to-back. Pushing the
                 // identical bitmap to the EPD (and freezing the screen) again is wasted work, so
-                // skip when the page and its viewport are unchanged. Select mode is exempt:
+                // skip when the bitmap and the viewport are unchanged. The bitmap, not the page
+                // id: a page change publishes the new page before its bitmap replaces the old
+                // one, and the refresh after the swap must not be skipped. Select mode is exempt:
                 // page-cut drag changes content without moving scroll.
-                val shown = page.currentPageId to page.viewport.value
+                val shown = page.windowedBitmap to page.viewport.value
                 val inSelect = viewModel.toolbarState.value.mode == Mode.Select
                 if (!inSelect && shown == lastImmediate) {
                     log.v("Refreshing UI! skipped — unchanged ($shown)")
