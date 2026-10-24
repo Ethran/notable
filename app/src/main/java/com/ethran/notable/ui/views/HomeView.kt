@@ -115,6 +115,10 @@ fun Library(
                 exportEngine = viewModel.exportEngine,
                 syncScheduler = viewModel.syncScheduler,
                 bookId = newlyCreatedBookId!!,
+                isNewlyCreated = true,
+                onOpenInEditor = { pageId, bookId ->
+                    navController.navigate(EditorDestination.createRoute(pageId, bookId))
+                },
                 onClose = { viewModel.clearNewlyCreatedBookId() }
             )
         } else {
