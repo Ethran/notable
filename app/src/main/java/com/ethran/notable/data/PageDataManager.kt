@@ -926,7 +926,7 @@ class PageDataManager @Inject constructor(
      * Puts back [bitmap], taken off [pageId]'s shelf and still showing [viewport], unless a newer
      * bitmap has been put there meanwhile or the page was dropped.
      */
-    fun putBackBitmap(pageId: String, bitmap: Bitmap, viewport: PageViewport) =
+    fun putBackBitmap(pageId: String, bitmap: Bitmap, viewport: PageViewport): Unit =
         synchronized(lock) {
             val entry = entries[pageId] ?: return
             if (entry.bitmap?.get() == null) shelveBitmapLocked(entry, bitmap, viewport)
