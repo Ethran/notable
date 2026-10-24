@@ -42,7 +42,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
-import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.math.min
 
@@ -58,7 +57,7 @@ class OnyxInputHandler(
 
     // The page the pen went down on, for the gesture under way. Pen callbacks arrive on the main
     // thread, as page swaps do, so a page changed in the middle of a gesture is seen when the
-    // gesture's points arrive, and a stroke or erase is dropped.
+    // gesture's points arrive, and a stroke, erase or selection is dropped.
     private var penDownPageId: String? = null
 
     // Taken once per gesture, when its points arrive; without a recorded pen-down, the page shown.
@@ -271,25 +270,24 @@ class OnyxInputHandler(
         when (toolbarState.mode) {
             Mode.Erase -> onRawErasingList(plist, pageId)
             Mode.Select -> {
-                thread {
-                    val viewport = page.viewport.value
-                    val points =
-                        copyInputToSimplePointF(plist.points, viewport.scroll, viewport.zoom)
-                    handleSelect(
-                        scope = coroutineScope,
-                        page = drawCanvas.page,
-                        viewModel = viewModel,
-                        points = points
-                    )
-                    val boundingBox = calculateBoundingBox(points) { Pair(it.x, it.y) }.toRect()
-                    val padding = 10
-                    val dirtyRect = Rect(
-                        boundingBox.left - padding,
-                        boundingBox.top - padding,
-                        boundingBox.right + padding,
-                        boundingBox.bottom + padding
-                    )
-                    drawCanvas.refreshManager.refreshUi(dirtyRect)
+                // On the main thread, as drawing is: selecting draws into the page's screen bitmap.
+                coroutineScope.launch(Dispatchers.Main.immediate) {
+                    CanvasEventBus.drawingInProgress.withLock {
+                        if (pageId != page.currentPageId) {
+                            log.i("Selection made on page $pageId dropped, another page is shown")
+                            return@withLock
+                        }
+                        val viewport = page.viewport.value
+                        val points =
+                            copyInputToSimplePointF(plist.points, viewport.scroll, viewport.zoom)
+                        handleSelect(
+                            scope = coroutineScope,
+                            page = drawCanvas.page,
+                            viewModel = viewModel,
+                            points = points
+                        )
+                    }
+                    drawCanvas.refreshManager.refreshUi(trackArea(plist))
                 }
             }
 
