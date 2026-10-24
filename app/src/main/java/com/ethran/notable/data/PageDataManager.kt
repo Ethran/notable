@@ -89,6 +89,11 @@ internal class PageCacheEntry(val pageId: String) {
     var estimateBytes: Long = 0L
 
     var loadJob: Job? = null
+
+    // Changes saved since this entry's load began reading its rows, which may not have them; null
+    // while no load is reading. Filled by [PageDataManager.finishSaving].
+    var savedWhileLoading: PageChanges? = null
+
     var backgroundKey: String? = null
 
     // Native (dotted/lined/blank) backgrounds have no bitmap; caching this lets
@@ -652,15 +657,24 @@ class PageDataManager @Inject constructor(
             log.d("Loading page $pageId")
             preLoadBackground(pageId)
 
-            // Taken before the read: a save committing after the read clears them from pending, so
-            // taken later they would be in neither. Edits made from here on land in the entry.
-            val (strokesBeforeRead, imagesBeforeRead) = synchronized(lock) {
-                pendingLocked(pageId) { it.strokes } to pendingLocked(pageId) { it.images }
+            // Opened before the read: a change saved after it leaves pending before the merge, while
+            // the rows read may not have it. Only the load that owns the entry opens it, so a stale
+            // load can't replace the log of the current one.
+            synchronized(lock) {
+                val entry = entries[pageId]
+                if (entry == null || entry.loadJob !== myJob) {
+                    log.d("Discarding stale/cancelled load of $pageId")
+                    return
+                }
+                entry.savedWhileLoading = PageChanges()
             }
 
             // Suspend I/O happens OUTSIDE the lock.
             val pageWithData = appRepository.pageRepository.getWithDataById(pageId)
             if (pageWithData == null) {
+                synchronized(lock) {
+                    entries[pageId]?.takeIf { it.loadJob === myJob }?.savedWhileLoading = null
+                }
                 log.w("Missing page Data.")
                 appEventBus.tryEmit(AppEvent.ActionHint("Missing Page Data", 2000))
                 return
@@ -678,14 +692,17 @@ class PageDataManager @Inject constructor(
                 }
                 if (entry.strokes != null || entry.images != null)
                     log.d("Joining edits made during page loading with the loaded page")
-                entry.strokes = mergeLoadedLocked(
-                    entry.strokes, pageWithData.strokes,
-                    strokesBeforeRead + pendingLocked(pageId) { it.strokes }, Stroke::id
-                )
-                entry.images = mergeLoadedLocked(
-                    entry.images, pageWithData.images,
-                    imagesBeforeRead + pendingLocked(pageId) { it.images }, Image::id
-                )
+                // Later ones win: saved during the read, being saved, unsaved.
+                val pending = PageChanges().apply {
+                    entry.savedWhileLoading?.let { putAll(it) }
+                    saving[pageId]?.let { putAll(it) }
+                    unsaved[pageId]?.let { putAll(it) }
+                }
+                entry.savedWhileLoading = null
+                entry.strokes =
+                    mergeLoadedLocked(entry.strokes, pageWithData.strokes, pending.strokes, Stroke::id)
+                entry.images =
+                    mergeLoadedLocked(entry.images, pageWithData.images, pending.images, Image::id)
                 recomputeEntrySizeLocked(entry)
                 touchLocked(entry)
                 logEstimateVsActualLocked(entry)
@@ -728,8 +745,9 @@ class PageDataManager @Inject constructor(
     /**
      * The page as loaded: its database [rows] with the edits the database doesn't have yet laid
      * over them. Those are [current], the edits made while the page was loading, and [pending], the
-     * page's unsaved edits by id, which also include edits made before the page was last evicted.
-     * Each id appears once, in its latest version, and removed ones are left out. Must hold [lock].
+     * page's edits by id that are unsaved or were saved while its rows were read, which also include
+     * edits made before the page was last evicted. Each id appears once, in its latest version, and
+     * removed ones are left out. Must hold [lock].
      */
     private fun <T> mergeLoadedLocked(
         current: List<T>?, rows: List<T>, pending: Map<String, T?>, id: (T) -> String,
@@ -741,16 +759,6 @@ class PageDataManager @Inject constructor(
         merged.addAll(currentList)
         pending.values.forEach { if (it != null && id(it) !in currentIds) merged.add(it) }
         return merged
-    }
-
-    /** [pageId]'s edits not in the database yet, being saved or not, by id. Must hold [lock]. */
-    private fun <T> pendingLocked(
-        pageId: String, changesOf: (PageChanges) -> Map<String, T?>,
-    ): Map<String, T?> {
-        val pending = HashMap<String, T?>()
-        saving[pageId]?.let { pending.putAll(changesOf(it)) }
-        unsaved[pageId]?.let { pending.putAll(changesOf(it)) }
-        return pending
     }
 
     /** Emits the estimate/actual ratio used to calibrate [PageMemoryModel.BLOB_EXPANSION_K]. */
@@ -1032,14 +1040,18 @@ class PageDataManager @Inject constructor(
 
     /**
      * Ends the save started by [takeUnsaved]. The changes of [failedPageIds] become unsaved again,
-     * under any newer ones made meanwhile, to be written by a later save.
+     * under any newer ones made meanwhile, to be written by a later save. The saved changes of a
+     * page whose rows are being read go to its load, for the merge.
      */
     internal fun finishSaving(failedPageIds: Set<String>) {
         synchronized(lock) {
-            for (pageId in failedPageIds) {
-                val failed = saving[pageId] ?: continue
-                unsaved[pageId]?.let { failed.putAll(it) }
-                unsaved[pageId] = failed
+            for ((pageId, changes) in saving) {
+                if (pageId in failedPageIds) {
+                    unsaved[pageId]?.let { changes.putAll(it) }
+                    unsaved[pageId] = changes
+                } else {
+                    entries[pageId]?.savedWhileLoading?.putAll(changes)
+                }
             }
             saving.clear()
         }

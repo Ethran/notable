@@ -117,4 +117,38 @@ class PageDataManagerUnsavedEditsTest {
             stored.drop(1).rows() + drawn.row() + storedMoved.row() + drawnAndSaved.row()
         assertEquals(expected, loaded.rows())
     }
+
+    private enum class SaveAt { BeforeLoad, BeforeRead, AfterRead }
+
+    @Test(timeout = 60000)
+    fun editsSavedWhileThePageLoads_showInTheLoadedPageAsInTheDatabase() = runBlocking {
+        for (saveAt in SaveAt.entries) {
+            val pageId = seedPage(strokes = 20)
+            val stored = data.storedStrokes(pageId)
+
+            // Drawn as the page starts loading, not saved yet.
+            val drawnEarly = testStroke(pageId)
+            pageDataManager.addStrokes(pageId, listOf(drawnEarly))
+
+            // Erases, draws and moves, then saves them, at [saveAt].
+            val drawnLater = testStroke(pageId, y = 300f)
+            val storedMoved = stored[1].movedDown(500f)
+            val editAndSave: suspend () -> Unit = {
+                pageDataManager.removeStrokes(pageId, listOf(drawnEarly.id, stored[0].id))
+                pageDataManager.addStrokes(pageId, listOf(drawnLater, storedMoved))
+                pageDataManager.takeUnsaved().values.forEach { write(it) }
+                pageDataManager.finishSaving(failedPageIds = emptySet())
+            }
+            when (saveAt) {
+                SaveAt.BeforeLoad -> editAndSave()
+                SaveAt.BeforeRead -> data.beforePageRead = { data.beforePageRead = {}; editAndSave() }
+                SaveAt.AfterRead -> data.afterPageRead = { data.afterPageRead = {}; editAndSave() }
+            }
+            pageDataManager.requestPageLoadJoin(pageId)
+
+            val expected = stored.drop(2).rows() + drawnLater.row() + storedMoved.row()
+            assertEquals("cache, saved $saveAt", expected, pageDataManager.getStrokes(pageId).rows())
+            assertEquals("database, saved $saveAt", expected, data.storedStrokes(pageId).rows())
+        }
+    }
 }
