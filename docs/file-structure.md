@@ -11,7 +11,9 @@ com.ethran.notable/
     - datastore/ — App settings and editor cache (AppSettings.kt).
     - model/ — Common data types (BackgroundType, SimplePointF).
     - AppRepository.kt — Main entry point for data operations, coordinating multiple repositories.
-    - PageDataManager.kt — Handles page-specific data, caching, and background loading.
+    - PageDataManager.kt — In-memory page content (strokes, images, backgrounds) by page id: loading, held pages, unsaved edits.
+    - PageCache.kt — Cache sizing and eviction policy for PageDataManager.
+    - PageSaver.kt — Writes unsaved page edits to the database.
 
 - editor/ — The core note-taking engine
     - canvas/ — Hardware-specific drawing and refresh logic (DrawCanvas, OnyxInputHandler, RefreshManager).
@@ -26,7 +28,10 @@ com.ethran.notable/
     - utils/ — Internal editor utilities (Pen/Eraser logic, Operations, Input handling).
     - EditorViewModel.kt — Orchestrates editor state and UI interactions.
     - EditorControlTower.kt — High-level coordination of editor components.
-    - PageView.kt — The main composable representing a single page.
+    - PageView.kt — The editor's view of the shown page: page changes, scroll and zoom, the screen bitmap.
+    - OpenPage.kt — Snapshot of the page a PageView shows.
+    - PageLeases.kt — Leases on the pages the views show; keeps them held in PageDataManager.
+    - PageViewport.kt — Scroll and zoom of a page.
 
 - io/ — File and bitmap I/O
     - ImportEngine.kt / ExportEngine.kt — Handling .xopp and PDF files.

@@ -134,7 +134,7 @@ class OnyxInputHandler(
         when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
             Mode.Draw, Mode.Line -> {
-                val scaledWidth = toolbarState.activePenSetting.strokeSize * page.zoomLevel.value
+                val scaledWidth = toolbarState.activePenSetting.strokeSize * page.zoom
                 touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
                     ?.setStrokeWidth(scaledWidth)
                     ?.setStrokeColor(toolbarState.activePenSetting.color)
@@ -261,8 +261,9 @@ class OnyxInputHandler(
             Mode.Erase -> onRawErasingList(plist)
             Mode.Select -> {
                 thread {
+                    val viewport = page.viewport.value
                     val points =
-                        copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+                        copyInputToSimplePointF(plist.points, viewport.scroll, viewport.zoom)
                     handleSelect(
                         scope = coroutineScope,
                         page = drawCanvas.page,
@@ -288,10 +289,11 @@ class OnyxInputHandler(
                         log.d("lock obtained in ${lock - startTime} ms")
 
 
+                        val viewport = page.viewport.value
                         val (startPoint, endPoint) = getModifiedStrokeEndpoints(
                             plist.points,
-                            page.scroll,
-                            page.zoomLevel.value
+                            viewport.scroll,
+                            viewport.zoom
                         )
                         val linePoints = transformToLine(startPoint, endPoint)
 
@@ -325,8 +327,9 @@ class OnyxInputHandler(
                         val lock = System.currentTimeMillis()
                         log.d("lock obtained in ${lock - startTime} ms")
 
+                        val viewport = page.viewport.value
                         val scaledPoints =
-                            copyInput(plist.points, page.scroll, page.zoomLevel.value)
+                            copyInput(plist.points, viewport.scroll, viewport.zoom)
                         val firstPointTime = plist.points.first().timestamp
                         val erasedByScribbleDirtyRect = handleScribbleToErase(
                             page,
@@ -383,7 +386,8 @@ class OnyxInputHandler(
         isErasing = false
 
         if (plist == null) return
-        val points = copyInputToSimplePointF(plist.points, page.scroll, page.zoomLevel.value)
+        val viewport = page.viewport.value
+        val points = copyInputToSimplePointF(plist.points, viewport.scroll, viewport.zoom)
 
         val padding = 10
         val boundingBox = (calculateBoundingBox(plist.points) { Pair(it.x, it.y) }).toRect()

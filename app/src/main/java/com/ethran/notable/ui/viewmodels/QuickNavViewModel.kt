@@ -128,7 +128,6 @@ class QuickNavViewModel(
     fun onScrubStart() {
         viewModelScope.launch {
             lastScrubEndTargetPageId = null
-            CanvasEventBus.saveCurrent.emit(Unit)
             CanvasEventBus.isScrubbing.emit(true)
         }
     }

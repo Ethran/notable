@@ -10,10 +10,10 @@ import io.shipbook.shipbooksdk.ShipBook
  * Immutable snapshot of the page a [PageView] displays: its id, a copy of its [Page] record, and
  * its position in the notebook.
  *
- * [PageView] holds the current snapshot in one atomic reference and replaces it whole: with an
- * unloaded snapshot when it changes page, then with the result of [load]. [withLoaded] drops a
- * load that finishes after the view has moved to another page, so [pageId] and [record] always
- * describe the same page.
+ * [PageView] holds the current snapshot in one atomic reference and replaces it whole with the
+ * result of [load]: when it shows a page, and when it reads the shown page again. [withLoaded]
+ * drops such a read that finishes after the view has moved to another page, so [pageId] and
+ * [record] always describe the same page.
  */
 data class OpenPage(
     val pageId: String,
@@ -28,9 +28,12 @@ data class OpenPage(
     val backgroundType: BackgroundType?
         get() = record?.getBackgroundType()
 
-    /** Whether scroll and zoom are allowed. A cover image is a fixed page and must not transform. */
+    /**
+     * Whether scroll and zoom are allowed: only once [load] has read the page's record, so its
+     * viewport is in place, and never on a cover image, which is a fixed page.
+     */
     val isTransformationAllowed: Boolean
-        get() = backgroundType != BackgroundType.CoverImage
+        get() = record != null && backgroundType != BackgroundType.CoverImage
 
     /** [loaded] if it is a snapshot of this page, otherwise this one unchanged. */
     fun withLoaded(loaded: OpenPage): OpenPage = if (loaded.pageId == pageId) loaded else this

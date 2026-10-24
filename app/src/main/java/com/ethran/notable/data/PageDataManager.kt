@@ -6,7 +6,6 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Debug
-import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -20,6 +19,7 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.BackgroundType.AutoPdf.getPage
 import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
+import com.ethran.notable.editor.PageViewport
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.saveHQPagePreview
 import com.ethran.notable.editor.utils.savePageThumbnail
@@ -103,6 +103,9 @@ internal class PageCacheEntry(val pageId: String) {
     // Windowed screen bitmap; SoftReference so ART can reclaim it under pressure.
     var bitmap: SoftReference<Bitmap>? = null
 
+    // The viewport [bitmap] shows.
+    var bitmapViewport: PageViewport? = null
+
     // LRU stamp; bumped on genuine access.
     var lastAccessSeq: Long = 0L
 
@@ -142,7 +145,6 @@ class PageDataManager @Inject constructor(
     private val appRepository: AppRepository,
     private val appEventBus: AppEventBus,
     private val backgroundFileWatcher: BackgroundFileWatcher,
-    private val viewport: PageViewportState,
 ) {
     val log = ShipBook.getLogger("PageDataManager")
     private val dataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -158,17 +160,16 @@ class PageDataManager @Inject constructor(
      * - suspend calls — DB reads and cost estimation run outside, only their results are stored;
      * - filesystem or syscall work — see [BackgroundFileWatcher], called with the lock released;
      * - Compose snapshot commits — they run Compose's global write observers and can wake the
-     *   recomposer. Height/scroll/zoom live in [PageViewportState] for exactly this reason, and
-     *   this class no longer touches snapshot state at all;
+     *   recomposer;
      * - other locks;
      * - remote logging above `log.d` — `log.w`/`log.e`/`log.i` reach ShipBook. Decide under the
      *   lock, report after; see the over-budget path in [getOrStartLoadingJob] and
      *   [validatePageDataLoaded], which classifies under the lock and repairs outside it.
      *
-     * What *is* allowed is appending to a buffered flow: [AppEventBus.tryEmit],
-     * [PageViewportState.scheduleRemoval] and [BackgroundFileWatcher.unwatchAsync] all enqueue and
-     * return, delivering nothing inline, so they never block the holder or re-enter this class.
-     * Eviction relies on that — it happens under the lock and has to hand work to both collaborators.
+     * What *is* allowed is appending to a buffered flow: [AppEventBus.tryEmit] and
+     * [BackgroundFileWatcher.unwatchAsync] enqueue and return, delivering nothing inline, so they
+     * never block the holder or re-enter this class. Eviction relies on that — it happens under the
+     * lock and has to hand work to the watcher.
      * The one launch under the lock ([getOrStartLoadingJob]) is justified at its call site.
      */
     private val lock = Any()
@@ -224,14 +225,9 @@ class PageDataManager @Inject constructor(
     // lock. It is called only OUTSIDE [lock] (it touches the filesystem) and never calls back in;
     // it reports page ids to invalidate through a flow, collected in [init].
 
-    // Per-page height/scroll/zoom are Compose snapshot state owned by [PageViewportState]; this
-    // class only forwards to it, always with [lock] released. The one exception is its documented
-    // lock-safe [PageViewportState.scheduleRemoval], used when evicting — which clears all three,
-    // so this view state still dies with its page exactly as it did when zoom lived in the entry.
-
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val saveTopic = MutableSharedFlow<String>()
+    private val saveTopic = MutableSharedFlow<String>()
 
     init {
         collectBackgroundFileChanges()
@@ -714,7 +710,6 @@ class PageDataManager @Inject constructor(
                 touchLocked(entry)
                 logEstimateVsActualLocked(entry)
             }
-            recomputeHeight(pageId)
         } catch (e: CancellationException) {
             log.w("Loading of page $pageId was cancelled.")
             dropUnfinishedLoad(pageId, myJob)
@@ -866,18 +861,13 @@ class PageDataManager @Inject constructor(
                 log.i("Persisting batch of bitmaps for pages: $uniquePageIds")
 
                 for (pageId in uniquePageIds) {
-                    val bitmap = synchronized(lock) { entries[pageId]?.bitmap?.get() }
-                    val currentZoomLevel = viewport.zoom(pageId)
-                    val currentScroll = viewport.scroll(pageId)
-
-                    if (bitmap == null || bitmap.isRecycled) {
-                        log.e("Page $pageId: Bitmap is recycled/null — cannot persist it")
-                        continue
-                    }
-
-                    scope.launch(Dispatchers.IO) {
-                        saveHQPagePreview(context, bitmap, pageId, currentScroll, currentZoomLevel)
+                    // Off the shelf while it is saved, so no view draws into it meanwhile.
+                    val (bitmap, shown) = takeBitmapToSave(pageId) ?: continue
+                    try {
+                        saveHQPagePreview(context, bitmap, pageId, shown.scroll, shown.zoom)
                         savePageThumbnail(context, bitmap, pageId)
+                    } finally {
+                        putBackBitmap(pageId, bitmap, shown)
                     }
                 }
             }
@@ -901,27 +891,63 @@ class PageDataManager @Inject constructor(
 
     private fun isHeld(pageId: String): Boolean = synchronized(lock) { pageId in held }
 
-    fun getCachedBitmap(pageId: String): Bitmap? = synchronized(lock) {
-        entries[pageId]?.bitmap?.get()?.takeIf { !it.isRecycled && it.isMutable }
+    // A page's screen bitmap sits on a shelf here while no one uses it. A view takes it to draw
+    // into, and the preview save to read it; each puts it back when done. So no one draws into a
+    // bitmap someone else is reading.
+
+    /**
+     * Takes [pageId]'s bitmap off the shelf, if it shows [viewport]. The caller owns it from then
+     * on; a view puts it back through [onExit].
+     */
+    fun takeCachedBitmap(pageId: String, viewport: PageViewport): Bitmap? = synchronized(lock) {
+        val entry = entries[pageId] ?: return null
+        if (entry.bitmapViewport?.matches(viewport) != true) return null
+        val bitmap = entry.bitmap?.get()?.takeIf { !it.isRecycled && it.isMutable }
+        clearBitmapLocked(entry)
+        bitmap
     }
 
-    fun cacheBitmap(pageId: String, bitmap: Bitmap) = synchronized(lock) {
-        getOrCreateEntryLocked(pageId).bitmap = SoftReference(bitmap)
+    /** [pageId]'s bitmap on the shelf, with the viewport it shows, left there. For tests. */
+    fun peekCachedBitmap(pageId: String): Pair<Bitmap, PageViewport>? = synchronized(lock) {
+        val entry = entries[pageId] ?: return null
+        val bitmap = entry.bitmap?.get() ?: return null
+        bitmap to (entry.bitmapViewport ?: return null)
     }
 
-    fun getPageHeight(pageId: String): Int? = viewport.height(pageId)
-    fun setPageHeight(pageId: String, height: Int) = viewport.setHeight(pageId, height)
+    private fun takeBitmapToSave(pageId: String): Pair<Bitmap, PageViewport>? = synchronized(lock) {
+        val entry = entries[pageId] ?: return null
+        val bitmap = entry.bitmap?.get()?.takeIf { !it.isRecycled } ?: return null
+        val viewport = entry.bitmapViewport ?: return null
+        clearBitmapLocked(entry)
+        bitmap to viewport
+    }
 
-    fun recomputeHeight(pageId: String): Int {
-        // Measure under [lock], publish outside it — [PageViewportState.setHeight] commits a Compose
-        // snapshot, which must never run with this hot drawing-path lock held.
-        val newHeight = synchronized(lock) {
-            val list = entries[pageId]?.strokes
-            if (list.isNullOrEmpty()) return SCREEN_HEIGHT
-            max(list.maxOf { it.bottom }.plus(50).toInt(), SCREEN_HEIGHT)
+    /**
+     * Puts back [bitmap], taken off [pageId]'s shelf and still showing [viewport], unless a newer
+     * bitmap has been put there meanwhile or the page was dropped.
+     */
+    fun putBackBitmap(pageId: String, bitmap: Bitmap, viewport: PageViewport): Unit =
+        synchronized(lock) {
+            val entry = entries[pageId] ?: return
+            if (entry.bitmap?.get() == null) shelveBitmapLocked(entry, bitmap, viewport)
         }
-        viewport.setHeight(pageId, newHeight)
-        return newHeight
+
+    private fun shelveBitmapLocked(entry: PageCacheEntry, bitmap: Bitmap, viewport: PageViewport) {
+        entry.bitmap = SoftReference(bitmap)
+        entry.bitmapViewport = viewport
+    }
+
+    private fun clearBitmapLocked(entry: PageCacheEntry) {
+        entry.bitmap = null
+        entry.bitmapViewport = null
+    }
+
+    /** Height [pageId]'s strokes and images need, with padding below; at least one screen. */
+    fun contentHeight(pageId: String): Int = synchronized(lock) {
+        val entry = entries[pageId] ?: return SCREEN_HEIGHT
+        val strokesBottom = entry.strokes?.maxOfOrNull { it.bottom.toInt() } ?: 0
+        val imagesBottom = entry.images?.maxOfOrNull { it.y + it.height } ?: 0
+        max(max(strokesBottom, imagesBottom) + 50, SCREEN_HEIGHT)
     }
 
     fun computeWidth(pageId: String): Int {
@@ -930,29 +956,6 @@ class PageDataManager @Inject constructor(
             if (list.isNullOrEmpty()) return SCREEN_WIDTH
             return max(list.maxOf { it.right }.plus(50).toInt(), SCREEN_WIDTH)
         }
-    }
-
-    /** Stored scroll for [pageId]; zero until [restorePageScroll] or [setPageScroll] sets one. */
-    fun getPageScroll(pageId: String): Offset = viewport.scroll(pageId) ?: Offset.Zero
-
-    /**
-     * Sets [pageId]'s scroll for showing it: its scroll from this session if it has one, otherwise
-     * its persisted [scrollY]. Always writes, so a removal scheduled by an earlier eviction of the
-     * page cannot erase the scroll afterwards.
-     */
-    fun restorePageScroll(pageId: String, scrollY: Int) {
-        viewport.setScroll(pageId, viewport.scroll(pageId) ?: Offset(0f, scrollY.toFloat()))
-    }
-
-    fun setPageScroll(pageId: String, scroll: Offset) {
-        viewport.setScroll(pageId, scroll)
-    }
-
-    /** Stored zoom for [pageId]; 1f (unzoomed) for a page that has not been zoomed this session. */
-    fun getPageZoom(pageId: String): Float = viewport.zoom(pageId) ?: 1f
-
-    fun setPageZoom(pageId: String, zoom: Float) {
-        viewport.setZoom(pageId, zoom)
     }
 
     fun getStrokes(pageId: String): List<Stroke> = synchronized(lock) {
@@ -996,11 +999,10 @@ class PageDataManager @Inject constructor(
         entry.images = withRemoved(entry.images, imageIds, Image::id, changes.images)
     }
 
-    /** Records [pageId]'s stored scroll for saving; does nothing if it has none. */
-    fun saveScroll(pageId: String) {
+    /** Records [scrollY] as [pageId]'s vertical scroll, to be saved. */
+    fun recordScroll(pageId: String, scrollY: Int) {
         if (pageId.isEmpty()) return
-        val scroll = viewport.scroll(pageId) ?: return
-        synchronized(lock) { unsavedLocked(pageId).scrollY = scroll.y.toInt() }
+        synchronized(lock) { unsavedLocked(pageId).scrollY = scrollY }
         unsavedSignal.trySend(Unit)
     }
 
@@ -1223,19 +1225,27 @@ class PageDataManager @Inject constructor(
                     log.d("Unlinked page $pageId from background key=$key (still used elsewhere)")
                 }
             }
-            entry?.bitmap = null // windowed bitmap for this page stays per-page
+            entry?.let { clearBitmapLocked(it) } // its screen bitmap shows the old background
             log.d("Invalidated background cache for page: $pageId")
         }
     }
 
-    fun onExit(targetPageId: String, windowedBitmap: Bitmap, scope: CoroutineScope) {
+    /**
+     * Puts [windowedBitmap], showing [targetPageId] at [viewport], on the shelf for the page's next
+     * showing and its preview, if the page's data is loaded. The view no longer draws into it.
+     */
+    fun onExit(
+        targetPageId: String,
+        windowedBitmap: Bitmap,
+        viewport: PageViewport,
+        scope: CoroutineScope,
+    ) {
         log.i("Page exit, is page loaded: ${validatePageDataLoaded(targetPageId)}")
         if (validatePageDataLoaded(targetPageId)) {
-            cacheBitmap(targetPageId, windowedBitmap)
+            synchronized(lock) { shelveBitmapLocked(getOrCreateEntryLocked(targetPageId), windowedBitmap, viewport) }
             scope.launch {
                 saveTopic.emit(targetPageId)
             }
-            recomputeHeight(targetPageId)
             // Size accounting is kept current on every edit, so no recompute here.
         }
     }
@@ -1266,9 +1276,8 @@ class PageDataManager @Inject constructor(
                 backgroundCache.remove(key)
             }
         }
-        // Both of these are lock-safe by contract: they enqueue and return, running no Compose code
-        // and touching no filesystem inline. That is the whole reason eviction may stay under [lock].
-        viewport.scheduleRemoval(pageId)
+        // Lock-safe by contract: it enqueues and returns, touching no filesystem inline. That is the
+        // whole reason eviction may stay under [lock].
         backgroundFileWatcher.unwatchAsync(pageId)
         assertTotalsLocked()
         return true

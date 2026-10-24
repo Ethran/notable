@@ -41,11 +41,12 @@ class EditorControlTower(
     private val logEditorControlTower = ShipBook.getLogger("EditorControlTower")
     private var changePageObserverJob: Job? = null
 
-    // Accumulated, not-yet-rendered scroll delta in screen coordinates. Input events add
-    // into this; a single consumer coroutine drains and renders it. StateFlow conflation
-    // means a burst of input collapses to one render pass per frame the renderer can keep
-    // up with.
-    private val pendingScroll = MutableStateFlow(Offset.Zero)
+    // Accumulated, not-yet-rendered scroll delta in screen coordinates, for the page the
+    // gesture was made on. Input events add into this; a single consumer coroutine drains
+    // and renders it. StateFlow conflation means a burst of input collapses to one render
+    // pass per frame the renderer can keep up with.
+    private data class PendingScroll(val pageId: String, val delta: Offset)
+    private val pendingScroll = MutableStateFlow(PendingScroll("", Offset.Zero))
     private var scrollConsumerJob: Job? = null
 
     fun registerObservers() {
@@ -84,7 +85,11 @@ class EditorControlTower(
     override fun requestScroll(delta: Offset) {
         if (delta == Offset.Zero) return
         if (!page.isTransformationAllowed) return
-        pendingScroll.update { it + delta }
+        val pageId = page.currentPageId
+        // A delta for another page replaces what is left of the previous page's.
+        pendingScroll.update {
+            if (it.pageId == pageId) it.copy(delta = it.delta + delta) else PendingScroll(pageId, delta)
+        }
     }
 
     /**
@@ -97,15 +102,16 @@ class EditorControlTower(
         if (scrollConsumerJob?.isActive == true) return
         scrollConsumerJob = scope.launch(Dispatchers.Main.immediate) {
             pendingScroll.collect {
-                val delta = pendingScroll.getAndUpdate { Offset.Zero }
+                val (pageId, delta) = pendingScroll.getAndUpdate { it.copy(delta = Offset.Zero) }
                 if (delta == Offset.Zero) return@collect
                 scrollInProgress.withLock {
                     if (viewModel.toolbarState.value.mode == Mode.Select &&
                         viewModel.selectionState.firstPageCut != null
                     ) {
-                        onOpenPageCut(delta / page.zoomLevel.value)
+                        // Dropped if queued on a page left; the cut belongs to that page.
+                        if (pageId == page.currentPageId) onOpenPageCut(delta / page.zoom)
                     } else {
-                        onPageScroll(-delta)
+                        onPageScroll(pageId, -delta)
                     }
                 }
                 CanvasEventBus.refreshUiImmediately.emit(Unit)
@@ -174,21 +180,24 @@ class EditorControlTower(
         // with the select tool merely armed, zooming is fine.
         if (viewModel.selectionState.isNonEmpty() || viewModel.selectionState.firstPageCut != null)
             return
+        // Steps queue up behind slower ones; those still queued when the page changes are dropped,
+        // so they never zoom the page shown after the one they were made on.
+        val pageId = page.currentPageId
         scope.launch {
             scrollInProgress.withLock {
                 if (GlobalAppSettings.current.simpleRendering || !GlobalAppSettings.current.continuousZoom)
-                    page.simpleUpdateZoom(delta)
+                    page.simpleUpdateZoom(pageId, delta)
                 else
-                    page.updateZoom(delta, center)
+                    page.updateZoom(pageId, delta, center)
             }
             CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
     }
 
     fun resetZoomAndScroll() {
+        val pageId = page.currentPageId
         scope.launch {
-            page.scroll = Offset(0f, page.scroll.y)
-            page.applyZoomAndRedraw(1f)
+            scrollInProgress.withLock { page.resetView(pageId) }
             // Request UI update
             CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
@@ -209,12 +218,12 @@ class EditorControlTower(
         viewModel.selectionState.reset()
     }
 
-    private suspend fun onPageScroll(dragDelta: Offset) {
+    private suspend fun onPageScroll(pageId: String, dragDelta: Offset) {
         // scroll is in Page coordinates
         if (GlobalAppSettings.current.simpleRendering)
-            page.simpleUpdateScroll(dragDelta)
+            page.simpleUpdateScroll(pageId, dragDelta)
         else
-            page.updateScroll(dragDelta)
+            page.updateScroll(pageId, dragDelta)
     }
 
 

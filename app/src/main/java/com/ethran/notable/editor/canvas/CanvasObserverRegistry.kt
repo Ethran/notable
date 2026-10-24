@@ -1,9 +1,10 @@
 package com.ethran.notable.editor.canvas
 
+import android.graphics.Bitmap
 import android.graphics.Rect
-import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.PageViewport
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.ImageHandler
@@ -77,7 +78,7 @@ class CanvasObserverRegistry(
         observeForceUpdate()
         observeRefreshUi()
         observeFocusChange()
-        observeZoomLevel()
+        observeZoom()
         observeDrawingState()
         observeSelectionGesture()
         observeClearPage()
@@ -88,15 +89,13 @@ class CanvasObserverRegistry(
         observeToolbar()
         observeMode()
         observeHistory()
-        observeSaveCurrent()
         observeQuickNav()
         observeRestoreCanvas()
     }
 
-    // Last (scroll, zoom) actually pushed by an immediate refresh. Used to drop redundant
+    // Last bitmap and viewport actually pushed by an immediate refresh. Used to drop redundant
     // refreshes — see observeRefreshUiImmediately.
-    private var lastImmediateScroll: Offset? = null
-    private var lastImmediateZoom: Float = Float.NaN
+    private var lastImmediate: Pair<Bitmap, PageViewport>? = null
 
     private fun observeRefreshUiImmediately() {
         observerScope.launch(Dispatchers.Main) {
@@ -105,17 +104,16 @@ class CanvasObserverRegistry(
                 // Dedup by content: the collector drains in bursts on Main, so several scroll
                 // steps that settled to the same scroll get drained back-to-back. Pushing the
                 // identical bitmap to the EPD (and freezing the screen) again is wasted work, so
-                // skip when scroll+zoom are unchanged. Select mode is exempt: page-cut drag
+                // skip when the bitmap and the viewport are unchanged; two pages at the same
+                // viewport differ only in their bitmap. Select mode is exempt: page-cut drag
                 // changes content without moving scroll.
-                val scroll = page.scroll
-                val zoom = page.zoomLevel.value
+                val shown = page.windowedBitmap to page.viewport.value
                 val inSelect = viewModel.toolbarState.value.mode == Mode.Select
-                if (!inSelect && scroll == lastImmediateScroll && zoom == lastImmediateZoom) {
-                    log.v("Refreshing UI! skipped — unchanged (scroll=$scroll, zoom=$zoom)")
+                if (!inSelect && shown == lastImmediate) {
+                    log.v("Refreshing UI! skipped — unchanged ($shown)")
                     return@collect
                 }
-                lastImmediateScroll = scroll
-                lastImmediateZoom = zoom
+                lastImmediate = shown
                 log.v("Refreshing UI!")
                 val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
                 refreshManager.refreshUi(zoneToRedraw)
@@ -167,11 +165,10 @@ class CanvasObserverRegistry(
         }
     }
 
-    private fun observeZoomLevel() {
+    private fun observeZoom() {
         observerScope.launch {
-            page.zoomLevel.drop(1).collect {
-                log.v("zoom level change: ${page.zoomLevel.value}")
-                pageDataManager.setPageZoom(page.currentPageId, page.zoomLevel.value)
+            page.viewport.map { it.zoom }.distinctUntilChanged().drop(1).collect { zoom ->
+                log.v("zoom level change: $zoom")
                 inputHandler.updatePenAndStroke()
             }
         }
@@ -327,16 +324,6 @@ class CanvasObserverRegistry(
         }
     }
 
-
-    private fun observeSaveCurrent() {
-        observerScope.launch {
-            CanvasEventBus.saveCurrent.collect {
-                // Push current bitmap to persist layer so preview has something to load
-                pageDataManager.cacheBitmap(page.currentPageId, page.windowedBitmap)
-                pageDataManager.saveTopic.tryEmit(page.currentPageId)
-            }
-        }
-    }
 
     @OptIn(FlowPreview::class)
     private fun observeQuickNav() {
