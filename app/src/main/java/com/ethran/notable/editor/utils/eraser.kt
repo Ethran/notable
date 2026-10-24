@@ -161,8 +161,8 @@ fun handleScribbleToErase(
             // Pressure is normalized to [0,1] at capture (TouchPoint.toStrokePoint).
             maxPressure = MAX_PRESSURE_NORMALIZED
         )
-        history.addOperationsToHistory(listOf(Operation.DeleteStroke(listOf(scribbleStroke.id))))
-        history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes + scribbleStroke)))
+        history.addOperationsToHistory(page.currentPageId, listOf(Operation.DeleteStroke(listOf(scribbleStroke.id))))
+        history.addOperationsToHistory(page.currentPageId, listOf(Operation.AddStroke(deletedStrokes + scribbleStroke)))
         // Return the erased region in SCREEN coordinates (mirrors handleErase). The caller
         // pushes this rect to the SurfaceView/EPD via commitErase, and the surface bitmap
         // (windowedBitmap) is in screen space — returning page coords here pushed the wrong
@@ -207,7 +207,7 @@ fun handleErase(
     if (deletedStrokes.isEmpty()) return null
     page.removeStrokes(deletedStrokeIds)
 
-    history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
+    history.addOperationsToHistory(page.currentPageId, listOf(Operation.AddStroke(deletedStrokes)))
 
     val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
     page.drawAreaScreenCoordinates(screenArea = effectedArea)
@@ -224,7 +224,7 @@ fun cleanAllStrokes(
     if (deletedStrokes.isEmpty()) return null
 
     page.removeStrokes(deletedStrokeIds)
-    history.addOperationsToHistory(listOf(Operation.AddStroke(deletedStrokes)))
+    history.addOperationsToHistory(page.currentPageId, listOf(Operation.AddStroke(deletedStrokes)))
 
     val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
     page.drawAreaScreenCoordinates(screenArea = effectedArea)

@@ -10,15 +10,24 @@ import io.shipbook.shipbooksdk.ShipBook
 
 private val log = ShipBook.getLogger("draw")
 
-// touchpoints are in page coordinates
+/**
+ * Adds a stroke through [touchPoints] to [pageId], the page the pen went down on, and draws it.
+ * [touchPoints] are in page coordinates. Returns false if another page is shown by now, which
+ * adds nothing, or if drawing failed.
+ */
 fun handleDraw(
     page: PageView,
-    historyBucket: MutableList<String>,
+    pageId: String,
+    historyBucket: MutableList<Stroke>,
     strokeSize: Float,
     color: Int,
     pen: Pen,
     touchPoints: List<StrokePoint>
-) {
+): Boolean {
+    if (pageId != page.currentPageId) {
+        log.i("Handle Draw: page $pageId is no longer shown, stroke dropped")
+        return false
+    }
     try {
         val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
 
@@ -28,7 +37,7 @@ fun handleDraw(
         val stroke = Stroke(
             size = strokeSize,
             pen = pen,
-            pageId = page.currentPageId,
+            pageId = pageId,
             top = boundingBox.top,
             bottom = boundingBox.bottom,
             left = boundingBox.left,
@@ -41,8 +50,10 @@ fun handleDraw(
         page.addStrokes(listOf(stroke))
         // this is causing lagging and crushing, neo pens are not good
         page.drawAreaPageCoordinates(strokeBounds(stroke).toRect())
-        historyBucket.add(stroke.id)
+        historyBucket.add(stroke)
     } catch (e: Exception) {
         log.e("Handle Draw: An error occurred while handling the drawing: ${e.message}")
+        return false
     }
+    return true
 }

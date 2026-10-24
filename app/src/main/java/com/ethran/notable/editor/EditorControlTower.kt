@@ -60,7 +60,6 @@ class EditorControlTower(
                 // Switch to Main thread for Compose state mutations
                 withContext(Dispatchers.Main) {
                     viewModel.changePage(pageId)
-                    history.cleanHistory()
                 }
                 // no need for this, we are listening for change of current page,
                 // in EditorView
@@ -148,13 +147,11 @@ class EditorControlTower(
     override fun goToNextPage() {
         logEditorControlTower.i("Going to next page")
         viewModel.goToNextPage()
-        history.cleanHistory()
     }
 
     override fun goToPreviousPage() {
         logEditorControlTower.i("Going to previous page")
         viewModel.goToPreviousPage()
-        history.cleanHistory()
     }
 
     override fun undo() {
@@ -209,6 +206,7 @@ class EditorControlTower(
 
         // commit to history
         history.addOperationsToHistory(
+            page.currentPageId,
             listOf(
                 Operation.DeleteStroke(result.movedStrokes.map { it.id }),
                 Operation.AddStroke(result.previousStrokes)

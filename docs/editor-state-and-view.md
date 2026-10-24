@@ -43,7 +43,7 @@ class EditorControlTower(
 ```
 
 - **Role**:
-    - Coordinates between `PageView`, `EditorViewModel`, and the undo/redo `History`.
+    - Coordinates between `PageView`, `EditorViewModel`, and the undo/redo `History`. The history belongs to one page: every recorded step names the page it was made on and joins that page's history, even if it arrives just after the page was left, and the history starts over once edits or undo happen on another page.
     - Handles tool interactions (selecting, moving strokes).
     - Orchestrates operations like scrolling, panning, and background manipulation.
 
@@ -97,3 +97,4 @@ class DrawCanvas(
     - Implements a `SurfaceView` optimized for high-performance drawing.
     - Renders the strokes, images, and background.
     - Tracks touch events, including distinguishing between stylus and eraser (`MotionEvent.TOOL_TYPE_STYLUS` / `TOOL_TYPE_ERASER`), and dispatching drawing operations correctly.
+    - Keeps pen input with the page it was made on: the page is recorded when the pen goes down, and a stroke or erase whose page is no longer shown when its points arrive is dropped. Pen callbacks and page swaps both run on the main thread.

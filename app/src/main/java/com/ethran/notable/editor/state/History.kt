@@ -40,12 +40,18 @@ enum class UndoRedoType {
 }
 
 sealed class HistoryBusActions {
-    data class RegisterHistoryOperationBlock(val operationBlock: OperationBlock) :
+    data class RegisterHistoryOperationBlock(val pageId: String, val operationBlock: OperationBlock) :
         HistoryBusActions()
 
     data class MoveHistory(val type: UndoRedoType) : HistoryBusActions()
 }
 
+/**
+ * Undo and redo for the page shown. The history belongs to one page: it starts over once edits or
+ * undo happen on another page. A step reaching the history just after its page was left, as drawn
+ * strokes do, still joins that page's history, unless another page's has started meanwhile. So
+ * undo never applies one page's operations to another, nor skips a step.
+ */
 class History @AssistedInject constructor(
     @Assisted private val pageView: PageView,
     private val appEventBus: AppEventBus
@@ -53,6 +59,9 @@ class History @AssistedInject constructor(
     private var undoList: OperationList = mutableListOf()
     private var redoList: OperationList = mutableListOf()
     private val pageModel = pageView
+
+    // The page [undoList] and [redoList] are for.
+    private var historyPageId: String? = null
 
     suspend fun handleHistoryBusActions(actions: HistoryBusActions) {
         when (actions) {
@@ -78,7 +87,7 @@ class History @AssistedInject constructor(
             }
 
             is HistoryBusActions.RegisterHistoryOperationBlock -> {
-                addOperationsToHistory(actions.operationBlock)
+                addOperationsToHistory(actions.pageId, actions.operationBlock)
             }
 
         }
@@ -93,9 +102,12 @@ class History @AssistedInject constructor(
     }
 
 
-    fun cleanHistory() {
+    // Starts the history over if it is for another page than [pageId].
+    private fun useHistoryOf(pageId: String) {
+        if (historyPageId == pageId) return
         undoList.clear()
         redoList.clear()
+        historyPageId = pageId
     }
 
     private fun treatOperation(operation: Operation): Pair<Operation, Rect> {
@@ -144,6 +156,7 @@ class History @AssistedInject constructor(
     }
 
     private fun undoRedo(type: UndoRedoType): Rect? {
+        useHistoryOf(pageView.currentPageId)
         val originList =
             if (type == UndoRedoType.Undo) undoList else redoList
         val targetList =
@@ -165,10 +178,26 @@ class History @AssistedInject constructor(
         return zoneAffected
     }
 
-    fun addOperationsToHistory(operations: OperationBlock) {
+    /** Records drawing [strokes] as one step, for each page they were drawn on. */
+    fun addDrawnStrokes(strokes: List<Stroke>) {
+        strokes.groupBy { it.pageId }.forEach { (pageId, drawn) ->
+            addOperationsToHistory(pageId, listOf(Operation.DeleteStroke(drawn.map { it.id })))
+        }
+    }
+
+    /**
+     * Records [operations], made on [pageId]: in its history, or in a new one if [pageId] is shown.
+     * Dropped if another page's history has started meanwhile.
+     */
+    fun addOperationsToHistory(pageId: String, operations: OperationBlock) {
         if (operations.isEmpty()) {
             logCallStack("History: No operations to add to history")
             return
+        }
+        if (pageId != historyPageId) {
+            // Only the page shown starts a history of its own.
+            if (pageId != pageView.currentPageId) return
+            useHistoryOf(pageId)
         }
         undoList.add(operations)
         if (undoList.size > MAX_UNDO_STEPS) undoList.removeAt(0)
