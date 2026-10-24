@@ -248,9 +248,10 @@ class PageView(
     /**
      * Shows [newPageId] in place of the current page:
      * 1.  Keeps the old page's bitmap in [PageDataManager] for its next showing and its preview.
-     * 2.  Reads the new page's record and shows the page (see [setOpenPage]), at its zoom.
-     * 3.  Uses the page's cached bitmap, resizing the canvas if the view size changed; otherwise
-     *     draws a new bitmap.
+     * 2.  Reads the new page's record and shows the page (see [setOpenPage]): it takes the page's
+     *     lease and the viewport the page had when this view left it, or else its saved scroll.
+     * 3.  Uses the page's cached bitmap if it shows that viewport, resizing the canvas if the view
+     *     size changed; otherwise draws a new bitmap.
      * 4.  Loads the page's strokes and images in the background and redraws once they are in.
      *
      * A disposed view loads nothing more: a page change interrupted by the disposal stops after

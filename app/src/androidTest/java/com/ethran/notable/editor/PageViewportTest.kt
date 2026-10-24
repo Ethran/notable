@@ -13,6 +13,7 @@ import com.ethran.notable.testing.movedDown
 import com.ethran.notable.testing.testImage
 import com.ethran.notable.testing.testStroke
 import com.ethran.notable.testing.waitForCondition
+import com.ethran.notable.utils.AppResult
 import com.ethran.notable.ui.SnackState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -64,10 +65,14 @@ class PageViewportTest {
     private suspend fun seedPages(count: Int): List<String> =
         TestNotebookSeeder.seedNotebook(data.db, pageCount = count, strokesPerPage = 5).pageIds
 
+    // Shared by every view of a test, as the app shares one.
+    private val pageLeases by lazy { PageLeases(data.pageDataManager) }
+
     private fun createPageView(pageId: String, snack: SnackState = SnackState()) = PageView(
         context = app,
         coroutineScope = viewScope,
         pageDataManager = data.pageDataManager,
+        pageLeases = pageLeases,
         appRepository = data.appRepository,
         initialPageId = pageId,
         viewWidth = 400,
@@ -104,7 +109,7 @@ class PageViewportTest {
         }
 
         view.disposeOldPage()
-        assertTrue(data.pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
         for (pageId in pages) {
             assertEquals(
                 "saved scroll of $pageId",
@@ -166,7 +171,7 @@ class PageViewportTest {
 
         assertEquals(PageViewport(scroll = Offset(0f, 300f)), view.viewport.value)
         view.disposeOldPage()
-        assertTrue(data.pageSaver.saveAll())
+        assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
         assertEquals(300, data.db.pageDao().getById(pageId)!!.scroll)
     }
 
