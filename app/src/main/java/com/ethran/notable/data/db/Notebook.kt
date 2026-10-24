@@ -74,6 +74,11 @@ interface NotebookDao {
     @Query("UPDATE notebook SET pageIds=:pageIds, updatedAt=:updatedAt WHERE id=:id")
     suspend fun setPageIds(id: String, pageIds: List<String>, updatedAt: Date)
 
+    // Bumps only the edit timestamp of the notebook holding the page, without a read-modify-write
+    // of the whole row that could overwrite a concurrent change to its other columns.
+    @Query("UPDATE notebook SET updatedAt=:updatedAt WHERE id = (SELECT notebookId FROM page WHERE id = :pageId)")
+    suspend fun touchUpdatedAtForPage(pageId: String, updatedAt: Date)
+
     @Insert
     suspend fun create(notebook: Notebook): Long
 
@@ -139,6 +144,11 @@ class BookRepository @Inject constructor(
 
     fun getByIdLive(notebookId: String): LiveData<Notebook?> {
         return notebookDao.getByIdLive(notebookId)
+    }
+
+    /** Advances the edit timestamp of the notebook holding [pageId]; no-op for a loose page. */
+    suspend fun touchUpdatedAtForPage(pageId: String, updatedAt: Date = Date()) {
+        notebookDao.touchUpdatedAtForPage(pageId, updatedAt)
     }
 
     suspend fun setOpenPageId(id: String, pageId: String) {

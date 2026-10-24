@@ -33,6 +33,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -91,6 +92,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var pageDataManager: dagger.Lazy<PageDataManager>
+
+    @Inject
+    lateinit var pageSaver: dagger.Lazy<PageSaver>
 
     @Inject
     lateinit var syncScheduler: dagger.Lazy<SyncScheduler>
@@ -248,6 +252,12 @@ class MainActivity : ComponentActivity() {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
             CanvasEventBus.refreshUi.emit(Unit)
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // The process may be killed while in the background; don't leave edits waiting.
+        if (hasUsableStorage(this)) pageSaver.get().saveSoon()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

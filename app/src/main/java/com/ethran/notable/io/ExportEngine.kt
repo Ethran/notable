@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -22,7 +23,12 @@ import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
 import com.ethran.notable.ui.components.getFolderList
+import com.ethran.notable.utils.AppResult
+import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.ensureNotMainThread
+import com.ethran.notable.utils.flatMap
+import com.ethran.notable.utils.fold
+import com.ethran.notable.utils.onError
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,6 +44,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 /* ---------------------------- Public API ---------------------------- */
 
@@ -63,6 +70,7 @@ class ExportEngine @Inject constructor(
     private val bookRepo: BookRepository,
     private val pageContentRenderer: PageContentRenderer,
     private val appEventBus: AppEventBus,
+    private val pageSaver: PageSaver,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
@@ -74,6 +82,8 @@ class ExportEngine @Inject constructor(
     suspend fun export(
         target: ExportTarget, format: ExportFormat, options: ExportOptions = ExportOptions()
     ): String {
+        // Exporters read pages from the database, so it must have every edit made so far.
+        pageSaver.saveAll().onError { return "Export cancelled: ${it.userMessage}" }
         // prepare file name and folder
         val (folderUri, baseFileName) = createFileNameAndFolder(target, format, options)
         // TODO: Retrieve all necessary data from the target, so that specific format exporter does not need to handle reading from db.
@@ -106,16 +116,27 @@ class ExportEngine @Inject constructor(
 
             try {
                 log.i("Exporting book to linked file, uri: $uriStr")
-                export(
-                    target = ExportTarget.Book(bookId),
-                    format = ExportFormat.XOPP,
-                    options = ExportOptions(
-                        copyToClipboard = false,
-                        targetFolderUri = uriStr.toUri(),
-                        overwrite = true
+                val target = ExportTarget.Book(bookId)
+                // The file is written from the database, so without every edit saved it would be
+                // overwritten with an older version of the book.
+                pageSaver.saveAll()
+                    .flatMap {
+                        val (folderUri, fileName) = createFileNameAndFolder(
+                            target, ExportFormat.XOPP,
+                            ExportOptions(copyToClipboard = false, targetFolderUri = uriStr.toUri()),
+                        )
+                        writeFile(folderUri, "$fileName.xopp", "application/x-xopp", overwrite = true) { out ->
+                            xoppFile.writeToXoppStream(target, out)
+                        }
+                    }
+                    .fold(
+                        onSuccess = { log.i("Linked export finished") },
+                        onError = {
+                            appEventBus.emit(
+                                AppEvent.LogMessage("exportToLinkedFileAsync", "Linked file not updated: ${it.userMessage}")
+                            )
+                        },
                     )
-                )
-                log.i("Linked export successful")
             } catch (e: Exception) {
                 appEventBus.emit(
                     AppEvent.LogMessage(
@@ -493,11 +514,6 @@ class ExportEngine @Inject constructor(
         writer = writer
     )
 
-    /**
-     * Central writer that handles directory types:
-     * - SAF directory Uris (tree/document) via DocumentsContract
-     * - file:// directory Uris via java.io.File
-     */
     private suspend fun saveInternal(
         folderUri: Uri,
         fileName: String,
@@ -505,8 +521,24 @@ class ExportEngine @Inject constructor(
         mimeType: String,
         overwrite: Boolean,
         writer: suspend (OutputStream) -> Unit
-    ): String = withContext(ioDispatcher) {
+    ): String {
         val displayName = if (extension.isBlank()) fileName else "$fileName.$extension"
+        return writeFile(folderUri, displayName, mimeType, overwrite, writer)
+            .fold(onSuccess = { "Saved $displayName" }, onError = { it.userMessage })
+    }
+
+    /**
+     * Writes [displayName] into [folderUri]. Handles both directory types:
+     * - SAF directory Uris (tree/document) via DocumentsContract
+     * - file:// directory Uris via java.io.File
+     */
+    private suspend fun writeFile(
+        folderUri: Uri,
+        displayName: String,
+        mimeType: String,
+        overwrite: Boolean,
+        writer: suspend (OutputStream) -> Unit
+    ): AppResult<Unit, DomainError> = withContext(ioDispatcher) {
         try {
             val dest = createOrGetFileInDir(folderUri, displayName, mimeType, overwrite)
                 ?: throw IOException(
@@ -527,14 +559,15 @@ class ExportEngine @Inject constructor(
 
                 else -> throw IOException("Unsupported Uri scheme: ${dest.scheme}")
             }
-
-            "Saved $displayName"
+            AppResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: OutOfMemoryError) {
             log.e("Save error (OOM): ${e.message}")
-            "Not enough memory to save $displayName"
+            AppResult.Error(DomainError.FileError("Not enough memory to save $displayName"))
         } catch (e: Exception) {
             log.e("Save error: ${e.message}")
-            "Error saving $displayName"
+            AppResult.Error(DomainError.FileError("Error saving $displayName: ${e.message}"))
         }
     }
 
