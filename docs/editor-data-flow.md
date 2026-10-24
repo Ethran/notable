@@ -103,10 +103,11 @@ editor and the code around it.
 - `PageView` owns a `StateFlow<PageViewport>` (`scroll`, `zoom`) for the shown page, and a map of
   the viewports of pages this editor has left, so returning to a page brings back its scroll and
   zoom.
-- Each scroll or zoom step is for the page its gesture was made on. It starts from that page's
-  viewport and commits only if the page is still shown and its viewport hasn't changed since the
-  step started. A step running or still queued while the page changes is dropped instead of being
-  applied to the new page. Scroll and zoom are ignored until the first page is shown.
+- Each scroll or zoom step is for the page its gesture was made on. It first waits for drawing to
+  finish, then reads that page's viewport and commits the new one without suspending, on the main
+  thread, where page swaps run too, so nothing changes the viewport in between. A step for a page
+  no longer shown is dropped instead of being applied to the new page. Scroll and zoom are ignored
+  until the first page is shown.
 - Each committed step records the vertical scroll with `PageDataManager.recordScroll(pageId, y)`;
   `PageSaver` writes it to `Page.scroll` with the other edits. A page shown for the first time in
   an editor opens at that saved scroll, unzoomed.

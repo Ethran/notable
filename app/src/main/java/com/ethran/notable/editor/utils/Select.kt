@@ -97,7 +97,7 @@ fun selectImagesAndStrokes(
 
     // create bitmap and draw images and strokes
     val viewport = page.viewport.value
-    val selectedBitmap = ((pageBounds - viewport.scroll) * viewport.zoom).let { boundsScreen ->
+    val selectedBitmap = viewport.toScreen(pageBounds).let { boundsScreen ->
         createBitmap(boundsScreen.width(), boundsScreen.height())
     }
     val selectedCanvas = Canvas(selectedBitmap)

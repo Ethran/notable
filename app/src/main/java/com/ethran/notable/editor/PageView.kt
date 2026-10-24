@@ -580,7 +580,7 @@ class PageView(
             (start.scroll.x + delta.x).coerceAtLeast(0f),
             (start.scroll.y + delta.y).coerceAtLeast(0f)
         )
-        if (!commitViewport(pageId, start, start.copy(scroll = newScroll))) return
+        if (!commitViewport(pageId, start.copy(scroll = newScroll))) return
 
         CanvasEventBus.forceUpdate.emit(null)
     }
@@ -601,6 +601,9 @@ class PageView(
     }
 
     suspend fun updateScroll(pageId: String, dragDelta: Offset) {
+        // before scrolling, make sure that strokes are drawn.
+        waitForDrawingWithSnack()
+
         val start = viewportStart(pageId) ?: return
         // drag delta is in screen coordinates,
         // so we have to scale it back to page coordinates.
@@ -617,11 +620,8 @@ class PageView(
         // There is nothing to do, return.
         if (deltaInPage == Offset.Zero) return
 
-        // before scrolling, make sure that strokes are drawn.
-        waitForDrawingWithSnack()
-
         val next = start.copy(scroll = start.scroll + deltaInPage)
-        if (!commitViewport(pageId, start, next)) return
+        if (!commitViewport(pageId, next)) return
         // To avoid rounding errors, we just calculate it again.
         val movement = (deltaInPage * start.zoom)
         if (movement.toIntOffset() == IntOffset.Zero) return
@@ -698,6 +698,7 @@ class PageView(
     /** Zooms [pageId] by [scaleDelta], if it is still shown, and redraws it whole. */
     suspend fun simpleUpdateZoom(pageId: String, scaleDelta: Float) {
         log.d("Simple Zoom updated, $scaleDelta")
+        waitForDrawingWithSnack()
         val start = viewportStart(pageId) ?: return
         // Update the zoom factor
         val newZoomLevel = calculateZoomLevel(scaleDelta, start.zoom)
@@ -708,19 +709,19 @@ class PageView(
             return
         }
         log.d("New zoom level: $newZoomLevel")
-        redrawAt(pageId, start, start.copy(zoom = newZoomLevel))
+        redrawAt(pageId, start.copy(zoom = newZoomLevel))
     }
 
     /** Unzooms the page and scrolls it back to its left edge, keeping its vertical scroll. */
     suspend fun resetView(pageId: String) {
+        waitForDrawingWithSnack()
         val start = viewportStart(pageId) ?: return
-        redrawAt(pageId, start, PageViewport(scroll = Offset(0f, start.scroll.y)))
+        redrawAt(pageId, PageViewport(scroll = Offset(0f, start.scroll.y)))
     }
 
-    /** Moves [pageId]'s view from [start] to [next] and redraws it whole. */
-    private suspend fun redrawAt(pageId: String, start: PageViewport, next: PageViewport) {
-        waitForDrawingWithSnack()
-        if (!commitViewport(pageId, start, next)) return
+    /** Moves [pageId]'s view to [next] and redraws it whole. */
+    private fun redrawAt(pageId: String, next: PageViewport) {
+        if (!commitViewport(pageId, next)) return
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -763,6 +764,8 @@ class PageView(
      */
     suspend fun updateZoom(pageId: String, scaleDelta: Float, center: Offset?) {
         log.d("Zoom(delta): $scaleDelta. Center: $center")
+        // Flush pending strokes/background before snapshot-based operations
+        waitForDrawingWithSnack()
 
         val start = viewportStart(pageId) ?: return
         val oldZoom = start.zoom
@@ -771,9 +774,6 @@ class PageView(
             log.d("Zoom unchanged. Current level: $oldZoom")
             return
         }
-
-        // Flush pending strokes/background before snapshot-based operations
-        waitForDrawingWithSnack()
 
         val scaleFactor = newZoom / oldZoom
         val screenW = windowedCanvas.width
@@ -815,7 +815,7 @@ class PageView(
         val newScrollX = (start.scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
         val newScrollY = (start.scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
         val next = PageViewport(Offset(newScrollX, newScrollY), newZoom)
-        if (!commitViewport(pageId, start, next)) return
+        if (!commitViewport(pageId, next)) return
 
         // Swap in the new bitmap and update zoom on the windowed canvas
         windowedBitmap = scaledBitmap
@@ -963,20 +963,26 @@ class PageView(
     }
 
 
-    /** [pageId]'s viewport for a scroll or zoom step to start from, or null if it is not shown. */
+    /**
+     * [pageId]'s viewport for a scroll or zoom step to start from, or null if it is not shown.
+     *
+     * A step reads it once it has waited for drawing, and commits through [commitViewport] without
+     * suspending again. Steps, page swaps and resizes all run on the main thread, so nothing changes
+     * the viewport in between.
+     */
     private fun viewportStart(pageId: String): PageViewport? =
         synchronized(pageLock) { viewportFlow.value.takeIf { currentPageId == pageId } }
 
     /**
      * Sets [pageId]'s viewport to [next] and records its vertical scroll for saving, if [pageId] is
-     * still shown at [start] and has a record. Returns false, changing nothing, otherwise: the page
-     * or its viewport changed meanwhile, no page is shown yet, or the page is missing.
+     * shown and has a record. Returns false, changing nothing, otherwise: another page is shown, no
+     * page is shown yet, or the page is missing.
      */
-    private fun commitViewport(pageId: String, start: PageViewport, next: PageViewport): Boolean {
+    private fun commitViewport(pageId: String, next: PageViewport): Boolean {
         synchronized(pageLock) {
             val shown = openPage
             if (shown.pageId != pageId || shown.record == null) return false
-            if (!viewportFlow.compareAndSet(start, next)) return false
+            viewportFlow.value = next
         }
         pageDataManager.recordScroll(pageId, next.scroll.y.roundToInt())
         return true
@@ -994,15 +1000,9 @@ class PageView(
         return rect - scroll
     }
 
-    fun toScreenCoordinates(rect: Rect): Rect {
-        val shown = viewport.value
-        return (rect - shown.scroll) * shown.zoom
-    }
+    fun toScreenCoordinates(rect: Rect): Rect = viewport.value.toScreen(rect)
 
-    private fun toPageCoordinates(rect: Rect): Rect {
-        val shown = viewport.value
-        return rect / shown.zoom + shown.scroll
-    }
+    private fun toPageCoordinates(rect: Rect): Rect = viewport.value.toPage(rect)
 
     private suspend fun waitForDrawingWithSnack() {
         if (drawingInProgress.isLocked) {
