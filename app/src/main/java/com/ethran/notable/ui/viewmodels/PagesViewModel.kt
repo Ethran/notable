@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.io.ThumbnailBackfillQueue
 import com.ethran.notable.ui.components.getFolderList
+import com.ethran.notable.utils.onSuccess
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
@@ -34,6 +36,7 @@ data class PagesUiState(
 @HiltViewModel
 class PagesViewModel @Inject constructor(
     private val appRepository: AppRepository,
+    private val pageSaver: PageSaver,
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -82,7 +85,7 @@ class PagesViewModel @Inject constructor(
 
     fun duplicatePage(pageId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            appRepository.duplicatePage(pageId)
+            pageSaver.saveAll().onSuccess { appRepository.duplicatePage(pageId) }
         }
     }
 

@@ -278,8 +278,8 @@ class EditorViewModel @Inject constructor(
         // 3. Cleanup page resources
         page.disposeOldPage()
 
-        // Save the edits now rather than after the usual delay: the screens shown next, page
-        // previews and duplication, read pages from the database.
+        // Save the edits now rather than after the usual delay: the page previews shown next are
+        // rendered from the database.
         pageSaver.saveSoon()
 
         // 4. Sync-on-close. syncFromPageId honors the "Sync when closing notes" setting. Run on the

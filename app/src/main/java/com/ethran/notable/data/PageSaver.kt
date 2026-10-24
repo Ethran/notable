@@ -31,13 +31,12 @@ import kotlin.time.Duration.Companion.milliseconds
  * edit, so a crash loses at most the last few seconds of work. Each save writes everything
  * collected in one transaction, together with the edit timestamps of the pages and notebooks.
  *
- * Code that reads page content from the database — export, sync — calls [saveAll] first, so it
- * sees every edit made so far, and stops if it returns an error. The editor never needs to:
- * [PageDataManager] lays unsaved edits over whatever it loads. Other readers (duplicating a page,
- * thumbnails) don't call it. They miss the edits not saved yet — usually those of the last
- * [IDLE_DELAY_MS], up to [MAX_DELAY_MS] of them during continuous editing, more while writes fail —
- * and a thumbnail rendered before the save counts as stale after it, since the save bumps the page's
- * edit timestamp.
+ * Code that reads page content from the database — export, sync, duplicating a page — calls
+ * [saveAll] first, so it sees every edit made so far, and stops if it returns an error. The editor
+ * never needs to: [PageDataManager] lays unsaved edits over whatever it loads. Thumbnails don't call
+ * it. They miss the edits not saved yet — usually those of the last [IDLE_DELAY_MS], up to
+ * [MAX_DELAY_MS] of them during continuous editing, more while writes fail — and a thumbnail
+ * rendered before the save counts as stale after it, since the save bumps the page's edit timestamp.
  *
  * A failed write keeps its changes unsaved and is retried, at most a minute apart, for as long as
  * the app runs. Until a save succeeds a warning stays on screen: edits still unsaved when the process
