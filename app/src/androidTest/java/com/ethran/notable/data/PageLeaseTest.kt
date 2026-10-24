@@ -53,24 +53,28 @@ class PageLeaseTest {
 
     @Test(timeout = 30000)
     fun memoryPressure_dropsAPageOnlyOnceNoViewShowsIt() = runBlocking {
-        pageDataManager.registerComponentCallbacks(app)
-        val (shown, leftBehind) = seedPages(2)
-        pageDataManager.requestPageLoadJoin(shown)
-        pageDataManager.requestPageLoadJoin(leftBehind)
+        val callbacks = pageDataManager.registerComponentCallbacks(app)
+        try {
+            val (shown, leftBehind) = seedPages(2)
+            pageDataManager.requestPageLoadJoin(shown)
+            pageDataManager.requestPageLoadJoin(leftBehind)
 
-        // Two views show the page; one of them leaves it, and closes its lease twice.
-        val leaving = pageLeases.acquire(shown)
-        val staying = pageLeases.acquire(shown)
-        leaving.close()
-        leaving.close()
+            // Two views show the page; one of them leaves it, and closes its lease twice.
+            val leaving = pageLeases.acquire(shown)
+            val staying = pageLeases.acquire(shown)
+            leaving.close()
+            leaving.close()
 
-        dropEverythingPossible()
-        assertTrue(pageDataManager.getStrokes(shown).isNotEmpty())
-        assertTrue(pageDataManager.getStrokes(leftBehind).isEmpty())
+            dropEverythingPossible()
+            assertTrue(pageDataManager.getStrokes(shown).isNotEmpty())
+            assertTrue(pageDataManager.getStrokes(leftBehind).isEmpty())
 
-        staying.close()
-        dropEverythingPossible()
-        assertTrue(pageDataManager.getStrokes(shown).isEmpty())
+            staying.close()
+            dropEverythingPossible()
+            assertTrue(pageDataManager.getStrokes(shown).isEmpty())
+        } finally {
+            app.unregisterComponentCallbacks(callbacks)
+        }
     }
 
     @Test(timeout = 30000)

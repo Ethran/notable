@@ -747,7 +747,8 @@ class PageDataManager @Inject constructor(
      */
     private fun dropUnfinishedLoad(pageId: String, job: Job?) = synchronized(lock) {
         val entry = entries[pageId]
-        if (entry != null && entry.loadJob === job && !entry.loaded) removePageLocked(pageId)
+        if (entry != null && entry.loadJob === job && !entry.loaded && pageId !in held)
+            removePageLocked(pageId)
     }
 
     /**
@@ -840,8 +841,13 @@ class PageDataManager @Inject constructor(
                 )
                 dataLoadingScope.launch {
                     synchronized(lock) {
-                        entries[pageId]?.loadJob?.cancel()
-                        removePageLocked(pageId)
+                        // A held page keeps its entry; its next request loads it again.
+                        if (pageId !in held) {
+                            entries[pageId]?.loadJob?.cancel()
+                            removePageLocked(pageId)
+                        } else {
+                            log.w("Page($pageId) is held, keeping its entry until it is requested again")
+                        }
                     }
                 }
                 false
@@ -1288,8 +1294,8 @@ class PageDataManager @Inject constructor(
     }
 
     /**
-     * Cancels and removes every page still loading, except [ignoredPageIds] and the page in front
-     * (see [cancelLoadsExcept]).
+     * Cancels and removes every page still loading, except [ignoredPageIds] and held ones (see
+     * [cancelLoadsExcept]).
      */
     fun cancelLoadingPages(ignoredPageIds: List<String> = listOf()) {
         dataLoadingScope.launch {
@@ -1343,8 +1349,9 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    fun registerComponentCallbacks(context: Context) {
-        context.registerComponentCallbacks(object : ComponentCallbacks2 {
+    /** Trims the cache on [context]'s memory signals; returns the callbacks registered. */
+    fun registerComponentCallbacks(context: Context): ComponentCallbacks2 {
+        val callbacks = object : ComponentCallbacks2 {
             @Suppress("DEPRECATION")
             override fun onTrimMemory(level: Int) {
                 log.d("onTrimMemory: $level, usedMB: ${getUsedMemory()}")
@@ -1365,6 +1372,8 @@ class PageDataManager @Inject constructor(
             override fun onLowMemory() {
                 dropAllUnpinned()
             }
-        })
+        }
+        context.registerComponentCallbacks(callbacks)
+        return callbacks
     }
 }

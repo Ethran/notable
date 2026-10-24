@@ -248,7 +248,8 @@ class PageView(
      *     draws a new bitmap.
      * 4.  Loads the page's strokes and images in the background and redraws once they are in.
      *
-     * Stops after step 1 once the view is disposed.
+     * A disposed view loads nothing more: a page change interrupted by the disposal stops after
+     * step 1 or 2, or at the latest before step 4.
      */
     private suspend fun switchToPage(newPageId: String) {
         val oldId = currentPageId
@@ -483,14 +484,9 @@ class PageView(
 
 
     private fun cleanJob() {
+        pageDataManager.cancelLoadingPage(pageId = currentPageId)
         //ensure that snack is canceled, even on dispose of the page.
-        coroutineScope.launch(Dispatchers.IO) {
-            pageDataManager.cancelLoadingPage(pageId = currentPageId)
-        }
         loadingJob?.cancel()
-        if (loadingJob?.isActive == true) {
-            log.e("Strokes are still loading, trying to cancel and resume")
-        }
     }
 
 
