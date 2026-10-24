@@ -52,6 +52,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicReference
@@ -60,6 +63,7 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 
 const val OVERLAP = 2
@@ -144,25 +148,27 @@ class PageView(
         get() = openPage.pageId
 
 
-    // scroll is observed by ui, represents top left corner
-    var scroll: Offset
-        get() = pageDataManager.getPageScroll(currentPageId)
-        set(value) = pageDataManager.setPageScroll(currentPageId, value)
+    // The shown page's viewport. [setOpenPage] replaces it together with the page. Scroll and zoom
+    // steps change it through [commitViewport]. A resize resets its zoom.
+    private val viewportFlow = MutableStateFlow(PageViewport())
+    val viewport: StateFlow<PageViewport> = viewportFlow.asStateFlow()
 
+    // Top left corner of the view, in page coordinates.
+    val scroll: Offset
+        get() = viewportFlow.value.scroll
+
+    val zoom: Float
+        get() = viewportFlow.value.zoom
+
+    // Pages this view has shown and left, with the viewport they had. Guarded by pageLock.
+    private val leftPages = HashMap<String, PageViewport>()
 
     val isTransformationAllowed: Boolean
         get() = openPage.isTransformationAllowed
 
-
-    // we need to observe zoom level, to adjust strokes size.
-    val zoomLevel: MutableStateFlow<Float> =
-        MutableStateFlow(pageDataManager.getPageZoom(currentPageId))
-
-    var height: Int
-        get() = pageDataManager.getPageHeight(currentPageId) ?: viewHeight
-        set(value) {
-            pageDataManager.setPageHeight(currentPageId, value)
-        }
+    // Height the shown page's content needs, in page coordinates.
+    private val contentHeightFlow = MutableStateFlow(SCREEN_HEIGHT)
+    val contentHeight: StateFlow<Int> = contentHeightFlow.asStateFlow()
 
 
 //    private var dbStrokes = appRepository.strokeRepository
@@ -204,15 +210,14 @@ class PageView(
             if(currentPageId.isEmpty())
                 log.e("Current page id is empty")
 
-            zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
-            pageDataManager.getCachedBitmap(currentPageId)?.let { cached ->
+            pageDataManager.getCachedBitmap(currentPageId, viewport.value)?.let { cached ->
                 log.i("PageView: using cached bitmap")
                 windowedBitmap = cached
                 windowedCanvas = Canvas(windowedBitmap)
             } ?: run {
                 log.i("PageView.init: creating new bitmap")
                 recreateCanvas()
-                pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
+                pageDataManager.cacheBitmap(currentPageId, windowedBitmap, viewport.value)
             }
 
             coroutineScope.launch(Dispatchers.Main) {
@@ -243,9 +248,10 @@ class PageView(
     /**
      * Shows [newPageId] in place of the current page:
      * 1.  Keeps the old page's bitmap in [PageDataManager] for its next showing and its preview.
-     * 2.  Reads the new page's record and shows the page (see [setOpenPage]), at its zoom.
-     * 3.  Uses the page's cached bitmap, resizing the canvas if the view size changed; otherwise
-     *     draws a new bitmap.
+     * 2.  Reads the new page's record and shows the page (see [setOpenPage]): it takes the page's
+     *     lease and the viewport the page had when this view left it, or else its saved scroll.
+     * 3.  Uses the page's cached bitmap if it shows that viewport, resizing the canvas if the view
+     *     size changed; otherwise draws a new bitmap.
      * 4.  Loads the page's strokes and images in the background and redraws once they are in.
      *
      * Stops after step 1 once the view is disposed.
@@ -253,11 +259,13 @@ class PageView(
     private suspend fun switchToPage(newPageId: String) {
         val oldId = currentPageId
         log.d("changePage Entry: $oldId -> $newPageId")
-        pageDataManager.onExit(oldId, windowedBitmap, coroutineScope)
+        pageDataManager.onExit(oldId, windowedBitmap, viewport.value, coroutineScope)
+        // The spare buffer may be a bitmap the cache keeps for a page left earlier; scrolling would
+        // draw over it.
+        scrollBackBuffer = null
         // A disposed view draws and loads nothing more.
         val shown = showPage(newPageId) ?: return
-        zoomLevel.value = pageDataManager.getPageZoom(currentPageId)
-        pageDataManager.getCachedBitmap(newPageId)?.let { cached ->
+        pageDataManager.getCachedBitmap(newPageId, viewport.value)?.let { cached ->
             log.i("PageView: using cached bitmap")
             windowedBitmap = cached
             windowedCanvas = Canvas(windowedBitmap)
@@ -267,7 +275,7 @@ class PageView(
         } ?: run {
             log.i("PageView.changePage: creating new bitmap")
             recreateCanvas()
-            pageDataManager.cacheBitmap(newPageId, windowedBitmap)
+            pageDataManager.cacheBitmap(newPageId, windowedBitmap, viewport.value)
         }
 
         log.d("New bitmap hash: ${windowedBitmap.hashCode()}, ID: $currentPageId")
@@ -292,7 +300,7 @@ class PageView(
     */
     fun disposeOldPage() {
         log.d("Dispose old page")
-        pageDataManager.onExit(currentPageId, windowedBitmap, coroutineScope)
+        pageDataManager.onExit(currentPageId, windowedBitmap, viewport.value, coroutineScope)
         markDisposed()
         cleanJob()
     }
@@ -312,7 +320,7 @@ class PageView(
         loadingJob?.cancel()
         val pageId = page.pageId
         logCache.i("Init from persist layer, pageId: $pageId")
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        windowedCanvas.scale(zoom, zoom)
         synchronized(pageLock) {
             // Nothing would cancel a wait started after [disposeOldPage], so none starts then.
             if (disposed) return
@@ -330,6 +338,7 @@ class PageView(
                 }
                 logCache.d("All strokes loaded in $timeToLoad ms")
             }
+            updateContentHeight()
             // TODO: If we put it in loadPage(…) sometimes it will try to refresh
             //  without seeing strokes, I have no idea why.
             coroutineScope.launch(Dispatchers.Main) {
@@ -351,7 +360,7 @@ class PageView(
 
     fun addStrokes(strokesToAdd: List<Stroke>) {
         pageDataManager.addStrokes(currentPageId, strokesToAdd)
-        updateHeightForChange(strokesToAdd)
+        updateContentHeight()
 
 //        persistBitmapDebounced()
     }
@@ -387,14 +396,13 @@ class PageView(
     // Completely updates strokes
     fun updateStrokes(strokesToUpdate: List<Stroke>) {
         pageDataManager.updateStrokes(currentPageId, strokesToUpdate)
-        updateHeightForChange(strokesToUpdate)
+        updateContentHeight()
 //        persistBitmapDebounced()
     }
 
     fun removeStrokes(strokeIds: List<String>) {
-        val pageId = currentPageId
-        pageDataManager.removeStrokes(pageId, strokeIds)
-        pageDataManager.recomputeHeight(pageId)
+        pageDataManager.removeStrokes(currentPageId, strokeIds)
+        updateContentHeight()
 
 //        persistBitmapDebounced()
     }
@@ -403,35 +411,20 @@ class PageView(
         return pageDataManager.getStrokes(strokeIds, currentPageId)
     }
 
-    fun updateHeightForChange(strokesChanged: List<Stroke>) {
-        strokesChanged.forEach {
-            val bottomPlusPadding = it.bottom + 50
-            if (bottomPlusPadding > height) height = bottomPlusPadding.toInt()
-        }
-    }
-
     fun addImage(imageToAdd: Image) {
-        pageDataManager.addImages(currentPageId, listOf(imageToAdd))
-        val bottomPlusPadding = imageToAdd.x + imageToAdd.height + 50
-        if (bottomPlusPadding > height) height = bottomPlusPadding
-
-//        persistBitmapDebounced()
+        addImage(listOf(imageToAdd))
     }
 
     fun addImage(imageToAdd: List<Image>) {
         pageDataManager.addImages(currentPageId, imageToAdd)
-        imageToAdd.forEach {
-            val bottomPlusPadding = it.x + it.height + 50
-            if (bottomPlusPadding > height) height = bottomPlusPadding
-        }
+        updateContentHeight()
 
 //        persistBitmapDebounced()
     }
 
     fun removeImages(imageIds: List<String>) {
-        val pageId = currentPageId
-        pageDataManager.removeImages(pageId, imageIds)
-        pageDataManager.recomputeHeight(pageId)
+        pageDataManager.removeImages(currentPageId, imageIds)
+        updateContentHeight()
 //        persistBitmapDebounced()
     }
 
@@ -439,9 +432,13 @@ class PageView(
     // displacement.
     fun updateImages(imagesToUpdate: List<Image>) {
         pageDataManager.updateImages(currentPageId, imagesToUpdate)
-        imagesToUpdate.forEach {
-            val bottomPlusPadding = it.x + it.height + 50
-            if (bottomPlusPadding > height) height = bottomPlusPadding
+        updateContentHeight()
+    }
+
+    // Measured and published in one step, so a measurement never overwrites a newer one.
+    private fun updateContentHeight() {
+        synchronized(pageLock) {
+            contentHeightFlow.value = pageDataManager.contentHeight(currentPageId)
         }
     }
 
@@ -455,8 +452,8 @@ class PageView(
         val bitmapFromDisc = loadHQPagePreview(
             context = context,
             pageID = shown.pageId,
-            scroll = pageDataManager.getPageScroll(shown.pageId),
-            zoom = zoomLevel.value,
+            scroll = scroll,
+            zoom = zoom,
             pageUpdatedAtMs = shown.record?.updatedAt?.time,
             requireExactMatch = true,
         )
@@ -539,12 +536,15 @@ class PageView(
         // Just update scroll, for debugging.
         // It will redraw whole screen, instead of trying to redraw only needed area.
         log.d("Simple update scroll")
-        val delta = (dragDelta / zoomLevel.value)
-
         waitForDrawingWithSnack()
 
-        scroll =
-            Offset((scroll.x + delta.x).coerceAtLeast(0f), (scroll.y + delta.y).coerceAtLeast(0f))
+        val (pageId, start) = viewportStart()
+        val delta = (dragDelta / start.zoom)
+        val newScroll = Offset(
+            (start.scroll.x + delta.x).coerceAtLeast(0f),
+            (start.scroll.y + delta.y).coerceAtLeast(0f)
+        )
+        if (!commitViewport(pageId, start, start.copy(scroll = newScroll))) return
 
         CanvasEventBus.forceUpdate.emit(null)
     }
@@ -565,17 +565,17 @@ class PageView(
     }
 
     suspend fun updateScroll(dragDelta: Offset) {
-//        log.d("Update scroll, dragDelta: $dragDelta, scroll: $scroll, zoomLevel.value: $zoomLevel.value")
+        val (pageId, start) = viewportStart()
         // drag delta is in screen coordinates,
         // so we have to scale it back to page coordinates.
-        var deltaInPage = Offset(dragDelta.x / zoomLevel.value, dragDelta.y / zoomLevel.value)
+        var deltaInPage = Offset(dragDelta.x / start.zoom, dragDelta.y / start.zoom)
 
         // Cut, so we won't shift outside the screen.
-        if (scroll.x + deltaInPage.x < 0) {
-            deltaInPage = deltaInPage.copy(x = -scroll.x)
+        if (start.scroll.x + deltaInPage.x < 0) {
+            deltaInPage = deltaInPage.copy(x = -start.scroll.x)
         }
-        if (scroll.y + deltaInPage.y < 0) {
-            deltaInPage = deltaInPage.copy(y = -scroll.y)
+        if (start.scroll.y + deltaInPage.y < 0) {
+            deltaInPage = deltaInPage.copy(y = -start.scroll.y)
         }
 
         // There is nothing to do, return.
@@ -584,9 +584,10 @@ class PageView(
         // before scrolling, make sure that strokes are drawn.
         waitForDrawingWithSnack()
 
-        scroll += deltaInPage
+        val next = start.copy(scroll = start.scroll + deltaInPage)
+        if (!commitViewport(pageId, start, next)) return
         // To avoid rounding errors, we just calculate it again.
-        val movement = (deltaInPage * zoomLevel.value)
+        val movement = (deltaInPage * start.zoom)
         if (movement.toIntOffset() == IntOffset.Zero) return
 
         val width = windowedBitmap.width
@@ -604,7 +605,7 @@ class PageView(
         scrollBackBuffer = windowedBitmap
         windowedBitmap = shiftedBitmap
         windowedCanvas.setBitmap(windowedBitmap)
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        windowedCanvas.scale(start.zoom, start.zoom)
 
         redrawOutsideRect(
             alreadyDrawnRectAfterShift(movement.toIntOffset(), width, height),
@@ -613,7 +614,6 @@ class PageView(
         )
 
 //        persistBitmapDebounced()
-        saveToPersistLayer()
     }
 
 
@@ -661,21 +661,29 @@ class PageView(
 
     suspend fun simpleUpdateZoom(scaleDelta: Float) {
         log.d("Simple Zoom updated, $scaleDelta")
+        val (pageId, start) = viewportStart()
         // Update the zoom factor
-        val newZoomLevel = calculateZoomLevel(scaleDelta, zoomLevel.value)
+        val newZoomLevel = calculateZoomLevel(scaleDelta, start.zoom)
 
         // If there's no actual zoom change, skip
-        if (newZoomLevel == zoomLevel.value) {
-            log.d("Zoom unchanged. Current level: ${zoomLevel.value}")
+        if (newZoomLevel == start.zoom) {
+            log.d("Zoom unchanged. Current level: ${start.zoom}")
             return
         }
         log.d("New zoom level: $newZoomLevel")
-        applyZoomAndRedraw(newZoomLevel)
+        redrawAt(pageId, start, start.copy(zoom = newZoomLevel))
     }
 
-    suspend fun applyZoomAndRedraw(newZoom: Float) {
-        zoomLevel.value = newZoom
+    /** Unzooms the page and scrolls it back to its left edge, keeping its vertical scroll. */
+    suspend fun resetView() {
+        val (pageId, start) = viewportStart()
+        redrawAt(pageId, start, PageViewport(scroll = Offset(0f, start.scroll.y)))
+    }
+
+    /** Moves [pageId]'s view from [start] to [next] and redraws it whole. */
+    private suspend fun redrawAt(pageId: String, start: PageViewport, next: PageViewport) {
         waitForDrawingWithSnack()
+        if (!commitViewport(pageId, start, next)) return
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -691,7 +699,7 @@ class PageView(
 //        windowedBitmap.recycle() -- It causes race condition with init from persistent layer
         windowedBitmap = zoomedBitmap
         windowedCanvas.setBitmap(windowedBitmap)
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        windowedCanvas.scale(next.zoom, next.zoom)
 
 
         // Redraw everything at new zoom level
@@ -700,11 +708,10 @@ class PageView(
         log.d("Redrawing full logical rect: $redrawRect")
         windowedCanvas.drawColor(Color.GREEN)
         drawBgToCanvas(redrawRect)
-        pageDataManager.cacheBitmap(currentPageId, windowedBitmap)
+        pageDataManager.cacheBitmap(pageId, windowedBitmap, next)
 
         drawAreaScreenCoordinates(redrawRect)
 
-        saveToPersistLayer()
         log.i("Zoom and redraw completed")
     }
 
@@ -720,7 +727,8 @@ class PageView(
     suspend fun updateZoom(scaleDelta: Float, center: Offset?) {
         log.d("Zoom(delta): $scaleDelta. Center: $center")
 
-        val oldZoom = zoomLevel.value
+        val (pageId, start) = viewportStart()
+        val oldZoom = start.zoom
         val newZoom = calculateZoomLevel(scaleDelta, oldZoom)
         if (newZoom == oldZoom) {
             log.d("Zoom unchanged. Current level: $oldZoom")
@@ -755,8 +763,8 @@ class PageView(
 
 
         //make sure that we won't go outside canvas.
-        val dx = (scroll.x - dstRect.left).coerceAtMost(0f)
-        val dy = (scroll.y - dstRect.top).coerceAtMost(0f)
+        val dx = (start.scroll.x - dstRect.left).coerceAtMost(0f)
+        val dy = (start.scroll.y - dstRect.top).coerceAtMost(0f)
         if (dx != 0f || dy != 0f) {
             matrix.postTranslate(dx, dy)
             matrix.mapRect(dstRect, srcRect)
@@ -767,32 +775,30 @@ class PageView(
         val deltaScrollPage = Offset(-dstRect.left / newZoom, -dstRect.top / newZoom)
 
 
-        val newScrollX = (scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
-        val newScrollY = (scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
-        scroll = Offset(newScrollX, newScrollY)
+        val newScrollX = (start.scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
+        val newScrollY = (start.scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
+        val next = PageViewport(Offset(newScrollX, newScrollY), newZoom)
+        if (!commitViewport(pageId, start, next)) return
 
         // Swap in the new bitmap and update zoom on the windowed canvas
         windowedBitmap = scaledBitmap
         windowedCanvas.setBitmap(windowedBitmap)
-
-        zoomLevel.value = newZoom
-        windowedCanvas.scale(zoomLevel.value, zoomLevel.value)
+        windowedCanvas.scale(newZoom, newZoom)
 
         if (scaleFactor < 1f) redrawOutsideRect(dstRect.toRect(), screenW, screenH)
 
 //        persistBitmapDebounced()
-        saveToPersistLayer()
         log.i(
             "Zoom updated using snapshot scaling. " +
                     "oldZoom=$oldZoom newZoom=$newZoom " +
                     "scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) " +
                     "bounds=$dstRect" +
-                    "scrollDelta=$deltaScrollPage newScroll=$scroll"
+                    "scrollDelta=$deltaScrollPage newScroll=${next.scroll}"
         )
     }
 
     fun redrawOutsideRect(dstRect: Rect, screenW: Int, screenH: Int) {
-        val scaledOverlap = ceil(OVERLAP * zoomLevel.value.coerceAtLeast(1f)).toInt()
+        val scaledOverlap = ceil(OVERLAP * zoom.coerceAtLeast(1f)).toInt()
 
         // Uncovered top band
         if (dstRect.top > 0) {
@@ -842,8 +848,7 @@ class PageView(
         val record = pageDataManager.getPageRecord(pageId)
         if (record == null)
             snackManager.showOrUpdateSnack(SnackConf(text = "Page not found", duration = 2000))
-        record?.let { pageDataManager.restorePageScroll(pageId, it.scroll) }
-        if (!setOpenPage(pageId)) return null
+        if (!setOpenPage(pageId, savedScrollY = record?.scroll ?: 0)) return null
         val loaded = OpenPage.load(appRepository, pageId, record)
         publishLoaded(loaded)
         // The view may have been disposed while the page was being read.
@@ -854,17 +859,24 @@ class PageView(
      * Publishes [pageId] as this view's page and leases it in place of the page shown before, so
      * [PageDataManager] keeps it while it is shown, then reports it to [onPageShown]. Does nothing
      * and returns false once the view is disposed.
+     *
+     * The page comes with the viewport it had when this view left it, or else unzoomed at
+     * [savedScrollY].
      */
-    private fun setOpenPage(pageId: String): Boolean {
+    private fun setOpenPage(pageId: String, savedScrollY: Int): Boolean {
         synchronized(pageLock) {
             if (disposed) return false
             val previous = lease
+            previous?.let { leftPages[it.pageId] = viewportFlow.value }
             lease = pageLeases.acquire(pageId)
             previous?.close()
             openPageRef.set(OpenPage(pageId))
+            viewportFlow.value =
+                leftPages.remove(pageId) ?: PageViewport(scroll = Offset(0f, savedScrollY.toFloat()))
             // Under the lock, so no page is reported after [disposeOldPage] returns.
             onPageShown(pageId)
         }
+        updateContentHeight()
         return true
     }
 
@@ -910,7 +922,7 @@ class PageView(
         val backgroundType = shown.backgroundType ?: BackgroundType.Native
         val bg = shown.backgroundName
         val pageNumber = shown.pageNumber
-        val scale = zoomLevel.value
+        val scale = zoom
         val bgImage: Bitmap? =
             when (backgroundType) {
                 BackgroundType.Image, BackgroundType.CoverImage, BackgroundType.AutoPdf,
@@ -931,7 +943,7 @@ class PageView(
             canvas = windowedCanvas,
             backgroundType = backgroundType,
             background = bg,
-            scroll = pageDataManager.getPageScroll(shown.pageId),
+            scroll = scroll,
             resourceBitmap = bgImage,
             scale = scale,
             repeat = false,
@@ -950,10 +962,13 @@ class PageView(
     }
 
     private fun updateCanvasDimensions() {
+        // A zoom fitted to the old size does not fit the new one, on any page.
+        synchronized(pageLock) {
+            viewportFlow.update { it.copy(zoom = 1f) }
+            leftPages.replaceAll { _, left -> left.copy(zoom = 1f) }
+        }
         // Recreate bitmap and canvas with new dimensions
         recreateCanvas()
-        //Reset zoom level.
-        zoomLevel.value = 1.0f
         // TODO: it might be worth to do it
         //  by redrawing only part of the screen, like in scroll and zoom.
         coroutineScope.launch {
@@ -963,14 +978,31 @@ class PageView(
     }
 
 
-    private fun saveToPersistLayer() = pageDataManager.saveScroll(currentPageId)
+    /** The shown page and its viewport, read together, for a scroll or zoom step to start from. */
+    private fun viewportStart(): Pair<String, PageViewport> =
+        synchronized(pageLock) { currentPageId to viewportFlow.value }
+
+    /**
+     * Sets [pageId]'s viewport to [next] and records its vertical scroll for saving, if [pageId] is
+     * still shown at [start] and its record is loaded. Returns false, changing nothing, otherwise:
+     * the page changed meanwhile, or it is still being read and gestures are not allowed yet.
+     */
+    private fun commitViewport(pageId: String, start: PageViewport, next: PageViewport): Boolean {
+        synchronized(pageLock) {
+            val shown = openPage
+            if (shown.pageId != pageId || shown.record == null) return false
+            if (!viewportFlow.compareAndSet(start, next)) return false
+        }
+        pageDataManager.recordScroll(pageId, next.scroll.y.roundToInt())
+        return true
+    }
 
     fun applyZoom(point: IntOffset): IntOffset {
-        return point * zoomLevel.value
+        return point * zoom
     }
 
     fun removeZoom(point: IntOffset): IntOffset {
-        return point / zoomLevel.value
+        return point / zoom
     }
 
     private fun removeScroll(rect: Rect): Rect {
@@ -978,11 +1010,13 @@ class PageView(
     }
 
     fun toScreenCoordinates(rect: Rect): Rect {
-        return (rect - scroll) * zoomLevel.value
+        val shown = viewport.value
+        return (rect - shown.scroll) * shown.zoom
     }
 
     private fun toPageCoordinates(rect: Rect): Rect {
-        return rect / zoomLevel.value + scroll
+        val shown = viewport.value
+        return rect / shown.zoom + shown.scroll
     }
 
     private suspend fun waitForDrawingWithSnack() {

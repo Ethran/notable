@@ -103,7 +103,7 @@ class EditorControlTower(
                     if (viewModel.toolbarState.value.mode == Mode.Select &&
                         viewModel.selectionState.firstPageCut != null
                     ) {
-                        onOpenPageCut(delta / page.zoomLevel.value)
+                        onOpenPageCut(delta / page.zoom)
                     } else {
                         onPageScroll(-delta)
                     }
@@ -187,8 +187,7 @@ class EditorControlTower(
 
     fun resetZoomAndScroll() {
         scope.launch {
-            page.scroll = Offset(0f, page.scroll.y)
-            page.applyZoomAndRedraw(1f)
+            scrollInProgress.withLock { page.resetView() }
             // Request UI update
             CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
