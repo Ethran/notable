@@ -138,7 +138,9 @@ editor and the code around it.
 - **Backgrounds.** Background bitmaps are pooled and shared between pages, on their own budget
   line, so a page full of cheap strokes is never evicted because backgrounds are large.
   `BackgroundFileWatcher` watches background files and reports changed pages; their backgrounds are
-  reloaded and held pages repainted.
+  dropped, for every page sharing them, then reloaded, and held pages repainted. A render begun
+  before such a change is not cached. A file that fails to render is cached as failed, unless it is
+  missing: then every draw checks for it again, so it is shown once it is there.
 - **Memory signals.** `onTrimMemory` shrinks the cache back to its budget, or drops every
   unpinned page when the app is hidden; `onLowMemory` drops every unpinned page.
 - **Previews.** `PagePreviewStore` (`data/PagePreviewStore.kt`, app-wide) writes the thumbnail and

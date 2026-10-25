@@ -44,7 +44,7 @@ import kotlin.math.max
 data class CachedBackground(val path: String, val pageNumber: Int, val scale: Float) {
     val id: String = keyOf(path, pageNumber)
 
-    var bitmap: Bitmap? = loadBackgroundBitmap(path, pageNumber, scale)
+    val bitmap: Bitmap? = loadBackgroundBitmap(path, pageNumber, scale)
 
     // LRU stamp for the background pool's own eviction line; bumped when set or read.
     var lastAccessSeq: Long = 0L
@@ -192,6 +192,10 @@ class PageDataManager @Inject constructor(
     private val backgroundCache = LinkedHashMap<String, CachedBackground>()
     private var bgAccessSeq = 0L
 
+    // Bumped whenever a background file changes. A render begun before the bump may show the old
+    // file, so it is not cached (see [linkBackground]).
+    private var backgroundFileChanges = 0L
+
     // Edits not in the database yet, per page: [unsaved] collects new ones, [saving] holds the ones
     // [PageSaver] is writing. Kept apart from [entries] so evicting a page never drops its edits; a
     // page loaded again gets them laid over its rows (see [mergeLoadedLocked]). Guarded by [lock].
@@ -330,7 +334,7 @@ class PageDataManager @Inject constructor(
                 entry?.backgroundIsNative == true -> false
                 else -> {
                     val bg = entry?.backgroundKey?.let { backgroundCache[it] }
-                    if (bg?.bitmap != null) {
+                    if (bg != null) {
                         bg.lastAccessSeq = ++bgAccessSeq
                         false
                     } else true
@@ -605,16 +609,6 @@ class PageDataManager @Inject constructor(
         if (alreadyLoaded) ensureBackgroundLoaded(pageId)
     }
 
-    /**
-     * Requests that the given page is loaded, but doesn't wait.
-     * If already loading, is a no-op. Loaded opportunistically (prefetch) into spare budget only.
-     */
-    fun requestPageLoad(pageId: String) {
-        dataLoadingScope.launch {
-            getOrStartLoadingJob(pageId, isPrefetch = true)
-        }
-    }
-
     private suspend fun preLoadBackground(pageId: String) {
         val pageDataFromDb = appRepository.pageRepository.getById(pageId)
         if (pageDataFromDb == null) {
@@ -639,15 +633,9 @@ class PageDataManager @Inject constructor(
             BackgroundType.Image, ImageRepeating, CoverImage -> -1
         }
         synchronized(lock) { entries[pageId]?.backgroundIsNative = false }
-        val value = CachedBackground(background, pageNumber, 1f)
-        log.i("Preloaded background: $value")
-        // Link synchronously (not via the fire-and-forget [setBackground]) so a caller that awaited
-        // this load — loadPageFromDb, then requestPageLoadJoin — actually observes the
-        // background. A deferred publish would leave entry.backgroundKey null when the join runs, and
-        // ensureBackgroundLoaded would launch a *second* decode of the same image/PDF page. The
-        // inotify watch stays deferred (blocking file I/O, ordered against nothing).
-        linkBackground(pageId, value)
-        armBackgroundWatch(pageId, value)
+        // Cached before this returns, so a caller that awaited the load (requestPageLoadJoin) finds
+        // it, and ensureBackgroundLoaded does not render it a second time.
+        renderBackground(pageId, background, pageNumber, 1f)
     }
 
     private suspend fun loadPageFromDb(coroutineScope: CoroutineScope, pageId: String) {
@@ -861,8 +849,6 @@ class PageDataManager @Inject constructor(
     fun release(pageId: String) {
         synchronized(lock) { held -= pageId }
     }
-
-    private fun isHeld(pageId: String): Boolean = synchronized(lock) { pageId in held }
 
     // A page's screen bitmap sits on a shelf here while no one uses it. A view takes it to draw
     // into, and the preview save to read it; each puts it back when done. So no one draws into a
@@ -1102,25 +1088,35 @@ class PageDataManager @Inject constructor(
         return appRepository.pageRepository.getById(pageId)?.updatedAt?.time
     }
 
-    fun setBackground(pageId: String, background: CachedBackground) {
-        // Fire-and-forget entry point (e.g. the delayed currentBackground property setter). The load
-        // path publishes synchronously via [linkBackground] instead — see [preLoadBackground].
-        dataScope.launch {
-            linkBackground(pageId, background)
-            armBackgroundWatch(pageId, background)
+    /**
+     * Renders page [pageNumber] of [path] (-1 for an image) at [scale] as the background of
+     * [pageId], and caches it and watches its file (see [linkBackground]). Caller must hold no lock.
+     */
+    fun renderBackground(pageId: String, path: String, pageNumber: Int, scale: Float): Bitmap? {
+        val fileChanges = synchronized(lock) { backgroundFileChanges }
+        val background = CachedBackground(path, pageNumber, scale)
+        log.d("Rendered background: $background")
+        // A missing file is not cached, so the page shows it once it is there; checking costs a
+        // stat per draw. A file that exists but fails to render is cached, so it is not opened again
+        // on every draw; a change to it drops it like any other background.
+        if (background.bitmap != null || File(path).exists()) {
+            if (linkBackground(pageId, background, fileChanges)) armBackgroundWatch(pageId, background)
         }
+        return background.bitmap
     }
 
     /**
      * Publish [background] into the shared pool and link [pageId] to it — pure in-memory work under
-     * [lock], no I/O. Caller must hold no lock. Synchronous so an awaited load observes the link
-     * before it returns.
+     * [lock], no I/O. Caller must hold no lock. Not done if a background file changed since the
+     * render began ([fileChanges] is behind), as it may show the old file; returns whether it was.
      */
-    private fun linkBackground(pageId: String, background: CachedBackground) {
+    private fun linkBackground(pageId: String, background: CachedBackground, fileChanges: Long): Boolean {
         synchronized(lock) {
-            // Merge/upgrade the shared pool: keep the higher-scale (higher-quality) bitmap.
+            if (fileChanges != backgroundFileChanges) return false
+            // Merge/upgrade the shared pool: keep the higher-scale (higher-quality) bitmap, and never
+            // a failed render over a bitmap.
             val existing = backgroundCache[background.id]
-            if (existing == null || background.scale > existing.scale) {
+            if (existing == null || background.scale > existing.scale && background.bitmap != null) {
                 background.lastAccessSeq = ++bgAccessSeq
                 backgroundCache[background.id] = background
                 log.d("Cached background set: id=${background.id} scale=${background.scale}")
@@ -1134,6 +1130,7 @@ class PageDataManager @Inject constructor(
 
             // Keep the pool within its own budget line right after every addition.
             trimBackgroundsLocked()
+            return true
         }
     }
 
@@ -1166,7 +1163,7 @@ class PageDataManager @Inject constructor(
 
     /**
      * Drops the cached background of every page whose file changed on disk, and repaints if a
-     * held page was among them.
+     * held page used one of them.
      *
      * The watcher reports page ids (already batched and de-duplicated), so the file→pages mapping
      * and its lock stay inside [BackgroundFileWatcher] instead of being read from here without one.
@@ -1176,36 +1173,32 @@ class PageDataManager @Inject constructor(
             backgroundFileWatcher.invalidatedPages.collect { pageIds ->
                 if (pageIds.isEmpty()) return@collect
                 log.i("Background file(s) changed, invalidating pages: $pageIds")
-                for (pageId in pageIds) {
-                    invalidateBackground(pageId)
-                    if (isHeld(pageId)) {
-                        CanvasEventBus.forceUpdate.emit(null)
-                        appEventBus.tryEmit(
-                            AppEvent.ActionHint("Background file changed", 4000)
-                        )
-                    }
+                // Not short-circuited: every page is invalidated.
+                val heldChanged = pageIds.map { invalidateBackground(it) }.any { it }
+                if (heldChanged) {
+                    CanvasEventBus.forceUpdate.emit(null)
+                    appEventBus.tryEmit(AppEvent.ActionHint("Background file changed", 4000))
                 }
             }
         }
     }
 
-    private fun invalidateBackground(pageId: String) {
+    /** Drops the background of [pageId] and of every page sharing it; true if one of them is held. */
+    private fun invalidateBackground(pageId: String): Boolean {
         synchronized(lock) {
-            // Remove page->bg link and drop the pooled bg if no other page references it.
-            val entry = entries[pageId]
-            val key = entry?.backgroundKey
-            entry?.backgroundKey = null
-            if (key != null) {
-                val stillUsed = entries.values.any { it.backgroundKey == key }
-                if (!stillUsed) {
-                    backgroundCache.remove(key)
-                    log.d("Invalidated background cache key=$key (no remaining pages)")
-                } else {
-                    log.d("Unlinked page $pageId from background key=$key (still used elsewhere)")
-                }
+            backgroundFileChanges++
+            val entry = entries[pageId] ?: return pageId in held
+            // Drop the pooled bitmap for every page using it, not only the watched one: they all
+            // show the old file.
+            val key = entry.backgroundKey
+            val users = if (key == null) listOf(entry) else entries.values.filter { it.backgroundKey == key }
+            if (key != null) backgroundCache.remove(key)
+            for (user in users) {
+                user.backgroundKey = null
+                clearBitmapLocked(user) // its screen bitmap shows the old background
             }
-            entry?.let { clearBitmapLocked(it) } // its screen bitmap shows the old background
-            log.d("Invalidated background cache for page: $pageId")
+            log.d("Invalidated background of page $pageId, key=$key")
+            return users.any { it.pageId in held }
         }
     }
 

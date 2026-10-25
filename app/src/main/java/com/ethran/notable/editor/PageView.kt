@@ -22,7 +22,6 @@ import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.CachedBackground
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Image
@@ -134,11 +133,6 @@ class PageView(
     val images: List<Image>
         get() = pageDataManager.getImages(currentPageId)
 
-    // warning: The setter is delayed!
-    private var currentBackground: CachedBackground
-        get() = pageDataManager.getBackground(currentPageId)
-        set(value) = pageDataManager.setBackground(currentPageId, value)
-
     // Until the first page is shown, the initial page without its record.
     private val openPageRef = AtomicReference(OpenPage(initialPageId))
 
@@ -186,9 +180,6 @@ class PageView(
     val contentHeight: StateFlow<Int> = contentHeightFlow.asStateFlow()
 
 
-//    private var dbStrokes = appRepository.strokeRepository
-//    private var dbImages = appRepository.imageRepository
-
     val currentPageNumber: Int
         get() = openPage.pageNumber
 
@@ -196,25 +187,16 @@ class PageView(
         If pageNumber is -1, its assumed that the background is image type.
      */
     fun getOrLoadBackground(pageId: String, filePath: String, pageNumber: Int, scale: Float): Bitmap? {
-        log.i("getOrLoadBackground")
         val cached = pageDataManager.getBackground(pageId)
-        if (cached.matches(filePath, pageNumber, scale)) {
-            log.i("Background bitmap (cached): ${cached.bitmap}")
-            return cached.bitmap
-        }
+        if (cached.matches(filePath, pageNumber, scale)) return cached.bitmap
         // Render a little larger than requested so small zoom-in steps reuse this bitmap instead of
         // forcing a re-render (matches() accepts any cached scale >= requested). Multiplicative so
-        // the headroom stays proportional as you zoom; floored to the old additive margin near 1x.
+        // the headroom stays proportional as you zoom, and at least 0.1 at small scales.
         val renderScale = (scale * BACKGROUND_ZOOM_HEADROOM).coerceAtLeast(scale + 0.1f)
-        val newBackground = CachedBackground(filePath, pageNumber, renderScale)
-        pageDataManager.setBackground(pageId, newBackground)
-        log.i("Background bitmap: ${newBackground.bitmap}")
-        return newBackground.bitmap
-    }
-
-    fun getBackgroundPageNumber(): Int {
-        // There might be a bug here -- check it again.
-        return currentBackground.pageNumber
+        val rendered = pageDataManager.renderBackground(pageId, filePath, pageNumber, renderScale)
+        // If rendering larger failed, the smaller bitmap of the same page beats a blank one.
+        val sameSource = cached.path == filePath && cached.pageNumber == pageNumber
+        return rendered ?: cached.bitmap?.takeIf { sameSource }
     }
 
 
@@ -547,7 +529,7 @@ class PageView(
             // Native backgrounds are drawn in page units, scaled by the canvas.
             canvas.save()
             canvas.scale(viewport.zoom, viewport.zoom)
-            drawBackground(canvas, page, viewport, null)
+            drawBackground(canvas, page, viewport)
             canvas.restore()
         } else
             canvas.drawColor(Color.WHITE)
@@ -781,9 +763,6 @@ class PageView(
         val redrawRect = Rect(0, 0, windowedBitmap.width, windowedBitmap.height)
 
         log.d("Redrawing full logical rect: $redrawRect")
-        windowedCanvas.drawColor(Color.GREEN)
-        drawBgToCanvas(redrawRect)
-
         drawAreaScreenCoordinates(redrawRect)
 
         log.i("Zoom and redraw completed")
@@ -929,16 +908,10 @@ class PageView(
 
     }
 
-    fun drawBgToCanvas(clipRect: Rect?, canvas: Canvas = windowedCanvas) =
-        drawBackground(canvas, openPage, viewport.value, clipRect)
+    fun drawBgToCanvas(canvas: Canvas) = drawBackground(canvas, openPage, viewport.value)
 
     /** Draws the background of [shown] at [shownViewport] into [canvas]. */
-    private fun drawBackground(
-        canvas: Canvas,
-        shown: OpenPage,
-        shownViewport: PageViewport,
-        clipRect: Rect?,
-    ) {
+    private fun drawBackground(canvas: Canvas, shown: OpenPage, shownViewport: PageViewport) {
         val backgroundType = shown.backgroundType ?: BackgroundType.Native
         val bg = shown.backgroundName
         val pageNumber = shown.pageNumber
@@ -967,7 +940,6 @@ class PageView(
             resourceBitmap = bgImage,
             scale = scale,
             repeat = false,
-            clipRect = clipRect
         )
     }
 
