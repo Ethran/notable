@@ -29,6 +29,17 @@ class CanvasRefreshManager(
 ) {
     private val log = ShipBook.getLogger("DrawCanvas")
 
+    /**
+     * Screen area of strokes drawn since the firmware layer was last dropped. Only the firmware
+     * shows them, so [commitErase] pushes them with the erased area before dropping its layer.
+     */
+    private val firmwareInk = Rect()
+
+    /** Notes [area] as drawn on the panel by the firmware only, see [firmwareInk]. */
+    fun addFirmwareInk(area: Rect) {
+        synchronized(firmwareInk) { firmwareInk.union(area) }
+    }
+
     fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoom}")
 
@@ -76,10 +87,14 @@ class CanvasRefreshManager(
      * indicator and erased strokes disappear in one transition with no gap to draw into.
      * ORDER IS CRITICAL: push first, then drop. See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
      * Must be called after the page bitmap has already been repainted (after handleErase /
-     * handleScribbleToErase).
+     * handleScribbleToErase). Strokes shown only by the firmware ([firmwareInk]) are pushed too.
      */
     fun commitErase(dirtyRect: Rect?, areaErase: Boolean = false) {
-        val dirty = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
+        val dirty = Rect(dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight))
+        synchronized(firmwareInk) {
+            dirty.union(firmwareInk)
+            firmwareInk.setEmpty()
+        }
         // 1. Block input immediately so no stroke can start during the swap/settle.
         touchHelper?.setRawInputReaderEnable(false)
         drawCanvas.coroutineScope.launch {
