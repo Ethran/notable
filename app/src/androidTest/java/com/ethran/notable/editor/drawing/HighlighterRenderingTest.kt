@@ -3,9 +3,13 @@ package com.ethran.notable.editor.drawing
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.pdf.PdfDocument
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
 import androidx.compose.ui.geometry.Offset
 import androidx.core.graphics.createBitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.utils.Pen
@@ -14,6 +18,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
  * Rendering contract for the highlighter: it is translucent, it sits behind pen strokes, its
@@ -55,11 +60,13 @@ class HighlighterRenderingTest {
     private fun render(
         strokes: List<Stroke>,
         offset: Offset = Offset.Zero,
+        zoom: Float = 1f,
         size: Int = 400,
     ): Bitmap {
         val bitmap = createBitmap(size, size)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)
+        canvas.scale(zoom, zoom)
         drawStrokesLayered(canvas, strokes, offset)
         return bitmap
     }
@@ -70,7 +77,7 @@ class HighlighterRenderingTest {
      * a buffer the size of the canvas drops it entirely.
      */
     @Test
-    fun `highlighter past the first screen is drawn`() {
+    fun highlighterPastTheFirstScreen_isDrawn() {
         val highlighter = strokeOf(
             Pen.MARKER, yellow, 40f, line(from = 50f, to = 350f, at = 1200f, horizontal = true)
         )
@@ -83,9 +90,24 @@ class HighlighterRenderingTest {
         )
     }
 
+    /** Zoomed out, page area past the canvas width comes into view and is drawn there too. */
+    @Test
+    fun highlighterPastTheCanvasWidth_isDrawnWhenZoomedOut() {
+        val highlighter = strokeOf(
+            Pen.MARKER, yellow, 40f, line(from = 450f, to = 750f, at = 200f, horizontal = true)
+        )
+
+        val bitmap = render(listOf(highlighter), zoom = 0.5f)
+
+        assertNotEquals(
+            "highlighter at page x=600 with zoom 0.5 should be visible at x=300",
+            Color.WHITE, bitmap.getPixel(300, 100)
+        )
+    }
+
     /** The layer alpha is applied to the band, so it tints the page instead of covering it. */
     @Test
-    fun `highlighter is translucent`() {
+    fun highlighter_isTranslucent() {
         val highlighter = strokeOf(
             Pen.MARKER, yellow, 40f, line(from = 50f, to = 350f, at = 200f, horizontal = true)
         )
@@ -105,7 +127,7 @@ class HighlighterRenderingTest {
      * the band's width — sampling both edges of a 40px band catches a layer that clips it.
      */
     @Test
-    fun `the layer does not clip the width of the band`() {
+    fun layer_doesNotClipTheWidthOfTheBand() {
         val highlighter = strokeOf(
             Pen.MARKER, yellow, 40f, line(from = 50f, to = 350f, at = 200f, horizontal = true)
         )
@@ -121,7 +143,7 @@ class HighlighterRenderingTest {
      * per-stroke alpha would make the crossing darker.
      */
     @Test
-    fun `overlapping highlighter strokes stay one shade`() {
+    fun overlappingHighlighterStrokes_stayOneShade() {
         val horizontal = strokeOf(
             Pen.MARKER, yellow, 40f, line(from = 50f, to = 350f, at = 200f, horizontal = true)
         )
@@ -139,7 +161,7 @@ class HighlighterRenderingTest {
 
     /** One layer means one z-position: highlighter goes behind every pen stroke. */
     @Test
-    fun `highlighter is drawn behind pen strokes`() {
+    fun highlighter_isDrawnBehindPenStrokes() {
         val ink = strokeOf(
             Pen.BALLPEN, black, 10f, line(from = 50f, to = 350f, at = 200f, horizontal = true)
         )
@@ -153,6 +175,51 @@ class HighlighterRenderingTest {
         assertEquals(
             "ink under a highlight must keep its colour",
             black, bitmap.getPixel(200, 200)
+        )
+    }
+
+    /** PDF export draws on a PDF canvas, where the layer has to survive as vector content. */
+    @Test
+    fun highlighterInPdfExport_isTranslucentAndBehindInk() {
+        val ink = strokeOf(
+            Pen.BALLPEN, black, 10f, line(from = 50f, to = 350f, at = 200f, horizontal = true)
+        )
+        val highlighter = strokeOf(
+            Pen.MARKER, yellow, 40f, line(from = 50f, to = 350f, at = 200f, horizontal = true)
+        )
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File(context.cacheDir, "highlighter-rendering-test.pdf")
+
+        val bitmap = try {
+            val document = PdfDocument()
+            val page = document.startPage(PdfDocument.PageInfo.Builder(400, 400, 1).create())
+            drawStrokesLayered(page.canvas, listOf(ink, highlighter), Offset.Zero)
+            document.finishPage(page)
+            file.outputStream().use { document.writeTo(it) }
+            document.close()
+
+            createBitmap(400, 400).also { bitmap ->
+                bitmap.eraseColor(Color.WHITE)
+                val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                PdfRenderer(fd).use { renderer ->
+                    renderer.openPage(0).use {
+                        it.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    }
+                }
+            }
+        } finally {
+            file.delete()
+        }
+
+        val band = bitmap.getPixel(200, 185)
+        assertTrue(
+            "the band beside the ink should be translucent yellow, was ${Integer.toHexString(band)}",
+            Color.red(band) > 240 && Color.green(band) > 240 && Color.blue(band) in 100..155
+        )
+        val onInk = bitmap.getPixel(200, 200)
+        assertTrue(
+            "ink under a highlight must stay black, was ${Integer.toHexString(onInk)}",
+            Color.red(onInk) < 30 && Color.green(onInk) < 30 && Color.blue(onInk) < 30
         )
     }
 }
