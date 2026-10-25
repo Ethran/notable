@@ -44,6 +44,9 @@ import kotlin.math.max
 data class CachedBackground(val path: String, val pageNumber: Int, val scale: Float) {
     val id: String = keyOf(path, pageNumber)
 
+    // The file as it was before rendering; taken first, so a change during the render counts.
+    private val fileStamp = stampOf(path)
+
     val bitmap: Bitmap? = loadBackgroundBitmap(path, pageNumber, scale)
 
     // LRU stamp for the background pool's own eviction line; bumped when set or read.
@@ -51,11 +54,22 @@ data class CachedBackground(val path: String, val pageNumber: Int, val scale: Fl
 
     fun bitmapBytes(): Long = bitmap?.allocationByteCount?.toLong() ?: 0L
 
+    /**
+     * Whether this render failed and its file has changed since, e.g. a missing file now there.
+     * Such a render is tried again. Reads the file's attributes.
+     */
+    fun failedAndFileChanged(): Boolean = bitmap == null && stampOf(path) != fileStamp
+
     fun matches(filePath: String, pageNum: Int, targetScale: Float): Boolean {
-        return path == filePath && pageNumber == pageNum && scale >= targetScale // Consider valid if our scale is larger
+        return path == filePath && pageNumber == pageNum && scale >= targetScale && // Consider valid if our scale is larger
+            !failedAndFileChanged()
     }
 
     companion object {
+        // 0 and 0 for a missing file.
+        private fun stampOf(path: String): Pair<Long, Long> =
+            File(path).let { it.lastModified() to it.length() }
+
         fun keyOf(path: String, pageNumber: Int): String {
             val md = MessageDigest.getInstance("SHA-1")
             val bytes = md.digest("$path#$pageNumber".toByteArray(Charsets.UTF_8))
@@ -327,21 +341,14 @@ class PageDataManager @Inject constructor(
      */
     private suspend fun ensureBackgroundLoaded(pageId: String) {
         if (pageId.isEmpty()) return
-        val needsReload = synchronized(lock) {
+        val bg = synchronized(lock) {
             val entry = entries[pageId]
-            when {
-                // Native (dotted/lined/blank) pages have no bitmap background — nothing to reload.
-                entry?.backgroundIsNative == true -> false
-                else -> {
-                    val bg = entry?.backgroundKey?.let { backgroundCache[it] }
-                    if (bg != null) {
-                        bg.lastAccessSeq = ++bgAccessSeq
-                        false
-                    } else true
-                }
-            }
+            // Native (dotted/lined/blank) pages have no bitmap background — nothing to reload.
+            if (entry?.backgroundIsNative == true) return
+            entry?.backgroundKey?.let { backgroundCache[it] }?.also { it.lastAccessSeq = ++bgAccessSeq }
         }
-        if (needsReload) {
+        // Reads the file's attributes, so outside the lock.
+        if (bg == null || bg.failedAndFileChanged()) {
             log.d("Background not resident for $pageId — reloading")
             preLoadBackground(pageId)
         }
@@ -1096,12 +1103,7 @@ class PageDataManager @Inject constructor(
         val fileChanges = synchronized(lock) { backgroundFileChanges }
         val background = CachedBackground(path, pageNumber, scale)
         log.d("Rendered background: $background")
-        // A missing file is not cached, so the page shows it once it is there; checking costs a
-        // stat per draw. A file that exists but fails to render is cached, so it is not opened again
-        // on every draw; a change to it drops it like any other background.
-        if (background.bitmap != null || File(path).exists()) {
-            if (linkBackground(pageId, background, fileChanges)) armBackgroundWatch(pageId, background)
-        }
+        if (linkBackground(pageId, background, fileChanges)) armBackgroundWatch(pageId, background)
         return background.bitmap
     }
 
@@ -1114,9 +1116,13 @@ class PageDataManager @Inject constructor(
         synchronized(lock) {
             if (fileChanges != backgroundFileChanges) return false
             // Merge/upgrade the shared pool: keep the higher-scale (higher-quality) bitmap, and never
-            // a failed render over a bitmap.
+            // a failed render over a bitmap. A failed render is cached too, so a file that can't be
+            // rendered isn't tried on every draw, only once it changes (see
+            // [CachedBackground.failedAndFileChanged]).
             val existing = backgroundCache[background.id]
-            if (existing == null || background.scale > existing.scale && background.bitmap != null) {
+            if (existing == null || existing.bitmap == null ||
+                background.scale > existing.scale && background.bitmap != null
+            ) {
                 background.lastAccessSeq = ++bgAccessSeq
                 backgroundCache[background.id] = background
                 log.d("Cached background set: id=${background.id} scale=${background.scale}")

@@ -72,8 +72,17 @@ class BackgroundFileChangeTest {
     }
 
     @Test(timeout = 30000)
-    fun backgroundWhoseFileIsMissing_isShownOnceTheFileIsThere() = runBlocking {
+    fun backgroundWhoseFileIsMissing_isShownOnceTheFileIsThere() =
+        unwatchedImageBackground_isShownOnceFixed { }
+
+    @Test(timeout = 30000)
+    fun backgroundFileThatFailsToRender_ofAnUnwatchedPage_isShownOnceFixed() =
+        unwatchedImageBackground_isShownOnceFixed { it.writeText("not an image") }
+
+    /** An unwatched page whose image file is [broken] draws it once the file is a good image. */
+    private fun unwatchedImageBackground_isShownOnceFixed(broken: (File) -> Unit) = runBlocking {
         val image = File(dir, "background.png")
+        broken(image)
         val pageId = createPage(notebookId = null, image, BackgroundType.Image)
 
         val view = PageView(
@@ -89,6 +98,7 @@ class BackgroundFileChangeTest {
             onPageShown = {},
         )
         assertTrue(waitForCondition(5000) { pageDataManager.validatePageDataLoaded(pageId) })
+        assertNull(view.getOrLoadBackground(pageId, image.path, -1, 1f))
         assertNull(view.getOrLoadBackground(pageId, image.path, -1, 1f))
 
         image.outputStream().use { solid(Color.BLUE).compress(Bitmap.CompressFormat.PNG, 100, it) }
