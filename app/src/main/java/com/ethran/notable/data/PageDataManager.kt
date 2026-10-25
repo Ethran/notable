@@ -202,18 +202,6 @@ class PageDataManager @Inject constructor(
     private val unsavedSignal = Channel<Unit>(Channel.CONFLATED)
     internal val unsavedChanges: ReceiveChannel<Unit> get() = unsavedSignal
 
-    // Pages whose bitmap was put on the shelf since [PagePreviewStore] last took them, to write
-    // their previews from. Guarded by [lock]. [previewSignal] wakes the store; conflated, like
-    // [unsavedSignal].
-    private val previewRequests = LinkedHashSet<String>()
-    private val previewSignal = Channel<Unit>(Channel.CONFLATED)
-    internal val previewsRequested: ReceiveChannel<Unit> get() = previewSignal
-
-    /** Takes the pages whose previews to write, each once, in the order they were left. */
-    internal fun takePreviewRequests(): List<String> = synchronized(lock) {
-        previewRequests.toList().also { previewRequests.clear() }
-    }
-
     // Fraction of the ART app-heap that stroke pages + backgrounds may use together. The rest is
     // left uncounted for the windowed bitmap, Compose/UI objects, and a load's transient stroke
     // copy. Tune down first if the app OOMs.
@@ -1223,17 +1211,12 @@ class PageDataManager @Inject constructor(
 
     /**
      * Puts [windowedBitmap], showing [targetPageId] at [viewport], on the shelf for the page's next
-     * showing, and asks [PagePreviewStore] to write the page's preview from it, if the page's data
-     * is loaded. The view no longer draws into it.
+     * showing and its preview, if the page's data is loaded. The view no longer draws into it.
      */
     fun onExit(targetPageId: String, windowedBitmap: Bitmap, viewport: PageViewport) {
         log.i("Page exit, is page loaded: ${validatePageDataLoaded(targetPageId)}")
         if (validatePageDataLoaded(targetPageId)) {
-            synchronized(lock) {
-                shelveBitmapLocked(getOrCreateEntryLocked(targetPageId), windowedBitmap, viewport)
-                previewRequests += targetPageId
-            }
-            previewSignal.trySend(Unit)
+            synchronized(lock) { shelveBitmapLocked(getOrCreateEntryLocked(targetPageId), windowedBitmap, viewport) }
             // Size accounting is kept current on every edit, so no recompute here.
         }
     }

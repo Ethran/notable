@@ -1,6 +1,7 @@
 package com.ethran.notable.data
 
 import android.content.Context
+import com.ethran.notable.editor.utils.canSavePreview
 import com.ethran.notable.editor.utils.deletePagePreviews
 import com.ethran.notable.editor.utils.saveHQPagePreview
 import com.ethran.notable.editor.utils.savePageThumbnail
@@ -9,6 +10,7 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -18,7 +20,8 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Writes the preview and thumbnail of each page the editor leaves, from the screen bitmap it left
- * on [PageDataManager]'s shelf.
+ * on [PageDataManager]'s shelf. Only a view unzoomed and at the page's left edge is written; its
+ * vertical scroll is the one the page opens at.
  *
  * It waits [SAVE_DELAY_MS] after the first page left since its last writes, then writes every page
  * left meanwhile, one at a time, each once however often it was left. So a page the user goes
@@ -27,9 +30,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * bitmap is off the shelf, so no view draws into it. The files of a page deleted meanwhile are
  * removed again.
  *
- * A singleton injected into the editor, the only source of these bitmaps; once created it runs for
- * the rest of the process, so the previews of the pages left last are written after the editor
- * closes too.
+ * A singleton, so the previews of the pages left last are written after the editor closes too.
  */
 @Singleton
 class PagePreviewStore @Inject constructor(
@@ -40,24 +41,36 @@ class PagePreviewStore @Inject constructor(
     private val log = ShipBook.getLogger("PagePreviewStore")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Pages left since the last writes, in the order they were left. Guarded by itself.
+    private val requests = LinkedHashSet<String>()
+    private val requested = Channel<Unit>(Channel.CONFLATED)
+
     init {
         scope.launch { writeRequestedPreviews() }
     }
 
+    /** Asks for the preview of [pageId], whose bitmap the view has just put on the shelf. */
+    fun request(pageId: String) {
+        synchronized(requests) { requests += pageId }
+        requested.trySend(Unit)
+    }
+
     private suspend fun writeRequestedPreviews() {
-        val requested = pageDataManager.previewsRequested
         while (true) {
             requested.receive()
             delay(SAVE_DELAY_MS.milliseconds)
-            for (pageId in pageDataManager.takePreviewRequests()) write(pageId)
+            val pageIds = synchronized(requests) { requests.toList().also { requests.clear() } }
+            for (pageId in pageIds) write(pageId)
         }
     }
 
     private suspend fun write(pageId: String) {
         val (bitmap, viewport) = pageDataManager.takeBitmapToSave(pageId) ?: return
         try {
-            saveHQPagePreview(context, bitmap, pageId, viewport.scroll, viewport.zoom)
-            savePageThumbnail(context, bitmap, pageId)
+            if (canSavePreview(viewport)) {
+                saveHQPagePreview(context, bitmap, pageId, viewport)
+                savePageThumbnail(context, bitmap, pageId)
+            }
         } catch (e: Exception) {
             log.e("Writing the preview of page $pageId failed: ${e.message}", e)
         } finally {

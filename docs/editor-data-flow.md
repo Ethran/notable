@@ -144,7 +144,7 @@ editor and the code around it.
 - **Previews.** `PagePreviewStore` (`data/PagePreviewStore.kt`, app-wide) writes the thumbnail and
   page preview of each page left, from the bitmap put on the shelf, within about 2 s after the page
   is left, one page at a time and even after the editor closes. A page shown again by then is not
-  written; the view has its bitmap. A preview is written only for an unzoomed page scrolled to its
-  left edge, and its file name carries the vertical scroll it was captured at. It counts as fresh
+  written; the view has its bitmap. Both are written only for an unzoomed page scrolled to its
+  left edge, and the preview's file name carries the vertical scroll it was captured at. It counts as fresh
   while it is newer than the page's `updatedAt`, which `PageSaver` sets to the time of the page's
   last edit. Deleting a page deletes its previews, including those written after it was deleted.

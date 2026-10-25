@@ -187,8 +187,7 @@ class EditorViewModel @Inject constructor(
     val pageDataManager: PageDataManager,
     val pageLeases: PageLeases,
     private val pageSaver: PageSaver,
-    // Only needs to exist: it writes the previews of the pages this editor leaves.
-    @Suppress("unused") private val pagePreviewStore: PagePreviewStore,
+    private val pagePreviewStore: PagePreviewStore,
     private val syncOrchestrator: SyncOrchestrator,
     val snackDispatcher: SnackDispatcher,
     private val historyFactory: History.Factory,
@@ -709,6 +708,9 @@ class EditorViewModel @Inject constructor(
     fun onPageShown(pageId: String) {
         shownPageId.value = pageId
     }
+
+    /** Called by the [PageView] once it has left [pageId], to write the page's preview. */
+    fun onPageLeft(pageId: String) = pagePreviewStore.request(pageId)
 
     /**
      * Loads the pages next to the shown [pageId] ahead of a page turn. Loads of pages left behind

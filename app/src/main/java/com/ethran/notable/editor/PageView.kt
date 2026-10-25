@@ -102,6 +102,11 @@ class PageView(
      * main thread under the view's page lock, so it must only hand the id on.
      */
     private val onPageShown: (pageId: String) -> Unit = {},
+    /**
+     * Called with each page this view leaves or is disposed on, once its bitmap is on the shelf.
+     * Runs like [onPageShown].
+     */
+    private val onPageLeft: (pageId: String) -> Unit = {},
 ) {
     // TODO: unify width height variable
 
@@ -325,6 +330,7 @@ class PageView(
             if (previous != null) {
                 leftPages[previous.pageId] = viewportFlow.value
                 pageDataManager.onExit(previous.pageId, windowedBitmap, viewportFlow.value)
+                onPageLeft(previous.pageId)
             }
             lease = pageLeases.acquire(page.pageId)
             previous?.close()
@@ -365,7 +371,10 @@ class PageView(
     fun disposeOldPage() {
         log.d("Dispose old page")
         synchronized(pageLock) {
-            lease?.let { pageDataManager.onExit(it.pageId, windowedBitmap, viewportFlow.value) }
+            lease?.let {
+                pageDataManager.onExit(it.pageId, windowedBitmap, viewportFlow.value)
+                onPageLeft(it.pageId)
+            }
             disposed = true
             lease?.close()
             lease = null
@@ -519,10 +528,8 @@ class PageView(
         val bitmapFromDisc = loadHQPagePreview(
             context = context,
             pageID = page.pageId,
-            scroll = viewport.scroll,
-            zoom = viewport.zoom,
+            viewport = viewport,
             pageUpdatedAtMs = page.record?.updatedAt?.time,
-            requireExactMatch = true,
         )
         if (bitmapFromDisc != null) {
             // let's control that the last preview fits the present orientation. Otherwise we'll ask for a redraw.

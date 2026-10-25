@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.editor.PageLeases
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.PageViewport
 import com.ethran.notable.editor.utils.deletePagePreviews
 import com.ethran.notable.editor.utils.getThumbnailFile
 import com.ethran.notable.editor.utils.loadHQPagePreview
@@ -23,6 +24,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -53,13 +55,12 @@ class PagePreviewStoreTest {
 
     // The preview of [pageId] at the top of the page, if it is on disk and not older than
     // [updatedAtMs].
-    private fun preview(pageId: String, updatedAtMs: Long? = null) = loadHQPagePreview(
-        app, pageId, scroll = Offset.Zero, zoom = 1f, pageUpdatedAtMs = updatedAtMs, requireExactMatch = true,
-    )
+    private fun preview(pageId: String, updatedAtMs: Long? = null) =
+        loadHQPagePreview(app, pageId, PageViewport(), pageUpdatedAtMs = updatedAtMs)
 
     // Opens an editor view on [pageId], waits until the page is loaded, lets [edit] change it, and
     // closes the view and its scope, as closing the editor does.
-    private fun showAndClose(pageId: String, edit: (PageView) -> Unit = {}) {
+    private fun showAndClose(store: PagePreviewStore, pageId: String, edit: (PageView) -> Unit = {}) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val view = PageView(
             context = app,
@@ -71,6 +72,7 @@ class PagePreviewStoreTest {
             viewWidth = 400,
             viewHeight = 600,
             snackManager = SnackState(),
+            onPageLeft = store::request,
         )
         assertTrue(waitForCondition(5000) {
             view.isTransformationAllowed && data.pageDataManager.validatePageDataLoaded(pageId)
@@ -82,15 +84,19 @@ class PagePreviewStoreTest {
 
     @Test(timeout = 60000)
     fun previewsOfPagesLeft_areWrittenAfterTheEditorCloses_stayFresh_andGoWithThePage() = runBlocking {
-        PagePreviewStore(app, data.pageDataManager, data.appRepository)
-        val (deletedRightAway, untouched, edited) =
-            TestNotebookSeeder.seedNotebook(data.db, pageCount = 3, strokesPerPage = 5).pageIds
-        pageIds += listOf(deletedRightAway, untouched, edited)
+        val store = PagePreviewStore(app, data.pageDataManager, data.appRepository)
+        val (deletedRightAway, sideways, untouched, edited) =
+            TestNotebookSeeder.seedNotebook(data.db, pageCount = 4, strokesPerPage = 5).pageIds
+        pageIds += listOf(deletedRightAway, sideways, untouched, edited)
 
-        showAndClose(deletedRightAway)
+        showAndClose(store, deletedRightAway)
         deletePage(data.appRepository, deletedRightAway, app.filesDir)
-        showAndClose(untouched)
-        showAndClose(edited) { it.addStrokes(listOf(testStroke(edited, y = 300f))) }
+        showAndClose(store, sideways) { view ->
+            runBlocking(Dispatchers.Main) { view.updateScroll(sideways, Offset(30f, 0f)) }
+            assertNotEquals("horizontal scroll of $sideways", 0f, view.viewport.value.scroll.x)
+        }
+        showAndClose(store, untouched)
+        showAndClose(store, edited) { it.addStrokes(listOf(testStroke(edited, y = 300f))) }
 
         for (pageId in listOf(untouched, edited)) {
             assertTrue("preview and thumbnail of $pageId", waitForCondition(10000) {
@@ -100,6 +106,8 @@ class PagePreviewStoreTest {
         // Pages are written in the order they were left.
         assertFalse("thumbnail of page deleted right away", getThumbnailFile(app, deletedRightAway).exists())
         assertEquals("preview of page deleted right away", null, preview(deletedRightAway))
+        // Only an unzoomed view at the page's left edge shows what the page opens at.
+        assertFalse("thumbnail of page left scrolled sideways", getThumbnailFile(app, sideways).exists())
 
         // Nothing has saved the edit yet: the harness creates its PageSaver on first use. Saving it
         // stamps the page with the time of the edit, which the preview, captured after it, is newer

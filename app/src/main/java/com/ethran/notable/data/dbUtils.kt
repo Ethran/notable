@@ -61,14 +61,6 @@ fun ensureBackgroundsFolder(): File {
     return backgroundsDir
 }
 
-fun ensurePreviewsFullFolder(context: Context): File {
-    val dir = File(context.filesDir, "pages/previews/full")
-    if (!dir.exists()) {
-        dir.mkdirs()
-    }
-    return dir
-}
-
 
 fun copyBackgroundToDatabase(context: Context, fileUri: Uri, subfolder: String): File {
     var outputDir = ensureBackgroundsFolder()
