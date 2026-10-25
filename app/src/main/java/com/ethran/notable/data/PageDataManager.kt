@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Debug
+import android.os.SystemClock
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -151,6 +152,9 @@ internal class PageChanges {
         editedAtMs = max(editedAtMs, newer.editedAtMs)
     }
 }
+
+// How long the hint that a background file changed stays up.
+private const val FILE_CHANGED_HINT_MS = 4000
 
 // Cache manager companion object
 @Singleton
@@ -1176,6 +1180,9 @@ class PageDataManager @Inject constructor(
      */
     private fun collectBackgroundFileChanges() {
         dataLoadingScope.launch {
+            // A file replaced by a new one is often reported twice: when the old one goes, and when
+            // the new one is written. Both repaint, but the hint is shown once while it is up.
+            var hintShownAtMs = 0L
             backgroundFileWatcher.invalidatedPages.collect { pageIds ->
                 if (pageIds.isEmpty()) return@collect
                 log.i("Background file(s) changed, invalidating pages: $pageIds")
@@ -1183,7 +1190,11 @@ class PageDataManager @Inject constructor(
                 val heldChanged = pageIds.map { invalidateBackground(it) }.any { it }
                 if (heldChanged) {
                     CanvasEventBus.forceUpdate.emit(null)
-                    appEventBus.tryEmit(AppEvent.ActionHint("Background file changed", 4000))
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - hintShownAtMs >= FILE_CHANGED_HINT_MS) {
+                        hintShownAtMs = now
+                        appEventBus.tryEmit(AppEvent.ActionHint("Background file changed", FILE_CHANGED_HINT_MS))
+                    }
                 }
             }
         }
