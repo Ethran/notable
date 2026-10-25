@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.drawing
 
+import android.graphics.BlendMode
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
@@ -8,6 +9,7 @@ import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
+import androidx.core.graphics.ColorUtils
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.utils.pointsToPath
@@ -81,6 +83,14 @@ fun drawEraserStroke(canvas: Canvas, points: List<StrokePoint>, strokeSize: Floa
 }
 
 
+/** How much of the highlighter colour its band keeps; the rest is white. */
+private const val MARKER_STRENGTH = 0.4f
+
+/**
+ * A highlighter band, drawn opaque in a light shade of its colour with [BlendMode.DARKEN]: each
+ * channel keeps the darker of the band and what is under it. So the band tints the page, ink
+ * under it stays as dark as it was, and a band drawn over the same colour does not get darker.
+ */
 fun drawMarkerStroke(
     canvas: Canvas, paint: Paint, strokeSize: Float, points: List<StrokePoint>
 ) {
@@ -90,8 +100,8 @@ fun drawMarkerStroke(
         this.strokeCap = Paint.Cap.ROUND
         this.strokeJoin = Paint.Join.ROUND
         this.isAntiAlias = true
-        this.alpha = 100
-
+        this.color = ColorUtils.blendARGB(Color.WHITE, paint.color, MARKER_STRENGTH)
+        this.blendMode = BlendMode.DARKEN
     }
 
     val path = pointsToPath(points.map { SimplePointF(it.x, it.y) })
