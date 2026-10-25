@@ -239,18 +239,11 @@ class ImportEngine @Inject constructor(
 
 
     /**
-     * Extracts the book title from a file URI.
+     * The file name of a URI, with its extension, which tells the file type when the URI has
+     * no MIME type, as a `file:` URI doesn't.
      */
-    private fun getFileName(uri: Uri): String {
-        val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "Imported Book"
-        return if (fileName.endsWith(".xopp", ignoreCase = true)) {
-            fileName.removeSuffix(".xopp")
-        } else if (fileName.endsWith(".pdf", ignoreCase = true)) {
-            fileName.removeSuffix(".pdf")
-        } else {
-            fileName
-        }
-    }
+    private fun getFileName(uri: Uri): String =
+        uri.lastPathSegment?.substringAfterLast("/") ?: "Imported Book"
 
 
     private fun sanitizeNotebookName(raw: String, maxLen: Int = 100): String {
