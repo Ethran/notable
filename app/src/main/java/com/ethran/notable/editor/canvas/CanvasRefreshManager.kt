@@ -16,9 +16,12 @@ import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
+import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class CanvasRefreshManager(
@@ -28,6 +31,9 @@ class CanvasRefreshManager(
     private val touchHelper: TouchHelper?
 ) {
     private val log = ShipBook.getLogger("DrawCanvas")
+
+    private var eraseCleanupJob: Job? = null
+    private var pendingEraseCleanup: Rect? = null
 
     fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoom}")
@@ -99,6 +105,31 @@ class CanvasRefreshManager(
             } else {
                 log.w("commitErase: not in drawing mode, leaving raw drawing disabled")
             }
+            scheduleEraseCleanup(dirty)
+        }
+    }
+
+    private fun scheduleEraseCleanup(dirty: Rect) {
+        val boundedDirty = Rect(dirty)
+        if (!drawCanvas.isAttachedToWindow ||
+            !boundedDirty.intersect(0, 0, drawCanvas.width, drawCanvas.height)
+        ) return
+
+        pendingEraseCleanup = pendingEraseCleanup?.also { it.union(boundedDirty) } ?: boundedDirty
+        eraseCleanupJob?.cancel()
+        eraseCleanupJob = drawCanvas.coroutineScope.launch {
+            delay(200)
+            val cleanup = pendingEraseCleanup ?: return@launch
+            pendingEraseCleanup = null
+            if (!drawCanvas.isAttachedToWindow || cleanup.isEmpty) return@launch
+            EpdController.invalidate(
+                drawCanvas,
+                cleanup.left,
+                cleanup.top,
+                cleanup.right,
+                cleanup.bottom,
+                UpdateMode.GC
+            )
         }
     }
 
