@@ -2,6 +2,7 @@ package com.ethran.notable.io
 
 import android.content.Context
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import androidx.annotation.WorkerThread
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.ImageRepository
@@ -89,7 +90,11 @@ class ImportEngine @Inject constructor(
         uri: Uri,
         options: ImportOptions = ImportOptions()
     ): AppResult<List<String>, DomainError> {
+        // A file: Uri has no type from the resolver; its extension says what it is.
         val mimeType = context.contentResolver.getType(uri)
+            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                uri.lastPathSegment?.substringAfterLast('.', "")?.lowercase()
+            )
         if (options.fileType != null && mimeType != options.fileType)
             return AppResult.Error(DomainError.UnexpectedState("File type mismatch. Expected: ${options.fileType}, Actual: $mimeType"))
 
