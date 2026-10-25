@@ -374,6 +374,10 @@ class OnyxInputHandler(
                                 toolbarState.pen,
                                 scaledPoints
                             )
+                            val width = (toolbarState.activePenSetting.strokeSize * viewport.zoom).toInt()
+                            drawCanvas.refreshManager.addFirmwareInk(
+                                trackArea(plist).apply { inset(-width, -width) }
+                            )
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                             // Union the scribble track (firmware screen coords) with the erased
