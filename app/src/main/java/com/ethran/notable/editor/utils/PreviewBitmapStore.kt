@@ -91,7 +91,7 @@ private fun previewsDir(filesDir: File): File = File(filesDir, "pages/previews/f
 
 // [pageID]'s previews in [dir], whatever scroll they were captured at, with a write in progress.
 private fun previewFiles(dir: File, pageID: String): List<File> =
-    dir.listFiles { f -> f.name.startsWith(pageID) }?.toList().orEmpty()
+    dir.listFiles { f -> f.name.startsWith("$pageID-") }?.toList().orEmpty()
 
 /**
  * The name of [pageID]'s preview captured at [viewport]. It carries the vertical scroll, rounded
@@ -123,29 +123,36 @@ private val webpLosslessFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSIO
     Bitmap.CompressFormat.WEBP_LOSSLESS else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
 
 /**
- * Writes [optimized] to [file] through a temporary file, so no reader sees it half written.
- * Returns whether it was written.
+ * Writes [optimized] to [file] through a temporary file of its own, so no reader sees it half
+ * written. The file is dated [capturedAtMs] if given: freshness is judged by its date, and an edit
+ * made while it was written is not in it. Returns whether it was written.
  */
-private fun writeWebp(file: File, optimized: StorageOptimization): Boolean {
-    val tempFile = File(file.parentFile, "${file.name}.tmp")
+private fun writeWebp(file: File, optimized: StorageOptimization, capturedAtMs: Long? = null): Boolean {
+    var tempFile: File? = null
     try {
+        tempFile = File.createTempFile("${file.name}.", ".tmp", file.parentFile)
         val compressed = tempFile.outputStream().buffered().use {
             optimized.bitmap.compress(optimized.format, optimized.quality, it)
         }
-        if (compressed && tempFile.length() > 0 && tempFile.renameTo(file)) return true
+        if (compressed && tempFile.length() > 0 && tempFile.renameTo(file)) {
+            capturedAtMs?.let(file::setLastModified)
+            return true
+        }
         log.e("Writing ${file.name} failed")
     } catch (e: Exception) {
         log.e("Writing ${file.name} failed: ${e.message}", e)
     }
-    tempFile.delete()
+    tempFile?.delete()
     return false
 }
 
 /**
- * Saves [bitmap], the view of [pageID] at [viewport], as the page's preview in place of the ones
- * captured at other scrolls, if [canSavePreview].
+ * Saves [bitmap], the view of [pageID] at [viewport] as it was at [capturedAtMs], as the page's
+ * preview in place of the ones captured at other scrolls, if [canSavePreview].
  */
-fun saveHQPagePreview(context: Context, bitmap: Bitmap, pageID: String, viewport: PageViewport) {
+fun saveHQPagePreview(
+    context: Context, bitmap: Bitmap, pageID: String, viewport: PageViewport, capturedAtMs: Long
+) {
     ensureNotMainThread("saveHQPagePreview")
     if (!canSavePreview(viewport)) return
 
@@ -153,7 +160,7 @@ fun saveHQPagePreview(context: Context, bitmap: Bitmap, pageID: String, viewport
     val fileName = previewFileName(pageID, viewport)
     val optimized = optimizeBitmapForStorage(bitmap, PreviewSaveMode.REGULAR, isThumbnail = false)
     try {
-        if (writeWebp(File(dir, fileName), optimized)) {
+        if (writeWebp(File(dir, fileName), optimized, capturedAtMs)) {
             log.d("saveHQPagePreview: saved $fileName")
             previewFiles(dir, pageID).filter { it.name != fileName }.forEach { it.delete() }
         }
@@ -282,7 +289,11 @@ private fun decodeBitmapFromFile(file: File): Bitmap? {
  * Persist a thumbnail for a page.
  */
 fun savePageThumbnail(
-    context: Context, bitmap: Bitmap, pageID: String, mode: PreviewSaveMode = PreviewSaveMode.REGULAR
+    context: Context,
+    bitmap: Bitmap,
+    pageID: String,
+    mode: PreviewSaveMode = PreviewSaveMode.REGULAR,
+    capturedAtMs: Long? = null,
 ) {
     ensureNotMainThread("savePageThumbnail")
     val finalFile = getThumbnailFile(context, pageID)
@@ -292,7 +303,7 @@ fun savePageThumbnail(
     val scaledBitmap = bitmap.scale(THUMBNAIL_WIDTH, (THUMBNAIL_WIDTH * ratio).toInt(), false)
     val optimized = optimizeBitmapForStorage(scaledBitmap, mode, isThumbnail = true)
     try {
-        if (writeWebp(finalFile, optimized)) log.d("savePageThumbnail: thumbnail saved for $pageID")
+        if (writeWebp(finalFile, optimized, capturedAtMs)) log.d("savePageThumbnail: thumbnail saved for $pageID")
     } finally {
         if (optimized.bitmap != scaledBitmap) optimized.bitmap.recycle()
         if (scaledBitmap != bitmap) scaledBitmap.recycle()

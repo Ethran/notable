@@ -18,6 +18,7 @@ import com.ethran.notable.testing.waitForCondition
 import com.ethran.notable.utils.AppResult
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -240,10 +241,14 @@ class PageSaverTest {
         assertEquals(longAgo, pageUpdatedAt(pageId))
         assertEquals(longAgo, notebookUpdatedAt(notebook.notebookId))
 
+        val beforeEdit = System.currentTimeMillis()
         pageDataManager.addStrokes(pageId, listOf(testStroke(pageId)))
+        val afterEdit = System.currentTimeMillis()
+        delay(50)
         assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
-        assertTrue(pageUpdatedAt(pageId).after(longAgo))
-        assertTrue(notebookUpdatedAt(notebook.notebookId).after(longAgo))
+        // The page is stamped with the time of its edit, the notebook with the time of the save.
+        assertTrue(pageUpdatedAt(pageId).time in beforeEdit..afterEdit)
+        assertTrue(notebookUpdatedAt(notebook.notebookId).time > afterEdit)
         assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
         assertEquals(longAgo, pageUpdatedAt(otherNotebook.pageIds.single()))
         assertEquals(longAgo, notebookUpdatedAt(otherNotebook.notebookId))

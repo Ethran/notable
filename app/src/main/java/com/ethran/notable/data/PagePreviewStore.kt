@@ -66,10 +66,12 @@ class PagePreviewStore @Inject constructor(
 
     private suspend fun write(pageId: String) {
         val (bitmap, viewport) = pageDataManager.takeBitmapToSave(pageId) ?: return
+        // Off the shelf, the bitmap is drawn into no more: it shows the page as it is now.
+        val capturedAtMs = System.currentTimeMillis()
         try {
             if (canSavePreview(viewport)) {
-                saveHQPagePreview(context, bitmap, pageId, viewport)
-                savePageThumbnail(context, bitmap, pageId)
+                saveHQPagePreview(context, bitmap, pageId, viewport, capturedAtMs)
+                savePageThumbnail(context, bitmap, pageId, capturedAtMs = capturedAtMs)
             }
         } catch (e: Exception) {
             log.e("Writing the preview of page $pageId failed: ${e.message}", e)
