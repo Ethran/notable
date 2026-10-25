@@ -10,7 +10,7 @@ import com.ethran.notable.editor.drawing.OnyxStrokeStyle
 import com.ethran.notable.editor.drawing.StrokeRenderer
 import com.ethran.notable.editor.drawing.StrokeStyleRegistry
 import com.ethran.notable.editor.drawing.drawBallPenStroke
-import com.ethran.notable.editor.drawing.drawHighlighterStroke
+import com.ethran.notable.editor.drawing.drawMarkerStroke
 import com.onyx.android.sdk.data.note.ShapeCreateArgs
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.pen.NeoBrushPenWrapper
@@ -126,9 +126,10 @@ object OnyxStrokeRenderer : StrokeRenderer {
                         )
                     }
 
-                    // draw highlighter using our own renderer
+                    // Not NeoMarkerPenWrapper: it rasterises into its own screen-sized buffer,
+                    // ignoring this canvas's transform, so strokes past the screen vanish.
                     OnyxStrokeStyle.Marker ->
-                        drawHighlighterStroke(canvas, paint, stroke.size, stroke.points)
+                        drawMarkerStroke(canvas, paint, stroke.size, stroke.points)
 
                     is OnyxStrokeStyle.Charcoal ->
                         NeoCharcoalPenWrapper.drawNormalStroke(
