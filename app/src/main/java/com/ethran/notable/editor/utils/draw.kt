@@ -5,20 +5,31 @@ import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.state.History
 import io.shipbook.shipbooksdk.ShipBook
 
 
 private val log = ShipBook.getLogger("draw")
 
-// touchpoints are in page coordinates
+/**
+ * Adds a stroke through [touchPoints] to [pageId], the page the pen went down on, draws it and
+ * records it in [history].
+ * [touchPoints] are in page coordinates. Returns false if another page is shown by now, which
+ * adds nothing, or if drawing failed.
+ */
 fun handleDraw(
     page: PageView,
-    historyBucket: MutableList<String>,
+    pageId: String,
+    history: History,
     strokeSize: Float,
     color: Int,
     pen: Pen,
     touchPoints: List<StrokePoint>
-) {
+): Boolean {
+    if (pageId != page.currentPageId) {
+        log.i("Handle Draw: page $pageId is no longer shown, stroke dropped")
+        return false
+    }
     try {
         val boundingBox = calculateBoundingBox(touchPoints) { Pair(it.x, it.y) }
 
@@ -28,7 +39,7 @@ fun handleDraw(
         val stroke = Stroke(
             size = strokeSize,
             pen = pen,
-            pageId = page.currentPageId,
+            pageId = pageId,
             top = boundingBox.top,
             bottom = boundingBox.bottom,
             left = boundingBox.left,
@@ -41,8 +52,10 @@ fun handleDraw(
         page.addStrokes(listOf(stroke))
         // this is causing lagging and crushing, neo pens are not good
         page.drawAreaPageCoordinates(strokeBounds(stroke).toRect())
-        historyBucket.add(stroke.id)
+        history.addDrawnStroke(stroke)
     } catch (e: Exception) {
         log.e("Handle Draw: An error occurred while handling the drawing: ${e.message}")
+        return false
     }
+    return true
 }

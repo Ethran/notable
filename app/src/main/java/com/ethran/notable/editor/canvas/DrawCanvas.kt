@@ -9,7 +9,6 @@ import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.state.History
-import com.ethran.notable.editor.state.Operation
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.onSurfaceChanged
 import com.ethran.notable.editor.utils.onSurfaceDestroy
@@ -75,21 +74,8 @@ class DrawCanvas(
 
     var glRenderer = OpenGLRenderer(this)
 
-    private val strokeHistoryBatch = mutableListOf<String>()
-    internal fun commitToHistory() {
-        if (strokeHistoryBatch.isNotEmpty()) history.addOperationsToHistory(
-            operations = listOf(
-                Operation.DeleteStroke(strokeHistoryBatch.map { it })
-            )
-        )
-        strokeHistoryBatch.clear()
-        //testing if it will help with undo hiding strokes.
-        refreshManager.drawCanvasToView(null)
-    }
-
-
     val inputHandler =
-        OnyxInputHandler(this, page, viewModel, history, coroutineScope, strokeHistoryBatch)
+        OnyxInputHandler(this, page, viewModel, history, coroutineScope)
     val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
 
 

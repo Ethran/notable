@@ -170,6 +170,10 @@ class PageView(
     val isTransformationAllowed: Boolean
         get() = openPage.isTransformationAllowed
 
+    /** Whether the shown page's strokes and images are loaded. */
+    val isPageDataLoaded: Boolean
+        get() = pageDataManager.validatePageDataLoaded(currentPageId)
+
     // Height the shown page's content needs, in page coordinates.
     private val contentHeightFlow = MutableStateFlow(SCREEN_HEIGHT)
     val contentHeight: StateFlow<Int> = contentHeightFlow.asStateFlow()
