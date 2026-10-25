@@ -100,7 +100,9 @@ fun drawMarkerStroke(
         this.strokeCap = Paint.Cap.ROUND
         this.strokeJoin = Paint.Join.ROUND
         this.isAntiAlias = true
-        this.color = ColorUtils.blendARGB(Color.WHITE, paint.color, MARKER_STRENGTH)
+        this.color = ColorUtils.setAlphaComponent(
+            ColorUtils.blendARGB(Color.WHITE, paint.color, MARKER_STRENGTH), 255
+        )
         this.blendMode = BlendMode.DARKEN
     }
 

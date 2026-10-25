@@ -32,7 +32,8 @@ class HighlighterRenderingTest {
     private val yellow = 0xFFFFFF00.toInt()
     private val renderers = listOf(AppStrokeRenderer, OnyxStrokeRenderer)
 
-    private fun highlighter(points: List<StrokePoint>) = stroke(Pen.MARKER, yellow, 40f, points)
+    private fun highlighter(points: List<StrokePoint>, color: Int = yellow) =
+        stroke(Pen.MARKER, color, 40f, points)
 
     private fun stroke(pen: Pen, color: Int, size: Float, points: List<StrokePoint>) = Stroke(
         size = size,
@@ -111,17 +112,19 @@ class HighlighterRenderingTest {
         }
     }
 
-    /** A band crossing a band of the same colour is no darker than either. */
+    /** A band crossing a band of the same colour is no darker than either, whatever its alpha. */
     @Test
     fun overlappingHighlighter_staysOneShade() {
-        val across = highlighter(line(from = 50f, to = 350f, y = 200f))
-        val down = highlighter(column(from = 50f, to = 350f, x = 200f))
-        for (renderer in renderers) {
-            val bitmap = renderer.render(across, down)
-            assertEquals(
-                "${renderer.name}: the crossing matches a single band",
-                bitmap.getPixel(100, 200), bitmap.getPixel(200, 200)
-            )
+        for (color in listOf(yellow, 0x80FFFF00.toInt())) {
+            val across = highlighter(line(from = 50f, to = 350f, y = 200f), color)
+            val down = highlighter(column(from = 50f, to = 350f, x = 200f), color)
+            for (renderer in renderers) {
+                val bitmap = renderer.render(across, down)
+                assertEquals(
+                    "${renderer.name}, ${Integer.toHexString(color)}: the crossing matches a single band",
+                    bitmap.getPixel(100, 200), bitmap.getPixel(200, 200)
+                )
+            }
         }
     }
 
