@@ -40,10 +40,6 @@ enum class UndoRedoType {
     Redo
 }
 
-sealed class HistoryBusActions {
-    data class MoveHistory(val type: UndoRedoType) : HistoryBusActions()
-}
-
 private class PageHistory {
     val undoList: OperationList = mutableListOf()
     val redoList: OperationList = mutableListOf()
@@ -68,38 +64,32 @@ class History @AssistedInject constructor(
                 size > MAX_PAGES_WITH_HISTORY
         }
 
-    suspend fun handleHistoryBusActions(actions: HistoryBusActions) {
-        when (actions) {
-            is HistoryBusActions.MoveHistory -> {
-                // Wait for commit to history to complete
-                if (actions.type == UndoRedoType.Undo) {
-                    CanvasEventBus.commitCompletion = CompletableDeferred()
-                    CanvasEventBus.commitHistorySignalImmediately.emit(Unit)
-                    CanvasEventBus.commitCompletion.await()
-                }
-                val zoneAffected = undoRedo(type = actions.type)
-                if (zoneAffected != null) {
-                    pageModel.drawAreaPageCoordinates(zoneAffected)
-                    //moved to refresh after drawing
-                    CanvasEventBus.refreshUi.emit(Unit)
-                } else {
-                    val message = when (actions.type) {
-                        UndoRedoType.Undo -> pageView.context.getString(R.string.no_undo_to_perform)
-                        UndoRedoType.Redo -> pageView.context.getString(R.string.no_redo_to_perform)
-                    }
-                    appEventBus.emit(AppEvent.ActionHint(message, 3000))
-                }
+    private suspend fun moveHistory(type: UndoRedoType) {
+        // Wait for commit to history to complete
+        if (type == UndoRedoType.Undo) {
+            CanvasEventBus.commitCompletion = CompletableDeferred()
+            CanvasEventBus.commitHistorySignalImmediately.emit(Unit)
+            CanvasEventBus.commitCompletion.await()
+        }
+        // A step reads and writes the page's strokes, so it waits until they are loaded.
+        if (!pageView.isPageDataLoaded) return
+        val zoneAffected = undoRedo(type = type)
+        if (zoneAffected != null) {
+            pageModel.drawAreaPageCoordinates(zoneAffected)
+            //moved to refresh after drawing
+            CanvasEventBus.refreshUi.emit(Unit)
+        } else {
+            val message = when (type) {
+                UndoRedoType.Undo -> pageView.context.getString(R.string.no_undo_to_perform)
+                UndoRedoType.Redo -> pageView.context.getString(R.string.no_redo_to_perform)
             }
+            appEventBus.emit(AppEvent.ActionHint(message, 3000))
         }
     }
 
-    suspend fun undo() {
-        handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Undo))
-    }
+    suspend fun undo() = moveHistory(UndoRedoType.Undo)
 
-    suspend fun redo() {
-        handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
-    }
+    suspend fun redo() = moveHistory(UndoRedoType.Redo)
 
 
     private fun treatOperation(operation: Operation): Pair<Operation, Rect> {
