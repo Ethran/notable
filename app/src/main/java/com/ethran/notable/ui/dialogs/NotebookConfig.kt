@@ -58,6 +58,8 @@ import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.getLinkedFilesDir
+import com.ethran.notable.navigation.DeepLink
+import com.ethran.notable.navigation.rememberLinkCopier
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncRequest
 import com.ethran.notable.ui.LocalSnackContext
@@ -83,6 +85,7 @@ fun NotebookConfigDialog(
     val book by bookRepository.getByIdLive(bookId).observeAsState()
     val scope = rememberCoroutineScope()
     val snackManager = LocalSnackContext.current
+    val linkCopier = rememberLinkCopier()
 
     if (book == null) return
 
@@ -356,6 +359,9 @@ fun NotebookConfigDialog(
                 }
                 ActionButton(stringResource(R.string.details_notebook_buttons_export)) {
                     showExportDialog = true
+                }
+                ActionButton(stringResource(R.string.copy_link)) {
+                    linkCopier.copy(DeepLink.Book(bookId))
                 }
                 ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
                     scope.launch {

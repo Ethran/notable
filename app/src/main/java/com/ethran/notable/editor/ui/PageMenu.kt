@@ -18,9 +18,13 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.res.stringResource
+import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.deletePage
+import com.ethran.notable.navigation.DeepLink
+import com.ethran.notable.navigation.rememberLinkCopier
 import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.utils.onSuccess
@@ -50,6 +54,7 @@ fun PageMenu(
     val pageSaver = remember(context) {
         EntryPoints.get(context.applicationContext, PageMenuEntryPoint::class.java).pageSaver()
     }
+    val linkCopier = rememberLinkCopier()
     ScaledPopup(
         alignment = Alignment.TopStart,
         onDismissRequest = { onClose() },
@@ -113,6 +118,15 @@ fun PageMenu(
                         }
                     }) {
                 Text("Duplicate")
+            }
+            Box(
+                Modifier
+                    .padding(10.dp)
+                    .noRippleClickable {
+                        linkCopier.copy(DeepLink.Page(pageId))
+                        onClose()
+                    }) {
+                Text(stringResource(R.string.copy_link))
             }
             if (canDelete) {
                 Box(

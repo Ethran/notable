@@ -70,4 +70,18 @@ class DeepLinkTest {
             "notable://page-0b7c1f3e",
         )) assertNull(link, parseDeepLink(link))
     }
+
+    @Test
+    fun copiedMarkup_keepsTheLinkWhole() {
+        val titles = listOf("Notes, p. 3", "[draft] ideas]", "a](b) [[c]]")
+        for (link in links) for (title in titles) {
+            val uri = link.toUri()
+            val markdown = link.toMarkup(title, LinkFormat.Markdown)
+            assertTrue(markdown, markdown.endsWith("]($uri)"))
+            assertEquals(markdown, 1, markdown.count { it == ']' })
+            val org = link.toMarkup(title, LinkFormat.Org)
+            assertTrue(org, org.startsWith("[[$uri]["))
+            assertEquals(org, 3, org.count { it == ']' })
+        }
+    }
 }
