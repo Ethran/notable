@@ -81,25 +81,17 @@ fun drawEraserStroke(canvas: Canvas, points: List<StrokePoint>, strokeSize: Floa
 }
 
 
-/**
- * A highlighter band: flat width, round ends, drawn **fully opaque**.
- *
- * The translucency comes from the layer this is composited through — see [drawStrokesLayered],
- * which is the only supported way to draw a highlighter stroke. Giving this paint an alpha
- * instead would make every overlap darker than the bands that cross there.
- */
-fun drawHighlighterStroke(
+fun drawMarkerStroke(
     canvas: Canvas, paint: Paint, strokeSize: Float, points: List<StrokePoint>
 ) {
-    if (points.isEmpty()) return
-
     val copyPaint = Paint(paint).apply {
         this.strokeWidth = strokeSize
         this.style = Paint.Style.STROKE
         this.strokeCap = Paint.Cap.ROUND
         this.strokeJoin = Paint.Join.ROUND
         this.isAntiAlias = true
-        this.alpha = 255
+        this.alpha = 100
+
     }
 
     val path = pointsToPath(points.map { SimplePointF(it.x, it.y) })

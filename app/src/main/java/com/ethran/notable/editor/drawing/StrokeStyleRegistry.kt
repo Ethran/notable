@@ -18,10 +18,7 @@ sealed interface OnyxStrokeStyle {
     /** NeoBrushPenWrapper. */
     data object Brush : OnyxStrokeStyle
 
-    /**
-     * App-drawn highlighter band (drawHighlighterStroke) — flat width, round ends, opaque.
-     * Its transparency comes from the layer drawStrokesLayered composites it through.
-     */
+    /** Flat translucent band (drawMarkerStroke). */
     data object Marker : OnyxStrokeStyle
 
     /** NeoCharcoalPenWrapper — textured pencil (charcoal V1). */
