@@ -82,8 +82,8 @@ class PageScopedInputTest {
 
     @Test(timeout = 60000)
     fun penInputAndUndo_stayWithThePageTheyWereMadeOn() = runBlocking {
-        val pages = TestNotebookSeeder.seedNotebook(data.db, pageCount = 3, strokesPerPage = 5).pageIds
-        val (a, b, c) = pages
+        val pages = TestNotebookSeeder.seedNotebook(data.db, pageCount = 4, strokesPerPage = 5).pageIds
+        val (a, b, c, d) = pages
         val view = createPageView(a)
         val history = History(view, data.appEventBus)
 
@@ -178,6 +178,17 @@ class PageScopedInputTest {
         view.showAndWait(b)
         view.showAndWait(a)
         undo(removed = setOf(u1))
+
+        // Only the three pages most recently edited keep their history: editing c and d drops b's.
+        view.showAndWait(c)
+        draw(c)!!
+        commitDrawn()
+        view.showAndWait(d)
+        val w1 = draw(d)!!
+        commitDrawn()
+        undo(removed = setOf(w1))
+        view.showAndWait(b)
+        undo()
         view.disposeOldPage()
     }
 }

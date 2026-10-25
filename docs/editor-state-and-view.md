@@ -43,7 +43,7 @@ class EditorControlTower(
 ```
 
 - **Role**:
-    - Coordinates between `PageView`, `EditorViewModel`, and the undo/redo `History`. The history belongs to one page: every recorded step names the page it was made on and joins that page's history, even if it arrives just after the page was left, and the history starts over once edits or undo happen on another page.
+    - Coordinates between `PageView`, `EditorViewModel`, and the undo/redo `History`. Each page has its own history: every recorded step names the page it was made on and joins that page's history, even if it arrives just after the page was left. Only the three pages most recently edited or undone on keep theirs.
     - Handles tool interactions (selecting, moving strokes).
     - Orchestrates operations like scrolling, panning, and background manipulation.
 

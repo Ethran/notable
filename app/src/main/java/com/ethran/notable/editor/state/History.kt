@@ -17,6 +17,7 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CompletableDeferred
 
 private const val MAX_UNDO_STEPS: Int = 20 // Maximum number of operations stored in the undo/redo history.
+private const val MAX_PAGES_WITH_HISTORY: Int = 3
 
 sealed class Operation {
     data class DeleteStroke(val strokeIds: List<String>) : Operation()
@@ -40,28 +41,32 @@ enum class UndoRedoType {
 }
 
 sealed class HistoryBusActions {
-    data class RegisterHistoryOperationBlock(val pageId: String, val operationBlock: OperationBlock) :
-        HistoryBusActions()
-
     data class MoveHistory(val type: UndoRedoType) : HistoryBusActions()
 }
 
+private class PageHistory {
+    val undoList: OperationList = mutableListOf()
+    val redoList: OperationList = mutableListOf()
+}
+
 /**
- * Undo and redo for the page shown. The history belongs to one page: it starts over once edits or
- * undo happen on another page. A step reaching the history just after its page was left, as drawn
- * strokes do, still joins that page's history, unless another page's has started meanwhile. So
- * undo never applies one page's operations to another, nor skips a step.
+ * Undo and redo for the page shown. Each page has a history of its own, so undo never applies one
+ * page's operations to another, and a step reaching the history just after its page was left, as
+ * drawn strokes do, still joins that page's history. Only the [MAX_PAGES_WITH_HISTORY] pages most
+ * recently edited or undone on keep theirs.
  */
 class History @AssistedInject constructor(
     @Assisted private val pageView: PageView,
     private val appEventBus: AppEventBus
 ) {
-    private var undoList: OperationList = mutableListOf()
-    private var redoList: OperationList = mutableListOf()
     private val pageModel = pageView
 
-    // The page [undoList] and [redoList] are for.
-    private var historyPageId: String? = null
+    // In access order, so the eldest entry is the page least recently used.
+    private val pageHistories =
+        object : LinkedHashMap<String, PageHistory>(MAX_PAGES_WITH_HISTORY + 1, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PageHistory>) =
+                size > MAX_PAGES_WITH_HISTORY
+        }
 
     suspend fun handleHistoryBusActions(actions: HistoryBusActions) {
         when (actions) {
@@ -85,11 +90,6 @@ class History @AssistedInject constructor(
                     appEventBus.emit(AppEvent.ActionHint(message, 3000))
                 }
             }
-
-            is HistoryBusActions.RegisterHistoryOperationBlock -> {
-                addOperationsToHistory(actions.pageId, actions.operationBlock)
-            }
-
         }
     }
 
@@ -101,14 +101,6 @@ class History @AssistedInject constructor(
         handleHistoryBusActions(HistoryBusActions.MoveHistory(UndoRedoType.Redo))
     }
 
-
-    // Starts the history over if it is for another page than [pageId].
-    private fun useHistoryOf(pageId: String) {
-        if (historyPageId == pageId) return
-        undoList.clear()
-        redoList.clear()
-        historyPageId = pageId
-    }
 
     private fun treatOperation(operation: Operation): Pair<Operation, Rect> {
         when (operation) {
@@ -156,11 +148,11 @@ class History @AssistedInject constructor(
     }
 
     private fun undoRedo(type: UndoRedoType): Rect? {
-        useHistoryOf(pageView.currentPageId)
+        val history = pageHistories[pageView.currentPageId] ?: return null
         val originList =
-            if (type == UndoRedoType.Undo) undoList else redoList
+            if (type == UndoRedoType.Undo) history.undoList else history.redoList
         val targetList =
-            if (type == UndoRedoType.Undo) redoList else undoList
+            if (type == UndoRedoType.Undo) history.redoList else history.undoList
 
         if (originList.isEmpty()) return null
 
@@ -185,23 +177,16 @@ class History @AssistedInject constructor(
         }
     }
 
-    /**
-     * Records [operations], made on [pageId]: in its history, or in a new one if [pageId] is shown.
-     * Dropped if another page's history has started meanwhile.
-     */
+    /** Records [operations], made on [pageId], in that page's history. */
     fun addOperationsToHistory(pageId: String, operations: OperationBlock) {
         if (operations.isEmpty()) {
             logCallStack("History: No operations to add to history")
             return
         }
-        if (pageId != historyPageId) {
-            // Only the page shown starts a history of its own.
-            if (pageId != pageView.currentPageId) return
-            useHistoryOf(pageId)
-        }
-        undoList.add(operations)
-        if (undoList.size > MAX_UNDO_STEPS) undoList.removeAt(0)
-        redoList.clear()
+        val history = pageHistories.getOrPut(pageId) { PageHistory() }
+        history.undoList.add(operations)
+        if (history.undoList.size > MAX_UNDO_STEPS) history.undoList.removeAt(0)
+        history.redoList.clear()
     }
 
     @AssistedFactory
