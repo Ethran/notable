@@ -23,13 +23,8 @@ import javax.inject.Singleton
  * Watches the image/PDF files that pages use as backgrounds and reports which pages need their
  * cached background dropped when one changes on disk.
  *
- * Split out of [PageDataManager]. It used to be a pair of maps living next to the page cache, with
- * its registration path (`File.exists()`, `canRead()`, `FileObserver.startWatching()` — blocking
- * disk I/O and an inotify registration) reached from inside the cache's monitor, i.e. while the
- * drawing thread could be waiting on it. Its two maps were also read by the invalidation collector
- * without holding the lock that guarded them, so a concurrent registration could tear the read.
- *
- * The rules that keep it honest now:
+ * Registering a file is blocking disk I/O and an inotify registration, so it is kept out of the
+ * page cache's lock:
  * - **This class owns [registryLock] and nothing else takes it.** Every method may be called with no
  *   other lock held, and none of them calls back into [PageDataManager].
  * - **Callers must not hold the page-cache lock** when calling [watch] / [unwatch]: both touch the
@@ -91,14 +86,12 @@ class BackgroundFileWatcher @Inject constructor(
     }
 
     /**
-     * After a delete/recreate, re-install an observer for [filePath] — but **only if pages still use
-     * it**, and without touching the page set.
+     * After the file was replaced, installs an observer for the new file at [filePath] — but **only
+     * if pages still use it**, and without touching the page set.
      *
-     * Re-arming by the page id that first created the observer (as the old code did) resurrects an
-     * evicted page: with a PDF shared by several pages, the creator can be evicted while another page
-     * still shows the file, and re-adding it leaves a zombie id in [pagesByFile] plus, if every real
-     * user unwatched during [waitForFileAvailable], a live observer for a file nobody displays.
-     * Re-checking [pagesByFile] here is the single source of truth for "does anyone still need this".
+     * Goes by [pagesByFile], not by the page that first registered the file: that page may have
+     * been evicted meanwhile while another page still shows the file, and every page may have been
+     * unwatched during [waitForFileAvailable].
      */
     private fun rearm(filePath: String) {
         synchronized(registryLock) {
@@ -153,10 +146,11 @@ class BackgroundFileWatcher @Inject constructor(
                     if (event == IN_IGNORED) return@launch
                     log.d("Background file changed: $filePath [event=${fileObserverEventNames(event)}]")
 
-                    if (event == DELETE || event == DELETE_SELF) {
-                        // The watch dies with the inode. Editors that save by replace (delete +
-                        // recreate) therefore need a fresh observer once the new file appears.
-                        log.d("Background file deleted.")
+                    if (event == DELETE_SELF || event == MOVE_SELF) {
+                        // The watch follows the inode, not the path. Editors that save by replacing
+                        // the file (deleting or moving it away, then writing a new one) therefore
+                        // need a fresh observer once the new file appears.
+                        log.d("Background file deleted or moved away.")
                         synchronized(registryLock) { observers.remove(filePath)?.stopWatching() }
                         if (!waitForFileAvailable(filePath)) {
                             log.w("File changed, but does not exist: $filePath")
@@ -176,11 +170,9 @@ class BackgroundFileWatcher @Inject constructor(
         }
 
     private companion object {
-        private const val WATCH_MASK = FileObserver.CREATE or
-            FileObserver.DELETE or
-            FileObserver.DELETE_SELF or
+        // Events on the watched file itself; CREATE, DELETE and MOVED_TO only come from directories.
+        private const val WATCH_MASK = FileObserver.DELETE_SELF or
             FileObserver.CLOSE_WRITE or
-            FileObserver.MOVED_TO or
             FileObserver.MOVE_SELF
     }
 }

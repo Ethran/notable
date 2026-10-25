@@ -99,10 +99,11 @@ internal class PageDataTestHarness(context: Context) {
     }
     val appRepository = createAppRepositoryForTest(context, db, pageDao, strokeDao)
     val appEventBus = DefaultAppEventBus()
+    val backgroundFileWatcher = BackgroundFileWatcher(appEventBus)
     val pageDataManager = PageDataManager(
         appRepository = appRepository,
         appEventBus = appEventBus,
-        backgroundFileWatcher = BackgroundFileWatcher(appEventBus),
+        backgroundFileWatcher = backgroundFileWatcher,
     )
     val pageSaver by lazy { PageSaver(pageDataManager, appRepository, db, appEventBus) }
 
