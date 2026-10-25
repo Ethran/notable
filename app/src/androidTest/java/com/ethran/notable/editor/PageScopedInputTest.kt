@@ -179,7 +179,8 @@ class PageScopedInputTest {
         view.showAndWait(a)
         undo(removed = setOf(u1))
 
-        // Only the three pages most recently edited keep their history: editing c and d drops b's.
+        // Only the three pages most recently edited keep their history: editing c and d drops b's,
+        // so the redo of t1 left there is gone.
         view.showAndWait(c)
         draw(c)!!
         commitDrawn()
@@ -188,7 +189,7 @@ class PageScopedInputTest {
         commitDrawn()
         undo(removed = setOf(w1))
         view.showAndWait(b)
-        undo()
+        redo()
         view.disposeOldPage()
     }
 }
