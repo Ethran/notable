@@ -3,7 +3,6 @@ package com.ethran.notable.editor.canvas
 import android.graphics.Rect
 import android.net.Uri
 import io.shipbook.shipbooksdk.Log
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -26,13 +25,6 @@ object CanvasEventBus {
 
     // used for managing drawing state on regain focus
     val onFocusChange = MutableSharedFlow<Boolean>()
-
-    // before undo we need to commit changes
-    val commitHistorySignal = MutableSharedFlow<Unit>()
-    val commitHistorySignalImmediately = MutableSharedFlow<Unit>()
-
-    // used for checking if commit was completed
-    var commitCompletion = CompletableDeferred<Unit>()
 
     // It might be bad idea, but plan is to insert graphic in this, and then take it from it
     // There is probably better way

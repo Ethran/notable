@@ -4,8 +4,6 @@ import android.app.Application
 import android.graphics.Color
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.cleanAllStrokes
@@ -19,7 +17,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.After
@@ -86,16 +83,9 @@ class PageScopedInputTest {
         val (a, b, c, d) = pages
         val view = createPageView(a)
         val history = History(view, data.appEventBus)
-
-        // Strokes drawn but not yet in the history, which undo first commits, as the editor does.
-        val drawn = mutableListOf<Stroke>()
-        viewScope.launch(Dispatchers.Main) {
-            CanvasEventBus.commitHistorySignalImmediately.collect {
-                history.addDrawnStrokes(drawn)
-                drawn.clear()
-                CanvasEventBus.commitCompletion.complete(Unit)
-            }
-        }
+        // Strokes drawn at the same time share an undo step; advancing it starts a new one.
+        var time = 0L
+        history.clock = { time }
 
         // Runs [action] on the main thread. Checks that the shown page lost [removed] and gained
         // [added] (read after the action), that no other page changed, and that every stroke stored
@@ -126,16 +116,12 @@ class PageScopedInputTest {
             val points = testStroke(pageId, x = 40f + n * 25, y = 300f + n * 25).points
             var id: String? = null
             expect("drawing on $pageId", added = { setOfNotNull(id) }) {
-                if (handleDraw(view, pageId, drawn, 5f, Color.BLACK, Pen.BALLPEN, points)) id = drawn.last().id
+                val before = strokeIds(view.currentPageId)
+                if (handleDraw(view, pageId, history, 5f, Color.BLACK, Pen.BALLPEN, points))
+                    id = (strokeIds(view.currentPageId) - before).single()
             }
             assertEquals("stroke on $pageId kept", pageId == view.currentPageId, id != null)
             return id
-        }
-
-        // Drawn strokes reach the history a moment after drawing, as in the editor.
-        suspend fun commitDrawn() = onMain {
-            history.addDrawnStrokes(drawn)
-            drawn.clear()
         }
 
         suspend fun undo(removed: Set<String> = emptySet()) =
@@ -162,31 +148,29 @@ class PageScopedInputTest {
         undo()
         redo(added = setOf(t1))
 
-        // A stroke whose step reaches the history only after its page was left still joins the
-        // page's history, so undo back on that page removes it first.
+        // Leaving a page and coming back keeps its history.
+        time += 1000
         val t2 = draw(b)!!
         view.showAndWait(c)
-        commitDrawn()
         view.showAndWait(b)
         undo(removed = setOf(t2))
         undo(removed = setOf(t1))
 
-        // Leaving a page and coming back keeps its history.
+        // Strokes drawn apart are undone one at a time.
         view.showAndWait(a)
+        time += 1000
         val u1 = draw(a)!!
-        commitDrawn()
-        view.showAndWait(b)
-        view.showAndWait(a)
+        time += 1000
+        val u2 = draw(a)!!
+        undo(removed = setOf(u2))
         undo(removed = setOf(u1))
 
         // Only the three pages most recently edited keep their history: editing c and d drops b's,
         // so the redo of t1 left there is gone.
         view.showAndWait(c)
         draw(c)!!
-        commitDrawn()
         view.showAndWait(d)
         val w1 = draw(d)!!
-        commitDrawn()
         undo(removed = setOf(w1))
         view.showAndWait(b)
         redo()

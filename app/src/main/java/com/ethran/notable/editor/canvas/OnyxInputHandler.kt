@@ -6,7 +6,6 @@ import android.graphics.RectF
 import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
-import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.PageView
@@ -53,7 +52,6 @@ class OnyxInputHandler(
     private val viewModel: EditorViewModel,
     private val history: History,
     private val coroutineScope: CoroutineScope,
-    private val strokeHistoryBatch: MutableList<Stroke>,
 ) {
     var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
@@ -313,7 +311,7 @@ class OnyxInputHandler(
                         handleDraw(
                             drawCanvas.page,
                             pageId,
-                            strokeHistoryBatch,
+                            history,
                             toolbarState.activePenSetting.strokeSize,
                             toolbarState.activePenSetting.color,
                             toolbarState.pen,
@@ -335,7 +333,6 @@ class OnyxInputHandler(
                         }
                         coroutineScope.launch(Dispatchers.Default) {
                             drawCanvas.refreshManager.refreshUi(dirtyRect)
-                            CanvasEventBus.commitHistorySignal.emit(Unit)
                         }
                     }
 
@@ -373,7 +370,7 @@ class OnyxInputHandler(
                             handleDraw(
                                 drawCanvas.page,
                                 pageId,
-                                strokeHistoryBatch,
+                                history,
                                 toolbarState.activePenSetting.strokeSize,
                                 toolbarState.activePenSetting.color,
                                 toolbarState.pen,
@@ -405,10 +402,6 @@ class OnyxInputHandler(
                         // Made on a page no longer shown; only the firmware's ink is left to clear.
                         log.i("Stroke made on page $pageId dropped, another page is shown")
                         drawCanvas.refreshManager.refreshUi(trackArea(plist))
-                        return@launch
-                    }
-                    coroutineScope.launch(Dispatchers.Default) {
-                        CanvasEventBus.commitHistorySignal.emit(Unit)
                     }
                 }
             }

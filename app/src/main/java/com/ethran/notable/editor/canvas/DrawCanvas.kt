@@ -5,7 +5,6 @@ import android.content.Context
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.OpenGLRenderer
@@ -75,18 +74,8 @@ class DrawCanvas(
 
     var glRenderer = OpenGLRenderer(this)
 
-    // Strokes drawn since the last commit to history.
-    private val strokeHistoryBatch = mutableListOf<Stroke>()
-    internal fun commitToHistory() {
-        history.addDrawnStrokes(strokeHistoryBatch)
-        strokeHistoryBatch.clear()
-        //testing if it will help with undo hiding strokes.
-        refreshManager.drawCanvasToView(null)
-    }
-
-
     val inputHandler =
-        OnyxInputHandler(this, page, viewModel, history, coroutineScope, strokeHistoryBatch)
+        OnyxInputHandler(this, page, viewModel, history, coroutineScope)
     val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
 
 
