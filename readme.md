@@ -242,7 +242,8 @@ in real time on your tablet.
 > After each recompilation, Notable will detect the updated PDF and automatically refresh the view.
 
 Instead of importing by hand, you can open the PDF with a [link](#links). The first time Notable
-asks whether to observe or copy it; after that the same link jumps to the page:
+asks whether to observe or copy it. Choose to observe it: after that the same link jumps to the
+page. A copy is not tied to the original file, so the link would ask to import it again.
 
 ```sh
 adb push build/main.pdf /sdcard/Documents/main.pdf
@@ -262,7 +263,7 @@ first.
 |---|---|
 | `notable://page/<pageId>` | the page |
 | `notable://book/<bookId>` | the notebook, at the page last open |
-| `notable://pdf?path=<absolute path>&page=<N>&folderId=<folderId>` | the notebook that observes this PDF, at page N (counted from 1). If there is none, asks to import it, into folder `folderId` or the library. `page` and `folderId` are optional |
+| `notable://pdf?path=<absolute path>&page=<N>&folderId=<folderId>` | the notebook that observes this PDF, at page N (counted from 1). If there is none, asks to import it, into folder `folderId` or the library; only an observed PDF is found again by later links. `page` and `folderId` are optional |
 
 To get a link, use **Copy link to page** or **Copy link to book** in the editor menu, **Copy link**
 in a page's menu, or **Copy link** in the notebook's settings. Exporting a single page copies its

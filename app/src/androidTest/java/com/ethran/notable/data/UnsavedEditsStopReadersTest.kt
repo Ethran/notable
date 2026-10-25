@@ -75,7 +75,7 @@ class UnsavedEditsStopReadersTest {
         val renderer = mockk<PageContentRenderer>(relaxed = true)
         val exportEngine = ExportEngine(
             context, appRepository, pageRepository, bookRepository, renderer,
-            DefaultAppEventBus(), pageSaver, Dispatchers.IO, scope,
+            DefaultAppEventBus(), pageSaver, mockk(relaxed = true), Dispatchers.IO, scope,
         )
 
         // A linked export, which would overwrite its file with what it read.
@@ -122,7 +122,7 @@ class UnsavedEditsStopReadersTest {
                 val eventBus = mockk<AppEventBus>(relaxed = true)
                 val exportEngine = ExportEngine(
                     context, mockk(relaxed = true), mockk(relaxed = true), bookRepository,
-                    mockk(relaxed = true), eventBus, saver, Dispatchers.IO, scope,
+                    mockk(relaxed = true), eventBus, saver, mockk(relaxed = true), Dispatchers.IO, scope,
                 ).also { it.xoppFile = xoppFile }
 
                 exportEngine.exportToLinkedFileAsync("book")
@@ -152,7 +152,7 @@ class UnsavedEditsStopReadersTest {
             val eventBus = mockk<AppEventBus>(relaxed = true)
             val exportEngine = ExportEngine(
                 context, mockk(relaxed = true), mockk(relaxed = true), bookRepository,
-                mockk(relaxed = true), eventBus, saver, Dispatchers.IO, exportScope,
+                mockk(relaxed = true), eventBus, saver, mockk(relaxed = true), Dispatchers.IO, exportScope,
             ).also { it.xoppFile = xoppFile }
 
             exportEngine.exportToLinkedFileAsync("book")

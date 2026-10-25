@@ -102,6 +102,7 @@ class EditorSimpleStateTests {
             appRepository = appRepository,
             editorSettingCacheManager = editorSettingCacheManager,
             exportEngine = exportEngine,
+            linkCopier = mockk(relaxed = true),
             pageDataManager = pageDataManager,
             pageLeases = PageLeases(pageDataManager),
             pageSaver = pageSaver,
