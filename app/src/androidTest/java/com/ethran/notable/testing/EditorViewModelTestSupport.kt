@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PagePreviewStore
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.db.AppDatabase
@@ -62,6 +63,7 @@ internal fun createEditorViewModelForTest(
         pageDataManager = pageDataManager,
         pageLeases = PageLeases(pageDataManager),
         pageSaver = pageSaver,
+        pagePreviewStore = PagePreviewStore(context, pageDataManager, appRepository),
         syncOrchestrator = syncOrchestrator,
         snackDispatcher = snackDispatcher,
         historyFactory = historyFactory,

@@ -10,14 +10,12 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Build
-import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import com.ethran.notable.R
-import com.ethran.notable.data.ensurePreviewsFullFolder
+import com.ethran.notable.editor.PageViewport
 import com.ethran.notable.utils.ensureNotMainThread
-import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -84,149 +82,117 @@ private fun optimizeBitmapForStorage(
     return StorageOptimization(bitmap, webpLossyFormat, quality)
 }
 
-fun getThumbnailFile(context: Context, pageID: String): File =
-    File(context.filesDir, "pages/previews/thumbs/$pageID.webp")
+fun getThumbnailFile(context: Context, pageID: String): File = thumbnailFile(context.filesDir, pageID)
+
+private fun thumbnailFile(filesDir: File, pageID: String): File =
+    File(filesDir, "pages/previews/thumbs/$pageID.webp")
+
+private fun previewsDir(filesDir: File): File = File(filesDir, "pages/previews/full")
+
+// [pageID]'s previews in [dir], whatever scroll they were captured at, with a write in progress.
+private fun previewFiles(dir: File, pageID: String): List<File> =
+    dir.listFiles { f -> f.name.startsWith("$pageID-") }?.toList().orEmpty()
+
+/**
+ * The name of [pageID]'s preview captured at [viewport]. It carries the vertical scroll, rounded
+ * to whole pixels, since the page opens at the scroll it was left at.
+ */
+private fun previewFileName(pageID: String, viewport: PageViewport): String =
+    "$pageID-sy${viewport.scroll.y.roundToInt()}.webp"
+
+/** Deletes [pageID]'s thumbnail and previews, whatever scroll they were captured at. */
+fun deletePagePreviews(filesDir: File, pageID: String) {
+    thumbnailFile(filesDir, pageID).delete()
+    previewFiles(previewsDir(filesDir), pageID).forEach { it.delete() }
+}
 
 private fun isEqApprox(a: Float, b: Float): Boolean = abs(a - b) <= EQUALITY_THRESHOLD
 
-private fun checkZoomAndScroll(scroll: Offset?, zoom: Float?): Boolean {
-    if (zoom == null || scroll == null) {
-        log.d("savePagePreview: skipping persist (zoom is $zoom, scroll is $scroll)")
-        return false
-    }
-    if (!isEqApprox(zoom, 1f)) {
-        log.d("savePagePreview: skipping persist (zoom=$zoom not ~1.0)")
-        return false
-    }
-    if (!isEqApprox(scroll.x, 0f)) {
-        log.d("savePagePreview: skipping persist (scroll.x: ${scroll.x} != 0)")
-        return false
-    }
-    return true
-}
+/** Whether a view at [viewport] makes the page's preview: unzoomed, at the page's left edge. */
+fun canSavePreview(viewport: PageViewport): Boolean =
+    isEqApprox(viewport.zoom, 1f) && isEqApprox(viewport.scroll.x, 0f)
 
 private fun isCacheFresh(file: File, pageUpdatedAtMs: Long?): Boolean {
     return pageUpdatedAtMs == null || pageUpdatedAtMs <= 0 || file.lastModified() >= pageUpdatedAtMs
 }
 
-/**
- * Build the filename (without directories) for a persisted preview bitmap.
- * We encode the vertical scroll (rounded to Int) into the name so different vertical positions
- * can have separate cached previews.
- *
- * Format: {pageID}-sy{scrollY}.webp
- */
-private fun buildPreviewFileName(pageID: String, scrollY: Int): String = "${pageID}-sy$scrollY.webp"
-
-val webpLossyFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+private val webpLossyFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
     Bitmap.CompressFormat.WEBP_LOSSY else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
 
-val webpLosslessFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+private val webpLosslessFormat get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
     Bitmap.CompressFormat.WEBP_LOSSLESS else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
 
 /**
- *   Remove other variants for this page (legacy + other scrollY encodings)
+ * Writes [optimized] to [file] through a temporary file of its own, so no reader sees it half
+ * written. The file is dated [capturedAtMs] if given: freshness is judged by its date, and an edit
+ * made while it was written is not in it. Returns whether it was written.
  */
-private fun removeOldBitmaps(dir: File, latestPreview: String, pageID: String) {
-    dir.listFiles()?.forEach { f ->
-        if (f.name != latestPreview && f.name.startsWith(pageID)) {
-            try {
-                if (f.delete()) {
-                    log.d("saveHQPagePreview: removed old preview ${f.name}")
-                } else {
-                    // File may have already been deleted by a concurrent save for the same page.
-                    log.d("saveHQPagePreview: could not delete old preview ${f.name} (already gone or in use)")
-                }
-            } catch (e: Throwable) {
-                log.w("saveHQPagePreview: exception deleting old preview ${f.name}", e)
-            }
+private fun writeWebp(file: File, optimized: StorageOptimization, capturedAtMs: Long? = null): Boolean {
+    var tempFile: File? = null
+    try {
+        tempFile = File.createTempFile("${file.name}.", ".tmp", file.parentFile)
+        val compressed = tempFile.outputStream().buffered().use {
+            optimized.bitmap.compress(optimized.format, optimized.quality, it)
         }
+        if (compressed && tempFile.length() > 0 && tempFile.renameTo(file)) {
+            capturedAtMs?.let(file::setLastModified)
+            return true
+        }
+        log.e("Writing ${file.name} failed")
+    } catch (e: Exception) {
+        log.e("Writing ${file.name} failed: ${e.message}", e)
     }
+    tempFile?.delete()
+    return false
 }
 
+/**
+ * Saves [bitmap], the view of [pageID] at [viewport] as it was at [capturedAtMs], as the page's
+ * preview in place of the ones captured at other scrolls, if [canSavePreview].
+ */
 fun saveHQPagePreview(
-    context: Context, bitmap: Bitmap, pageID: String, scroll: Offset?, zoom: Float?, mode: PreviewSaveMode = PreviewSaveMode.REGULAR
+    context: Context, bitmap: Bitmap, pageID: String, viewport: PageViewport, capturedAtMs: Long
 ) {
     ensureNotMainThread("saveHQPagePreview")
-    if (!checkZoomAndScroll(scroll, zoom)) return
+    if (!canSavePreview(viewport)) return
 
-    val scrollYInt = scroll!!.y.roundToInt()
-    val fileName = buildPreviewFileName(pageID, scrollYInt)
-    val dir = ensurePreviewsFullFolder(context)
-    val finalFile = File(dir, fileName)
-    val tempFile = File(dir, "$fileName.tmp")
-
-    val optimized = optimizeBitmapForStorage(bitmap, mode, isThumbnail = false)
-
+    val dir = previewsDir(context.filesDir).apply { mkdirs() }
+    val fileName = previewFileName(pageID, viewport)
+    val optimized = optimizeBitmapForStorage(bitmap, PreviewSaveMode.REGULAR, isThumbnail = false)
     try {
-        tempFile.outputStream().buffered().use { os ->
-            val success = optimized.bitmap.compress(optimized.format, optimized.quality, os)
-            if (!success) {
-                log.e("saveHQPagePreview: Failed to compress bitmap")
-                tempFile.delete()
-                return@use
-            }
+        if (writeWebp(File(dir, fileName), optimized, capturedAtMs)) {
+            log.d("saveHQPagePreview: saved $fileName")
+            previewFiles(dir, pageID).filter { it.name != fileName }.forEach { it.delete() }
         }
-        if (tempFile.exists() && tempFile.length() > 0) {
-            tempFile.renameTo(finalFile)
-            log.d("saveHQPagePreview: cached preview saved as $fileName (scrollY=$scrollYInt)")
-            removeOldBitmaps(dir, fileName, pageID)
-        } else {
-            log.e("saveHQPagePreview: temp file missing or empty, aborting rename")
-            tempFile.delete()
-        }
-    } catch (e: Exception) {
-        tempFile.delete()
-        log.e("saveHQPagePreview: Exception while saving preview: ${e.message}")
-        logCallStack("saveHQPagePreview")
     } finally {
-        if (optimized.bitmap != bitmap) {
-            optimized.bitmap.recycle()
-        }
+        if (optimized.bitmap != bitmap) optimized.bitmap.recycle()
     }
 }
 
+/** [pageID]'s preview captured at [viewport], if there is one and it is newer than [pageUpdatedAtMs]. */
 fun loadHQPagePreview(
     context: Context,
     pageID: String,
-    scroll: Offset?,
-    zoom: Float?,
+    viewport: PageViewport,
     pageUpdatedAtMs: Long?,
-    requireExactMatch: Boolean,
 ): Bitmap? {
-    val dir = ensurePreviewsFullFolder(context)
-
-    if (requireExactMatch) {
-        if (!checkZoomAndScroll(scroll, zoom)) return null
-        val scrollYInt = scroll!!.y.roundToInt()
-        val expectedFileName = buildPreviewFileName(pageID, scrollYInt)
-        val targetFile = File(dir, expectedFileName)
-
-        if (!targetFile.exists()) {
-            log.i("loadHQPagePreview: no exact-match cache (expected $expectedFileName)")
-            return null
-        }
-        if (!isCacheFresh(targetFile, pageUpdatedAtMs)) {
-            log.i("loadHQPagePreview: cache is stale for ${targetFile.name}")
-            return null
-        }
-        return decodeBitmapFromFile(targetFile)
-    }
-
-    // Try finding the freshest file starting with pageID
-    val candidates =
-        dir.listFiles { f -> f.isFile && f.name.startsWith(pageID) && f.name.endsWith(".webp") }
-            ?.toList()?.filter { isCacheFresh(it, pageUpdatedAtMs) }.orEmpty()
-
-    if (candidates.isEmpty()) {
-        log.i("loadHQPagePreview: no native cache file for pageID=$pageID")
+    if (!canSavePreview(viewport)) return null
+    val file = File(previewsDir(context.filesDir), previewFileName(pageID, viewport))
+    if (!file.exists()) {
+        log.i("loadHQPagePreview: no preview ${file.name}")
         return null
     }
-
-    val newest = candidates.maxByOrNull { it.lastModified() } ?: candidates.first()
-    return decodeBitmapFromFile(newest)
+    if (!isCacheFresh(file, pageUpdatedAtMs)) {
+        log.i("loadHQPagePreview: preview ${file.name} is stale")
+        return null
+    }
+    return decodeBitmapFromFile(file)
 }
 
+/**
+ * A picture of [pageIdToLoad] of the given size: its preview at whatever scroll, if fresh, or else
+ * its thumbnail, scaled; or a placeholder if it has neither.
+ */
 suspend fun loadPagePreviewOrFallback(
     context: Context,
     pageIdToLoad: String,
@@ -235,27 +201,11 @@ suspend fun loadPagePreviewOrFallback(
     pageNumber: Int?,
     pageUpdatedAtMs: Long?
 ): Bitmap = withContext(Dispatchers.IO) {
-    // Load from disk (full quality folder) ignoring requireExactMatch initially to find any full image
-    var bitmapFromDisk: Bitmap? = try {
-        loadHQPagePreview(
-            context,
-            pageIdToLoad,
-            null,
-            null,
-            pageUpdatedAtMs = pageUpdatedAtMs,
-            requireExactMatch = false
-        )
-    } catch (t: Throwable) {
-        log.e("Failed to load persisted bitmap: ${t.message}")
-        null
-    }
-
-    if (bitmapFromDisk == null) {
-        val thumbFile = getThumbnailFile(context, pageIdToLoad)
-        if (thumbFile.exists()) {
-            bitmapFromDisk = decodeBitmapFromFile(thumbFile)
-        }
-    }
+    val preview = previewFiles(previewsDir(context.filesDir), pageIdToLoad)
+        .filter { it.name.endsWith(".webp") && isCacheFresh(it, pageUpdatedAtMs) }
+        .maxByOrNull { it.lastModified() }
+    val bitmapFromDisk = preview?.let(::decodeBitmapFromFile)
+        ?: getThumbnailFile(context, pageIdToLoad).takeIf { it.exists() }?.let(::decodeBitmapFromFile)
 
     when {
         bitmapFromDisk == null -> {
@@ -282,8 +232,7 @@ suspend fun loadPagePreviewOrFallback(
             val srcRect = Rect(0, 0, bitmapFromDisk.width, bitmapFromDisk.height)
             val destRect = Rect(0, 0, expectedWidth, expectedHeight)
             canvas.drawBitmap(bitmapFromDisk, srcRect, destRect, paint)
-
-            if (scaled != bitmapFromDisk) bitmapFromDisk.recycle()
+            bitmapFromDisk.recycle()
             scaled
         }
     }
@@ -312,11 +261,8 @@ private fun createPlaceholderPreview(
     return bmp
 }
 
+// Decodes [file], deleting it if it is empty or can't be decoded.
 private fun decodeBitmapFromFile(file: File): Bitmap? {
-    if (!file.exists()) {
-        log.w("decodeBitmapFromFile: file does not exist: ${file.name}")
-        return null
-    }
     if (file.length() == 0L) {
         log.w("decodeBitmapFromFile: file is zero bytes, deleting: ${file.name}")
         file.delete()
@@ -329,7 +275,6 @@ private fun decodeBitmapFromFile(file: File): Bitmap? {
             imgBitmap
         } else {
             log.w("decodeBitmapFromFile: failed to decode bitmap from ${file.name}, deleting")
-            log.d("exists=${file.exists()} size=${file.length()} name=${file.name}")
             file.delete()
             null
         }
@@ -344,37 +289,21 @@ private fun decodeBitmapFromFile(file: File): Bitmap? {
  * Persist a thumbnail for a page.
  */
 fun savePageThumbnail(
-    context: Context, bitmap: Bitmap, pageID: String, mode: PreviewSaveMode = PreviewSaveMode.REGULAR
+    context: Context,
+    bitmap: Bitmap,
+    pageID: String,
+    mode: PreviewSaveMode = PreviewSaveMode.REGULAR,
+    capturedAtMs: Long? = null,
 ) {
     ensureNotMainThread("savePageThumbnail")
     val finalFile = getThumbnailFile(context, pageID)
     finalFile.parentFile?.mkdirs()
-    val tempFile = File(finalFile.parentFile, "${finalFile.name}.tmp")
 
     val ratio = bitmap.height.toFloat() / bitmap.width.toFloat()
     val scaledBitmap = bitmap.scale(THUMBNAIL_WIDTH, (THUMBNAIL_WIDTH * ratio).toInt(), false)
     val optimized = optimizeBitmapForStorage(scaledBitmap, mode, isThumbnail = true)
-
     try {
-        tempFile.outputStream().buffered().use { os ->
-            val success = optimized.bitmap.compress(optimized.format, optimized.quality, os)
-            if (!success) {
-                log.e("savePageThumbnail: Failed to compress bitmap")
-                tempFile.delete()
-                return
-            }
-        }
-        if (tempFile.exists() && tempFile.length() > 0) {
-            tempFile.renameTo(finalFile)
-            log.d("savePageThumbnail: thumbnail saved for $pageID")
-        } else {
-            log.e("savePageThumbnail: temp file missing or empty, aborting rename")
-            tempFile.delete()
-        }
-    } catch (e: Exception) {
-        tempFile.delete()
-        log.e("savePageThumbnail: Exception while saving thumbnail: ${e.message}")
-        logCallStack("savePageThumbnail")
+        if (writeWebp(finalFile, optimized, capturedAtMs)) log.d("savePageThumbnail: thumbnail saved for $pageID")
     } finally {
         if (optimized.bitmap != scaledBitmap) optimized.bitmap.recycle()
         if (scaledBitmap != bitmap) scaledBitmap.recycle()
@@ -382,7 +311,7 @@ fun savePageThumbnail(
 }
 
 
-fun Bitmap.toThresholded(threshold: Int = 180): Bitmap {
+private fun Bitmap.toThresholded(threshold: Int = 180): Bitmap {
     val result = createBitmap(width, height, Bitmap.Config.RGB_565)
     val canvas = Canvas(result)
     val paint = Paint().apply {

@@ -90,6 +90,8 @@ editor and the code around it.
    page loaded again gets them laid over its database rows.
 3. `PageSaver` (`data/PageSaver.kt`) writes everything collected in one transaction once editing
    pauses, and, while the process runs, no later than a few seconds after the first unsaved edit.
+   It stamps each edited page with the time of its last edit, or just past a later stamp put on
+   the page meanwhile, and its notebook with the time of the save.
    A failed write keeps its changes unsaved and is retried, and a warning stays on screen until a
    save succeeds; changes to a page deleted meanwhile are dropped.
 4. Saving is forced sooner when it matters:
@@ -139,6 +141,10 @@ editor and the code around it.
   reloaded and held pages repainted.
 - **Memory signals.** `onTrimMemory` shrinks the cache back to its budget, or drops every
   unpinned page when the app is hidden; `onLowMemory` drops every unpinned page.
-- **Previews.** The bitmaps put on the shelf on page exit are written off the main thread, one at a
-  time, as thumbnails and page previews. A preview is written only for an unzoomed page scrolled to its left edge, and its
-  file name carries the vertical scroll it was captured at.
+- **Previews.** `PagePreviewStore` (`data/PagePreviewStore.kt`, app-wide) writes the thumbnail and
+  page preview of each page left, from the bitmap put on the shelf, within about 2 s after the page
+  is left, one page at a time and even after the editor closes. A page shown again by then is not
+  written; the view has its bitmap. Both are written only for an unzoomed page scrolled to its
+  left edge, and the preview's file name carries the vertical scroll it was captured at. It counts as fresh
+  while it is newer than the page's `updatedAt`, which `PageSaver` sets to the time of the page's
+  last edit. Deleting a page deletes its previews, including those written after it was deleted.

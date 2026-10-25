@@ -29,14 +29,16 @@ import kotlin.time.Duration.Companion.milliseconds
  * as [PageChanges], the latest version of each changed stroke and image. This class writes them
  * once editing pauses for [IDLE_DELAY_MS], and no later than [MAX_DELAY_MS] after the first unsaved
  * edit, so a crash loses at most the last few seconds of work. Each save writes everything
- * collected in one transaction, together with the edit timestamps of the pages and notebooks.
+ * collected in one transaction, together with the edit timestamps of the pages, set to the time of
+ * each page's last edit, and of their notebooks, set to the time of the save.
  *
  * Code that reads page content from the database — export, sync, duplicating a page — calls
  * [saveAll] first, so it sees every edit made so far, and stops if it returns an error. The editor
  * never needs to: [PageDataManager] lays unsaved edits over whatever it loads. Thumbnails don't call
  * it. They miss the edits not saved yet — usually those of the last [IDLE_DELAY_MS], up to
- * [MAX_DELAY_MS] of them during continuous editing, more while writes fail — and a thumbnail
- * rendered before the save counts as stale after it, since the save bumps the page's edit timestamp.
+ * [MAX_DELAY_MS] of them during continuous editing, more while writes fail. A thumbnail counts as
+ * stale until a margin after the page's edit timestamp, so one rendered before an edit was saved is
+ * rendered again, unless the save came more than that margin after the edit.
  *
  * A failed write keeps its changes unsaved and is retried, at most a minute apart, for as long as
  * the app runs. Until a save succeeds a warning stays on screen: edits still unsaved when the process
@@ -167,11 +169,14 @@ class PageSaver @Inject constructor(
 
         // The page timestamp is the per-page dirty signal for incremental upload; the notebook
         // timestamp drives the per-notebook sync Upload/Download decision. A scroll alone is saved
-        // below without them, so scrolling never makes sync upload a page.
+        // below without them, so scrolling never makes sync upload a page. The page is stamped with
+        // when it was last edited, so a preview captured after the last edit stays fresh, or past
+        // a later time stamped meanwhile. The notebook is stamped with when it was saved, which
+        // keeps it further from its last sync: sync treats a notebook changed less than a second
+        // after it as unchanged.
         if (changes.hasEdits) {
-            val now = Date()
-            appRepository.pageRepository.touchUpdatedAt(pageId, now.time)
-            appRepository.bookRepository.touchUpdatedAtForPage(pageId, now)
+            appRepository.pageRepository.touchUpdatedAt(pageId, changes.editedAtMs)
+            appRepository.bookRepository.touchUpdatedAtForPage(pageId, Date())
         }
         changes.scrollY?.let { appRepository.pageRepository.updateScroll(pageId, it) }
     }

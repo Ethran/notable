@@ -14,6 +14,7 @@ com.ethran.notable/
     - PageDataManager.kt — In-memory page content (strokes, images, backgrounds) by page id: loading, held pages, unsaved edits.
     - PageCache.kt — Cache sizing and eviction policy for PageDataManager.
     - PageSaver.kt — Writes unsaved page edits to the database.
+    - PagePreviewStore.kt — Writes the previews and thumbnails of the pages the editor leaves.
 
 - editor/ — The core note-taking engine
     - canvas/ — Hardware-specific drawing and refresh logic (DrawCanvas, OnyxInputHandler, RefreshManager).

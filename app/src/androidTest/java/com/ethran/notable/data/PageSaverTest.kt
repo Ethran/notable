@@ -18,6 +18,7 @@ import com.ethran.notable.testing.waitForCondition
 import com.ethran.notable.utils.AppResult
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -228,7 +229,7 @@ class PageSaverTest {
         pageDataManager.requestPageLoadJoin(pageId)
         val longAgo = Date(1_000L)
         for (id in notebook.pageIds + otherNotebook.pageIds) {
-            data.db.pageDao().touchUpdatedAt(id, longAgo.time)
+            data.db.pageDao().update(data.db.pageDao().getById(id)!!.copy(updatedAt = longAgo))
             data.db.notebookDao().touchUpdatedAtForPage(id, longAgo)
         }
         suspend fun pageUpdatedAt(id: String) = data.db.pageDao().getById(id)!!.updatedAt
@@ -240,12 +241,29 @@ class PageSaverTest {
         assertEquals(longAgo, pageUpdatedAt(pageId))
         assertEquals(longAgo, notebookUpdatedAt(notebook.notebookId))
 
+        val beforeEdit = System.currentTimeMillis()
         pageDataManager.addStrokes(pageId, listOf(testStroke(pageId)))
+        val afterEdit = System.currentTimeMillis()
+        delay(50)
         assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
-        assertTrue(pageUpdatedAt(pageId).after(longAgo))
-        assertTrue(notebookUpdatedAt(notebook.notebookId).after(longAgo))
+        // The page is stamped with the time of its edit, the notebook with the time of the save.
+        assertTrue(pageUpdatedAt(pageId).time in beforeEdit..afterEdit)
+        assertTrue(notebookUpdatedAt(notebook.notebookId).time > afterEdit)
         assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
         assertEquals(longAgo, pageUpdatedAt(otherNotebook.pageIds.single()))
         assertEquals(longAgo, notebookUpdatedAt(otherNotebook.notebookId))
+    }
+
+    /** Sync finds edited pages by their timestamp having moved past the one it last uploaded. */
+    @Test(timeout = 30000)
+    fun savedEdit_movesItsPageTimestampPastAnyStampedMeanwhile() = runBlocking {
+        val pageId = seedLoadedPage(strokes = 5)
+        pageDataManager.addStrokes(pageId, listOf(testStroke(pageId)))
+        // Stamped after the edit by something else, e.g. a background change, then uploaded.
+        val uploaded = Date(System.currentTimeMillis() + 60_000)
+        data.db.pageDao().update(data.db.pageDao().getById(pageId)!!.copy(updatedAt = uploaded))
+
+        assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
+        assertTrue(data.db.pageDao().getById(pageId)!!.updatedAt.after(uploaded))
     }
 }

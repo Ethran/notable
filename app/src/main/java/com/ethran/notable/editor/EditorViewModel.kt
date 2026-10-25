@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
+import com.ethran.notable.data.PagePreviewStore
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
@@ -186,6 +187,7 @@ class EditorViewModel @Inject constructor(
     val pageDataManager: PageDataManager,
     val pageLeases: PageLeases,
     private val pageSaver: PageSaver,
+    private val pagePreviewStore: PagePreviewStore,
     private val syncOrchestrator: SyncOrchestrator,
     val snackDispatcher: SnackDispatcher,
     private val historyFactory: History.Factory,
@@ -706,6 +708,9 @@ class EditorViewModel @Inject constructor(
     fun onPageShown(pageId: String) {
         shownPageId.value = pageId
     }
+
+    /** Called by the [PageView] once it has left [pageId], to write the page's preview. */
+    fun onPageLeft(pageId: String) = pagePreviewStore.request(pageId)
 
     /**
      * Loads the pages next to the shown [pageId] ahead of a page turn. Loads of pages left behind
