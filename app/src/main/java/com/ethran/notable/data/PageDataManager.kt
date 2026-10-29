@@ -1183,7 +1183,7 @@ class PageDataManager @Inject constructor(
             // A file replaced by a new one is often reported twice: when the old one goes, and when
             // the new one is written. Both repaint, but the hint is shown once while it is up.
             var hintShownAtMs = 0L
-            backgroundFileWatcher.invalidatedPages.collect { pageIds ->
+            backgroundFileWatcher.invalidatedPages.collect { (pageIds, announce) ->
                 if (pageIds.isEmpty()) return@collect
                 log.i("Background file(s) changed, invalidating pages: $pageIds")
                 // Not short-circuited: every page is invalidated.
@@ -1191,7 +1191,8 @@ class PageDataManager @Inject constructor(
                 if (heldChanged) {
                     CanvasEventBus.forceUpdate.emit(null)
                     val now = SystemClock.elapsedRealtime()
-                    if (now - hintShownAtMs >= FILE_CHANGED_HINT_MS) {
+                    // Each hint costs e-ink refreshes; a file the app replaced itself goes without.
+                    if (announce && now - hintShownAtMs >= FILE_CHANGED_HINT_MS) {
                         hintShownAtMs = now
                         appEventBus.tryEmit(AppEvent.ActionHint("Background file changed", FILE_CHANGED_HINT_MS))
                     }
