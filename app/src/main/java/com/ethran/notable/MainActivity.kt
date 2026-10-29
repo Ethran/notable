@@ -44,6 +44,7 @@ import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.navigation.DeepLinkResolver
+import com.ethran.notable.navigation.isLinkOfNewerKind
 import com.ethran.notable.navigation.parseDeepLink
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.AppEventUiBridge
@@ -242,9 +243,9 @@ class MainActivity : ComponentActivity() {
         val link = parseDeepLink(uri)
         if (link == null) {
             Log.w(TAG, "Not a Notable link: $uri")
-            snackDispatcher.showOrUpdateSnack(
-                SnackConf(text = "Notable can't open this link", duration = 3000)
-            )
+            val text = if (isLinkOfNewerKind(uri)) "This link needs a newer version of Notable"
+            else "Notable can't open this link"
+            snackDispatcher.showOrUpdateSnack(SnackConf(text = text, duration = 3000))
             return
         }
         Log.i(TAG, "Received link $link")

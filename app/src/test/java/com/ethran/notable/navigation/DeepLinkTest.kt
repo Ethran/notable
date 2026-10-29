@@ -1,6 +1,7 @@
 package com.ethran.notable.navigation
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,7 +13,6 @@ class DeepLinkTest {
         DeepLink.Book("4f1e2d3c-5b6a-4789-8a9b-0c1d2e3f4a5b"),
         DeepLink.Pdf("/sdcard/Documents/thesis.pdf"),
         DeepLink.Pdf("/sdcard/Documents/thesis.pdf", page = 12),
-        DeepLink.Pdf("/sdcard/Documents/thesis.pdf", page = 3, folderId = "f-1"),
         DeepLink.Pdf("/sdcard/Studia/Praca magisterska/rozdział 1 & 2 (v=3)+#.pdf", page = 1),
         DeepLink.Page("id with/odd?chars&=#%"),
     )
@@ -37,6 +37,28 @@ class DeepLinkTest {
             DeepLink.Pdf("/sdcard/My Docs/C++ notes.pdf", page = 2),
             parseDeepLink("notable://pdf?path=/sdcard/My Docs/C++ notes.pdf&page=2")
         )
+        for (path in listOf("/sdcard/100% done.pdf", "/a%2.pdf", "/a%zz.pdf", "/a%", "/sdcard/📚 ß/a.pdf"))
+            assertEquals(path, DeepLink.Pdf(path), parseDeepLink("notable://pdf?path=$path"))
+    }
+
+    @Test
+    fun parametersALaterVersionMayAdd_areIgnored() {
+        assertEquals(
+            DeepLink.Pdf("/sdcard/a.pdf", page = 2),
+            parseDeepLink("notable://pdf?path=/sdcard/a.pdf&folderId=f-1&page=2&mode=read&flag&note=100%")
+        )
+        assertEquals(DeepLink.Book("b-1"), parseDeepLink("notable://book/b-1?page=3&x=%zz"))
+        assertEquals(DeepLink.Page("p-1"), parseDeepLink("notable://Page/p-1/"))
+    }
+
+    @Test
+    fun linksOfALaterKind_areToldApartFromBrokenOnes() {
+        for (link in listOf("notable://folder/x", "notable://search?q=a", "Notable://Tag", "notable://x#y"))
+            assertTrue(link, isLinkOfNewerKind(link))
+        for (link in listOf(
+            "notable://page/x", "notable://pdf?path=/a.pdf", "notable://", "notable://page-0b7c1f3e",
+            "notable://2fa/x", "https://folder/x", "notable:folder/x",
+        )) assertFalse(link, isLinkOfNewerKind(link))
     }
 
     @Test
@@ -65,8 +87,6 @@ class DeepLinkTest {
             "notable://pdf",
             "notable://pdf?path=relative/a.pdf",
             "notable://pdf/x?path=/a.pdf",
-            "notable://pdf?path=/a%2.pdf",
-            "notable://pdf?path=/a%zz.pdf",
             "notable://page-0b7c1f3e",
         )) assertNull(link, parseDeepLink(link))
     }

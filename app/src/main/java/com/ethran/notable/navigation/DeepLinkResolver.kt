@@ -51,14 +51,13 @@ class DeepLinkResolver @Inject constructor(
     }
 
     /**
-     * Imports the PDF into the link's folder if it exists. A followed file stays where it is and
-     * the notebook shows its changes; otherwise Notable keeps its own copy.
+     * Imports the PDF into the library. A followed file stays where it is and the notebook shows
+     * its changes; otherwise Notable keeps its own copy.
      */
     suspend fun import(link: DeepLink.Pdf, followFile: Boolean): Target = withContext(Dispatchers.IO) {
-        val folderId = link.folderId?.takeIf { appRepository.folderRepository.get(it) != null }
         val result = importEngine.import(
             Uri.fromFile(File(link.path)),
-            ImportOptions(folderId = folderId, linkToExternalFile = followFile)
+            ImportOptions(linkToExternalFile = followFile)
         )
         result.fold(
             onSuccess = { pageIds ->
@@ -67,15 +66,13 @@ class DeepLinkResolver @Inject constructor(
                     ?.let { appRepository.pageRepository.getById(it)?.notebookId }
                     ?.let { appRepository.bookRepository.getById(it) }
                     ?: return@fold Target.Failed("Imported notebook not found")
-                val target = openBook(book, link.page)
-                if (link.folderId != null && folderId == null && target is Target.Editor)
-                    target.copy(note = "Folder not found, imported to the library")
-                else target
+                openBook(book, link.page)
             },
             onError = { Target.Failed("Import failed: ${it.userMessage}") }
         )
     }
 
+    /** [page] is a PDF page; in a notebook that follows a PDF, page N shows PDF page N. */
     private fun openBook(book: Notebook, page: Int?): Target {
         val pageId = page?.let { book.pageIds.getOrNull(it - 1) }
             ?: book.openPageId

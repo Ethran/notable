@@ -263,15 +263,25 @@ first.
 |---|---|
 | `notable://page/<pageId>` | the page |
 | `notable://book/<bookId>` | the notebook, at the page last open |
-| `notable://pdf?path=<absolute path>&page=<N>&folderId=<folderId>` | the notebook that observes this PDF, at page N (counted from 1). If there is none, asks to import it, into folder `folderId` or the library; only an observed PDF is found again by later links. `page` and `folderId` are optional |
+| `notable://pdf?path=<absolute path>&page=<N>` | the notebook that observes this PDF, at page N of the PDF (counted from 1; `page` is optional). If there is none, asks to import it into the library; only an observed PDF is found again by later links. If several notebooks observe it, the one edited last |
 
 To get a link, use **Copy link to page** or **Copy link to book** in the editor menu, **Copy link**
 in a page's menu, or **Copy link** in the notebook's settings. Exporting a single page copies its
 link too. The link is copied as Markdown, `[Title](notable://…)`, or as an Org link; choose the
-format in Settings → General.
+format in Settings → General. Org mode opens only link types it knows, so in Emacs register it
+once:
+
+```elisp
+(org-link-set-parameters "notable" :follow (lambda (path) (browse-url (concat "notable:" path))))
+```
 
 In a path, encode spaces as `%20` (`/sdcard/My%20Notes/a.pdf`); a path typed with plain spaces
-also works when the link is quoted.
+also works when the link is quoted. A `+` is a plus sign, not a space, so don't build links with
+a form encoder (Python's `urlencode`); `urllib.parse.quote(path)` is right.
+
+Links that work now keep working in later versions. Parameter names are case-sensitive, and
+parameters Notable doesn't know are ignored, so new optional ones can be added. A link of a kind
+your Notable doesn't know says that it needs a newer version.
 
 ---
 
