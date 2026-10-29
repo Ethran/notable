@@ -206,10 +206,8 @@ fun encodeStrokePoints(
     validateUniform(mask, points)
 
     // encode mandatory data, using Polyline
-    val encodedX =
-        encode(points.map { it.x }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
-    val encodedY =
-        encode(points.map { it.y }, precision = ENCODING_PRECISION_XY).toByteArray(Charsets.UTF_8)
+    val encodedX = encode(FloatArray(count) { points[it].x }, precision = ENCODING_PRECISION_XY)
+    val encodedY = encode(FloatArray(count) { points[it].y }, precision = ENCODING_PRECISION_XY)
 
     val hasP = mask.hasPressure()
     val hasTX = mask.hasTiltX()
@@ -356,9 +354,9 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
 
 
     // decode mandatory coordinates
-    val xs = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
-    val ys = getDecodedListFloat(buffer, ENCODING_PRECISION_XY)
-    require(xs.size == count && ys.size == count) { "Point count mismatch, xs=${xs.size} ys=${ys.size} count=$count, $ys" }
+    val xs = getDecodedFloats(buffer, ENCODING_PRECISION_XY)
+    val ys = getDecodedFloats(buffer, ENCODING_PRECISION_XY)
+    require(xs.size == count && ys.size == count) { "Point count mismatch, xs=${xs.size} ys=${ys.size} count=$count, ${ys.contentToString()}" }
 
     // v1 stored raw digitizer pressure (int16); v2 stores normalized [0,1] as uint16
     // fixed-point. Decode both: v1 values stay raw here and are normalized at load
@@ -408,12 +406,12 @@ fun decodeStrokePoints(bytes: ByteArray): List<StrokePoint> {
 }
 
 
-fun getDecodedListFloat(buffer: ByteBuffer, precision: Int): List<Float> {
+fun getDecodedFloats(buffer: ByteBuffer, precision: Int): FloatArray {
     val size = buffer.int
-    val bytes = ByteArray(size)
-    if (buffer.remaining() < size) {
+    if (size < 0 || buffer.remaining() < size) {
         throw IllegalArgumentException("Truncated coordinates section")
     }
+    val bytes = ByteArray(size)
     buffer.get(bytes)
-    return decode(String(bytes, Charsets.UTF_8), precision) { it.toFloat() }
+    return decode(bytes, precision)
 }
