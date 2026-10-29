@@ -63,6 +63,10 @@ class DeepLinkResolver @Inject constructor(
      * doesn't stop it halfway.
      */
     suspend fun import(link: DeepLink.Pdf): Target = applicationScope.async(Dispatchers.IO) {
+        // Another import may have made a notebook following the file meanwhile, e.g. the PDF
+        // receiver's while the import dialog was open.
+        appRepository.bookRepository.getLinkedToPdf(link.path)
+            ?.let { return@async openBook(it, link.page) }
         val result = importEngine.import(
             Uri.fromFile(File(link.path)),
             ImportOptions(linkToExternalFile = true)
