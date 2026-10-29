@@ -69,7 +69,7 @@ fun parseDeepLink(link: String): DeepLink? {
         kind == "book" && segments.size == 2 && !id.isNullOrBlank() -> DeepLink.Book(id)
         kind == "pdf" && segments.size == 1 -> {
             val path = query["path"]?.takeIf { it.startsWith("/") } ?: return null
-            DeepLink.Pdf(path = path, page = query["page"]?.toIntOrNull()?.takeIf { it >= 1 })
+            DeepLink.Pdf(path = path, page = parsePage(query["page"]))
         }
 
         else -> null
@@ -90,13 +90,19 @@ fun isLinkOfNewerKind(link: String): Boolean {
     return kind.isNotEmpty() && kind.all { it in 'a'..'z' } && kind !in KNOWN_KINDS
 }
 
-/** Query parameters by name; of a repeated one, the last. */
-private fun parseQuery(query: String): Map<String, String> = buildMap {
+/**
+ * Query parameters by name; of a repeated one, the last. A `+` is a plus sign unless
+ * [plusIsSpace]: links are typed by hand, while HTTP clients write a space as `+` in a query.
+ */
+internal fun parseQuery(query: String, plusIsSpace: Boolean = false): Map<String, String> = buildMap {
     for (pair in query.split('&')) {
         if (pair.isEmpty()) continue
-        put(pair.substringBefore('='), decode(pair.substringAfter('=', "")))
+        put(pair.substringBefore('='), decode(pair.substringAfter('=', ""), plusIsSpace))
     }
 }
+
+/** A page number counted from 1; anything else is no page. */
+internal fun parsePage(value: String?): Int? = value?.toIntOrNull()?.takeIf { it >= 1 }
 
 private const val UNRESERVED = "-._~"
 
@@ -109,7 +115,7 @@ private fun encode(value: String, keep: String = ""): String = buildString {
 }
 
 /** Decodes `%XX` sequences as UTF-8; anything else, a `%` without two hex digits too, is kept. */
-private fun decode(value: String): String {
+private fun decode(value: String, plusIsSpace: Boolean = false): String {
     val bytes = ByteArrayOutputStream()
     var i = 0
     while (i < value.length) {
@@ -120,7 +126,8 @@ private fun decode(value: String): String {
         } else {
             // Up to the next %, as a whole, so that a character outside the BMP keeps both halves.
             val end = value.indexOf('%', i + 1).takeIf { it >= 0 } ?: value.length
-            bytes.write(value.substring(i, end).encodeToByteArray())
+            val text = value.substring(i, end)
+            bytes.write((if (plusIsSpace) text.replace('+', ' ') else text).encodeToByteArray())
             i = end
         }
     }

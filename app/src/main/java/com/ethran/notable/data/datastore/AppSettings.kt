@@ -73,6 +73,7 @@ data class AppSettings(
     val blockSystemGestures: Boolean = false,
     val renameOnCreate: Boolean = true,
     val linkFormat: LinkFormat = LinkFormat.Markdown,
+    val receivePdfs: Boolean = false,
 
     // Debug
     val showWelcome: Boolean = true,

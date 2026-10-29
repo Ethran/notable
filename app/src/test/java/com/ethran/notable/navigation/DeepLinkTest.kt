@@ -62,6 +62,16 @@ class DeepLinkTest {
     }
 
     @Test
+    fun plusIsASpaceOnlyWhereHttpClientsWriteIt() {
+        assertEquals("ADE changes.pdf", parseQuery("name=ADE+changes.pdf", plusIsSpace = true)["name"])
+        assertEquals("C++ a.pdf", parseQuery("name=C%2B%2B+a.pdf", plusIsSpace = true)["name"])
+        assertEquals("100% done", parseQuery("x=100%+done", plusIsSpace = true)["x"])
+        // What `curl --url-query "name=ADE ż+x changes.pdf"` sends.
+        assertEquals("ADE ż+x changes.pdf", parseQuery("name=ADE+%c5%bc%2bx+changes.pdf", plusIsSpace = true)["name"])
+        assertEquals("C++ a.pdf", parseQuery("name=C++%20a.pdf")["name"])
+    }
+
+    @Test
     fun badPageNumbers_areIgnored() {
         for (page in listOf("0", "-1", "abc", "", "1.5")) {
             assertEquals(

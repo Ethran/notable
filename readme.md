@@ -251,6 +251,42 @@ adb shell am start -a android.intent.action.VIEW \
   -d "'notable://pdf?path=/sdcard/Documents/main.pdf&page=12'"
 ```
 
+### Receiving PDFs from a computer
+
+Notable can take the PDF itself, in one request that writes it, redraws the notebook and, if
+asked, turns to a page, and answers with what happened. Turn on Settings → General → **Receive PDFs from a
+computer**, and copy the token shown there. The receiver runs while Notable is open, and listens
+only on the tablet itself, so over USB reach it through adb:
+
+```sh
+adb forward tcp:8765 tcp:8765   # again after unplugging or a reboot
+curl --fail-with-body -sS -T build/main.pdf -H "Expect:" \
+  -H "Authorization: Bearer $TOKEN" \
+  --url-query "name=My paper.pdf" --url-query "page=12" http://localhost:8765/pdf
+```
+
+The file is written as `Documents/notable/Received/<name>`, so a push can't touch anything else.
+The first push of a name imports it as a new notebook that observes the file, and shows it; later
+pushes redraw that notebook. A push moves you only when it gives `page`, which means what it
+means in a [link](#links): page N of the PDF. Without it you stay where you are, also in another
+notebook. The answer is one line, and its status code says what happened:
+
+| Code | Meaning |
+|---|---|
+| 200 | Written, and the notebook that observes it shows the new version |
+| 202 | Written, but no notebook observes it (the import failed; the line says why) |
+| 400 | `name` missing, or not a plain `.pdf` file name, or the upload ended early |
+| 401 | Wrong or missing token |
+| 404 | Unknown request: an older Notable |
+| 411, 413, 415, 422 | No `Content-Length`; larger than 200 MB; not a PDF; a PDF with no readable page |
+| 503 | Setup isn't finished |
+| 500 | Writing failed; the old file is kept |
+
+Only 200 and 202 write the file. `GET /` answers `Notable <version>` without a token: when it
+fails, the receiver is off, Notable is in the background, or the tablet is asleep. Like links,
+requests that work now keep working in later versions, and parameters Notable doesn't know are
+ignored. In the query a `+` is a space, as curl and other HTTP clients write it.
+
 ---
 
 ## Links
