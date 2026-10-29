@@ -55,6 +55,10 @@ class DeepLinkResolver @Inject constructor(
      * its changes; otherwise Notable keeps its own copy.
      */
     suspend fun import(link: DeepLink.Pdf, followFile: Boolean): Target = withContext(Dispatchers.IO) {
+        // Another import may have made a notebook following the file meanwhile, e.g. the PDF
+        // receiver's while the import dialog was open.
+        if (followFile) appRepository.bookRepository.getLinkedToPdf(link.path)
+            ?.let { return@withContext openBook(it, link.page) }
         val result = importEngine.import(
             Uri.fromFile(File(link.path)),
             ImportOptions(linkToExternalFile = followFile)

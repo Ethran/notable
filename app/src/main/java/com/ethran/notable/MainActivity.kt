@@ -42,8 +42,8 @@ import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.io.ExportEngine
-import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.navigation.DeepLinkResolver
+import com.ethran.notable.navigation.LinkRequests
 import com.ethran.notable.navigation.isLinkOfNewerKind
 import com.ethran.notable.navigation.parseDeepLink
 import com.ethran.notable.sync.SyncScheduler
@@ -62,8 +62,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -117,8 +115,8 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var syncWorkUiBridge: SyncWorkUiBridge
 
-    /** Links waiting for the UI; only the latest is kept. */
-    private val deepLinks = Channel<DeepLink>(Channel.CONFLATED)
+    @Inject
+    lateinit var linkRequests: LinkRequests
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -140,7 +138,11 @@ class MainActivity : ComponentActivity() {
         trackSystemGestureBlocking()
 
         // A recreated activity gets its launching intent again; that link was already opened.
-        if (savedInstanceState == null) receiveDeepLink(intent)
+        if (savedInstanceState == null) {
+            // A fresh start: what waited for the activity the user left shouldn't open now.
+            linkRequests.drop()
+            receiveDeepLink(intent)
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -193,7 +195,7 @@ class MainActivity : ComponentActivity() {
                             snackState = snackState,
                             snackDispatcher = snackDispatcher,
                             appRepository = appRepositoryLazy.get(),
-                            deepLinks = deepLinks.receiveAsFlow(),
+                            linkRequests = linkRequests.requests,
                             deepLinkResolver = deepLinkResolver.get(),
                         )
                     } else {
@@ -249,7 +251,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         Log.i(TAG, "Received link $link")
-        deepLinks.trySend(link)
+        linkRequests.open(link)
     }
 
     private fun triggerInitialSync() {

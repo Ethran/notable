@@ -12,9 +12,9 @@ import androidx.compose.ui.unit.dp
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.gestures.quickNavGesture
 import com.ethran.notable.io.ExportEngine
-import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.navigation.DeepLinkHandler
 import com.ethran.notable.navigation.DeepLinkResolver
+import com.ethran.notable.navigation.LinkRequests
 import com.ethran.notable.navigation.NotableNavHost
 import com.ethran.notable.navigation.rememberNotableAppState
 import com.ethran.notable.ui.SnackBar
@@ -29,11 +29,11 @@ fun NotableApp(
     snackState: SnackState,
     snackDispatcher: SnackDispatcher,
     appRepository: AppRepository,
-    deepLinks: Flow<DeepLink>,
+    linkRequests: Flow<LinkRequests.Request>,
     deepLinkResolver: DeepLinkResolver,
 ) {
     val appNavState = rememberNotableAppState()
-    DeepLinkHandler(deepLinks, deepLinkResolver, appNavState, snackDispatcher)
+    DeepLinkHandler(linkRequests, deepLinkResolver, appNavState, snackDispatcher)
     Box(
         Modifier
             .background(Color.White)
