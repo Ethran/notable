@@ -1,0 +1,44 @@
+name: PR Android Tests Label
+on:
+  workflow_run:
+    workflows: ["PR Android Tests"]
+    types: [completed]
+permissions: {}
+# Runs from the default branch, so a PR can't change what runs here with write access.
+jobs:
+  # Removes the label after every run, forks and cancelled runs included, so it can be added
+  # again to rerun. Finds the PR from the run itself, and reads nothing the PR produced.
+  remove-label:
+    if: github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove Label
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const run = context.payload.workflow_run
+            if (!run.head_repository) return
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${run.head_repository.owner.login}:${run.head_branch}`,
+            })
+            // The API returns every PR when head is malformed.
+            const fromRun = pull =>
+              pull.head.repo?.full_name === run.head_repository.full_name && pull.head.ref === run.head_branch
+            for (const pull of pulls.filter(fromRun)) {
+              if (!pull.labels.some(label => label.name === 'run-android-tests')) continue
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pull.number,
+                  name: 'run-android-tests',
+                })
+              } catch (error) {
+                // Already removed, by someone else or another run.
+                if (error.status !== 404) throw error
+              }
+            }
