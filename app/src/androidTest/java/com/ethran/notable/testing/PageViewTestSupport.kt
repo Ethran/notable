@@ -70,6 +70,16 @@ internal suspend fun seedSheetPage(
 }
 
 /**
+ * A loose page — belonging to no notebook — on a [pageMode] sheet; returns the page id. A view
+ * pages to it with [PageViewFixture.showPage], for tests that leave one page and come back.
+ */
+internal suspend fun seedLooseSheetPage(db: AppDatabase, pageMode: PageMode): String {
+    val pageId = UUID.randomUUID().toString()
+    db.pageDao().create(Page(id = pageId, pageMode = pageMode))
+    return pageId
+}
+
+/**
  * A [PageView] showing [pageId] on a [PageDataTestHarness] page, plus the layer it reads: the same
  * page data, repositories and leases the app shares between its views.
  */
@@ -103,6 +113,17 @@ internal class PageViewFixture internal constructor(
             view.isTransformationAllowed && view.isPageDataLoaded
         }
         check(ready) { "The view never showed and loaded page ${view.currentPageId}" }
+    }
+
+    /**
+     * Shows [toPageId] in [view] and waits until it is shown and loaded, as the editor's pager does.
+     */
+    suspend fun showPage(toPageId: String, view: PageView = page) {
+        view.changePage(toPageId)
+        val shown = waitForCondition(READY_TIMEOUT_MS) {
+            view.currentPageId == toPageId && view.isTransformationAllowed && view.isPageDataLoaded
+        }
+        check(shown) { "The view never showed page $toPageId" }
     }
 
     /**

@@ -308,18 +308,24 @@ class PageView(
     }
 
     /**
-     * The viewport [page] had when this view left it, or else unzoomed at its saved scroll. The saved
-     * x goes through [fitScrollX] rather than being taken as it was: a sheet is centred or clamped at
-     * this zoom whatever was saved, since the bound its x was saved inside depends on the zoom it was
-     * saved at, while an infinite page, which has no bound, keeps where the reader left it.
+     * The viewport [page] had when this view left it, or else unzoomed at its saved scroll.
+     *
+     * Its x is re-fitted either way rather than taken as it was. A sheet's x bound depends on the
+     * view's width and the zoom it was kept at, and both can have moved since — a resize re-fits the
+     * shown page and drops the zoom of the pages this view left, but the x kept for those was fitted
+     * for the old width, so a narrow sheet would come back off centre. [fitScrollX] centres or
+     * clamps it for the width and zoom it is being shown at, and leaves an infinite page, which has
+     * no bound, where the reader left it.
      */
-    private fun viewportToShow(page: OpenPage): PageViewport = synchronized(pageLock) {
-        leftPages[page.pageId] ?: PageViewport(
-            scroll = Offset(
-                x = fitScrollX(page.pageMode, (page.record?.scrollX ?: 0).toFloat(), 1f),
-                y = (page.record?.scrollY ?: 0).toFloat(),
-            ),
-        )
+    private fun viewportToShow(page: OpenPage): PageViewport {
+        val kept = synchronized(pageLock) { leftPages[page.pageId] }
+            ?: return PageViewport(
+                scroll = Offset(
+                    x = fitScrollX(page.pageMode, (page.record?.scrollX ?: 0).toFloat(), 1f),
+                    y = (page.record?.scrollY ?: 0).toFloat(),
+                ),
+            )
+        return kept.copy(scroll = kept.scroll.copy(x = fitScrollX(page.pageMode, kept.scroll.x, kept.zoom)))
     }
 
     /**
