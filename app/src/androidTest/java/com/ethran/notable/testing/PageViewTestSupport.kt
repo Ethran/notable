@@ -50,7 +50,7 @@ internal fun sheetWidthInPixels(pageMode: PageMode, context: Context): Float =
  */
 internal suspend fun seedSheetPage(
     db: AppDatabase,
-    pageMode: PageMode,
+    pageMode: PageMode?,
     savedScrollY: Int = 0,
     savedScrollX: Int = 0,
     fitPortrait: FitMode = FitMode.REAL,
@@ -189,7 +189,7 @@ internal class PageViewFixture internal constructor(
  */
 internal fun createPageViewForTest(
     context: Context,
-    pageMode: PageMode,
+    pageMode: PageMode?,
     viewWidth: Int,
     viewHeight: Int,
     savedScrollY: Int = 0,

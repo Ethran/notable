@@ -96,10 +96,13 @@ class EditorSimpleStateTests {
     // setPageScroll calls, and run their steps on the main thread, where the editor runs them.
     // ---------------------------------------------------------------------------
 
-    /** A page on a [pageMode] sheet, viewed at [viewWidth] x [viewHeight]; closed with the test. */
+    /**
+     * A page on a [pageMode] sheet, viewed at [viewWidth] x [viewHeight]; closed with the test. A
+     * null [pageMode] is a page carrying no sheet at all, which is what a quick page is.
+     */
     private fun createPageView(
         context: Context,
-        pageMode: PageMode,
+        pageMode: PageMode?,
         viewWidth: Int,
         viewHeight: Int,
         savedScrollY: Int = 0,
@@ -182,6 +185,103 @@ class EditorSimpleStateTests {
 
         fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(-30f, 0f)) }
         assertEquals(PageViewport(scroll = Offset(20f, 0f)), fixture.viewport)
+    }
+
+    /**
+     * Regression from ff7c838f: the guard that kept scroll x off negative values
+     * (`if (start.scroll.x + delta.x < 0) delta.x = -start.scroll.x`) was unconditional, but the
+     * `fitScrollX` that replaced it hands a sheet-less page's scroll straight back, so a sideways
+     * drag walked the view past the page's left edge and into blank space.
+     *
+     * An infinite canvas has no right bound — updateScroll must not clamp a delta there, which is
+     * what the test above pins — but it does have a left one: scroll x stops at 0.
+     */
+    @Test(timeout = 60_000)
+    fun updateScroll_stopsAtTheLeftEdge_forInfinitePageMode() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.INFINITE,
+            viewWidth = 800,
+            viewHeight = 600,
+        )
+        fixture.awaitInitialization()
+
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(50f, 0f)) }
+        assertEquals(50f, fixture.page.scroll.x, 0.01f)
+
+        // A drag far past the left edge: there is no page content left of x = 0 to bring in.
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(-500f, 0f)) }
+        assertEquals(
+            "the drag is cut at the page's left edge, not walked past it",
+            0f, fixture.page.scroll.x, 0.01f,
+        )
+        assertEquals(0f, fixture.page.scroll.y, 0.01f)
+
+        // A floor, not a wall: coming back right still takes the delta verbatim.
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(80f, 0f)) }
+        assertEquals(80f, fixture.page.scroll.x, 0.01f)
+    }
+
+    /**
+     * The same floor for a page carrying no sheet at all — a quick page, whose pageMode is null.
+     * fitScrollX short-circuits on null exactly as it does on INFINITE, so it lost the bound the
+     * same way.
+     */
+    @Test(timeout = 60_000)
+    fun updateScroll_stopsAtTheLeftEdge_forANullPageMode() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fixture = createPageView(
+            context = context,
+            pageMode = null,
+            viewWidth = 800,
+            viewHeight = 600,
+        )
+        fixture.awaitInitialization()
+
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(50f, 0f)) }
+        assertEquals(50f, fixture.page.scroll.x, 0.01f)
+
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(-500f, 0f)) }
+        assertEquals(
+            "a page with no sheet still has a left edge at x = 0",
+            0f, fixture.page.scroll.x, 0.01f,
+        )
+    }
+
+    /**
+     * Companion of the drag regression, from 4105e071: the snapshot-scaling zoom used to end on
+     * `(start.scroll.x + deltaScrollPage.x).coerceAtLeast(0f)`, and routing that through fitScrollX
+     * dropped the floor for a sheet-less page too.
+     *
+     * Zooming out about a screen-centre pivot pulls the view's top left leftwards, and from a small
+     * scroll x that lands it off the page: the content that used to sit at x = 0 slides into blank
+     * space. The bound has to stop it at the edge.
+     */
+    @Test(timeout = 60_000)
+    fun updateZoom_stopsAtTheLeftEdge_forInfinitePageMode() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.INFINITE,
+            viewWidth = 800,
+            viewHeight = 600,
+        )
+        fixture.awaitInitialization()
+
+        // Panned a little right, then zoomed out about the screen centre, as the pinch sends it.
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(120f, 0f)) }
+        assertEquals(120f, fixture.page.scroll.x, 0.01f)
+
+        fixture.onMain { fixture.page.updateZoom(fixture.pageId, -0.5f, null) }
+        val zoom = fixture.page.zoom
+        assertTrue("the page was zoomed out: $zoom", zoom < 1f)
+
+        assertEquals(
+            "the zoom stops at the page's left edge",
+            0f, fixture.page.scroll.x, 0.01f,
+        )
+        assertEquals(0f, fixture.page.scroll.y, 0.01f)
     }
 
     /**

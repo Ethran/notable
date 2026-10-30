@@ -756,9 +756,16 @@ class PageView(
      * A scroll x that keeps [pageMode]'s sheet inside the view at [zoom], close to [scrollX]:
      * exactly centred when the sheet leaves slack at the sides, and clamped to the sheet when the
      * view does.
+     *
+     * A page with no sheet — infinite, or carrying no sheet at all — has no right bound, so it takes
+     * [scrollX] as the reader left it, but it keeps the left one: the page's own left edge, at 0.
+     * Nothing can be brought into view from left of it, so the scroll stops there. That floor used to
+     * sit in each caller (`coerceAtLeast(0f)`, or a `< 0` guard on the drag delta); it lives here so
+     * the drag, the zoom and the resize cannot each forget it the way they did in ff7c838f and
+     * 4105e071.
      */
     private fun fitScrollX(pageMode: PageMode?, scrollX: Float, zoom: Float): Float {
-        if (pageMode == null || pageMode == PageMode.INFINITE) return scrollX
+        if (pageMode == null || pageMode == PageMode.INFINITE) return scrollX.coerceAtLeast(0f)
         val edge = scrollToCenterSheet(pageMode, zoom)
         return if (edge < 0f) edge else scrollX.coerceIn(0f, edge)
     }
