@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Debug
 import android.os.SystemClock
+import androidx.compose.ui.unit.IntOffset
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -135,8 +136,11 @@ internal class PageChanges {
     val strokes = HashMap<String, Stroke?>()
     val images = HashMap<String, Image?>()
 
-    /** Scroll to persist, or null if unchanged. Not an edit: it doesn't advance edit timestamps. */
-    var scrollY: Int? = null
+    /**
+     * The scroll to persist, both axes in page pixels, or null if unchanged. Not an edit: it doesn't
+     * advance edit timestamps.
+     */
+    var scroll: IntOffset? = null
 
     /** Whether strokes or images changed, not only the scroll. */
     val hasEdits: Boolean get() = strokes.isNotEmpty() || images.isNotEmpty()
@@ -148,7 +152,7 @@ internal class PageChanges {
     fun putAll(newer: PageChanges) {
         strokes.putAll(newer.strokes)
         images.putAll(newer.images)
-        newer.scrollY?.let { scrollY = it }
+        newer.scroll?.let { scroll = it }
         editedAtMs = max(editedAtMs, newer.editedAtMs)
     }
 }
@@ -973,10 +977,10 @@ class PageDataManager @Inject constructor(
         entry.images = withRemoved(entry.images, imageIds, Image::id, changes.images)
     }
 
-    /** Records [scrollY] as [pageId]'s vertical scroll, to be saved. */
-    fun recordScroll(pageId: String, scrollY: Int) {
+    /** Records [scroll] as [pageId]'s scroll, both axes, to be saved. */
+    fun recordScroll(pageId: String, scroll: IntOffset) {
         if (pageId.isEmpty()) return
-        synchronized(lock) { unsavedLocked(pageId).scrollY = scrollY }
+        synchronized(lock) { unsavedLocked(pageId).scroll = scroll }
         unsavedSignal.trySend(Unit)
     }
 

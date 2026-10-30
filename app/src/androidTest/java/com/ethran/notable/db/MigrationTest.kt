@@ -223,4 +223,50 @@ class MigrationTest {
 
         roomDb.close()
     }
+
+    /**
+     * 37 -> 38 splits the page scroll in two: `scroll` becomes `scrollY`, and `scrollX` is added.
+     *
+     * `scroll` only ever held the vertical scroll, so the rename has to **carry the value over** — a
+     * reader who had scrolled 750 down a page must not land back at its top after upgrading. The new
+     * axis starts at 0, which is the horizontal position every page had on upgrade anyway.
+     */
+    @Test(timeout = 60000)
+    @Throws(IOException::class)
+    fun migrate37To38_renamesScrollToScrollY_andAddsScrollXAtZero() {
+        val dbName = "migration-test-38"
+
+        // 1. Create the v37 schema and seed a page scrolled down it, using the old column name.
+        val oldDb = helper.createDatabase(dbName, 37)
+        oldDb.execSQL(
+            """
+            INSERT INTO Page (id, scroll, background, backgroundType, createdAt, updatedAt)
+            VALUES ('page1', 750, 'blank', 'native', 1620000000000, 1620000000000)
+            """.trimIndent()
+        )
+        oldDb.close()
+
+        // 2. Reopen at the latest version to trigger the 37 -> 38 auto-migration.
+        val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName).build()
+        val migratedDb = roomDb.openHelper.writableDatabase
+
+        // 3. The saved scroll is readable under the new name, with its value, and the new axis is 0.
+        migratedDb.query(
+            "SELECT scrollY, scrollX FROM Page WHERE id = 'page1'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(750, it.getInt(it.getColumnIndexOrThrow("scrollY")))
+            assertEquals(0, it.getInt(it.getColumnIndexOrThrow("scrollX")))
+        }
+
+        // 4. The new column is writable, and writing both axes leaves the row's own scroll intact.
+        migratedDb.execSQL("UPDATE Page SET scrollY = 800, scrollX = 120 WHERE id = 'page1'")
+        migratedDb.query("SELECT scrollY, scrollX FROM Page WHERE id = 'page1'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(800, it.getInt(it.getColumnIndexOrThrow("scrollY")))
+            assertEquals(120, it.getInt(it.getColumnIndexOrThrow("scrollX")))
+        }
+
+        roomDb.close()
+    }
 }

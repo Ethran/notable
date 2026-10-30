@@ -137,7 +137,10 @@ object NotebookSerializer {
             backgroundType = page.backgroundType,
             parentFolderId = page.parentFolderId,
             pageMode = page.pageMode,
-            scroll = page.scroll,
+            // The wire keys keep the older shape: `scroll` is the vertical scroll every client
+            // already writes, and `scrollX` defaults to 0 for the page files they left behind.
+            scroll = page.scrollY,
+            scrollX = page.scrollX,
             createdAt = page.createdAt.toInstant().toString(),
             updatedAt = page.updatedAt.toInstant().toString()
         )
@@ -211,7 +214,8 @@ object NotebookSerializer {
                 background = pageDto.background,
                 backgroundType = pageDto.backgroundType,
                 parentFolderId = pageDto.parentFolderId,
-                scroll = pageDto.scroll,
+                scrollY = pageDto.scroll,
+                scrollX = pageDto.scrollX,
                 createdAt = pageCreated,
                 updatedAt = pageUpdated,
                 pageMode = pageDto.pageMode
@@ -363,6 +367,7 @@ object NotebookSerializer {
         val parentFolderId: String?,
         val pageMode: PageMode?,
         val scroll: Int,
+        val scrollX: Int = 0,
         val createdAt: String,
         val updatedAt: String
     )
@@ -377,6 +382,7 @@ object NotebookSerializer {
         val parentFolderId: String?,
         val pageMode: PageMode? = null,
         val scroll: Int,
+        val scrollX: Int = 0,
         val createdAt: String,
         val updatedAt: String,
         val strokes: List<StrokeDto>,

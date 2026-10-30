@@ -42,14 +42,15 @@ internal fun sheetWidthInPixels(pageMode: PageMode, context: Context): Float =
     convertPointsToPixel(pageMode.width, context)
 
 /**
- * A notebook holding one page on a [pageMode] sheet, stored [savedScrollY] down the page; returns
- * the page id. Only the vertical scroll is stored: a page keeps no zoom in the database, a view
- * holds that in memory for as long as it shows the page.
+ * A notebook holding one page on a [pageMode] sheet, stored [savedScrollX] across and
+ * [savedScrollY] down it, in page pixels; returns the page id. A page keeps no zoom in the
+ * database: a view holds that in memory for as long as it shows the page.
  */
 internal suspend fun seedSheetPage(
     db: AppDatabase,
     pageMode: PageMode,
     savedScrollY: Int = 0,
+    savedScrollX: Int = 0,
 ): String {
     val notebookId = UUID.randomUUID().toString()
     val pageId = UUID.randomUUID().toString()
@@ -59,7 +60,8 @@ internal suspend fun seedSheetPage(
             id = pageId,
             notebookId = notebookId,
             pageMode = pageMode,
-            scroll = savedScrollY,
+            scrollY = savedScrollY,
+            scrollX = savedScrollX,
         ),
     )
     db.notebookDao().setPageIds(notebookId, listOf(pageId), Date())
@@ -157,10 +159,11 @@ internal fun createPageViewForTest(
     viewWidth: Int,
     viewHeight: Int,
     savedScrollY: Int = 0,
+    savedScrollX: Int = 0,
 ): PageViewFixture {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val data = PageDataTestHarness(context)
-    val pageId = runBlocking { seedSheetPage(data.db, pageMode, savedScrollY) }
+    val pageId = runBlocking { seedSheetPage(data.db, pageMode, savedScrollY, savedScrollX) }
     val pageLeases = PageLeases(data.pageDataManager)
     val page = PageView(
         context = context,

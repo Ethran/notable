@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 38,
-    "identityHash": "9008ba5e27f5eaf2eba7cd33db31c421",
+    "identityHash": "c9e21b7e2aef2e3f04c356f442dcaf11",
     "entities": [
       {
         "tableName": "Folder",
@@ -171,7 +171,7 @@
       },
       {
         "tableName": "Page",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `scroll` INTEGER NOT NULL, `notebookId` TEXT, `background` TEXT NOT NULL DEFAULT 'blank', `backgroundType` TEXT NOT NULL DEFAULT 'native', `pageMode` TEXT, `parentFolderId` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`parentFolderId`) REFERENCES `Folder`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`notebookId`) REFERENCES `Notebook`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `scrollY` INTEGER NOT NULL, `scrollX` INTEGER NOT NULL DEFAULT 0, `notebookId` TEXT, `background` TEXT NOT NULL DEFAULT 'blank', `backgroundType` TEXT NOT NULL DEFAULT 'native', `pageMode` TEXT, `parentFolderId` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`parentFolderId`) REFERENCES `Folder`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`notebookId`) REFERENCES `Notebook`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -180,10 +180,17 @@
             "notNull": true
           },
           {
-            "fieldPath": "scroll",
-            "columnName": "scroll",
+            "fieldPath": "scrollY",
+            "columnName": "scrollY",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "scrollX",
+            "columnName": "scrollX",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
           },
           {
             "fieldPath": "notebookId",
@@ -623,7 +630,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9008ba5e27f5eaf2eba7cd33db31c421')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c9e21b7e2aef2e3f04c356f442dcaf11')"
     ]
   }
 }

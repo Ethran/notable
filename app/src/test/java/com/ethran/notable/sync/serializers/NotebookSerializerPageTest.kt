@@ -55,14 +55,16 @@ class NotebookSerializerPageTest {
     private fun samplePage(
         id: String = "page-1",
         notebookId: String? = "nb-1",
-        scroll: Int = 0,
+        scrollY: Int = 0,
+        scrollX: Int = 0,
         pageMode: PageMode? = null,
         parentFolderId: String? = null,
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
     ) = Page(
         id = id,
-        scroll = scroll,
+        scrollY = scrollY,
+        scrollX = scrollX,
         notebookId = notebookId,
         background = "blank",
         backgroundType = "native",
@@ -133,6 +135,36 @@ class NotebookSerializerPageTest {
         }
     }
 
+    // The scroll a reader left a page at travels with it, so a notebook opened on another device
+    // comes back where it was left on this one.
+    @Test
+    fun page_round_trip_preserves_both_scroll_axes() {
+        val page = samplePage(scrollY = 300, scrollX = 120)
+        val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
+        val result = NotebookSerializer.deserializePage(json)
+
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data.first
+        assertEquals(300, restored.scrollY)
+        assertEquals(120, restored.scrollX)
+    }
+
+    // A page file uploaded by an app that had no horizontal scroll must still read back, that axis
+    // left at its default rather than failing the parse.
+    @Test
+    fun page_file_without_scrollX_reads_back_unscrolled_horizontally() {
+        val page = samplePage(scrollY = 300, scrollX = 120)
+        val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
+        val legacyJson = json.replace(Regex("\"scrollX\"\\s*:\\s*\\d+\\s*,\\s*"), "")
+        assertTrue("scrollX missing from the payload: $json", legacyJson != json)
+
+        val result = NotebookSerializer.deserializePage(legacyJson)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data.first
+        assertEquals(300, restored.scrollY)
+        assertEquals(0, restored.scrollX)
+    }
+
     @Test
     fun page_round_trip_preserves_metadata_strokes_and_images() {
         val page = samplePage()
@@ -149,7 +181,8 @@ class NotebookSerializerPageTest {
         assertEquals(page.notebookId, restoredPage.notebookId)
         assertEquals(page.background, restoredPage.background)
         assertEquals(page.backgroundType, restoredPage.backgroundType)
-        assertEquals(page.scroll, restoredPage.scroll)
+        assertEquals(page.scrollY, restoredPage.scrollY)
+        assertEquals(page.scrollX, restoredPage.scrollX)
         assertEquals(page.createdAt, restoredPage.createdAt)
         assertEquals(page.updatedAt, restoredPage.updatedAt)
 
