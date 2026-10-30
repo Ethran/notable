@@ -37,6 +37,7 @@ import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.withSeededToolbarLayout
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
@@ -157,7 +158,19 @@ class MainActivity : ComponentActivity() {
                                 AppSettings(version = 1)
                             )
 
-                        GlobalAppSettings.update(savedSettings)
+                        // One-time toolbar layout seed: an element added in a later version reaches a
+                        // layout the user saved before it existed, placed next to a familiar anchor so
+                        // it is reachable without opening the toolbar editor. The flag in
+                        // withSeededToolbarLayout makes it exactly once — running it on every launch
+                        // would resurrect a button the user removed. Only a customised toolbar needs
+                        // it: with `toolbarLayout == null` the app uses DEFAULT, which already places
+                        // the element.
+                        val settings = savedSettings.withSeededToolbarLayout()
+                        if (settings !== savedSettings) {
+                            kvProxy.get().setAppSettings(settings)
+                        } else {
+                            GlobalAppSettings.update(settings)
+                        }
                         strokeMigrationHelper.get().reencodeStrokePointsToBinary()
                         pageDataManager.get()
                             .registerComponentCallbacks(this@MainActivity.applicationContext)

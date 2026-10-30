@@ -8,6 +8,7 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.data.db.encodeStrokePoints
 import com.ethran.notable.data.db.withNormalizedPressure
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -58,6 +59,8 @@ object NotebookSerializer {
             defaultBackground = notebook.defaultBackground,
             defaultBackgroundType = notebook.defaultBackgroundType,
             pageMode = notebook.pageMode,
+            fitPortrait = notebook.fitPortrait,
+            fitLandscape = notebook.fitLandscape,
             linkedExternalUri = notebook.linkedExternalUri,
             createdAt = notebook.createdAt.toInstant().toString(),
             updatedAt = notebook.updatedAt.toInstant().toString(),
@@ -93,6 +96,10 @@ object NotebookSerializer {
                     defaultBackground = manifestDto.defaultBackground,
                     defaultBackgroundType = manifestDto.defaultBackgroundType,
                     pageMode = manifestDto.pageMode,
+                    // A downloaded fit is an intent, not a zoom: the receiving device applies it to
+                    // its own viewport, so the same manifest means different pixels per screen.
+                    fitPortrait = manifestDto.fitPortrait,
+                    fitLandscape = manifestDto.fitLandscape,
                     linkedExternalUri = manifestDto.linkedExternalUri,
                     createdAt = createdAt,
                     updatedAt = updatedAt
@@ -352,6 +359,11 @@ object NotebookSerializer {
         val defaultBackgroundType: String,
         // Defaults to null so manifests written before page modes existed still decode.
         val pageMode: PageMode? = null,
+        // Likewise: manifests written before the fit preference existed decode as REAL, i.e. the
+        // sheet at its true size, which is what those clients did. The manifest is written whole
+        // (no streaming splice like pages), so field order here is free.
+        val fitPortrait: FitMode = FitMode.REAL,
+        val fitLandscape: FitMode = FitMode.REAL,
         val linkedExternalUri: String?,
         val createdAt: String,
         val updatedAt: String,

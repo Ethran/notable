@@ -1,6 +1,7 @@
 package com.ethran.notable.editor.ui.toolbar.model
 
 import androidx.compose.ui.graphics.Color
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.state.Shape
 import com.ethran.notable.editor.utils.Eraser
 
@@ -24,4 +25,12 @@ data class ShapePickerSpec(
 /** Eraser type selection plus the scribble-to-erase toggle. */
 data class EraserSubmenuSpec(
     val erasers: List<Eraser>,
+) : SubmenuSpec
+
+/**
+ * Sheet-fit picker: the [FitMode]s a finite sheet can be shown at. Listed in enum order so the
+ * renderer stays driven by the enum — new fits need only the enum entry and its icon/label.
+ */
+data class FitModeSubmenuSpec(
+    val modes: List<FitMode>,
 ) : SubmenuSpec

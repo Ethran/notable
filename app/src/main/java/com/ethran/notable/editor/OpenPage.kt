@@ -5,6 +5,7 @@ import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.FitMode
 import io.shipbook.shipbooksdk.ShipBook
 
 /**
@@ -22,6 +23,13 @@ data class OpenPage(
     val record: Page? = null,
     /** Position within the notebook, or -1 for a loose page or before [load]. */
     val pageNumber: Int = -1,
+    /**
+     * How the notebook this page belongs to wants its sheets fitted, per orientation. REAL for a
+     * loose page, which has no notebook to hold a preference (and no sheet of its own to fit when
+     * it is infinite).
+     */
+    val fitPortrait: FitMode = FitMode.REAL,
+    val fitLandscape: FitMode = FitMode.REAL,
 ) {
     val backgroundName: String
         get() = record?.background ?: "blank"
@@ -32,6 +40,12 @@ data class OpenPage(
     /** The sheet this page is laid out on, or null while it keeps the infinite canvas. */
     val pageMode: PageMode?
         get() = record?.pageMode
+
+    /**
+     * The fit this page should be shown at in the given orientation. Callers never branch on
+     * orientation themselves — the view knows its size, and says which way round it is.
+     */
+    fun fitModeFor(isLandscape: Boolean): FitMode = if (isLandscape) fitLandscape else fitPortrait
 
     /**
      * Whether scroll and zoom are allowed: only once [load] has read the page's record, so its
@@ -55,10 +69,17 @@ data class OpenPage(
                 log.e("Page($pageId) not found")
                 return OpenPage(pageId)
             }
-            val pageNumber = record.notebookId
-                ?.let { appRepository.bookRepository.getById(it)?.pageIds?.indexOf(pageId) }
-                ?: -1
-            return OpenPage(pageId, record, pageNumber)
+            // The notebook is already here for the page's position, so carrying its fit across
+            // costs no extra query.
+            val notebook = record.notebookId?.let { appRepository.bookRepository.getById(it) }
+            val pageNumber = notebook?.pageIds?.indexOf(pageId) ?: -1
+            return OpenPage(
+                pageId,
+                record,
+                pageNumber,
+                notebook?.fitPortrait ?: FitMode.REAL,
+                notebook?.fitLandscape ?: FitMode.REAL,
+            )
         }
     }
 }

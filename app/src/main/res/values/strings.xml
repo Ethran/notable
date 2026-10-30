@@ -286,9 +286,15 @@
     <string name="toolbar_element_home">Library</string>
     <string name="toolbar_element_menu">Menu</string>
     <string name="toolbar_element_divider">Divider</string>
+    <string name="toolbar_element_fit_mode">Fit mode</string>
     <string name="no_undo_to_perform">Nothing to undo</string>
     <string name="no_redo_to_perform">Nothing to redo</string>
     <string name="toolbar_eraser">Eraser</string>
+    <!-- Sheet fit: how a finite sheet is scaled to the screen. Wording is provisional while the
+         icons are placeholders, so these are untranslated for now (a lint warning at most). -->
+    <string name="toolbar_fit_mode">Fit mode</string>
+    <string name="toolbar_fit_mode_fit_to_width">Fit to width</string>
+    <string name="toolbar_fit_mode_real">Real size</string>
     <string name="details_notebook_buttons_cancel">Cancel</string>
     <string name="details_notebook_buttons_create">Create</string>
     <string name="details_notebook_pageMode">Page mode</string>

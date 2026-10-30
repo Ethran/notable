@@ -57,6 +57,34 @@ data class ToolbarLayout(
         return ToolbarLayout(cleanScrollable, cleanPinned)
     }
 
+    /**
+     * This layout with [entry] placed directly after [after], when it places [after] but not [entry]:
+     * how an element added in a later version reaches layouts users saved before it existed without
+     * rewriting the order they chose. The new entry joins whichever zone holds [after].
+     *
+     * Returns this layout unchanged when there is nothing to add — [entry] is already placed
+     * (including by a user who added it themselves), or [after] is absent, which covers a user who
+     * deliberately hid the anchor element: seeding next to something they removed would ignore that.
+     *
+     * Callers run this **once**, not on every load, and persist the result: run repeatedly it would
+     * resurrect the button a user removed. [validated] deliberately does not do it — validation runs
+     * on every commit from the toolbar editor, where re-adding would fight the user.
+     */
+    fun withSeeded(entry: ToolbarElementId, after: ToolbarElementId): ToolbarLayout {
+        val name = entry.name
+        val anchor = after.name
+        if (name in scrollable || name in pinned) return this
+        val inScrollable = scrollable.indexOf(anchor)
+        if (inScrollable >= 0) {
+            return copy(scrollable = scrollable.toMutableList().apply { add(inScrollable + 1, name) })
+        }
+        val inPinned = pinned.indexOf(anchor)
+        if (inPinned >= 0) {
+            return copy(pinned = pinned.toMutableList().apply { add(inPinned + 1, name) })
+        }
+        return this
+    }
+
     companion object {
         /** References the stable seed ids of [ToolbarPen.DEFAULT_PENS]. */
         val DEFAULT = ToolbarLayout(
@@ -64,6 +92,7 @@ data class ToolbarLayout(
                 "PEN:ball", "PEN:red", "PEN:blue", "PEN:green", "PEN:pencil", "PEN:brush",
                 "PEN:fountain", "SHAPE", "DIVIDER", "PEN:marker", "DIVIDER", "ERASER",
                 "DIVIDER", "SELECT", "DIVIDER", "IMAGE", "DIVIDER", "PASTE", "RESET_VIEW",
+                "FIT_MODE",
             ),
             pinned = listOf(
                 "DIVIDER", "UNDO", "REDO", "DIVIDER", "PAGE_NAV", "HOME", "DIVIDER", "MENU",

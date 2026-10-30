@@ -6,6 +6,7 @@ import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.PageLeases
 import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.PageViewport
@@ -33,17 +34,18 @@ import java.util.UUID
  * Width in pixels of the [pageMode] sheet on the current display.
  *
  * The tests derive their viewport sizes from this value instead of hardcoding pixels, so the
- * "sheet is narrower/wider than the viewport" precondition holds on any screen density. The
- * fixtures keep the viewport's width a whole sheet width away from the sheet, well past the 5mm
- * tolerance [com.ethran.notable.ui.sheetAdjustedWidth] snaps at, so this is also the width [PageView]
- * lays the sheet out at.
+ * "sheet is narrower/wider than the viewport" precondition holds on any screen density. It is also
+ * exactly the width [PageView] lays the sheet out at: a sheet is never snapped to the viewport, so
+ * these fixtures stay a whole sheet width away from the screen edge unless a fit mode deliberately
+ * scales the sheet to it.
  */
 internal fun sheetWidthInPixels(pageMode: PageMode, context: Context): Float =
     convertPointsToPixel(pageMode.width, context)
 
 /**
  * A notebook holding one page on a [pageMode] sheet, stored [savedScrollX] across and
- * [savedScrollY] down it, in page pixels; returns the page id. A page keeps no zoom in the
+ * [savedScrollY] down it, in page pixels, with the notebook's per-orientation [fitPortrait] /
+ * [fitLandscape] fit; returns the page id. A page keeps no zoom in the
  * database: a view holds that in memory for as long as it shows the page.
  */
 internal suspend fun seedSheetPage(
@@ -51,10 +53,19 @@ internal suspend fun seedSheetPage(
     pageMode: PageMode,
     savedScrollY: Int = 0,
     savedScrollX: Int = 0,
+    fitPortrait: FitMode = FitMode.REAL,
+    fitLandscape: FitMode = FitMode.REAL,
 ): String {
     val notebookId = UUID.randomUUID().toString()
     val pageId = UUID.randomUUID().toString()
-    db.notebookDao().create(Notebook(id = notebookId, title = "Sheet viewport test"))
+    db.notebookDao().create(
+        Notebook(
+            id = notebookId,
+            title = "Sheet viewport test",
+            fitPortrait = fitPortrait,
+            fitLandscape = fitLandscape,
+        ),
+    )
     db.pageDao().create(
         Page(
             id = pageId,
@@ -167,12 +178,14 @@ internal class PageViewFixture internal constructor(
 
 /**
  * Starts the page data layer as the app wires it, seeds one page on a [pageMode] sheet stored
- * [savedScrollY] down, and opens a [PageView] of it at [viewWidth] x [viewHeight].
+ * [savedScrollY] down with the notebook's [fitPortrait] / [fitLandscape] fit, and opens a [PageView]
+ * of it at [viewWidth] x [viewHeight].
  *
- * The view opens its page unzoomed — with the sheet centred in the view when the sheet is narrower
- * than it, and at the page's saved scroll (`PageView.viewportToShow`). Nothing else can be given to
- * a fresh view: zoom lives in the view, not in the page record, and a screen bitmap worth reusing
- * only gets onto the page's shelf when another view leaves the page (`disposeOldPage`).
+ * The view opens its page at the zoom its fit prescribes for that size — unzoomed with the sheet
+ * centred under REAL, sheet spanning the width under FIT_TO_WIDTH — at the page's saved scroll
+ * (`PageView.viewportToShow`). Nothing else can be given to a fresh view: zoom lives in the view,
+ * not in the page record, and a screen bitmap worth reusing only gets onto the page's shelf when
+ * another view leaves the page (`disposeOldPage`).
  */
 internal fun createPageViewForTest(
     context: Context,
@@ -181,10 +194,14 @@ internal fun createPageViewForTest(
     viewHeight: Int,
     savedScrollY: Int = 0,
     savedScrollX: Int = 0,
+    fitPortrait: FitMode = FitMode.REAL,
+    fitLandscape: FitMode = FitMode.REAL,
 ): PageViewFixture {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val data = PageDataTestHarness(context)
-    val pageId = runBlocking { seedSheetPage(data.db, pageMode, savedScrollY, savedScrollX) }
+    val pageId = runBlocking {
+        seedSheetPage(data.db, pageMode, savedScrollY, savedScrollX, fitPortrait, fitLandscape)
+    }
     val pageLeases = PageLeases(data.pageDataManager)
     val page = PageView(
         context = context,
