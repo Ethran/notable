@@ -673,22 +673,6 @@ class PageView(
         return scrollToCenterSheet
     }
 
-    /** The largest horizontal page-space delta from [start] that keeps the sheet inside the view. */
-    private fun maxAllowedScrollX(pageMode: PageMode?, start: PageViewport, deltaInX: Float): Float {
-        if (pageMode == null || pageMode == PageMode.INFINITE) return deltaInX
-        val maxScrollX = scrollToCenterSheet(pageMode, start.zoom)
-        val deltaOutX =
-            if (start.scroll.x + deltaInX > maxScrollX) maxScrollX - start.scroll.x else deltaInX
-        log.d(
-            """
-                Scroll x: ${start.scroll.x}
-                Delta in x: $deltaInX
-                Delta out x: $deltaOutX
-            """.trimIndent()
-        )
-        return deltaOutX
-    }
-
     /**
      * A scroll x that keeps [pageMode]'s sheet inside the view at [zoom], close to [scrollX]:
      * exactly centred when the sheet leaves slack at the sides, and clamped to the sheet when the
@@ -707,31 +691,29 @@ class PageView(
         val start = viewportStart(pageId) ?: return
         // drag delta is in screen coordinates,
         // so we have to scale it back to page coordinates.
-        var deltaInPage = Offset(dragDelta.x / start.zoom, dragDelta.y / start.zoom)
+        val deltaInPage = Offset(dragDelta.x / start.zoom, dragDelta.y / start.zoom)
 
         log.d("Delta in page coordinates: $deltaInPage")
 
-        // Cut, so we won't shift outside the screen.
-        if (start.scroll.x + deltaInPage.x < 0) {
-            deltaInPage = deltaInPage.copy(x = -start.scroll.x)
-        }
-        if (start.scroll.y + deltaInPage.y < 0) {
-            deltaInPage = deltaInPage.copy(y = -start.scroll.y)
-        }
-
-        // Keep the sheet inside the view: it cannot be scrolled past its edges.
-        val sheetMode = pageMode
-        if (sheetMode != null && sheetMode != PageMode.INFINITE) {
-            deltaInPage = deltaInPage.copy(x = maxAllowedScrollX(sheetMode, start, deltaInPage.x))
-        }
+        // Where the drag is allowed to land the view, on both axes: never past the page's top left
+        // corner, and with the sheet kept inside the view — centred when it leaves slack at the
+        // sides, clamped to its edges when the view does, and free horizontally on an infinite page.
+        val next = start.copy(
+            scroll = Offset(
+                x = fitScrollX(pageMode, start.scroll.x + deltaInPage.x, start.zoom),
+                y = (start.scroll.y + deltaInPage.y).coerceAtLeast(0f),
+            ),
+        )
+        // The shift below moves the screen by the drag, so the drag is cut to what the landing
+        // allows: zero on a centred sheet, which cannot be moved sideways at all.
+        val allowed = next.scroll - start.scroll
 
         // There is nothing to do, return.
-        if (deltaInPage == Offset.Zero) return
+        if (allowed == Offset.Zero) return
 
-        val next = start.copy(scroll = start.scroll + deltaInPage)
         if (!commitViewport(pageId, next)) return
         // To avoid rounding errors, we just calculate it again.
-        val movement = (deltaInPage * start.zoom)
+        val movement = (allowed * start.zoom)
         if (movement.toIntOffset() == IntOffset.Zero) return
 
         val width = windowedBitmap.width

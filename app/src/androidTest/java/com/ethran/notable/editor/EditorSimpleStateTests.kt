@@ -228,6 +228,46 @@ class EditorSimpleStateTests {
     }
 
     /**
+     * A sheet narrower than the view has one x at any zoom — the centring one — and a sideways drag
+     * from either side cannot move it. The clamp that keeps it there is applied twice per drag, once
+     * to the page's left edge and once to the sheet, so this pins what the pair produces together at
+     * a zoom other than 1, where the two bounds differ.
+     */
+    @Test(timeout = 60_000)
+    fun updateScroll_holdsZoomedOutNarrowSheetCentred_againstDragsFromEitherSide() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sheetWidth = sheetWidthInPixels(PageMode.A6, context)
+        val viewWidth = (sheetWidth * 2f).toInt()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.A6,
+            viewWidth = viewWidth,
+            viewHeight = (viewWidth * 0.6f).toInt(),
+        )
+        fixture.awaitInitialization()
+
+        // Zoomed out, so the page area the view covers is wider than the sheet, and the sheet has
+        // even more slack at its sides than it did at zoom 1.
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(0f, 40f)) }
+        fixture.onMain { fixture.page.simpleUpdateZoom(fixture.pageId, -0.5f) }
+        val zoom = fixture.page.zoom
+        assertTrue("the page was zoomed: $zoom", zoom != 1f)
+        val centered = -((viewWidth / zoom) - sheetWidth) / 2f
+        assertEquals(centered, fixture.page.scroll.x, 0.01f)
+
+        // Pulling the sheet right, then pushing it left: it stays centred either way, and the
+        // vertical position takes the drag, a screen delta divided by the zoom into page space.
+        val yAfterFirstDrag = 40f + 30f / zoom
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(-150f, 30f)) }
+        assertEquals("dragged left at zoom $zoom", centered, fixture.page.scroll.x, 0.01f)
+        assertEquals(yAfterFirstDrag, fixture.page.scroll.y, 0.01f)
+
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(150f, 0f)) }
+        assertEquals("dragged right at zoom $zoom", centered, fixture.page.scroll.x, 0.01f)
+        assertEquals(yAfterFirstDrag, fixture.page.scroll.y, 0.01f)
+    }
+
+    /**
      * Zooming re-fits the sheet: the slack at the sides depends on the zoom, so the view centers the
      * sheet again at the new zoom instead of holding the scroll it had, and keeps its vertical
      * position.
