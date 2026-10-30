@@ -388,10 +388,6 @@ fun drawDotPattern(canvas: Canvas, rect: Rect, scale: Float) {
             }
         }
 
-        paginationLinePaint.pathEffect = DashPathEffect(
-            floatArrayOf(10f, 10f), // dash length, gap length
-            0f
-        )
         var startX = 0f
         startX = if (rect.left == 0) { // if left rectangle
             rect.right.toFloat()
