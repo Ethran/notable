@@ -55,6 +55,93 @@ private const val PRESSURE_FACTOR = 0.5f
  */
 private const val STROKE_SAVE_BATCH_SIZE = 500
 
+// -----------------------------------------------------------------------------------------
+// Float parsing — zero per-stroke allocation after warm-up
+//
+// Outside XoppFile because they run for every number in a file: a test that mocks XoppFile
+// makes MockK intercept every call to its methods, which would slow later imports ten-fold.
+// -----------------------------------------------------------------------------------------
+
+/**
+ * Parses whitespace-separated floats from [input] into [buf], growing [buf] only when
+ * the current capacity is exhausted. Returns the (possibly grown) buffer and the count
+ * of values written.
+ *
+ * Single-pass, no preliminary space-count scan, no intermediate String or List
+ * allocation. The caller keeps the returned buffer reference across calls so it survives
+ * as a long-lived object and is never re-allocated once it has grown to the maximum
+ * stroke size encountered.
+ */
+private fun extractFloatsInto(input: CharSequence, buf: FloatArray): Pair<FloatArray, Int> {
+    var result = buf
+    var resultIdx = 0
+    val len = input.length
+    var start = 0
+
+    while (start < len) {
+        while (start < len && input[start].isWhitespace()) start++
+        if (start >= len) break
+
+        var end = start
+        while (end < len && !input[end].isWhitespace()) end++
+
+        try {
+            val value = parseCoordinateFast(input, start, end)
+            if (resultIdx == result.size) {
+                result = result.copyOf(result.size * 2)
+            }
+            result[resultIdx++] = value
+        } catch (_: Exception) {
+            // Ignore malformed tokens
+        }
+        start = end
+    }
+    return result to resultIdx
+}
+
+/**
+ * Parses a standard decimal float directly from a [CharSequence] slice [[start], [end])
+ * without allocating an intermediate String. Falls back to [String.toFloat] only for
+ * rare scientific-notation values (e.g. "1.5e-3").
+ */
+private fun parseCoordinateFast(input: CharSequence, start: Int, end: Int): Float {
+    var isNegative = false
+    var i = start
+    if (i < end && input[i] == '-') {
+        isNegative = true
+        i++
+    } else if (i < end && input[i] == '+') {
+        i++
+    }
+
+    var intPart = 0.0
+    var fraction = 0.0
+    var divisor = 1.0
+    var isFraction = false
+
+    while (i < end) {
+        when (val c = input[i]) {
+            '.' -> isFraction = true
+            in '0'..'9' -> {
+                val digit = c - '0'
+                if (isFraction) {
+                    divisor *= 10.0
+                    fraction += digit / divisor
+                } else {
+                    intPart = intPart * 10.0 + digit
+                }
+            }
+            // Scientific notation is rare; only then pay the allocation cost
+            'e', 'E' -> return input.subSequence(start, end).toString().toFloat()
+            else -> return input.subSequence(start, end).toString().toFloat()
+        }
+        i++
+    }
+
+    val finalValue = (intPart + fraction).toFloat()
+    return if (isNegative) -finalValue else finalValue
+}
+
 class XoppFile @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val pageRepo: PageRepository,
@@ -423,90 +510,6 @@ class XoppFile @Inject constructor(
         }
 
         return images
-    }
-
-    // -----------------------------------------------------------------------------------------
-    // Float parsing — zero per-stroke allocation after warm-up
-    // -----------------------------------------------------------------------------------------
-
-    /**
-     * Parses whitespace-separated floats from [input] into [buf], growing [buf] only when
-     * the current capacity is exhausted. Returns the (possibly grown) buffer and the count
-     * of values written.
-     *
-     * Single-pass, no preliminary space-count scan, no intermediate String or List
-     * allocation. The caller keeps the returned buffer reference across calls so it survives
-     * as a long-lived object and is never re-allocated once it has grown to the maximum
-     * stroke size encountered.
-     */
-    private fun extractFloatsInto(input: CharSequence, buf: FloatArray): Pair<FloatArray, Int> {
-        var result = buf
-        var resultIdx = 0
-        val len = input.length
-        var start = 0
-
-        while (start < len) {
-            while (start < len && input[start].isWhitespace()) start++
-            if (start >= len) break
-
-            var end = start
-            while (end < len && !input[end].isWhitespace()) end++
-
-            try {
-                val value = parseCoordinateFast(input, start, end)
-                if (resultIdx == result.size) {
-                    result = result.copyOf(result.size * 2)
-                }
-                result[resultIdx++] = value
-            } catch (_: Exception) {
-                // Ignore malformed tokens
-            }
-            start = end
-        }
-        return result to resultIdx
-    }
-
-    /**
-     * Parses a standard decimal float directly from a [CharSequence] slice [[start], [end])
-     * without allocating an intermediate String. Falls back to [String.toFloat] only for
-     * rare scientific-notation values (e.g. "1.5e-3").
-     */
-    private fun parseCoordinateFast(input: CharSequence, start: Int, end: Int): Float {
-        var isNegative = false
-        var i = start
-        if (i < end && input[i] == '-') {
-            isNegative = true
-            i++
-        } else if (i < end && input[i] == '+') {
-            i++
-        }
-
-        var intPart = 0.0
-        var fraction = 0.0
-        var divisor = 1.0
-        var isFraction = false
-
-        while (i < end) {
-            when (val c = input[i]) {
-                '.' -> isFraction = true
-                in '0'..'9' -> {
-                    val digit = c - '0'
-                    if (isFraction) {
-                        divisor *= 10.0
-                        fraction += digit / divisor
-                    } else {
-                        intPart = intPart * 10.0 + digit
-                    }
-                }
-                // Scientific notation is rare; only then pay the allocation cost
-                'e', 'E' -> return input.subSequence(start, end).toString().toFloat()
-                else -> return input.subSequence(start, end).toString().toFloat()
-            }
-            i++
-        }
-
-        val finalValue = (intPart + fraction).toFloat()
-        return if (isNegative) -finalValue else finalValue
     }
 
     // -----------------------------------------------------------------------------------------
