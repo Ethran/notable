@@ -1,0 +1,72 @@
+name: PR Android Tests Label
+on:
+  workflow_run:
+    workflows: ["PR Android Tests"]
+    types: [completed]
+permissions: {}
+# Runs from the default branch, so a PR can't change what runs here with write access.
+jobs:
+  # After every run, forks and cancelled runs included: removes the label, so it can be added
+  # again to rerun, and links the run from one PR comment that each run updates. Finds the PR
+  # from the run itself, and reads nothing the PR produced: the comment holds only GitHub's own
+  # conclusion and URL for the run.
+  follow-up:
+    if: github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove Label and Comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const run = context.payload.workflow_run
+            if (!run.head_repository) return
+            const { owner, repo } = context.repo
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${run.head_repository.owner.login}:${run.head_branch}`,
+            })
+            // The API returns every PR when head is malformed.
+            const fromRun = pull =>
+              pull.head.repo?.full_name === run.head_repository.full_name && pull.head.ref === run.head_branch
+
+            const marker = '<!-- android-tests-result -->'
+            const commit = run.head_sha.slice(0, 7)
+            const result =
+              run.conclusion === 'success' ? `✅ Android tests passed on ${commit}: [run](${run.html_url})`
+              : run.conclusion === 'failure' ? `❌ Android tests failed on ${commit}: [see failing tests](${run.html_url})`
+              : `⚠️ Android tests ${run.conclusion} on ${commit}: [run](${run.html_url})`
+            const body = `${marker}\n${result}`
+
+            for (const pull of pulls.filter(fromRun)) {
+              if (pull.labels.some(label => label.name === 'run-android-tests')) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: pull.number,
+                    name: 'run-android-tests',
+                  })
+                } catch (error) {
+                  // Already removed, by someone else or another run.
+                  if (error.status !== 404) throw error
+                }
+              }
+
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: pull.number,
+                per_page: 100,
+              })
+              // Only this workflow's own comment, not one that copies the marker.
+              const previous = comments.find(comment =>
+                comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(marker))
+              if (previous) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body })
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: pull.number, body })
+              }
+            }
