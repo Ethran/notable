@@ -72,18 +72,20 @@ private const val STROKE_SAVE_BATCH_SIZE = 500
  * as a long-lived object and is never re-allocated once it has grown to the maximum
  * stroke size encountered.
  */
-private fun extractFloatsInto(input: CharSequence, buf: FloatArray): Pair<FloatArray, Int> {
+private fun extractFloatsInto(input: String, buf: FloatArray): Pair<FloatArray, Int> {
     var result = buf
     var resultIdx = 0
     val len = input.length
     var start = 0
 
+    // XML whitespace (space, tab, CR, LF) is all at or below ' ', and this test is much cheaper
+    // than Char.isWhitespace.
     while (start < len) {
-        while (start < len && input[start].isWhitespace()) start++
+        while (start < len && input[start] <= ' ') start++
         if (start >= len) break
 
         var end = start
-        while (end < len && !input[end].isWhitespace()) end++
+        while (end < len && input[end] > ' ') end++
 
         try {
             val value = parseCoordinateFast(input, start, end)
@@ -100,11 +102,11 @@ private fun extractFloatsInto(input: CharSequence, buf: FloatArray): Pair<FloatA
 }
 
 /**
- * Parses a standard decimal float directly from a [CharSequence] slice [[start], [end])
+ * Parses a standard decimal float directly from a [String] slice [[start], [end])
  * without allocating an intermediate String. Falls back to [String.toFloat] only for
  * rare scientific-notation values (e.g. "1.5e-3").
  */
-private fun parseCoordinateFast(input: CharSequence, start: Int, end: Int): Float {
+private fun parseCoordinateFast(input: String, start: Int, end: Int): Float {
     var isNegative = false
     var i = start
     if (i < end && input[i] == '-') {
@@ -131,9 +133,8 @@ private fun parseCoordinateFast(input: CharSequence, start: Int, end: Int): Floa
                     intPart = intPart * 10.0 + digit
                 }
             }
-            // Scientific notation is rare; only then pay the allocation cost
-            'e', 'E' -> return input.subSequence(start, end).toString().toFloat()
-            else -> return input.subSequence(start, end).toString().toFloat()
+            // Anything else, such as scientific notation, is rare; only then pay the allocation cost
+            else -> return input.substring(start, end).toFloat()
         }
         i++
     }
@@ -160,9 +161,6 @@ class XoppFile @Inject constructor(
      * independent state with no risk of data races.
      */
     private class ParseState {
-        /** Accumulates the raw text content of a <stroke> element. Cleared, never re-created. */
-        val textBuffer = StringBuilder(256)
-
         /**
          * Reusable float storage for stroke point coordinates.
          * Grows to fit the largest stroke seen so far, then stays at that size.
@@ -532,22 +530,21 @@ class XoppFile @Inject constructor(
         state.widthsBuffer = newWidthsBuf
         val strokeSize = if (widthCount > 0) state.widthsBuffer[0] / scaleFactor else 1.0f
 
-        // Accumulate all TEXT children of <stroke> into the reusable buffer.
-        // setLength(0) resets the internal counter with zero allocation.
-        state.textBuffer.setLength(0)
+        // The text of <stroke>: almost always one TEXT event, which the parser already made a String.
+        var text = ""
         var eventType = parser.next()
         while (eventType != XmlPullParser.END_DOCUMENT &&
             !(eventType == XmlPullParser.END_TAG && parser.name == "stroke")
         ) {
             if (eventType == XmlPullParser.TEXT) {
-                state.textBuffer.append(parser.text)
+                text = if (text.isEmpty()) parser.text else text + parser.text
             }
             eventType = parser.next()
         }
 
         // Parse coordinate pairs into reusable buffer. copyOf only occurs when this stroke
         // is larger than any previously seen — after warm-up, no allocation at all.
-        val (newCoordsBuf, coordCount) = extractFloatsInto(state.textBuffer, state.coordsBuffer)
+        val (newCoordsBuf, coordCount) = extractFloatsInto(text, state.coordsBuffer)
         state.coordsBuffer = newCoordsBuf
         val pointsCount = coordCount / 2
 
