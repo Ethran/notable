@@ -169,7 +169,14 @@ class AppRepository @Inject constructor(
     ): String {
         val now = Date()
         pageRepository.create(
-            source.page.copy(id = id, notebookId = notebookId, scroll = 0, createdAt = now, updatedAt = now)
+            source.page.copy(
+                id = id,
+                notebookId = notebookId,
+                scrollY = 0,
+                scrollX = 0,
+                createdAt = now,
+                updatedAt = now
+            )
         )
         strokeRepository.create(source.strokes.map {
             it.copy(id = UUID.randomUUID().toString(), pageId = id, createdAt = now, updatedAt = now)

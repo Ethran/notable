@@ -308,14 +308,16 @@ class PageView(
     }
 
     /**
-     * The viewport [page] had when this view left it, or else unzoomed at its saved scroll, with its
-     * sheet centred in the view.
+     * The viewport [page] had when this view left it, or else unzoomed at its saved scroll. The saved
+     * x goes through [fitScrollX] rather than being taken as it was: a sheet is centred or clamped at
+     * this zoom whatever was saved, since the bound its x was saved inside depends on the zoom it was
+     * saved at, while an infinite page, which has no bound, keeps where the reader left it.
      */
     private fun viewportToShow(page: OpenPage): PageViewport = synchronized(pageLock) {
         leftPages[page.pageId] ?: PageViewport(
             scroll = Offset(
-                x = fitScrollX(page.pageMode, 0f, 1f),
-                y = (page.record?.scroll ?: 0).toFloat(),
+                x = fitScrollX(page.pageMode, (page.record?.scrollX ?: 0).toFloat(), 1f),
+                y = (page.record?.scrollY ?: 0).toFloat(),
             ),
         )
     }
@@ -1100,7 +1102,7 @@ class PageView(
         synchronized(pageLock) { viewportFlow.value.takeIf { !disposed && currentPageId == pageId } }
 
     /**
-     * Sets [pageId]'s viewport to [next] and records its vertical scroll for saving, if [pageId] is
+     * Sets [pageId]'s viewport to [next] and records its scroll, both axes, for saving, if [pageId] is
      * shown and has a record. Returns false, changing nothing, otherwise: another page is shown, no
      * page is shown yet, the page is missing, or the view is disposed.
      */
@@ -1111,7 +1113,10 @@ class PageView(
             if (disposed || shown.pageId != pageId || shown.record == null) return false
             viewportFlow.value = next
         }
-        pageDataManager.recordScroll(pageId, next.scroll.y.roundToInt())
+        pageDataManager.recordScroll(
+            pageId,
+            IntOffset(next.scroll.x.roundToInt(), next.scroll.y.roundToInt()),
+        )
         return true
     }
 

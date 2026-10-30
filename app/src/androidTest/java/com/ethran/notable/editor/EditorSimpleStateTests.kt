@@ -100,8 +100,9 @@ class EditorSimpleStateTests {
         viewWidth: Int,
         viewHeight: Int,
         savedScrollY: Int = 0,
+        savedScrollX: Int = 0,
     ): PageViewFixture =
-        createPageViewForTest(context, pageMode, viewWidth, viewHeight, savedScrollY)
+        createPageViewForTest(context, pageMode, viewWidth, viewHeight, savedScrollY, savedScrollX)
             .also { fixtures += it }
 
     /**
@@ -262,15 +263,118 @@ class EditorSimpleStateTests {
         assertEquals(42f, fixture.page.scroll.y, 0.01f)
     }
 
+    // ---------------------------------------------------------------------------
+    // The horizontal scroll in the page record
+    //
+    // A page's record keeps where it was last shown, on both axes, so closing the document and
+    // opening it again — a fresh view over the same record — comes back where the reader left it.
+    // Saving the axis is only meaningful where it is the reader's own: a sheet wider than the view
+    // and an infinite page can be held anywhere in their bounds, while a sheet narrower than the
+    // view has exactly one x, the centring one, which the fit derives whatever was saved.
+    // ---------------------------------------------------------------------------
+
+    /**
+     * A sheet wider than the view can be panned up to its far edge; that position is the reader's,
+     * so a reopened page has to be back there rather than at the sheet's left edge.
+     */
+    @Test(timeout = 60_000)
+    fun reopeningAView_restoresSavedScrollX_whenSheetIsWiderThanViewport() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sheetWidth = sheetWidthInPixels(PageMode.A5, context)
+        val viewWidth = (sheetWidth / 2f).toInt()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.A5,
+            viewWidth = viewWidth,
+            viewHeight = (viewWidth * 0.75f).toInt(),
+        )
+        fixture.awaitInitialization()
+
+        // Panned to the bound the sheet allows at this size.
+        val maxScrollX = sheetWidth - viewWidth
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(1000f, 0f)) }
+        assertEquals(maxScrollX, fixture.page.scroll.x, 0.01f)
+
+        // What closing the document does to the scroll: it gets saved.
+        fixture.data.pageSaver.saveAll()
+
+        fixture.page.disposeOldPage()
+        val reopened = fixture.newPageView()
+        fixture.awaitInitialization(reopened)
+        assertEquals(
+            "the reopened page is back at the sheet's far edge",
+            maxScrollX, reopened.viewport.value.scroll.x, 0.01f,
+        )
+    }
+
+    /** An infinite page has no bound at all, so its horizontal position is purely the reader's. */
+    @Test(timeout = 60_000)
+    fun reopeningAView_restoresSavedScrollX_forInfinitePageMode() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.INFINITE,
+            viewWidth = 900,
+            viewHeight = 700,
+            savedScrollY = 200,
+        )
+        fixture.awaitInitialization()
+
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(300f, 0f)) }
+        assertEquals(300f, fixture.page.scroll.x, 0.01f)
+
+        fixture.data.pageSaver.saveAll()
+
+        fixture.page.disposeOldPage()
+        val reopened = fixture.newPageView()
+        fixture.awaitInitialization(reopened)
+        assertEquals(
+            PageViewport(scroll = Offset(300f, 200f)),
+            reopened.viewport.value,
+        )
+    }
+
+    /**
+     * The axis the fit owns: a sheet narrower than the view has exactly one x, the centring one, so
+     * the saved value never gets to move the sheet. The page starts with an x saved far past its
+     * centring value, and the reopened page is centred just the same.
+     */
+    @Test(timeout = 60_000)
+    fun reopeningAView_keepsNarrowSheetCentred_afterItsScrollWasSaved() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sheetWidth = sheetWidthInPixels(PageMode.A6, context)
+        val viewWidth = (sheetWidth * 2f).toInt()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.A6,
+            viewWidth = viewWidth,
+            viewHeight = (viewWidth * 0.6f).toInt(),
+            savedScrollX = 5_000,
+        )
+        fixture.awaitInitialization()
+
+        val centeredScrollX = -(viewWidth - sheetWidth) / 2f
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(-100f, 42f)) }
+        assertEquals(centeredScrollX, fixture.page.scroll.x, 0.01f)
+        assertEquals(42f, fixture.page.scroll.y, 0.01f)
+
+        fixture.data.pageSaver.saveAll()
+
+        fixture.page.disposeOldPage()
+        val reopened = fixture.newPageView()
+        fixture.awaitInitialization(reopened)
+        assertEquals(PageViewport(scroll = Offset(centeredScrollX, 42f)), reopened.viewport.value)
+    }
+
     /**
      * Regression 99fc4fca: opening a page whose screen bitmap was still cached restored its zoom but
      * left the scroll at (0, 0). A page's screen now sits on the page's shelf together with the
      * viewport it shows, and a view opening that page takes it, at that viewport.
      *
      * The zoom half of that fix is gone by design: a page's zoom is kept in the views showing it,
-     * not in its record, and only its vertical scroll is saved — so a reopened page comes back
-     * unzoomed at its saved scroll. `PageViewportTest` covers that per-page viewport memory, so
-     * nothing here asserts a restored zoom any more.
+     * not in its record, while both of its scroll axes are saved — so a reopened page comes back
+     * unzoomed at the scroll it was left at. `PageViewportTest` covers that per-page viewport
+     * memory, so nothing here asserts a restored zoom any more.
      */
     @Test(timeout = 60_000)
     fun reopeningAView_restoresSavedScroll_andReusesTheCachedScreen() = runBlocking {

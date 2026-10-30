@@ -76,7 +76,8 @@ class Converters {
         AutoMigration(35, 36, spec = AutoMigration35to36::class),
         // Adds the nullable `remoteDirEtag` / `remoteDirServerKey` bulk-detection baseline columns.
         AutoMigration(36, 37),
-        AutoMigration(37, 38)
+        // Splits the page scroll into `scrollY` — the old `scroll`, renamed — and a new `scrollX`.
+        AutoMigration(37, 38, spec = AutoMigration37to38::class),
     ], exportSchema = true
 )
 @TypeConverters(Converters::class)

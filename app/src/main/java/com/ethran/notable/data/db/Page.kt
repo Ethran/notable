@@ -34,7 +34,13 @@ import javax.inject.Inject
     )]
 )
 data class Page(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(), val scroll: Int = 0,
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    // Where the page was last shown, in page coordinates, one column per axis. An axis the reader
+    // is free to move is worth saving; one the fit owns is re-derived on showing (PageView
+    // .viewportToShow), so its column only ever holds what the fit asked for.
+    val scrollY: Int = 0,
+    @ColumnInfo(defaultValue = "0")
+    val scrollX: Int = 0,
     @ColumnInfo(index = true) val notebookId: String? = null,
     @ColumnInfo(defaultValue = "blank") val background: String = "blank", // path or native subtype
     @ColumnInfo(defaultValue = "native") val backgroundType: String = "native", // image, imageRepeating, coverImage, native
@@ -71,8 +77,10 @@ interface PageDao {
     @Query("SELECT * FROM page WHERE id =:pageId")
     suspend fun getPageWithDataById(pageId: String): PageWithData?
 
-    @Query("UPDATE page SET scroll=:scroll WHERE id =:pageId")
-    suspend fun updateScroll(pageId: String, scroll: Int)
+    // One statement for both axes: they are committed together as one viewport, and writing a pair
+    // that did not change is cheaper than tracking which of the two did.
+    @Query("UPDATE page SET scrollY=:scrollY, scrollX=:scrollX WHERE id =:pageId")
+    suspend fun updateScroll(pageId: String, scrollY: Int, scrollX: Int)
 
     // Bump only the edit timestamp, without a read-modify-write of the whole row. updatedAt is
     // stored as epoch millis (Date <-> Long converter), so a Long here matches the column format.
@@ -104,8 +112,8 @@ class PageRepository @Inject constructor(
         return db.create(page)
     }
 
-    suspend fun updateScroll(id: String, scroll: Int) {
-        return db.updateScroll(id, scroll)
+    suspend fun updateScroll(id: String, scrollY: Int, scrollX: Int) {
+        return db.updateScroll(id, scrollY, scrollX)
     }
 
     /** Advance a page's edit timestamp — the per-page dirty signal for incremental sync. */

@@ -65,6 +65,18 @@ class AutoMigration31to32 : AutoMigrationSpec
 )
 class AutoMigration35to36 : AutoMigrationSpec
 
+// The page scroll is stored per axis now. `scroll` always held the vertical one, so it is renamed to
+// say so and its value carries over; `scrollX` is new, and every page starts it at 0, which is where
+// they have all been opening anyway.
+@RenameColumn.Entries(
+    RenameColumn(
+        tableName = "Page",
+        fromColumnName = "scroll",
+        toColumnName = "scrollY"
+    )
+)
+class AutoMigration37to38 : AutoMigrationSpec
+
 
 
 // Migration 32 -> 33:
