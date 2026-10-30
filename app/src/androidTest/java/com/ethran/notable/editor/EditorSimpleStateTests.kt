@@ -457,6 +457,11 @@ class EditorSimpleStateTests {
      * Companion of the fix above: recreating the canvas re-applied the zoom to it. A zoom fitted to
      * one viewport size fits no page at another, so a resize now drops it: the new screen is drawn
      * unzoomed, and the sheet is fitted — centered again — in the new width.
+     *
+     * This is the REAL fit mode, where the prescribed zoom is 1x. A notebook fitted to the width is
+     * re-fitted at the new size instead of dropped to 1x, which `FitModeViewportTests` pins
+     * (`fitToWidth_staysFittedThroughAResize`); a notebook's fit defaults to REAL, so the fixture here
+     * keeps the behaviour this test was written for.
      */
     @Test(timeout = 60_000)
     fun updateDimensions_recreatesTheScreenUnzoomedAndRefitsTheSheet() = runBlocking {

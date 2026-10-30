@@ -2,9 +2,11 @@ package com.ethran.notable.sync.serializers
 
 import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -153,6 +155,46 @@ class NotebookSerializerTest {
         val result = NotebookSerializer.deserializeManifest(legacyJson)
         assertTrue("expected Success, got $result", result is AppResult.Success)
         assertNull((result as AppResult.Success).data.pageMode)
+    }
+
+    @Test
+    fun manifest_round_trip_preserves_the_fit_modes() {
+        // The fit pair is a document preference, so it rides the manifest like `title`: a downloading
+        // device gets the same **intent** and applies it to its own viewport (the zoom it produces is
+        // its own, which is exactly why no zoom number is ever serialised).
+        val original = sampleNotebook().copy(
+            fitPortrait = FitMode.FIT_TO_WIDTH,
+            fitLandscape = FitMode.REAL,
+        )
+        val json = NotebookSerializer.serializeManifest(original)
+
+        val result = NotebookSerializer.deserializeManifest(json)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data
+        assertEquals(FitMode.FIT_TO_WIDTH, restored.fitPortrait)
+        assertEquals(FitMode.REAL, restored.fitLandscape)
+    }
+
+    @Test
+    fun deserializeManifest_reads_preFit_manifest_as_real() {
+        // Manifests written before the fit preference existed carry neither key. The DTO's defaults
+        // decode them to REAL — the sheet at its true size, which is what those clients showed.
+        val original = sampleNotebook().copy(
+            fitPortrait = FitMode.FIT_TO_WIDTH,
+            fitLandscape = FitMode.FIT_TO_WIDTH,
+        )
+        var json = NotebookSerializer.serializeManifest(original)
+        listOf("fitPortrait", "fitLandscape").forEach { key ->
+            json = json.replace(Regex(""""$key"\s*:\s*"FIT_TO_WIDTH"\s*,\s*\n"""), "")
+        }
+        assertFalse("expected both fit keys stripped, got: $json", "fitPortrait" in json)
+        assertFalse("expected both fit keys stripped, got: $json", "fitLandscape" in json)
+
+        val result = NotebookSerializer.deserializeManifest(json)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data
+        assertEquals(FitMode.REAL, restored.fitPortrait)
+        assertEquals(FitMode.REAL, restored.fitLandscape)
     }
 
     @Test

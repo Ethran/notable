@@ -236,12 +236,20 @@ class MigrationTest {
     fun migrate37To38_renamesScrollToScrollY_andAddsScrollXAtZero() {
         val dbName = "migration-test-38"
 
-        // 1. Create the v37 schema and seed a page scrolled down it, using the old column name.
+        // 1. Create the v37 schema and seed a page scrolled down it, using the old column name — plus
+        //    a notebook, which the current schema gives two more columns.
         val oldDb = helper.createDatabase(dbName, 37)
         oldDb.execSQL(
             """
             INSERT INTO Page (id, scroll, background, backgroundType, createdAt, updatedAt)
             VALUES ('page1', 750, 'blank', 'native', 1620000000000, 1620000000000)
+            """.trimIndent()
+        )
+        oldDb.execSQL(
+            """
+            INSERT INTO Notebook (id, title, pageIds, defaultBackground, defaultBackgroundType,
+                                  createdAt, updatedAt)
+            VALUES ('nb1', 'nb', '[]', 'blank', 'native', 1620000000000, 1620000000000)
             """.trimIndent()
         )
         oldDb.close()
@@ -265,6 +273,37 @@ class MigrationTest {
             assertTrue(it.moveToFirst())
             assertEquals(800, it.getInt(it.getColumnIndexOrThrow("scrollY")))
             assertEquals(120, it.getInt(it.getColumnIndexOrThrow("scrollX")))
+        }
+
+        // 5. The notebook also arrives with the two fit columns, defaulted to REAL — the sheet at its
+        //    true size, what a v37 database was already showing. This pins that the generated 37 -> 38
+        //    migration is built from the **current** entities, so an old database reaches the current
+        //    38 in one step instead of needing a migration for a schema that was never released.
+        migratedDb.query(
+            "SELECT fitPortrait, fitLandscape FROM Notebook WHERE id = 'nb1'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals("REAL", it.getString(it.getColumnIndexOrThrow("fitPortrait")))
+            assertEquals("REAL", it.getString(it.getColumnIndexOrThrow("fitLandscape")))
+        }
+
+        // 6. Room can read them back as the enum and write them through its own statement, so the
+        //    column really is the type the entity declares and not just a leftover string.
+        kotlinx.coroutines.runBlocking {
+            roomDb.notebookDao().setFitModes(
+                "nb1",
+                com.ethran.notable.data.model.FitMode.FIT_TO_WIDTH,
+                com.ethran.notable.data.model.FitMode.REAL,
+                java.util.Date(1620000009000),
+            )
+        }
+        migratedDb.query(
+            "SELECT fitPortrait, fitLandscape, updatedAt FROM Notebook WHERE id = 'nb1'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals("FIT_TO_WIDTH", it.getString(it.getColumnIndexOrThrow("fitPortrait")))
+            assertEquals("REAL", it.getString(it.getColumnIndexOrThrow("fitLandscape")))
+            assertEquals(1620000009000, it.getLong(it.getColumnIndexOrThrow("updatedAt")))
         }
 
         roomDb.close()

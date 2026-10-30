@@ -1,5 +1,8 @@
 package com.ethran.notable.editor.ui.toolbar.model
 
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
@@ -57,6 +60,34 @@ class ToolbarElementsTest {
         assertNull("Deleted preset must not resolve", ToolbarElements.resolve("PEN:gone", pens))
         assertNull("Bare PEN sentinel must not resolve", ToolbarElements.resolve("PEN", pens))
         assertNull(ToolbarElements.resolve("FROM_THE_FUTURE", pens))
+    }
+
+    @Test
+    fun `fit mode is offered only for a finite sheet of a notebook`() {
+        // The predicate mirrors the preconditions `PageView.setFitMode` checks, so the button never
+        // appears somewhere that clicking it would do nothing.
+        val fit = ToolbarElements.of(ToolbarElementId.FIT_MODE)
+        val settings = AppSettings(version = 1)
+
+        fun offered(notebookId: String?, pageMode: PageMode?) =
+            fit.visibleWhen(ToolbarUiState(notebookId = notebookId, pageMode = pageMode), settings)
+
+        assertTrue("a sheet page of a notebook", offered("nb", PageMode.A5))
+        assertFalse("an infinite canvas has no sheet to fit", offered("nb", PageMode.INFINITE))
+        assertFalse("a page with no sheet at all", offered("nb", null))
+        assertFalse(
+            "a page of no notebook — a quick page — has no row to store the preference on",
+            offered(null, PageMode.A5),
+        )
+    }
+
+    @Test
+    fun `fit mode button reads as selected only when a fit is in force`() {
+        // The collapsed toolbar has to show the fit without opening the popup, the way the eraser
+        // button shows the eraser type. REAL is "no fit", so it leaves the button unselected.
+        val fit = ToolbarElements.of(ToolbarElementId.FIT_MODE) as FitModeElement
+        assertFalse(fit.isSelected(ToolbarUiState(fitMode = FitMode.REAL)))
+        assertTrue(fit.isSelected(ToolbarUiState(fitMode = FitMode.FIT_TO_WIDTH)))
     }
 
     @Test

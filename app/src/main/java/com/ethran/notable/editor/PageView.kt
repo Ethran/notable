@@ -28,6 +28,7 @@ import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.canvas.CanvasEventBus.drawingInProgress
@@ -49,15 +50,18 @@ import com.ethran.notable.gestures.ZOOM_SENSITIVITY
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
-import com.ethran.notable.ui.sheetAdjustedWidth
+import com.ethran.notable.ui.convertPointsToPixel
 import com.ethran.notable.utils.onError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,6 +79,10 @@ const val OVERLAP = 2
 // Backgrounds are rendered this much larger than the current zoom so a small zoom-in reuses the
 // cached bitmap instead of re-rendering (trades a little memory/render cost for fewer reloads).
 private const val BACKGROUND_ZOOM_HEADROOM = 1.2f
+
+// Two zooms within this of each other are the same zoom. A fitted zoom is a division, so it is
+// compared with an epsilon rather than `==`; same tolerance as PreviewBitmapStore uses.
+private const val ZOOM_APPROX_EPSILON = 0.01f
 
 data class PageCutMoveResult(
     val previousStrokes: List<Stroke>,
@@ -164,6 +172,25 @@ class PageView(
     // steps change it through [commitViewport]. A resize resets its zoom.
     private val viewportFlow = MutableStateFlow(PageViewport())
     val viewport: StateFlow<PageViewport> = viewportFlow.asStateFlow()
+
+    /**
+     * The fit this view actually applies to the shown page: the notebook's preference for the
+     * orientation this view happens to be in. Published rather than left to the ViewModel because
+     * orientation lives here — a rotation changes it with no page change, and a toolbar menu reading
+     * the stored preference alone would tick the wrong entry until the page were reopened.
+     */
+    private val appliedFitModeFlow = MutableStateFlow(FitMode.REAL)
+    val appliedFitMode: StateFlow<FitMode> = appliedFitModeFlow.asStateFlow()
+
+    /**
+     * Whether the shown page sits at a zoom its active fit does not prescribe — the reader has
+     * pinched away from it, so a `Reset view` back to the fit is worth offering. This is what
+     * replaces the old "zoom isn't 1" rule: a page at its fitted zoom, or a REAL page at 1x, shows
+     * nothing, and either one does as soon as the reader wanders.
+     */
+    val needsResetView: Flow<Boolean> = viewportFlow
+        .map { !isApprox(it.zoom, prescribedZoom()) }
+        .distinctUntilChanged()
 
     // Top left corner of the view, in page coordinates.
     val scroll: Offset
@@ -316,15 +343,25 @@ class PageView(
      * for the old width, so a narrow sheet would come back off centre. [fitScrollX] centres or
      * clamps it for the width and zoom it is being shown at, and leaves an infinite page, which has
      * no bound, where the reader left it.
+     *
+     * A page shown for the first time — from the database, or in a new view — opens at the zoom its
+     * notebook's fit prescribes for this view's orientation, and at its saved vertical scroll: REAL
+     * opens unzoomed, FIT_TO_WIDTH opens with the sheet spanning the view. A page this view has
+     * already shown and left keeps the zoom the reader left it at, fit or no fit; the fit is a
+     * preference for how a page *starts*, not a leash on where the reader takes it.
      */
     private fun viewportToShow(page: OpenPage): PageViewport {
         val kept = synchronized(pageLock) { leftPages[page.pageId] }
-            ?: return PageViewport(
-                scroll = Offset(
-                    x = fitScrollX(page.pageMode, (page.record?.scrollX ?: 0).toFloat(), 1f),
-                    y = (page.record?.scrollY ?: 0).toFloat(),
-                ),
-            )
+            ?: run {
+                val zoom = prescribedZoom(page.fitModeFor(isLandscape), page.pageMode)
+                return PageViewport(
+                    scroll = Offset(
+                        x = fitScrollX(page.pageMode, (page.record?.scrollX ?: 0).toFloat(), zoom),
+                        y = (page.record?.scrollY ?: 0).toFloat(),
+                    ),
+                    zoom = zoom,
+                )
+            }
         return kept.copy(scroll = kept.scroll.copy(x = fitScrollX(page.pageMode, kept.scroll.x, kept.zoom)))
     }
 
@@ -351,6 +388,8 @@ class PageView(
             lease = pageLeases.acquire(page.pageId)
             previous?.close()
 
+            // Which fit is in force follows this view's orientation, so it is settled with the page.
+            appliedFitModeFlow.value = page.fitModeFor(isLandscape)
             val shown = viewportToShow(page)
             leftPages.remove(page.pageId)
             // A resize since the bitmap was drawn changed the view's size or the page's zoom. Left
@@ -658,13 +697,47 @@ class PageView(
         get() = openPage.pageMode
 
     /**
+     * Whether this view is wider than tall: the orientation the notebook's fit preference is keyed
+     * by. Read from the view's own size, not the device's, so a split-screen or a rotated-but-not
+     * yet re-laid-out view fits the way it actually looks.
+     */
+    private val isLandscape: Boolean
+        get() = viewWidth > viewHeight
+
+    /**
+     * The zoom that makes [pageMode]'s sheet exactly as wide as this view, clamped to the zoom the
+     * gestures allow so an extreme sheet/viewport mismatch cannot ask for a scale the reader can
+     * never pinch back from. Fitting is a zoom, never a resize of the sheet: its physical proportions
+     * stay true, which is what the removed viewport-width clamp used to break.
+     *
+     * A sheet wider than the view is therefore scaled *down* below 1x — that is what fitting it to
+     * the width means — and an infinite page, which has no sheet, is left at 1x.
+     */
+    private fun fitZoom(pageMode: PageMode?): Float {
+        if (pageMode == null || pageMode == PageMode.INFINITE) return 1f
+        val sheetWidth = convertPointsToPixel(pageMode.width, context)
+        if (sheetWidth <= 0f) return 1f
+        return (viewWidth / sheetWidth).coerceIn(MIN_ZOOM, MAX_ZOOM)
+    }
+
+    /** The zoom [mode] prescribes for [pageMode] in this view. */
+    private fun prescribedZoom(mode: FitMode, pageMode: PageMode?): Float =
+        if (mode == FitMode.FIT_TO_WIDTH) fitZoom(pageMode) else 1f
+
+    /** The zoom the fit currently applied to the shown page prescribes here. */
+    private fun prescribedZoom(): Float = prescribedZoom(appliedFitModeFlow.value, pageMode)
+
+    /** Two zooms equal enough to be the same one; see [ZOOM_APPROX_EPSILON]. */
+    private fun isApprox(a: Float, b: Float): Boolean = abs(a - b) <= ZOOM_APPROX_EPSILON
+
+    /**
      * The largest scroll x that keeps [pageMode]'s sheet inside a view of this width at [zoom]:
      * with the sheet narrower than the view it is the negative half-slack that centres the sheet,
      * with the sheet wider it is the sheet's far edge, and for an infinite page it is 0.
      */
     private fun scrollToCenterSheet(pageMode: PageMode?, zoom: Float): Float {
         if (pageMode == null || pageMode == PageMode.INFINITE) return 0f
-        val sheetWidth = sheetAdjustedWidth(viewWidth, pageMode.width, context)
+        val sheetWidth = convertPointsToPixel(pageMode.width, context)
         val viewportWidth = viewWidth / zoom
         val scrollAvailable = sheetWidth - viewportWidth
         val scrollToCenterSheet = if (scrollAvailable >= 0) scrollAvailable else scrollAvailable / 2f
@@ -815,17 +888,72 @@ class PageView(
     }
 
     /**
-     * Unzooms the page and takes it back to its left edge, centring the sheet when it is narrower
-     * than the view, and keeping its vertical scroll.
+     * Takes the page back to the viewport its active fit prescribes — at the sheet's left edge,
+     * centring the sheet when it is narrower than the view, and keeping its vertical scroll.
+     *
+     * It resolves that viewport itself rather than taking a zoom from its caller, so a reset on a
+     * fitted page returns it to the fitted zoom instead of fighting the setting the user just chose.
      */
     suspend fun resetView(pageId: String) {
         waitForDrawingWithSnack()
         val start = viewportStart(pageId) ?: return
         val sheetMode = pageMode
+        val zoom = prescribedZoom()
         redrawAt(
             pageId,
             PageViewport(
-                scroll = Offset(fitScrollX(sheetMode, 0f, 1f), start.scroll.y),
+                scroll = Offset(fitScrollX(sheetMode, 0f, zoom), start.scroll.y),
+                zoom = zoom,
+            ),
+        )
+    }
+
+    /**
+     * Stores [mode] as this notebook's fit for the orientation the view is in right now — leaving the
+     * other orientation's preference alone — and moves the shown page to the viewport the new fit
+     * prescribes, re-fitting scroll x and keeping vertical scroll.
+     *
+     * Pinching and scrolling never come through here: the mode is a preference, not a live mirror of
+     * the viewport, which is what keeps [needsResetView] meaningful once the reader wanders.
+     *
+     * A no-op when there is nothing to store the preference on — an infinite page, which has no sheet
+     * to fit, or a page of no notebook, which has no row to hold it (quick pages are exactly that).
+     */
+    suspend fun setFitMode(pageId: String, mode: FitMode) {
+        waitForDrawingWithSnack()
+        val start = viewportStart(pageId) ?: return
+        val page = openPage.takeIf { it.pageId == pageId && it.record != null } ?: return
+        val sheetMode = page.pageMode ?: return
+        if (sheetMode == PageMode.INFINITE) return
+        val notebookId = page.record?.notebookId ?: return
+
+        // The orientation is read once, and the same value decides both which column is written and
+        // what the view does next, so the two cannot disagree mid-step.
+        val landscape = isLandscape
+        val fitPortrait = if (landscape) page.fitPortrait else mode
+        val fitLandscape = if (landscape) mode else page.fitLandscape
+
+        try {
+            appRepository.bookRepository.setFitModes(notebookId, fitPortrait, fitLandscape)
+        } catch (e: Exception) {
+            log.e("Could not save fit mode $mode on notebook $notebookId", e)
+            return
+        }
+
+        // The snapshot carries the fit every later step reads (rotation, reset, the toolbar's tick),
+        // so it moves with the row, not after it.
+        synchronized(pageLock) {
+            openPageRef.get()?.takeIf { it.pageId == pageId }
+                ?.let { openPageRef.set(it.copy(fitPortrait = fitPortrait, fitLandscape = fitLandscape)) }
+            appliedFitModeFlow.value = mode
+        }
+
+        val zoom = prescribedZoom(mode, sheetMode)
+        redrawAt(
+            pageId,
+            PageViewport(
+                scroll = Offset(fitScrollX(sheetMode, 0f, zoom), start.scroll.y),
+                zoom = zoom,
             ),
         )
     }
@@ -1050,19 +1178,28 @@ class PageView(
     /**
      * Resizes the screen bitmap. The zoom that fitted the old size fits no page at the new size, and
      * a sheet needs re-centring in the new width, so every page this view holds is re-fitted.
+     *
+     * Re-fitting re-applies the active fit rather than dropping every page to 1x: a sheet fitted to
+     * the width stays fitted through a rotation — at the new width's zoom, which is the whole point of
+     * storing an intent instead of a zoom — and a REAL sheet still goes to 1x, as it always did.
+     * Pages left behind get the same treatment, at the shown page's sheet geometry: their own sheet
+     * sizes are not held here, and a notebook's pages share its sheet.
      */
     private fun updateCanvasDimensions() {
         checkMainThread("updateDimensions")
         // A zoom fitted to the old size does not fit the new one, on any page.
         synchronized(pageLock) {
             val sheetMode = openPage.pageMode
+            // The new size can be the other way round, and the fit follows the view, not the page.
+            appliedFitModeFlow.value = openPage.fitModeFor(isLandscape)
+            val zoom = prescribedZoom(appliedFitModeFlow.value, sheetMode)
             viewportFlow.update { shown ->
                 shown.copy(
-                    scroll = Offset(fitScrollX(sheetMode, shown.scroll.x, 1f), shown.scroll.y),
-                    zoom = 1f,
+                    scroll = Offset(fitScrollX(sheetMode, shown.scroll.x, zoom), shown.scroll.y),
+                    zoom = zoom,
                 )
             }
-            leftPages.replaceAll { _, left -> left.copy(zoom = 1f) }
+            leftPages.replaceAll { _, left -> left.copy(zoom = zoom) }
         }
         // The re-fit moves the shown page's scroll, so it is recorded like any other step's: a
         // resize the reader never scrolls after must not leave the pre-resize scroll in the page.

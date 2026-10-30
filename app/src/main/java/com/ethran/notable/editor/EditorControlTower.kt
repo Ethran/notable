@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.state.ClipboardStore
 import com.ethran.notable.editor.state.History
@@ -195,6 +196,22 @@ class EditorControlTower(
         val pageId = page.currentPageId
         scope.launch {
             scrollInProgress.withLock { page.resetView(pageId) }
+            // Request UI update
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
+        }
+    }
+
+    /**
+     * Saves [mode] as the notebook's fit for the orientation the view is in and takes the page to the
+     * viewport that fit prescribes. Nothing is resolved here: [PageView.setFitMode] is what knows the
+     * sheet, the notebook and the orientation, and no-ops when there is nothing to store the
+     * preference on. [resetZoomAndScroll] needs no counterpart change — `resetView` resolves the
+     * prescribed viewport itself now.
+     */
+    fun setFitMode(mode: FitMode) {
+        val pageId = page.currentPageId
+        scope.launch {
+            scrollInProgress.withLock { page.setFitMode(pageId, mode) }
             // Request UI update
             CanvasEventBus.refreshUiImmediately.emit(Unit)
         }

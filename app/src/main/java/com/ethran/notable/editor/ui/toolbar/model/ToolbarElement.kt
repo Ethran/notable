@@ -3,6 +3,7 @@ package com.ethran.notable.editor.ui.toolbar.model
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
@@ -94,6 +95,22 @@ data class ModeElement(
     val submenu: SubmenuSpec? = null,
 ) : ToolbarElement {
     override fun isSelected(state: ToolbarUiState): Boolean = state.mode == mode
+}
+
+/**
+ * The sheet-fit button: one button, one popup listing the [FitMode]s. It is not a [Mode] tool — it
+ * changes how the page is shown, not what a touch does — so it is its own element rather than a
+ * member of the mode group. Selected means a fit other than the default is in force, which is what
+ * lets the collapsed toolbar show the fit the way [ModeElement] shows the active tool.
+ */
+data class FitModeElement(
+    override val id: ToolbarElementId,
+    override val icon: IconRef,
+    override val contentDescription: String,
+    override val visibleWhen: VisibleWhen = ALWAYS,
+    val submenu: FitModeSubmenuSpec,
+) : ToolbarElement {
+    override fun isSelected(state: ToolbarUiState): Boolean = state.fitMode != FitMode.REAL
 }
 
 /** Stateless action buttons: undo, redo, paste, reset view, home, toolbar toggle. */

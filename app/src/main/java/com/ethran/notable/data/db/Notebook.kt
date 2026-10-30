@@ -11,6 +11,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.FitMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.Flow
 import java.io.File
@@ -42,6 +43,20 @@ data class Notebook(
     val defaultBackgroundType: String = "native",
 
     val pageMode: PageMode? = null,
+
+    /**
+     * How the notebook's sheets are fitted to the viewport, one preference per orientation.
+     *
+     * Per-notebook because every page of a notebook inherits its `pageMode` (see [newPage]), so one
+     * pair drives every page — while each page still computes its own zoom from its own sheet.
+     * Stored as an intent, never a zoom number, so the value carries across rotations and screens
+     * (see [FitMode]).
+     */
+    @ColumnInfo(defaultValue = "REAL")
+    val fitPortrait: FitMode = FitMode.REAL,
+
+    @ColumnInfo(defaultValue = "REAL")
+    val fitLandscape: FitMode = FitMode.REAL,
 
     // File that it's linked to:
     val linkedExternalUri: String? = null,
@@ -88,6 +103,17 @@ interface NotebookDao {
 
     @Query("UPDATE notebook SET parentFolderId=:folderId, updatedAt=:updatedAt WHERE id=:notebookId")
     suspend fun setParentFolder(notebookId: String, folderId: String?, updatedAt: Date)
+
+    // The fit pair, written whole so the orientation the user did not change is preserved.
+    //
+    // Unlike [setOpenPageId], which is device-local and deliberately leaves the timestamp alone,
+    // this advances updatedAt: a fit is a document preference that must reach the manifest, and
+    // updatedAt against the sync anchor is the only thing the planner compares — without the bump
+    // the notebook stays SYNCED and the change is never uploaded. That is the opposite of
+    // Page.updateScroll, where the timestamp is left alone precisely so that scrolling never
+    // dirties a page.
+    @Query("UPDATE notebook SET fitPortrait=:fitPortrait, fitLandscape=:fitLandscape, updatedAt=:updatedAt WHERE id=:notebookId")
+    suspend fun setFitModes(notebookId: String, fitPortrait: FitMode, fitLandscape: FitMode, updatedAt: Date)
 
     // Advances updatedAt alongside pageIds so a structural change (add/remove/reorder) marks the
     // notebook dirty for sync — otherwise the change would not be detected and could be lost.
@@ -208,6 +234,19 @@ class BookRepository @Inject constructor(
 
     suspend fun setParentFolder(id: String, folderId: String?) {
         notebookDao.setParentFolder(id, folderId, Date())
+    }
+
+    /**
+     * Saves the notebook's per-orientation sheet fit, bumping `updatedAt` so the manifest is
+     * re-published — see [NotebookDao.setFitModes] for why that differs from [setOpenPageId].
+     */
+    suspend fun setFitModes(
+        id: String,
+        fitPortrait: FitMode,
+        fitLandscape: FitMode,
+        updatedAt: Date = Date(),
+    ) {
+        notebookDao.setFitModes(id, fitPortrait, fitLandscape, updatedAt)
     }
 
     suspend fun addPage(bookId: String, pageId: String, index: Int? = null) {

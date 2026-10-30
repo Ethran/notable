@@ -19,7 +19,6 @@ import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.utils.scaleRect
 import com.ethran.notable.ui.convertPointsToPixel
 import com.ethran.notable.ui.sideBarsRectangles
-import com.ethran.notable.ui.sheetAdjustedWidth
 import com.onyx.android.sdk.extension.copy
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.cos
@@ -436,9 +435,7 @@ fun drawPaginationLine(
     if (pageMode == null || pageMode == PageMode.INFINITE) return
 
     val sheetHeightPixels = convertPointsToPixel(pageMode.height, context)
-    val sheetAdjustedWidth = sheetAdjustedWidth(
-        canvas.width, pageMode.width, context
-    )
+    val sheetWidth = convertPointsToPixel(pageMode.width, context)
 
 
     // Convert scroll position to canvas coordinates
@@ -450,10 +447,10 @@ fun drawPaginationLine(
 
     val residualScrollX = scroll.x
     val startX = -residualScrollX
-    val stopX = -residualScrollX + sheetAdjustedWidth
+    val stopX = -residualScrollX + sheetWidth
     log.d(
         """
-    Sheet adj width $sheetAdjustedWidth, scrollX $residualScrollX
+    Sheet width $sheetWidth, scrollX $residualScrollX
     StartX $startX, stopX $stopX
     """.trimIndent()
     )

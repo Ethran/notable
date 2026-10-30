@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 38,
-    "identityHash": "c9e21b7e2aef2e3f04c356f442dcaf11",
+    "identityHash": "fe5bc0c33122b52a92409d2dc6f3aa97",
     "entities": [
       {
         "tableName": "Folder",
@@ -71,7 +71,7 @@
       },
       {
         "tableName": "Notebook",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `openPageId` TEXT, `pageIds` TEXT NOT NULL, `parentFolderId` TEXT, `defaultBackground` TEXT NOT NULL DEFAULT 'blank', `defaultBackgroundType` TEXT NOT NULL DEFAULT 'native', `pageMode` TEXT, `linkedExternalUri` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`parentFolderId`) REFERENCES `Folder`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `openPageId` TEXT, `pageIds` TEXT NOT NULL, `parentFolderId` TEXT, `defaultBackground` TEXT NOT NULL DEFAULT 'blank', `defaultBackgroundType` TEXT NOT NULL DEFAULT 'native', `pageMode` TEXT, `fitPortrait` TEXT NOT NULL DEFAULT 'REAL', `fitLandscape` TEXT NOT NULL DEFAULT 'REAL', `linkedExternalUri` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`parentFolderId`) REFERENCES `Folder`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -119,6 +119,20 @@
             "fieldPath": "pageMode",
             "columnName": "pageMode",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fitPortrait",
+            "columnName": "fitPortrait",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'REAL'"
+          },
+          {
+            "fieldPath": "fitLandscape",
+            "columnName": "fitLandscape",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'REAL'"
           },
           {
             "fieldPath": "linkedExternalUri",
@@ -630,7 +644,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c9e21b7e2aef2e3f04c356f442dcaf11')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fe5bc0c33122b52a92409d2dc6f3aa97')"
     ]
   }
 }
