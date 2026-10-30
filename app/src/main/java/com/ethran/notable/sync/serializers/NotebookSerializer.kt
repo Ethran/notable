@@ -57,6 +57,7 @@ object NotebookSerializer {
             parentFolderId = notebook.parentFolderId,
             defaultBackground = notebook.defaultBackground,
             defaultBackgroundType = notebook.defaultBackgroundType,
+            pageMode = notebook.pageMode,
             linkedExternalUri = notebook.linkedExternalUri,
             createdAt = notebook.createdAt.toInstant().toString(),
             updatedAt = notebook.updatedAt.toInstant().toString(),
@@ -91,6 +92,7 @@ object NotebookSerializer {
                     parentFolderId = manifestDto.parentFolderId,
                     defaultBackground = manifestDto.defaultBackground,
                     defaultBackgroundType = manifestDto.defaultBackgroundType,
+                    pageMode = manifestDto.pageMode,
                     linkedExternalUri = manifestDto.linkedExternalUri,
                     createdAt = createdAt,
                     updatedAt = updatedAt
@@ -348,6 +350,8 @@ object NotebookSerializer {
         val parentFolderId: String?,
         val defaultBackground: String,
         val defaultBackgroundType: String,
+        // Defaults to null so manifests written before page modes existed still decode.
+        val pageMode: PageMode? = null,
         val linkedExternalUri: String?,
         val createdAt: String,
         val updatedAt: String,

@@ -1,5 +1,6 @@
 package com.ethran.notable.sync.serializers
 
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -25,6 +26,7 @@ class NotebookSerializerTest {
         pageIds: List<String> = listOf("p-1", "p-2"),
         openPageId: String? = "p-1",
         parentFolderId: String? = "folder-1",
+        pageMode: PageMode? = PageMode.A4,
         linkedExternalUri: String? = null,
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
@@ -36,6 +38,7 @@ class NotebookSerializerTest {
         parentFolderId = parentFolderId,
         defaultBackground = "blank",
         defaultBackgroundType = "native",
+        pageMode = pageMode,
         linkedExternalUri = linkedExternalUri,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -59,6 +62,7 @@ class NotebookSerializerTest {
         assertEquals(original.parentFolderId, restored.parentFolderId)
         assertEquals(original.defaultBackground, restored.defaultBackground)
         assertEquals(original.defaultBackgroundType, restored.defaultBackgroundType)
+        assertEquals(original.pageMode, restored.pageMode)
         assertEquals(original.linkedExternalUri, restored.linkedExternalUri)
         // ISO 8601 round-trip is millisecond-precise — exact equality is reasonable here.
         assertEquals(original.createdAt, restored.createdAt)
@@ -70,6 +74,7 @@ class NotebookSerializerTest {
         val original = sampleNotebook(
             openPageId = null,
             parentFolderId = null,
+            pageMode = null,
             linkedExternalUri = null,
             pageIds = emptyList(),
         )
@@ -80,6 +85,7 @@ class NotebookSerializerTest {
 
         assertNull(restored.openPageId)
         assertNull(restored.parentFolderId)
+        assertNull(restored.pageMode)
         assertNull(restored.linkedExternalUri)
         assertEquals(emptyList<String>(), restored.pageIds)
     }
@@ -133,6 +139,20 @@ class NotebookSerializerTest {
         val result = NotebookSerializer.deserializeManifest(augmented)
         assertTrue("expected Success, got $result", result is AppResult.Success)
         assertEquals(original.id, (result as AppResult.Success).data.id)
+    }
+
+    @Test
+    fun deserializeManifest_reads_prePageMode_manifest_as_null_pageMode() {
+        // Manifests written before page modes existed carry no `pageMode` key; the DTO's default
+        // must decode them to null rather than fail or invent a mode.
+        val original = sampleNotebook(pageMode = PageMode.A4)
+        val json = NotebookSerializer.serializeManifest(original)
+        assertTrue("expected a pageMode line in the manifest: $json", Regex(""""pageMode"\s*:\s*"A4"\s*,\s*\n""").containsMatchIn(json))
+        val legacyJson = json.replace(Regex(""""pageMode"\s*:\s*"A4"\s*,\s*\n"""), "")
+
+        val result = NotebookSerializer.deserializeManifest(legacyJson)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        assertNull((result as AppResult.Success).data.pageMode)
     }
 
     @Test
