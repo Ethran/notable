@@ -1064,6 +1064,16 @@ class PageView(
             }
             leftPages.replaceAll { _, left -> left.copy(zoom = 1f) }
         }
+        // The re-fit moves the shown page's scroll, so it is recorded like any other step's: a
+        // resize the reader never scrolls after must not leave the pre-resize scroll in the page.
+        val shown = openPage
+        if (shown.record != null) {
+            val scroll = viewportFlow.value.scroll
+            pageDataManager.recordScroll(
+                shown.pageId,
+                IntOffset(scroll.x.roundToInt(), scroll.y.roundToInt()),
+            )
+        }
         // Blank at the new size, rather than read from disk on the main thread; the redraw below
         // fills it.
         windowedBitmap = createBitmap(viewWidth, viewHeight).apply { eraseColor(Color.WHITE) }
