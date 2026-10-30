@@ -34,6 +34,7 @@ import com.ethran.notable.testing.createPageViewForTest
 import com.ethran.notable.testing.seedLooseSheetPage
 import com.ethran.notable.testing.sheetWidthInPixels
 import com.ethran.notable.ui.SnackDispatcher
+import com.ethran.notable.utils.AppResult
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @RunWith(AndroidJUnit4::class)
 class EditorSimpleStateTests {
@@ -532,6 +534,47 @@ class EditorSimpleStateTests {
         assertEquals(
             "the page left behind is centered in the new width too",
             centeredInNew, fixture.page.scroll.x, 0.01f,
+        )
+    }
+
+    /**
+     * A resize re-fits the shown page's scroll, and a re-fit changes the scroll the way a drag or a
+     * zoom does, so it has to be recorded too. Otherwise the page keeps the scroll it had at the old
+     * size: the row reports where the reader was before the rotation rather than where the sheet
+     * actually sits now, for anything that reads it — a reopen, an export, a preview, a sync.
+     */
+    @Test(timeout = 60_000)
+    fun updateDimensions_recordsTheScrollItRefits() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sheetWidth = sheetWidthInPixels(PageMode.A5, context)
+        val viewWidth = (sheetWidth / 2f).toInt()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.A5,
+            viewWidth = viewWidth,
+            viewHeight = (viewWidth * 0.75f).toInt(),
+        )
+        fixture.awaitInitialization()
+
+        // Panned to the sheet's far edge at the old size, a scroll the view does record.
+        fixture.onMain { fixture.page.updateScroll(fixture.pageId, Offset(1000f, 0f)) }
+        val pannedScrollX = (sheetWidth - viewWidth).roundToInt()
+        assertEquals(pannedScrollX.toFloat(), fixture.page.scroll.x, 0.01f)
+        assertEquals(AppResult.Success(Unit), fixture.data.pageSaver.saveAll())
+        assertEquals(pannedScrollX, fixture.data.db.pageDao().getById(fixture.pageId)!!.scrollX)
+
+        // A much wider view: the sheet now leaves slack, so the re-fit centres it — a different x.
+        val newWidth = (sheetWidth * 2f).toInt()
+        fixture.onMain { fixture.page.updateDimensions(newWidth, (newWidth * 0.75f).toInt()) }
+        val refitScrollX = -(newWidth - sheetWidth) / 2f
+        assertEquals(refitScrollX, fixture.page.scroll.x, 0.01f)
+
+        // The row says what the reader sees, to the whole page pixel the column keeps.
+        assertEquals(AppResult.Success(Unit), fixture.data.pageSaver.saveAll())
+        assertEquals(
+            "the re-fitted scroll is the one stored",
+            refitScrollX.roundToInt(),
+            fixture.data.db.pageDao().getById(fixture.pageId)!!.scrollX,
         )
     }
 
