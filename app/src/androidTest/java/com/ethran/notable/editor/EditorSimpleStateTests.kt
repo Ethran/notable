@@ -31,6 +31,7 @@ import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.testing.PageViewFixture
 import com.ethran.notable.testing.TestDatabaseFactory
 import com.ethran.notable.testing.createPageViewForTest
+import com.ethran.notable.testing.seedLooseSheetPage
 import com.ethran.notable.testing.sheetWidthInPixels
 import com.ethran.notable.ui.SnackDispatcher
 import io.mockk.mockk
@@ -490,6 +491,48 @@ class EditorSimpleStateTests {
             -(newWidth - sheetWidth) / 2f, fixture.page.scroll.x, 0.01f,
         )
         assertEquals("the vertical scroll is kept", 60f, fixture.page.scroll.y, 0.01f)
+    }
+
+    /**
+     * The resize re-fits the page it shows, and it must re-fit the pages it has shown and left too:
+     * those keep the viewport they were left at, and a page coming back takes that viewport as it
+     * stands rather than fitting it again. So a viewport kept for another page is fitted for the old
+     * view width unless the resize re-fits it, and a narrow sheet ends up off centre in the new one.
+     */
+    @Test(timeout = 60_000)
+    fun updateDimensions_refitsTheSheetOfPagesLeftBehindToo() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sheetWidth = sheetWidthInPixels(PageMode.A6, context)
+        val viewWidth = (sheetWidth * 2f).toInt()
+        val fixture = createPageView(
+            context = context,
+            pageMode = PageMode.A6,
+            viewWidth = viewWidth,
+            viewHeight = (viewWidth * 0.6f).toInt(),
+        )
+        fixture.awaitInitialization()
+
+        // A second sheet page, shown once so the view holds the viewport it was left at, then left
+        // for the first page again: the first page is the shown one when the size changes.
+        val otherPageId = seedLooseSheetPage(fixture.data.db, PageMode.A6)
+        fixture.showPage(otherPageId)
+        fixture.showPage(fixture.pageId)
+
+        val newWidth = (sheetWidth * 1.2f).toInt()
+        val newHeight = (sheetWidth * 0.9f).toInt()
+        fixture.onMain { fixture.page.updateDimensions(newWidth, newHeight) }
+        val centeredInNew = -(newWidth - sheetWidth) / 2f
+        assertEquals(
+            "the shown page is centered in the new width",
+            centeredInNew, fixture.page.scroll.x, 0.01f,
+        )
+
+        // The other page was never shown at the new size, so the view still holds its old viewport.
+        fixture.showPage(otherPageId)
+        assertEquals(
+            "the page left behind is centered in the new width too",
+            centeredInNew, fixture.page.scroll.x, 0.01f,
+        )
     }
 
     private fun createEditorViewModelForTest(context: Context, db: AppDatabase): EditorViewModel {
