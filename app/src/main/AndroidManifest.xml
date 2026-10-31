@@ -26,6 +26,7 @@
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize"
+            android:launchMode="singleTask"
             android:exported="true"
             android:theme="@style/Theme.Inka"
             android:hardwareAccelerated="true">
