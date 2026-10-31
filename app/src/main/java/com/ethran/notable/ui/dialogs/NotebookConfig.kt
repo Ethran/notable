@@ -366,19 +366,19 @@ fun NotebookConfigDialog(
                     copyLink(context, DeepLink.Book(bookId), book!!.title, snackManager::showOrUpdateSnack)
                 }
                 if (!isNewlyCreated) {
-                    ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
+                    ActionButton(stringResource(R.string.details_notebook_buttons_duplicate)) {
                         scope.launch {
                             try {
-                                snackManager.runWithSnack("Copying notebook...", 2000) {
+                                snackManager.runWithSnack("Duplicating notebook...", 2000) {
                                     val newNotebookId = appRepository.duplicateNotebook(bookId)
-                                    if (newNotebookId != null) "Notebook copied."
-                                    else "Copy failed: notebook not found."
+                                    if (newNotebookId != null) "Notebook duplicated."
+                                    else "Duplicating failed: notebook not found."
                                 }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 // runWithSnack has already shown the error to the user.
-                                log.e("Notebook copy failed: ${e.message}", e)
+                                log.e("Duplicating notebook failed: ${e.message}", e)
                             }
                         }
                     }
