@@ -220,9 +220,6 @@ fun EditorView(
         }
 
         // Sync PageView state to ViewModel for Toolbar rendering.
-        // Both flows are already `distinctUntilChanged` in the view, which is what keeps this cheap:
-        // collecting the viewport itself — or even its zoom — would recompose the toolbar on every
-        // scroll step, while a boolean and an enum only change when the toolbar must.
         val needsResetView by remember(page) { page.needsResetView }
             .collectAsStateWithLifecycle(initialValue = false)
         val appliedFitMode by remember(page) { page.appliedFitMode }
@@ -235,9 +232,6 @@ fun EditorView(
                 "EditorView: needsResetView=$needsResetView, fitMode=$appliedFitMode, " +
                         "selectionActive=$selectionActive"
             )
-            // "The zoom isn't 1" is no longer the test: the view reports when the shown zoom is not
-            // the one the active fit prescribes. The fit comes from the view too, so the popup's tick
-            // follows a rotation without waiting for a page change.
             viewModel.setShowResetView(needsResetView)
             viewModel.setAppliedFitMode(appliedFitMode)
             viewModel.setSelectionActive(selectionActive)

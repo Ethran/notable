@@ -23,11 +23,6 @@ data class OpenPage(
     val record: Page? = null,
     /** Position within the notebook, or -1 for a loose page or before [load]. */
     val pageNumber: Int = -1,
-    /**
-     * How the notebook this page belongs to wants its sheets fitted, per orientation. REAL for a
-     * loose page, which has no notebook to hold a preference (and no sheet of its own to fit when
-     * it is infinite).
-     */
     val fitPortrait: FitMode = FitMode.REAL,
     val fitLandscape: FitMode = FitMode.REAL,
 ) {
@@ -41,10 +36,6 @@ data class OpenPage(
     val pageMode: PageMode?
         get() = record?.pageMode
 
-    /**
-     * The fit this page should be shown at in the given orientation. Callers never branch on
-     * orientation themselves — the view knows its size, and says which way round it is.
-     */
     fun fitModeFor(isLandscape: Boolean): FitMode = if (isLandscape) fitLandscape else fitPortrait
 
     /**
@@ -69,8 +60,6 @@ data class OpenPage(
                 log.e("Page($pageId) not found")
                 return OpenPage(pageId)
             }
-            // The notebook is already here for the page's position, so carrying its fit across
-            // costs no extra query.
             val notebook = record.notebookId?.let { appRepository.bookRepository.getById(it) }
             val pageNumber = notebook?.pageIds?.indexOf(pageId) ?: -1
             return OpenPage(

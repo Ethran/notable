@@ -112,9 +112,7 @@ fun BackgroundSelector(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // -------------------------------------------------------------------------
-    // Draft state - nothing is persisted until Confirm is pressed
-    // -------------------------------------------------------------------------
+    // Draft state: persisted only on Confirm.
     var pageBackground by remember {
         mutableStateOf(initialPageBackground)
     }
@@ -153,10 +151,6 @@ fun BackgroundSelector(
         mutableStateOf(false)
     }
 
-    /**
-     * Update only the local draft.
-     * No call to onChange() happens here.
-     */
     fun updateDraft(
         type: BackgroundType,
         background: String
@@ -182,9 +176,7 @@ fun BackgroundSelector(
         }
     }
 
-    // -------------------------------------------------------------------------
     // Image picker
-    // -------------------------------------------------------------------------
     val pickMedia =
         rememberLauncherForActivityResult(
             contract = PickVisualMedia()
@@ -216,7 +208,6 @@ fun BackgroundSelector(
                     )
 
                     withContext(Dispatchers.Main) {
-                        // Only update draft state.
                         updateDraft(
                             type = currentType,
                             background = copiedFile.toString()
@@ -241,9 +232,7 @@ fun BackgroundSelector(
             }
         }
 
-    // -------------------------------------------------------------------------
     // PDF picker
-    // -------------------------------------------------------------------------
     val pickPdf =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument()
@@ -279,7 +268,6 @@ fun BackgroundSelector(
                     )
 
                     withContext(Dispatchers.Main) {
-                        // Only update draft state.
                         updateDraft(
                             type = currentType,
                             background = copiedFile.toString()
@@ -303,13 +291,10 @@ fun BackgroundSelector(
             }
         }
 
-    // -------------------------------------------------------------------------
     // Confirm / Cancel
-    // -------------------------------------------------------------------------
     fun confirm() {
         if (isCopyingFile) return
 
-        // Persist the final draft only here.
         onChange(
             pageBackgroundType.key,
             pageBackground
@@ -323,8 +308,6 @@ fun BackgroundSelector(
     }
 
     fun cancel() {
-        // We intentionally do not call onChange().
-        // Local draft state is discarded when the dialog closes.
         onClose()
     }
 
@@ -347,9 +330,7 @@ fun BackgroundSelector(
                 )
         ) {
 
-            // -----------------------------------------------------------------
             // Background mode buttons
-            // -----------------------------------------------------------------
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -399,9 +380,7 @@ fun BackgroundSelector(
                     .background(Color.Black)
             )
 
-            // -----------------------------------------------------------------
             // Main content
-            // -----------------------------------------------------------------
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -412,9 +391,7 @@ fun BackgroundSelector(
             ) {
                 when (selectedBackgroundMode) {
 
-                    // ---------------------------------------------------------
                     // IMAGE
-                    // ---------------------------------------------------------
                     "Image" -> {
                         val currentBackgroundType =
                             if (
@@ -433,7 +410,6 @@ fun BackgroundSelector(
                             currentBackgroundType = currentBackgroundType,
 
                             onBackgroundChange = { background, type ->
-                                // Draft only
                                 updateDraft(
                                     type = type,
                                     background = background
@@ -486,8 +462,7 @@ fun BackgroundSelector(
                                                 BackgroundType.Image
                                             }
 
-                                        // Keep the selected image while changing
-                                        // only the type.
+                                        // Keep the image when changing only the type.
                                         updateDraft(
                                             type = newType,
                                             background = pageBackground
@@ -498,9 +473,7 @@ fun BackgroundSelector(
                         }
                     }
 
-                    // ---------------------------------------------------------
                     // COVER
-                    // ---------------------------------------------------------
                     "Cover" -> {
                         ShowImageOption(
                             currentBackground = pageBackground,
@@ -508,7 +481,6 @@ fun BackgroundSelector(
                                 BackgroundType.CoverImage,
 
                             onBackgroundChange = { background, type ->
-                                // Draft only
                                 updateDraft(
                                     type = type,
                                     background = background
@@ -525,9 +497,7 @@ fun BackgroundSelector(
                         )
                     }
 
-                    // ---------------------------------------------------------
                     // NATIVE
-                    // ---------------------------------------------------------
                     "Native" -> {
                         ShowNativeOption(
                             currentBackground = pageBackground,
@@ -535,7 +505,6 @@ fun BackgroundSelector(
                                 BackgroundType.Native,
 
                             onBackgroundChange = { background, type ->
-                                // Draft only
                                 updateDraft(
                                     type = type,
                                     background = background
@@ -544,9 +513,7 @@ fun BackgroundSelector(
                         )
                     }
 
-                    // ---------------------------------------------------------
                     // PDF
-                    // ---------------------------------------------------------
                     "PDF" -> {
                         val currentBackgroundType =
                             if (
@@ -563,7 +530,6 @@ fun BackgroundSelector(
                             type: BackgroundType,
                             background: String
                         ) {
-                            // Draft only
                             updateDraft(
                                 type = type,
                                 background = background
@@ -606,9 +572,7 @@ fun BackgroundSelector(
                 }
             }
 
-            // -----------------------------------------------------------------
             // Bottom action buttons
-            // -----------------------------------------------------------------
             Box(
                 modifier = Modifier
                     .height(0.5.dp)

@@ -58,17 +58,9 @@ data class ToolbarLayout(
     }
 
     /**
-     * This layout with [entry] placed directly after [after], when it places [after] but not [entry]:
-     * how an element added in a later version reaches layouts users saved before it existed without
-     * rewriting the order they chose. The new entry joins whichever zone holds [after].
-     *
-     * Returns this layout unchanged when there is nothing to add — [entry] is already placed
-     * (including by a user who added it themselves), or [after] is absent, which covers a user who
-     * deliberately hid the anchor element: seeding next to something they removed would ignore that.
-     *
-     * Callers run this **once**, not on every load, and persist the result: run repeatedly it would
-     * resurrect the button a user removed. [validated] deliberately does not do it — validation runs
-     * on every commit from the toolbar editor, where re-adding would fight the user.
+     * This layout with [entry] placed directly after [after], in whichever zone holds [after].
+     * Returns this layout unchanged when [entry] is already placed or [after] is absent.
+     * Call once and persist the result.
      */
     fun withSeeded(entry: ToolbarElementId, after: ToolbarElementId): ToolbarLayout {
         val name = entry.name

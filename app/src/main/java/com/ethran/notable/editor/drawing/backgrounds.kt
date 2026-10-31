@@ -318,8 +318,7 @@ fun drawBg(
                     )
                 }
             }
-            // The sheet is narrower than the view: cover the slack either side with the dot
-            // pattern, so it reads as a sheet on a desk rather than as part of the page.
+            // Calculate the size of the sidebar rectangles and apply the dot pattern
             for (rect in sideBarsRectangles(pageMode, canvas.width, canvas.height, scale, context)) {
                 drawDotPattern(canvas, rect, scale)
             }

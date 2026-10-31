@@ -181,9 +181,7 @@ class LibraryViewModel @Inject constructor(
         _openCreateNewNotebookDialog.value = true
     }
 
-    /**
-     * Create a new document and open it
-     */
+    // Creates a new document and opens it
     fun createNotebook(
         title: String,
         backgroundType: String,

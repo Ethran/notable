@@ -69,11 +69,6 @@ data class AppSettings(
     // User-created pen instances; layouts reference them as "PEN:<id>". The preset is the
     // single source of truth for a pen's color/size — StrokeMenu edits write back here.
     val toolbarPens: List<ToolbarPen> = ToolbarPen.DEFAULT_PENS,
-    /**
-     * One-shot marker for the toolbar layout seeds applied when settings are loaded (see
-     * [withSeededToolbarLayout]). They must run exactly once: reapplied on every launch they would
-     * resurrect a button the user deliberately removed.
-     */
     val toolbarLayoutSeeded: Boolean = false,
     val uiScale: Float = 1.0f, // Scale factor for the entire UI
 
@@ -114,13 +109,7 @@ data class AppSettings(
 }
 
 /**
- * [AppSettings] with the toolbar layout seeds applied and [AppSettings.toolbarLayoutSeeded] set, so
- * an element introduced in a later version reaches layouts the user saved before it existed (see
- * [ToolbarLayout.withSeeded]) without disturbing the order they chose.
- *
- * Returns the same value when there is nothing to do, which is how callers tell that no write is
- * needed. A user who never customised the toolbar needs nothing: `toolbarLayout` is null, so
- * [ToolbarLayout.DEFAULT] is used and it already places the element.
+ * [AppSettings] with the toolbar layout seeds applied, or the same value when there is nothing to seed.
  */
 fun AppSettings.withSeededToolbarLayout(): AppSettings {
     if (toolbarLayoutSeeded) return this

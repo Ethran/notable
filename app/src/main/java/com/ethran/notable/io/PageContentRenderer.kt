@@ -91,7 +91,7 @@ class PageContentRenderer @Inject constructor(
         } ?: Native
     }
 
-    private fun drawBgExport( // Used for when exporting file
+    private fun drawBgExport( // used when exporting
         canvas: Canvas,
         backgroundType: BackgroundType,
         background: String,
@@ -111,7 +111,7 @@ class PageContentRenderer @Inject constructor(
         }
 
         when (backgroundType) {
-            // draw native background for it we don't need a resource
+            // native background: no resource needed
             is BackgroundType.Native -> {
                 when (background) {
                     "blank" -> canvas.drawColor(Color.WHITE)
@@ -120,9 +120,7 @@ class PageContentRenderer @Inject constructor(
                     "squared" -> drawSquaredBg(canvas, scroll, scale)
                     "hexed" -> drawHexedBg(canvas, scroll, scale)
                     else -> {
-                        // Reaching the Native branch with an unknown value usually means the *type*
-                        // detection misclassified a non-native background (e.g. a .pdf) as Native, not
-                        // that the string is merely unknown — surface the type so it's obvious.
+                        // unknown native key: the background type was probably misdetected
                         throw IllegalArgumentException(
                             "Unknown native background '$background' (type=$backgroundType)"
                         )

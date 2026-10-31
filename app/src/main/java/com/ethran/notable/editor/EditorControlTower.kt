@@ -201,13 +201,7 @@ class EditorControlTower(
         }
     }
 
-    /**
-     * Saves [mode] as the notebook's fit for the orientation the view is in and takes the page to the
-     * viewport that fit prescribes. Nothing is resolved here: [PageView.setFitMode] is what knows the
-     * sheet, the notebook and the orientation, and no-ops when there is nothing to store the
-     * preference on. [resetZoomAndScroll] needs no counterpart change — `resetView` resolves the
-     * prescribed viewport itself now.
-     */
+    // Fit page to the desired FitMode
     fun setFitMode(mode: FitMode) {
         val pageId = page.currentPageId
         scope.launch {

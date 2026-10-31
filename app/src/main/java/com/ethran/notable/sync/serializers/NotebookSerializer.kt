@@ -96,8 +96,6 @@ object NotebookSerializer {
                     defaultBackground = manifestDto.defaultBackground,
                     defaultBackgroundType = manifestDto.defaultBackgroundType,
                     pageMode = manifestDto.pageMode,
-                    // A downloaded fit is an intent, not a zoom: the receiving device applies it to
-                    // its own viewport, so the same manifest means different pixels per screen.
                     fitPortrait = manifestDto.fitPortrait,
                     fitLandscape = manifestDto.fitLandscape,
                     linkedExternalUri = manifestDto.linkedExternalUri,
@@ -146,8 +144,6 @@ object NotebookSerializer {
             backgroundType = page.backgroundType,
             parentFolderId = page.parentFolderId,
             pageMode = page.pageMode,
-            // The wire keys keep the older shape: `scroll` is the vertical scroll every client
-            // already writes, and `scrollX` defaults to 0 for the page files they left behind.
             scroll = page.scrollY,
             scrollX = page.scrollX,
             createdAt = page.createdAt.toInstant().toString(),
@@ -357,11 +353,7 @@ object NotebookSerializer {
         val parentFolderId: String?,
         val defaultBackground: String,
         val defaultBackgroundType: String,
-        // Defaults to null so manifests written before page modes existed still decode.
         val pageMode: PageMode? = null,
-        // Likewise: manifests written before the fit preference existed decode as REAL, i.e. the
-        // sheet at its true size, which is what those clients did. The manifest is written whole
-        // (no streaming splice like pages), so field order here is free.
         val fitPortrait: FitMode = FitMode.REAL,
         val fitLandscape: FitMode = FitMode.REAL,
         val linkedExternalUri: String?,

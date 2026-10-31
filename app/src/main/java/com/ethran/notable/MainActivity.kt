@@ -158,13 +158,8 @@ class MainActivity : ComponentActivity() {
                                 AppSettings(version = 1)
                             )
 
-                        // One-time toolbar layout seed: an element added in a later version reaches a
-                        // layout the user saved before it existed, placed next to a familiar anchor so
-                        // it is reachable without opening the toolbar editor. The flag in
-                        // withSeededToolbarLayout makes it exactly once — running it on every launch
-                        // would resurrect a button the user removed. Only a customised toolbar needs
-                        // it: with `toolbarLayout == null` the app uses DEFAULT, which already places
-                        // the element.
+                        // Seed a newer element into a saved toolbar layout once, anchored next to an
+                        // existing one; the flag prevents re-adding a button the user removed.
                         val settings = savedSettings.withSeededToolbarLayout()
                         if (settings !== savedSettings) {
                             kvProxy.get().setAppSettings(settings)

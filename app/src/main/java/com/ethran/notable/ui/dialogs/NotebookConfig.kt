@@ -481,7 +481,7 @@ fun NotebookCreateDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
 
-                    /* -------------- Title Field ----------- */
+                    // Title Field
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -555,7 +555,6 @@ fun NotebookCreateDialog(
                                 is BackgroundType.Pdf -> "Static pdf Page"
                             }
 
-                            // Map native keys to localized names, or extract the file name for image/PDF paths
                             val backgroundDisplayName = when (defaultBackground) {
                                 "blank" -> stringResource(R.string.blank_page)
                                 "dotted" -> stringResource(R.string.dot_grid)
