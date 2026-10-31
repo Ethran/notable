@@ -87,6 +87,10 @@
     <string name="exporting_the_page_to">Exporting the page to %1$s…</string>
 
     <string name="export_book_to">Export book to %1$s</string>
+    <string name="copy_page_link">Copy link to page</string>
+    <string name="copy_book_link">Copy link to book</string>
+    <string name="copy_link">Copy link</string>
+    <string name="link_format">Copied link format</string>
     <string name="exporting_the_book_to">Exporting the book to %1$s…</string>
     <string name="clean_all_strokes">Clean all strokes</string>
     <string name="cleared_all_strokes">Cleared all strokes</string>

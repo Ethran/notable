@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
+import com.ethran.notable.navigation.LinkFormat
 import kotlinx.serialization.Serializable
 
 
@@ -71,6 +72,7 @@ data class AppSettings(
     // stop working inside the app while this is on — hence opt-in.
     val blockSystemGestures: Boolean = false,
     val renameOnCreate: Boolean = true,
+    val linkFormat: LinkFormat = LinkFormat.Markdown,
 
     // Debug
     val showWelcome: Boolean = true,
