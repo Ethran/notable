@@ -20,7 +20,6 @@ import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
-import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -55,7 +54,6 @@ sealed class ExportTarget {
 }
 
 data class ExportOptions(
-    val copyToClipboard: Boolean = true,
     val targetFolderUri: Uri? = null, // can be made to also get from it fileName.
     val overwrite: Boolean = false,   // TODO: Fix it -- for now it does not work correctly (it overwrites the files too often)
     val fileName: String? = null
@@ -122,7 +120,7 @@ class ExportEngine @Inject constructor(
                     .flatMap {
                         val (folderUri, fileName) = createFileNameAndFolder(
                             target, ExportFormat.XOPP,
-                            ExportOptions(copyToClipboard = false, targetFolderUri = uriStr.toUri()),
+                            ExportOptions(targetFolderUri = uriStr.toUri()),
                         )
                         writeFile(folderUri, "$fileName.xopp", "application/x-xopp", overwrite = true) { out ->
                             xoppFile.writeToXoppStream(target, out)
@@ -174,7 +172,6 @@ class ExportEngine @Inject constructor(
                         doc.writeTo(out)
                     }
                 }
-                if (options.copyToClipboard) copyPageLink(target.pageId)
             }
         }
 
@@ -214,7 +211,6 @@ class ExportEngine @Inject constructor(
                         ext, mime, options.overwrite, bytes
                     )
                 }
-                if (options.copyToClipboard) copyPageLink(pageId)
                 return "Page exported: $baseFileName.$ext"
             }
 
@@ -228,9 +224,6 @@ class ExportEngine @Inject constructor(
                         val bytes = bmp.toBytes(compressFormat)
                         saveBytes(folderUri, fileName, ext, mime, options.overwrite, bytes)
                     }
-                }
-                if (options.copyToClipboard) {
-                    log.w("Can't copy book links or images to clipboard -- batch export.")
                 }
                 return "Book exported: ${book.title} (${book.pageIds.size} pages)"
             }
@@ -566,12 +559,6 @@ class ExportEngine @Inject constructor(
         }
     }
 
-
-    /* -------------------- Clipboard Helpers -------------------- */
-
-    // The export reports its own result, so the copy isn't confirmed separately.
-    private suspend fun copyPageLink(pageId: String) =
-        copyLink(context, DeepLink.Page(pageId), pageLinkTitle(appRepository, pageId)) {}
 
     /* -------------------- Utilities -------------------- */
 

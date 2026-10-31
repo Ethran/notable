@@ -81,7 +81,7 @@ class UnsavedEditsStopReadersTest {
         // A linked export, which would overwrite its file with what it read.
         val result = exportEngine.export(
             ExportTarget.Book("book"), ExportFormat.XOPP,
-            ExportOptions(copyToClipboard = false, overwrite = true),
+            ExportOptions(overwrite = true),
         )
 
         assertTrue(result.isNotBlank())
