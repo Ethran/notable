@@ -68,8 +68,6 @@ import com.ethran.notable.ui.viewmodels.NotebookConfigViewModel
 @Composable
 fun NotebookConfigDialog(
     bookId: String,
-    isNewlyCreated: Boolean = false,
-    onOpenInEditor: ((pageId: String, bookId: String) -> Unit)? = null,
     onClose: () -> Unit,
     viewModel: NotebookConfigViewModel =
         hiltViewModel<NotebookConfigViewModel, NotebookConfigViewModel.Factory>(
@@ -146,7 +144,6 @@ fun NotebookConfigDialog(
             onTitleChange = { bookTitle = it },
             onTitleDone = { viewModel.setTitle(bookTitle) },
             breadcrumbFolders = breadcrumbFolders,
-            isNewlyCreated = isNewlyCreated,
             onChangeBackground = { showBackgroundSelector = !showBackgroundSelector },
             onLinkedChange = viewModel::setLinked,
             onDelete = { showDeleteDialog = true },
@@ -156,11 +153,6 @@ fun NotebookConfigDialog(
                 copyLink(context, DeepLink.Book(bookId), book.title, snackManager::showOrUpdateSnack)
             },
             onDuplicate = viewModel::duplicate,
-            onCreate = {
-                viewModel.setTitle(bookTitle)
-                onClose()
-                book.pageIds.firstOrNull()?.let { onOpenInEditor?.invoke(it, bookId) }
-            },
         )
     }
 }
@@ -173,7 +165,6 @@ private fun NotebookConfigContent(
     onTitleChange: (String) -> Unit,
     onTitleDone: () -> Unit,
     breadcrumbFolders: List<Folder>,
-    isNewlyCreated: Boolean,
     onChangeBackground: () -> Unit,
     onLinkedChange: (Boolean) -> Unit,
     onDelete: () -> Unit,
@@ -181,7 +172,6 @@ private fun NotebookConfigContent(
     onExport: () -> Unit,
     onCopyLink: () -> Unit,
     onDuplicate: () -> Unit,
-    onCreate: () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
     val formattedCreatedAt = remember(book.createdAt) { DateFormat.format("dd MMM yyyy HH:mm", book.createdAt) }
@@ -336,29 +326,20 @@ private fun NotebookConfigContent(
                 ActionButton(stringResource(R.string.details_notebook_buttons_move), onMove)
                 ActionButton(stringResource(R.string.details_notebook_buttons_export), onExport)
                 ActionButton(stringResource(R.string.copy_link), onCopyLink)
-                if (!isNewlyCreated) {
-                    ActionButton(stringResource(R.string.details_notebook_buttons_duplicate), onDuplicate)
-                }
-                if (isNewlyCreated) {
-                    ActionButton(stringResource(R.string.details_notebook_buttons_create)) {
-                        focusManager.clearFocus()
-                        onCreate()
-                    }
-                }
+                ActionButton(stringResource(R.string.details_notebook_buttons_duplicate), onDuplicate)
             }
         }
     }
 }
 
 @Composable
-private fun NotebookConfigPreview(isNewlyCreated: Boolean) {
+private fun NotebookConfigPreview() {
     NotebookConfigContent(
         book = Notebook(title = "Lecture notes", pageIds = listOf("p1", "p2", "p3")),
         title = "Lecture notes",
         onTitleChange = {},
         onTitleDone = {},
         breadcrumbFolders = listOf(Folder(title = "Studies")),
-        isNewlyCreated = isNewlyCreated,
         onChangeBackground = {},
         onLinkedChange = {},
         onDelete = {},
@@ -366,21 +347,13 @@ private fun NotebookConfigPreview(isNewlyCreated: Boolean) {
         onExport = {},
         onCopyLink = {},
         onDuplicate = {},
-        onCreate = {},
     )
 }
 
-@Preview(name = "Notebook settings", showBackground = true, widthDp = 800)
+@Preview(name = "Tablet", showBackground = true, widthDp = 800)
+@Preview(name = "Phone", showBackground = true, widthDp = 340)
 @Composable
-private fun ExistingNotebookConfigPreview() = NotebookConfigPreview(isNewlyCreated = false)
-
-@Preview(name = "New notebook", showBackground = true, widthDp = 800)
-@Composable
-private fun NewNotebookConfigPreview() = NotebookConfigPreview(isNewlyCreated = true)
-
-@Preview(name = "Notebook settings, phone", showBackground = true, widthDp = 340)
-@Composable
-private fun PhoneNotebookConfigPreview() = NotebookConfigPreview(isNewlyCreated = false)
+private fun NotebookConfigPreviewTabletAndPhone() = NotebookConfigPreview()
 
 @Composable
 fun ActionButton(text: String, onClick: () -> Unit) {
