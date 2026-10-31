@@ -136,10 +136,7 @@ internal class PageChanges {
     val strokes = HashMap<String, Stroke?>()
     val images = HashMap<String, Image?>()
 
-    /**
-     * The scroll to persist, both axes in page pixels, or null if unchanged. Not an edit: it doesn't
-     * advance edit timestamps.
-     */
+    /** Scroll to persist, or null if unchanged. Not an edit: it doesn't advance edit timestamps. */
     var scroll: IntOffset? = null
 
     /** Whether strokes or images changed, not only the scroll. */

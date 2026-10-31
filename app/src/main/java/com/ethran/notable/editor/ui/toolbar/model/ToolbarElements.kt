@@ -76,14 +76,8 @@ object ToolbarElements {
         FitModeElement(
             id = ToolbarElementId.FIT_MODE,
             // TODO: placeholder icon — replace with a sheet-with-margins glyph when the art exists.
-            // Both the button and its entries resolve their art from FitMode in ToolbarElementView,
-            // so swapping it touches those mappings only.
             icon = IconRef.Vector(FeatherIcons.Maximize),
             contentDescription = "fit mode",
-            // Only a sheet can be fitted, and only a notebook can remember the preference: an
-            // infinite page has no sheet, and a page of no notebook — which is what a quick page is —
-            // has no row to store it on. Both conditions mirror what `PageView.setFitMode` requires,
-            // so the button never offers something that would do nothing.
             visibleWhen = { state, _ ->
                 state.notebookId != null && state.pageMode?.let { it != PageMode.INFINITE } == true
             },

@@ -233,14 +233,7 @@ private fun eraserIcon(eraser: Eraser): Int =
         Eraser.SELECT -> R.drawable.eraser_select
     }
 
-/**
- * The sheet-fit button: same shape as the eraser's, one popup listing every [FitMode]. Its art follows
- * the fit the canvas reports (`uiState.fitMode`), so the button shows — and the popup ticks — what is
- * really applied, which follows the view's orientation rather than the page.
- *
- * The button opens and closes the popup on its own: unlike a mode tool, arming it never changes what a
- * touch on the page does, so there is no "click again to deselect" state to leave the popup for.
- */
+/** The sheet-fit button: one popup listing every [FitMode]; its icon and tick follow `uiState.fitMode`. */
 @Composable
 private fun FitModeElementView(
     element: FitModeElement,
@@ -251,9 +244,7 @@ private fun FitModeElementView(
         ToolbarButton(
             isSelected = element.isSelected(uiState),
             onSelect = { onAction(ToolbarAction.ToggleFitModeMenu(!uiState.isFitModeMenuOpen)) },
-            // The fit in force, not the spec's static icon — same trick the eraser button uses.
             vectorIcon = fitModeIcon(uiState.fitMode),
-            // A resource, not the registry's literal: this label is also what a screen reader hears.
             contentDescription = stringResource(R.string.toolbar_fit_mode),
         )
 
@@ -312,7 +303,6 @@ private fun FitModeSubmenu(
                 .border(1.dp, Color.Black)
                 .height(IntrinsicSize.Max)
         ) {
-            // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -335,8 +325,6 @@ private fun FitModeSubmenu(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 spec.modes.forEach { mode ->
-                    // The fit modes have no names a glyph can be trusted to carry on its own (a
-                    // maximize arrow could mean either), so each entry is labelled.
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         ToolbarButton(
                             vectorIcon = fitModeIcon(mode),

@@ -44,14 +44,6 @@ data class Notebook(
 
     val pageMode: PageMode? = null,
 
-    /**
-     * How the notebook's sheets are fitted to the viewport, one preference per orientation.
-     *
-     * Per-notebook because every page of a notebook inherits its `pageMode` (see [newPage]), so one
-     * pair drives every page — while each page still computes its own zoom from its own sheet.
-     * Stored as an intent, never a zoom number, so the value carries across rotations and screens
-     * (see [FitMode]).
-     */
     @ColumnInfo(defaultValue = "REAL")
     val fitPortrait: FitMode = FitMode.REAL,
 
@@ -104,14 +96,7 @@ interface NotebookDao {
     @Query("UPDATE notebook SET parentFolderId=:folderId, updatedAt=:updatedAt WHERE id=:notebookId")
     suspend fun setParentFolder(notebookId: String, folderId: String?, updatedAt: Date)
 
-    // The fit pair, written whole so the orientation the user did not change is preserved.
-    //
-    // Unlike [setOpenPageId], which is device-local and deliberately leaves the timestamp alone,
-    // this advances updatedAt: a fit is a document preference that must reach the manifest, and
-    // updatedAt against the sync anchor is the only thing the planner compares — without the bump
-    // the notebook stays SYNCED and the change is never uploaded. That is the opposite of
-    // Page.updateScroll, where the timestamp is left alone precisely so that scrolling never
-    // dirties a page.
+    // Writes the whole fit pair, and bumps updatedAt so the fit reaches the sync manifest.
     @Query("UPDATE notebook SET fitPortrait=:fitPortrait, fitLandscape=:fitLandscape, updatedAt=:updatedAt WHERE id=:notebookId")
     suspend fun setFitModes(notebookId: String, fitPortrait: FitMode, fitLandscape: FitMode, updatedAt: Date)
 
@@ -236,10 +221,7 @@ class BookRepository @Inject constructor(
         notebookDao.setParentFolder(id, folderId, Date())
     }
 
-    /**
-     * Saves the notebook's per-orientation sheet fit, bumping `updatedAt` so the manifest is
-     * re-published — see [NotebookDao.setFitModes] for why that differs from [setOpenPageId].
-     */
+    /** Saves the notebook's per-orientation sheet fit, bumping updatedAt. */
     suspend fun setFitModes(
         id: String,
         fitPortrait: FitMode,

@@ -35,9 +35,6 @@ import javax.inject.Inject
 )
 data class Page(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    // Where the page was last shown, in page coordinates, one column per axis. An axis the reader
-    // is free to move is worth saving; one the fit owns is re-derived on showing (PageView
-    // .viewportToShow), so its column only ever holds what the fit asked for.
     val scrollY: Int = 0,
     @ColumnInfo(defaultValue = "0")
     val scrollX: Int = 0,
@@ -77,8 +74,6 @@ interface PageDao {
     @Query("SELECT * FROM page WHERE id =:pageId")
     suspend fun getPageWithDataById(pageId: String): PageWithData?
 
-    // One statement for both axes: they are committed together as one viewport, and writing a pair
-    // that did not change is cheaper than tracking which of the two did.
     @Query("UPDATE page SET scrollY=:scrollY, scrollX=:scrollX WHERE id =:pageId")
     suspend fun updateScroll(pageId: String, scrollY: Int, scrollX: Int)
 

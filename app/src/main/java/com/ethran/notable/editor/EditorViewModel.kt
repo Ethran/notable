@@ -90,18 +90,8 @@ data class ToolbarUiState(
     val isBackgroundSelectorModalOpen: Boolean = false,
     val showResetView: Boolean = false,
 
-    /**
-     * The shown page's sheet: null for an infinite canvas, which has nothing to fit. Drives whether
-     * the fit button shows at all — a quick page belongs to no notebook, so it has no row to hold
-     * the preference either.
-     */
+    /** The shown page's sheet; null for an infinite canvas and imported files, which have nothing to fit. */
     val pageMode: PageMode? = null,
-    /**
-     * The fit the canvas is actually applying. Fed from `PageView.appliedFitMode`, never derived
-     * here: the fit is keyed by the **view's** orientation, which only the view knows at the moment
-     * it re-lays-out, so a ViewModel reading the screen size would tick the wrong entry between a
-     * rotation and the resize.
-     */
     val fitMode: FitMode = FitMode.REAL,
     val isFitModeMenuOpen: Boolean = false,
 
@@ -365,8 +355,6 @@ class EditorViewModel @Inject constructor(
 //                updateDrawingState() // on focus change is doing this
             }
 
-            // Only the popup's open state lives here: the fit itself is applied by the canvas, which
-            // reports back through [setAppliedFitMode], so the menu's tick and the page cannot drift.
             is ToolbarAction.ToggleFitModeMenu -> {
                 _toolbarState.update { it.copy(isFitModeMenuOpen = action.isOpen) }
             }
@@ -647,8 +635,6 @@ class EditorViewModel @Inject constructor(
                 backgroundType = page.backgroundType,
                 backgroundPath = page.background,
                 backgroundPageNumber = bgPageNumber,
-                // Which of the notebook's two fits applies is the view's call; the canvas reports it
-                // through [setAppliedFitMode]. Only the sheet itself is needed here, for visibility.
                 pageMode = page.pageMode
             )
         }
@@ -873,12 +859,6 @@ class EditorViewModel @Inject constructor(
         _toolbarState.update { it.copy(showResetView = showResetView) }
     }
 
-    /**
-     * Records the fit the canvas is applying, fed from `PageView.appliedFitMode`. The view is the only
-     * place that knows its own orientation, so the toolbar's selected state comes from there rather
-     * than from the stored pair — otherwise a rotation would leave the menu ticking the old
-     * orientation's fit until the page was reopened.
-     */
     fun setAppliedFitMode(fitMode: FitMode) {
         _toolbarState.update { it.copy(fitMode = fitMode) }
     }

@@ -169,7 +169,7 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
     // Exclude area based on page mode
     excludeRectList.addAll(sideBarsRectangles(pageMode, viewWidth, viewHeight, zoomLevel, context))
 
-    // Exclude area based on toolbar position
+    // Determine the exclusion area based on toolbar position
     val excludeRect: Rect =
         if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
             Rect(0, 0, viewWidth, toolbarHeight)

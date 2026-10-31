@@ -27,10 +27,7 @@ data class EraserSubmenuSpec(
     val erasers: List<Eraser>,
 ) : SubmenuSpec
 
-/**
- * Sheet-fit picker: the [FitMode]s a finite sheet can be shown at. Listed in enum order so the
- * renderer stays driven by the enum — new fits need only the enum entry and its icon/label.
- */
+/** Sheet-fit picker: the [FitMode]s to offer, in enum order. */
 data class FitModeSubmenuSpec(
     val modes: List<FitMode>,
 ) : SubmenuSpec

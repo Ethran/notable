@@ -36,18 +36,12 @@ fun convertDpToPixel(dp: Dp, context: Context): Float {
     )
 }
 
-/**
- * Converts a value in PDF points to pixels using the display's horizontal DPI.
- *
- * @param points The value in PDF points, where 1 point equals 1/72 of an inch.
- * @param context The Android context used to obtain the display's DPI.
- * @return The equivalent value in pixels.
- */
+/** Converts PDF points to pixels using the display's horizontal DPI. */
 fun convertPointsToPixel(points: Int, context: Context): Float {
     return points * context.resources.displayMetrics.xdpi / 72f
 }
 
-
+/** Calculate the size of sidebars rectangles*/
 fun sideBarsRectangles(
     pageMode: PageMode?,
     viewWidth: Int,
@@ -57,15 +51,10 @@ fun sideBarsRectangles(
 ): List<Rect> {
     val rectList = mutableListOf<Rect>()
     if (pageMode != null && pageMode != PageMode.INFINITE) {
-        // The sheet's true physical width, whatever the viewport's: a sheet is never snapped to
-        // the screen, so these touch-exclusion rects stay on the real sheet edge in every
-        // orientation. Fitting the sheet to the width is an explicit user preference
-        // (FitMode), applied as a zoom — not a rewrite of the sheet's size.
         val sheetWidth = convertPointsToPixel(pageMode.width, context) * zoomLevel
         if (sheetWidth < viewWidth) {
             val offset = Pair(ceil((viewWidth - sheetWidth) / 2).toInt(), viewHeight)
 
-            // Define sideExcludeRect
             val sideExcludeRect = Rect(0, 0, offset.first, offset.second)
             rectList.add( // Add left rectangle
                 sideExcludeRect

@@ -20,9 +20,8 @@ enum class ToolbarElementId {
     UNDO, REDO, PAGE_NAV, HOME, MENU,
 
     /**
-     * The sheet-fit button (see [FitModeElement]): one button whose popup picks how a finite sheet
-     * is scaled to the viewport. Only shown for pages that have a sheet and a notebook to record the
-     * preference on.
+     * The sheet-fit button: picks how a finite sheet is scaled to the viewport. Shown only for
+     * pages with a sheet and a notebook.
      */
     FIT_MODE,
 
