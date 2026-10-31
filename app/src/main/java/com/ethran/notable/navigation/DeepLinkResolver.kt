@@ -1,5 +1,6 @@
 package com.ethran.notable.navigation
 
+import android.graphics.Bitmap
 import android.net.Uri
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
@@ -8,6 +9,8 @@ import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
 import com.ethran.notable.io.ThumbnailBackfillQueue
+import com.ethran.notable.io.getPdfPageCount
+import com.ethran.notable.io.renderPdfPageAndroid
 import com.ethran.notable.utils.fold
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +80,17 @@ class DeepLinkResolver @Inject constructor(
         )
     }.await()
 
+    /** What the import dialog shows of the PDF of [link]. */
+    suspend fun preview(link: DeepLink.Pdf): PdfPreview = withContext(Dispatchers.IO) {
+        PdfPreview(
+            pageCount = getPdfPageCount(link.path),
+            firstPage = renderPdfPageAndroid(File(link.path), 0, PREVIEW_WIDTH_PX),
+        )
+    }
+
+    /** [firstPage] is null when it couldn't be drawn. */
+    class PdfPreview(val pageCount: Int, val firstPage: Bitmap?)
+
     /** [page] is a PDF page; in a notebook that follows a PDF, page N shows PDF page N. */
     private fun openBook(book: Notebook, page: Int?): Target {
         val pageId = page?.let { book.pageIds.getOrNull(it - 1) }
@@ -93,3 +107,5 @@ class DeepLinkResolver @Inject constructor(
         return file.extension.equals("pdf", ignoreCase = true) && file.isFile && file.canRead()
     }
 }
+
+private const val PREVIEW_WIDTH_PX = 300
