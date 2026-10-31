@@ -103,7 +103,6 @@
     <string name="copy_book_link">Kopiuj link do zeszytu</string>
     <string name="copy_link">Kopiuj link</string>
     <string name="link_format">Format kopiowanego linku</string>
-    <string name="link_format_plain">Zwykły</string>
     <string name="exporting_the_book_to">Eksportowanie zeszytu do %1$s…</string>
     <string name="clean_all_strokes">Wyczyść wszystkie kreski</string>
     <string name="cleared_all_strokes">Wyczyszczono wszystkie kreski</string>
