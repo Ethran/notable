@@ -1,5 +1,6 @@
 package com.ethran.notable.data.db
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,8 +17,8 @@ class EncodePolylineTest {
 
     @Test
     fun encode_then_decode_round_trip_recovers_input_at_precision_5() {
-        val original = listOf(38.5, -120.2, 40.7, -120.95, 43.252, -126.453)
-        val decoded = decode(encode(original, precision = 5), precision = 5) { it }
+        val original = floatArrayOf(38.5f, -120.2f, 40.7f, -120.95f, 43.252f, -126.453f)
+        val decoded = decode(encode(original, precision = 5), precision = 5)
 
         assertEquals(original.size, decoded.size)
         original.zip(decoded).forEach { (e, a) ->
@@ -28,31 +29,18 @@ class EncodePolylineTest {
     @Test
     fun encode_output_is_deterministic_for_same_input() {
         // Locks the encoder against accidental output drift between releases.
-        val coords = listOf(38.5, -120.2, 40.7, -120.95, 43.252, -126.453)
-        assertEquals(encode(coords), encode(coords))
+        val coords = floatArrayOf(38.5f, -120.2f, 40.7f, -120.95f, 43.252f, -126.453f)
+        assertArrayEquals(encode(coords), encode(coords))
     }
 
     @Test
     fun round_trip_preserves_values_within_precision() {
         // Note: precision=5 only allows ~1e-5 absolute error; precision=2 is what
         // StrokePointConverter uses for page coordinates.
-        val original = listOf(0.0, 1.23, -4.56, 1000.78, -999.99, 0.01)
+        val original = floatArrayOf(0f, 1.23f, -4.56f, 1000.78f, -999.99f, 0.01f)
 
         val encoded = encode(original, precision = 2)
-        val decoded = decode(encoded, precision = 2) { it }
-
-        assertEquals(original.size, decoded.size)
-        original.zip(decoded).forEach { (e, a) ->
-            assertTrue("expected $e ≈ $a", abs(e - a) < 1e-2)
-        }
-    }
-
-    @Test
-    fun float_round_trip_works_with_caster() {
-        val original = listOf(0.0f, 100.5f, 250.25f, -50.75f)
-
-        val encoded = encode(original, precision = 2)
-        val decoded = decode(encoded, precision = 2) { it.toFloat() }
+        val decoded = decode(encoded, precision = 2)
 
         assertEquals(original.size, decoded.size)
         original.zip(decoded).forEach { (e, a) ->
@@ -62,7 +50,8 @@ class EncodePolylineTest {
 
     @Test
     fun empty_input_encodes_to_empty_string() {
-        assertEquals("", encode(emptyList<Double>()))
+        assertEquals(0, encode(FloatArray(0)).size)
+        assertEquals(0, decode(ByteArray(0)).size)
     }
 
     // Simple test to check if encoding is reversible. 
@@ -70,16 +59,16 @@ class EncodePolylineTest {
     fun reencoding_a_float32_narrowed_decoded_value_reproduces_the_same_integer() {
         // Decoded coordinates are Float32; re-encoding them must reproduce the same integers.
         val trueValues = listOf(708.29, 706.95, 706.19, 704.66, 704.42, 711.8, 725.79, 728.48, -706.95, -708.29, 0.0, -0.01)
-        val decodedAsFloat32 = trueValues.map { it.toFloat() }
+        val decodedAsFloat32 = FloatArray(trueValues.size) { trueValues[it].toFloat() }
 
         val reencoded = encode(decodedAsFloat32, precision = 2)
-        val reencodedThenDecoded = decode(reencoded, precision = 2) { it }
+        val reencodedThenDecoded = decode(reencoded, precision = 2)
 
         assertEquals(trueValues.size, reencodedThenDecoded.size)
-        trueValues.zip(reencodedThenDecoded).forEach { (original, roundTripped) ->
+        trueValues.zip(reencodedThenDecoded.toList()).forEach { (original, roundTripped) ->
             assertEquals(
                 "value $original must survive a decode-then-Float32-then-reencode cycle unchanged",
-                original, roundTripped, 1e-9
+                original.toFloat(), roundTripped, 0f
             )
         }
     }
@@ -87,17 +76,40 @@ class EncodePolylineTest {
     @Test
     fun reencoding_a_fixed_known_polyline_reproduces_the_same_bytes() {
         // First 4 points of a real device stroke at precision 2.
-        val fixture = "yiiCjGjCJ"
-        val decodedAsFloat32 = decode(fixture, precision = 2) { it.toFloat() }
-        assertEquals(fixture, encode(decodedAsFloat32, precision = 2))
+        val fixture = "yiiCjGjCJ".toByteArray()
+        val decodedAsFloat32 = decode(fixture, precision = 2)
+        assertArrayEquals(fixture, encode(decodedAsFloat32, precision = 2))
+    }
+
+    @Test
+    fun stored_bytes_stay_the_same_for_every_length_and_sign_of_delta() {
+        // Stored strokes hold these bytes, so they must never change. The deltas take 1, 1, 3, 4,
+        // 5, 6, 7 and 7 characters, both signs, up to 6,000,000 px from 0.
+        val values = floatArrayOf(0f, -0.01f, 12.34f, -5000.5f, 50000f, 1e6f, -6e6f, 7f)
+        val fixture = "?@elAfar]chunI_{ietD~nrcvh@wjclwb@".toByteArray()
+
+        assertArrayEquals(fixture, encode(values, precision = 2))
+        assertArrayEquals(values, decode(fixture, precision = 2), 0f)
+    }
+
+    @Test
+    fun a_value_cut_off_at_the_end_is_dropped() {
+        val values = floatArrayOf(12.34f, -5000.5f, 7f)
+        val encoded = encode(values, precision = 2)
+        for (cut in 0..encoded.size) {
+            // Whatever is decoded is the start of the values, nothing made up from the cut-off part.
+            val decoded = decode(encoded.copyOf(cut), precision = 2)
+            assertArrayEquals(values.copyOf(decoded.size), decoded, 0f)
+        }
+        assertEquals(2, decode(encoded.copyOf(encoded.size - 1), precision = 2).size)
     }
 
     @Test
     fun negative_deltas_encode_and_decode_symmetrically() {
         // Monotonically decreasing — every delta is negative, exercising the
-        // `value < 0` branch of encodeValue.
-        val original = listOf(10.0, 5.0, 0.0, -5.0, -10.0)
-        val decoded = decode(encode(original, precision = 2), precision = 2) { it }
+        // `delta < 0` branch of encode.
+        val original = floatArrayOf(10f, 5f, 0f, -5f, -10f)
+        val decoded = decode(encode(original, precision = 2), precision = 2)
         original.zip(decoded).forEach { (e, a) ->
             assertTrue("expected $e ≈ $a", abs(e - a) < 1e-2)
         }

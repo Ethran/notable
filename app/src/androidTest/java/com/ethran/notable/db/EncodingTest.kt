@@ -31,18 +31,18 @@ class EncodingTest {
             println("=== Testing precision $precision ===")
 
             // Floats
-            val encodedFloats = encode(floatList, precision)
-            val decodedFloats = decode(encodedFloats, precision) { it.toFloat() }
+            val encodedFloats = encode(floatList.toFloatArray(), precision)
+            val decodedFloats = decode(encodedFloats, precision).toList()
             println("Floats original: $floatList")
-            println("Floats encoded : $encodedFloats")
+            println("Floats encoded : ${String(encodedFloats)}")
             println("Floats decoded : $decodedFloats")
             assertAlmostEqual(floatList, decodedFloats, precision)
 
             // Ints
-            val encodedInts = encode(intList, precision)
-            val decodedInts = decode(encodedInts, precision) { it.toInt() }
+            val encodedInts = encode(FloatArray(intList.size) { intList[it].toFloat() }, precision)
+            val decodedInts = decode(encodedInts, precision).map { it.toInt() }
             println("Ints original: $intList")
-            println("Ints encoded : $encodedInts")
+            println("Ints encoded : ${String(encodedInts)}")
             println("Ints decoded : $decodedInts")
             require(intList == decodedInts) { "Decoded ints do not match original" }
         }
