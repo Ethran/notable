@@ -8,7 +8,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -28,19 +30,15 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowCircleRight
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
@@ -50,92 +48,53 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.R
-import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.model.BackgroundType
-import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.copyLink
-import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.navigation.DeepLink
-import com.ethran.notable.sync.SyncScheduler
-import com.ethran.notable.sync.SyncRequest
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.ScaledDialog
-import com.ethran.notable.ui.components.getFolderList
-import io.shipbook.shipbooksdk.ShipBook
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.launch
-
-private val log = ShipBook.getLogger("NotebookConfig")
+import com.ethran.notable.ui.viewmodels.NotebookConfigViewModel
 
 @Composable
 fun NotebookConfigDialog(
-    appRepository: AppRepository,
-    exportEngine: ExportEngine,
-    syncScheduler: SyncScheduler,
     bookId: String,
     isNewlyCreated: Boolean = false,
     onOpenInEditor: ((pageId: String, bookId: String) -> Unit)? = null,
-    onClose: () -> Unit) {
-    val bookRepository  = appRepository.bookRepository
-
-    val book by bookRepository.getByIdLive(bookId).observeAsState()
-    val scope = rememberCoroutineScope()
+    onClose: () -> Unit,
+    viewModel: NotebookConfigViewModel =
+        hiltViewModel<NotebookConfigViewModel, NotebookConfigViewModel.Factory>(
+            key = "NotebookConfig-$bookId"
+        ) { it.create(bookId) },
+) {
+    val book = viewModel.book.collectAsStateWithLifecycle().value ?: return
+    val breadcrumbFolders by viewModel.breadcrumbFolders.collectAsStateWithLifecycle()
     val snackManager = LocalSnackContext.current
     val context = LocalContext.current
 
-    if (book == null) return
-
-    var bookTitle by remember {
-        mutableStateOf(book!!.title)
-    }
-    val formattedCreatedAt = remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.createdAt) }
-    val formattedUpdatedAt = remember { DateFormat.format("dd MMM yyyy HH:mm", book!!.updatedAt) }
+    var bookTitle by remember { mutableStateOf(book.title) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showBackgroundSelector by remember { mutableStateOf(false) }
 
-
-    var bookFolder by remember { mutableStateOf(book?.parentFolderId) }
-    var breadcrumbFolders by remember { mutableStateOf<List<Folder>>(emptyList()) }
-    LaunchedEffect(bookFolder) {
-        breadcrumbFolders = getFolderList(appRepository, bookFolder)
-    }
-
-
     if (showBackgroundSelector) {
         BackgroundSelector(
-            initialPageBackgroundType = book!!.defaultBackgroundType,
-            initialPageBackground = book!!.defaultBackground,
+            initialPageBackgroundType = book.defaultBackgroundType,
+            initialPageBackground = book.defaultBackground,
             isNotebookBgSelector = true,
-            notebookId = book!!.id,
-            onChange = { backgroundType, background ->
-                if (background == null) {
-                    if (book!!.defaultBackgroundType != backgroundType) {
-                        val updatedBook = book!!.copy(
-                            defaultBackgroundType = backgroundType
-                        )
-                        scope.launch {
-                            bookRepository.update(updatedBook)
-                        }
-                    }
-                } else if (book!!.defaultBackgroundType != backgroundType || book!!.defaultBackground != background) {
-                    val updatedBook = book!!.copy(
-                        defaultBackgroundType = backgroundType,
-                        defaultBackground = background
-                    )
-                    scope.launch {
-                        bookRepository.update(updatedBook)
-                    }
-                }
-            }) {
+            notebookId = book.id,
+            onChange = viewModel::setDefaultBackground
+        ) {
             showBackgroundSelector = false
         }
     }
@@ -143,37 +102,21 @@ fun NotebookConfigDialog(
     if (showDeleteDialog) {
         ShowSimpleConfirmationDialog(
             title = "Confirm Deletion",
-            message = "Are you sure you want to delete \"${book!!.title}\"?",
+            message = "Are you sure you want to delete \"${book.title}\"?",
             onConfirm = {
-                scope.launch {
-                    bookRepository.delete(bookId)
-                }
+                viewModel.delete()
                 showDeleteDialog = false
                 onClose()
-
-                // Queue remote deletion in background so it is independent from this view lifecycle.
-                scope.launch {
-                    snackManager.runWithSnack("Deleting notebook...", 3000) {
-                        syncScheduler.triggerImmediateSync(
-                            SyncRequest.UploadDeletion(notebookId = bookId)
-                        )
-                        log.i("Queued notebook deletion upload for $bookId")
-                        "Notebook deleted. Sync queued."
-                    }
-                }
             },
             onCancel = {
                 showDeleteDialog = false
             })
         return
     }
-    // Confirmation Dialog for Deletion
     if (showExportDialog) {
         ShowExportDialog(
-            exportEngine = exportEngine,
-            snackManager = snackManager,
-            bookId = bookId,
-            onConfirm = {
+            onExport = { format ->
+                viewModel.export(format)
                 showExportDialog = false
                 onClose()
             },
@@ -184,226 +127,260 @@ fun NotebookConfigDialog(
     }
     // Folder Selection Dialog
     if (showMoveDialog) {
-
         ShowFolderSelectionDialog(
-            appRepository = appRepository,
-            notebookName = book!!.title,
-            initialFolderId = book!!.parentFolderId,
+            notebookName = book.title,
+            initialFolderId = book.parentFolderId,
+            folderContents = viewModel::folderContents,
             onCancel = { showMoveDialog = false },
             onConfirm = { selectedFolder ->
                 showMoveDialog = false
                 onClose()
-                log.i("folder: $selectedFolder")
-                val updatedBook = book!!.copy(parentFolderId = selectedFolder)
-                bookFolder = selectedFolder
-                scope.launch {
-                    // be careful, not to cause race condition.
-                    bookRepository.update(updatedBook)
-                }
+                viewModel.moveTo(selectedFolder)
             })
     }
 
-    ScaledDialog(
-        onDismissRequest = {
-            onClose()
-        }) {
-        val focusManager = LocalFocusManager.current
+    ScaledDialog(onDismissRequest = onClose) {
+        NotebookConfigContent(
+            book = book,
+            title = bookTitle,
+            onTitleChange = { bookTitle = it },
+            onTitleDone = { viewModel.setTitle(bookTitle) },
+            breadcrumbFolders = breadcrumbFolders,
+            isNewlyCreated = isNewlyCreated,
+            onChangeBackground = { showBackgroundSelector = !showBackgroundSelector },
+            onLinkedChange = viewModel::setLinked,
+            onDelete = { showDeleteDialog = true },
+            onMove = { showMoveDialog = true },
+            onExport = { showExportDialog = true },
+            onCopyLink = {
+                copyLink(context, DeepLink.Book(bookId), book.title, snackManager::showOrUpdateSnack)
+            },
+            onDuplicate = viewModel::duplicate,
+            onCreate = {
+                viewModel.setTitle(bookTitle)
+                onClose()
+                book.pageIds.firstOrNull()?.let { onOpenInEditor?.invoke(it, bookId) }
+            },
+        )
+    }
+}
 
-        Column(
+/** The dialog's card for [book]; [title] is the title being edited. */
+@Composable
+private fun NotebookConfigContent(
+    book: Notebook,
+    title: String,
+    onTitleChange: (String) -> Unit,
+    onTitleDone: () -> Unit,
+    breadcrumbFolders: List<Folder>,
+    isNewlyCreated: Boolean,
+    onChangeBackground: () -> Unit,
+    onLinkedChange: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+    onMove: () -> Unit,
+    onExport: () -> Unit,
+    onCopyLink: () -> Unit,
+    onDuplicate: () -> Unit,
+    onCreate: () -> Unit,
+) {
+    val focusManager = LocalFocusManager.current
+    val formattedCreatedAt = remember(book.createdAt) { DateFormat.format("dd MMM yyyy HH:mm", book.createdAt) }
+    val formattedUpdatedAt = remember(book.updatedAt) { DateFormat.format("dd MMM yyyy HH:mm", book.updatedAt) }
+
+    val preview = @Composable {
+        Box(
             modifier = Modifier
-                .background(Color.White)
-                .fillMaxWidth()
-                .border(2.dp, Color.Black, RectangleShape)
-                .padding(16.dp)
-                .padding(top = 24.dp, bottom = 16.dp)
+                .size(200.dp, 250.dp)
+                .background(Color.Gray),
+            contentAlignment = Alignment.Center
         ) {
-            // Header Section
-            Row(Modifier.padding(bottom = 16.dp)) {
-                Box(
+            book.pageIds.firstOrNull()?.let { pageId ->
+                PagePreview(
                     modifier = Modifier
-                        .size(200.dp, 250.dp)
-                        .background(Color.Gray),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .aspectRatio(3f / 4f)
+                        .border(1.dp, Color.Black, RectangleShape), pageId
+                )
+            }
+        }
+    }
+
+    val details = @Composable {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+
+            /* -------------- Title Field -----------*/
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.details_notebook_title),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp
+                )
+                Spacer(Modifier.width(20.dp))
+                BasicTextField(
+                    value = title,
+                    textStyle = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Light,
+                        fontSize = 24.sp
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text, imeAction = ImeAction.Done
+                    ),
+                    onValueChange = onTitleChange,
+                    keyboardActions = KeyboardActions(onDone = {
+                        focusManager.clearFocus()
+                    }),
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(Color(230, 230, 230, 255))
+                        .padding(10.dp, 0.dp)
+                        .onFocusChanged { focusState ->
+                            if (!focusState.isFocused) onTitleDone()
+                        }
+                )
+            }
+
+            /* -------------- Template selection -----------*/
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = stringResource(R.string.details_notebook_default_background_template),
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Button(
+                    onClick = onChangeBackground,
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = Color.White,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color.Black)
                 ) {
-                    val pageId = book!!.pageIds[0]
-                    PagePreview(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(3f / 4f)
-                            .border(1.dp, Color.Black, RectangleShape), pageId
+                    val typeName =
+                        when (BackgroundType.fromKey(book.defaultBackgroundType)) {
+                            BackgroundType.AutoPdf -> "Observe Pdf"
+                            BackgroundType.CoverImage -> "Cover Image"
+                            BackgroundType.Image -> "Image"
+                            BackgroundType.ImageRepeating -> "Repeating Image"
+                            BackgroundType.Native -> "Native"
+                            is BackgroundType.Pdf -> "Static pdf Page"
+                        }
+                    Text(
+                        text = typeName,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.ArrowCircleRight,
+                        contentDescription = "Expand selector",
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-                Spacer(Modifier.width(16.dp))
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+            }
 
-                    /* -------------- Title Field -----------*/
-                    Row {
-                        Text(
-                            text = stringResource(R.string.details_notebook_title),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp
-                        )
-                        Spacer(Modifier.width(20.dp))
-                        BasicTextField(
-                            value = bookTitle,
-                            textStyle = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Light,
-                                fontSize = 24.sp
-                            ),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Text, imeAction = ImeAction.Done
-                            ),
-                            onValueChange = { bookTitle = it },
-                            keyboardActions = KeyboardActions(onDone = {
-                                focusManager.clearFocus()
-                            }),
-                            modifier = Modifier
-                                .background(Color(230, 230, 230, 255))
-                                .padding(10.dp, 0.dp)
-                                .onFocusChanged { focusState ->
-                                    if (!focusState.isFocused) {
-                                        log.i("loose focus")
-                                        if (book!!.title != bookTitle) {
-                                            scope.launch {
-                                                bookRepository.setTitle(bookId, bookTitle)
-                                            }
-                                        }
-                                    }
-                                }
+            /* -------------- Linking to external files -----------*/
+            NotebookLinkRow(linkedUri = book.linkedExternalUri, onLinkedChange = onLinkedChange)
 
+            /* -------------- Other book info -----------*/
+            Text(stringResource(R.string.details_notebook_pages, book.pageIds.size))
+            Text("Size: TODO!")
+            Row {
+                Text(stringResource(R.string.details_notebook_in_folder))
+                BreadCrumb(folders = breadcrumbFolders, fontSize = 16) { }
+            }
+            Text(stringResource(R.string.details_notebook_created, formattedCreatedAt))
+            Text(stringResource(R.string.details_notebook_last_updated, formattedUpdatedAt))
+        }
+    }
 
-                        )
-                    }
-
-                    /* -------------- Template selection -----------*/
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = stringResource(R.string.details_notebook_default_background_template),
-                        )
-                        Spacer(modifier = Modifier.width(40.dp))
-                        Button(
-                            onClick = { showBackgroundSelector = !showBackgroundSelector },
-                            colors = ButtonDefaults.buttonColors(
-                                backgroundColor = Color(Color.White.toArgb()),
-                                contentColor = Color.Black
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, Color.Black)
-                        ) {
-                            val typeName =
-                                when (BackgroundType.fromKey(book?.defaultBackgroundType ?: "")) {
-                                    BackgroundType.AutoPdf -> "Observe Pdf"
-                                    BackgroundType.CoverImage -> "Cover Image"
-                                    BackgroundType.Image -> "Image"
-                                    BackgroundType.ImageRepeating -> "Repeating Image"
-                                    BackgroundType.Native -> "Native"
-                                    is BackgroundType.Pdf -> "Static pdf Page"
-                                }
-                            Text(
-                                text = typeName,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Default.ArrowCircleRight,
-                                contentDescription = "Expand selector",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    /* -------------- Linking to external files -----------*/
-
-
-                    val defaultPath = getLinkedFilesDir().toUri().toString()
-                    NotebookLinkRow(
-                        isLinkedInit = book!!.linkedExternalUri != null,
-                        linkedUriInit = book!!.linkedExternalUri,
-                        defaultPath = defaultPath,
-                        onLinkChanged = { newUri ->
-                            val updated = book!!.copy(linkedExternalUri = newUri)
-                            scope.launch {
-                                bookRepository.update(updated)
-                            }
-                        })
-
-                    /* -------------- Other book info -----------*/
-                    Text(stringResource(R.string.details_notebook_pages, book!!.pageIds.size))
-                    Text("Size: TODO!")
-                    Row {
-                        Text(stringResource(R.string.details_notebook_in_folder))
-                        BreadCrumb(folders = breadcrumbFolders, fontSize = 16)  { }
-                    }
-                    Text(stringResource(R.string.details_notebook_created, formattedCreatedAt))
-                    Text(stringResource(R.string.details_notebook_last_updated, formattedUpdatedAt))
+    BoxWithConstraints(
+        modifier = Modifier
+            .background(Color.White)
+            .fillMaxWidth()
+            .border(2.dp, Color.Black, RectangleShape)
+            .padding(16.dp)
+            .padding(top = 24.dp, bottom = 16.dp)
+    ) {
+        // A phone's dialog has no room for the preview beside the details.
+        val narrow = maxWidth < 500.dp
+        Column {
+            if (narrow) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    preview()
+                    Spacer(Modifier.height(16.dp))
+                    details()
+                }
+            } else {
+                Row {
+                    preview()
+                    Spacer(Modifier.width(16.dp))
+                    details()
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
             // Grid Actions Section
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ActionButton(stringResource(R.string.details_notebook_buttons_delete)) {
-                    showDeleteDialog = true
-                }
-                ActionButton(stringResource(R.string.details_notebook_buttons_move)) {
-                    showMoveDialog = true
-                }
-                ActionButton(stringResource(R.string.details_notebook_buttons_export)) {
-                    showExportDialog = true
-                }
-                ActionButton(stringResource(R.string.copy_link)) {
-                    copyLink(context, DeepLink.Book(bookId), book!!.title, snackManager::showOrUpdateSnack)
-                }
+                ActionButton(stringResource(R.string.details_notebook_buttons_delete), onDelete)
+                ActionButton(stringResource(R.string.details_notebook_buttons_move), onMove)
+                ActionButton(stringResource(R.string.details_notebook_buttons_export), onExport)
+                ActionButton(stringResource(R.string.copy_link), onCopyLink)
                 if (!isNewlyCreated) {
-                    ActionButton(stringResource(R.string.details_notebook_buttons_duplicate)) {
-                        scope.launch {
-                            try {
-                                snackManager.runWithSnack("Duplicating notebook...", 2000) {
-                                    val newNotebookId = appRepository.duplicateNotebook(bookId)
-                                    if (newNotebookId != null) "Notebook duplicated."
-                                    else "Duplicating failed: notebook not found."
-                                }
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                // runWithSnack has already shown the error to the user.
-                                log.e("Duplicating notebook failed: ${e.message}", e)
-                            }
-                        }
-                    }
+                    ActionButton(stringResource(R.string.details_notebook_buttons_duplicate), onDuplicate)
                 }
                 if (isNewlyCreated) {
                     ActionButton(stringResource(R.string.details_notebook_buttons_create)) {
-                        val firstPageId = book!!.pageIds.firstOrNull()
                         focusManager.clearFocus()
-                        scope.launch {
-                            if (book!!.title != bookTitle) {
-                                bookRepository.setTitle(bookId, bookTitle)
-                            }
-                            onClose()
-                            if (firstPageId != null) {
-                                onOpenInEditor?.invoke(firstPageId, bookId)
-                            }
-                        }
+                        onCreate()
                     }
                 }
             }
         }
-
     }
-
 }
+
+@Composable
+private fun NotebookConfigPreview(isNewlyCreated: Boolean) {
+    NotebookConfigContent(
+        book = Notebook(title = "Lecture notes", pageIds = listOf("p1", "p2", "p3")),
+        title = "Lecture notes",
+        onTitleChange = {},
+        onTitleDone = {},
+        breadcrumbFolders = listOf(Folder(title = "Studies")),
+        isNewlyCreated = isNewlyCreated,
+        onChangeBackground = {},
+        onLinkedChange = {},
+        onDelete = {},
+        onMove = {},
+        onExport = {},
+        onCopyLink = {},
+        onDuplicate = {},
+        onCreate = {},
+    )
+}
+
+@Preview(name = "Notebook settings", showBackground = true, widthDp = 800)
+@Composable
+private fun ExistingNotebookConfigPreview() = NotebookConfigPreview(isNewlyCreated = false)
+
+@Preview(name = "New notebook", showBackground = true, widthDp = 800)
+@Composable
+private fun NewNotebookConfigPreview() = NotebookConfigPreview(isNewlyCreated = true)
+
+@Preview(name = "Notebook settings, phone", showBackground = true, widthDp = 340)
+@Composable
+private fun PhoneNotebookConfigPreview() = NotebookConfigPreview(isNewlyCreated = false)
 
 @Composable
 fun ActionButton(text: String, onClick: () -> Unit) {
@@ -422,14 +399,10 @@ fun ActionButton(text: String, onClick: () -> Unit) {
 
 @Composable
 fun NotebookLinkRow(
-    isLinkedInit: Boolean,
-    linkedUriInit: String?,
-    defaultPath: String,
-    onLinkChanged: (String?) -> Unit
+    linkedUri: String?,
+    onLinkedChange: (Boolean) -> Unit
 ) {
-    var isLinked by remember { mutableStateOf(isLinkedInit) }
-
-    val linkText = linkedUriInit?.let {
+    val linkText = linkedUri?.let {
         if (it.length > 32) "${it.take(5)}...${it.takeLast(7)}/\${bookTitle}" else it
     } ?: "none"
 
@@ -445,26 +418,11 @@ fun NotebookLinkRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        if (isLinked) {
-            Button(
-                onClick = {
-                    isLinked = false
-                    onLinkChanged(null)
-                },
-                modifier = Modifier.weight(0.3f, fill = false)
-            ) {
-                Text("Unlink")
-            }
-        } else {
-            Button(
-                onClick = {
-                    isLinked = true
-                    onLinkChanged(defaultPath)
-                },
-                modifier = Modifier.weight(0.3f, fill = false)
-            ) {
-                Text("Link")
-            }
+        Button(
+            onClick = { onLinkedChange(linkedUri == null) },
+            modifier = Modifier.weight(0.3f, fill = false)
+        ) {
+            Text(if (linkedUri == null) "Link" else "Unlink")
         }
     }
 }

@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -23,32 +21,36 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ethran.notable.data.AppRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.ScaledDialog
-import com.ethran.notable.ui.components.getFolderList
+import kotlinx.coroutines.flow.Flow
 
 
+/** A folder as the picker shows it: the path to it, its parent and the folders in it. */
+data class FolderContents(
+    val breadcrumbs: List<Folder>,
+    val parentId: String?,
+    val children: List<Folder>,
+)
+
+/** Picks a folder to move [notebookName] to; [folderContents] says what a folder holds. */
 @Composable
 fun ShowFolderSelectionDialog(
-    appRepository: AppRepository,
     notebookName: String,
     initialFolderId: String?,
+    folderContents: (folderId: String?) -> Flow<FolderContents>,
     onCancel: () -> Unit,
     onConfirm: (String?) -> Unit
 ) {
 
     var currentFolderId by remember { mutableStateOf(initialFolderId) }
-    val availableFolders by appRepository.folderRepository.getAllInFolder(currentFolderId)
-        .observeAsState()
-
-    var breadcrumbFolders by remember { mutableStateOf<List<Folder>>(emptyList()) }
-    LaunchedEffect(currentFolderId) {
-        breadcrumbFolders = getFolderList(appRepository, currentFolderId)
-    }
-
-    val parentFolder = appRepository.folderRepository.getParentLive(currentFolderId).observeAsState().value
+    val contents by remember(currentFolderId) { folderContents(currentFolderId) }
+        .collectAsStateWithLifecycle(initialValue = null)
+    val breadcrumbFolders = contents?.breadcrumbs.orEmpty()
+    val availableFolders = contents?.children
+    val parentFolder = contents?.parentId
 
     ScaledDialog(onDismissRequest = { onCancel() }) {
         Column(

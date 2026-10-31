@@ -4,12 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,12 +17,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
-import com.ethran.notable.io.ExportTarget
-import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.ScaledDialog
-import kotlinx.coroutines.launch
 
 @Composable
 fun ShowSimpleConfirmationDialog(
@@ -79,15 +75,12 @@ fun ShowConfirmationDialog(
     }
 }
 
+/** Asks in which format to export a book; [onExport] gets the chosen one. */
 @Composable
 fun ShowExportDialog(
-    exportEngine: ExportEngine,
-    snackManager: SnackState,
-    bookId: String,
-    onConfirm: () -> Unit,
+    onExport: (ExportFormat) -> Unit,
     onCancel: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
     ScaledDialog(onDismissRequest = { onCancel() }) {
         Column(
             modifier = Modifier
@@ -102,46 +95,16 @@ fun ShowExportDialog(
                 text = "Select the format in which you want to export the book:\n" + "- Xopp: Preserves all data and can be imported. " + "However, if opened and saved by Xournal++, tool-specific information will be lost, " + "and all strokes will be interpreted as ballpoint pen.\n" + "- PDF: A standard format for document sharing.",
                 fontSize = 16.sp
             )
-            Row(
-                horizontalArrangement = Arrangement.SpaceAround,
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .padding(vertical = 24.dp)
             ) {
-                ActionButton(
-                    text = "Cancel", onClick = onCancel
-                )
-                ActionButton(
-                    text = "Export as PDF", onClick = {
-                        scope.launch {
-                            snackManager.runWithSnack(
-                                "Exporting book to PDF.."
-                            ) {
-                                exportEngine.export(
-                                    target = ExportTarget.Book(bookId = bookId),
-                                    format = ExportFormat.PDF,
-                                )
-
-                            }
-
-                        }
-                        onConfirm()
-                    })
-                ActionButton(
-                    text = "Export as Xopp", onClick = {
-                        scope.launch {
-                            snackManager.runWithSnack(
-                                "Exporting the book to xopp..."
-                            ) {
-                               exportEngine.export(
-                                    target = ExportTarget.Book(bookId = bookId),
-                                    format = ExportFormat.XOPP,
-                                )
-                            }
-                        }
-
-                        onConfirm()
-                    })
+                ActionButton(text = "Cancel", onClick = onCancel)
+                ActionButton(text = "Export as PDF", onClick = { onExport(ExportFormat.PDF) })
+                ActionButton(text = "Export as Xopp", onClick = { onExport(ExportFormat.XOPP) })
             }
         }
     }
