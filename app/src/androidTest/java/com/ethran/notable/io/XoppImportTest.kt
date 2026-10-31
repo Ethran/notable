@@ -115,8 +115,9 @@ class XoppImportTest {
     }
 
     @Test(timeout = 60_000)
-    fun titleGivenInOptions_isUsedWithoutItsExtension() = runBlocking {
-        import(firstPageOfFixture("FirstPage.xopp"), ImportOptions(bookTitle = "ManualTitle.xopp"))
+    fun titleGivenInOptions_isUsed_andTheTypeStillComesFromTheFileName() = runBlocking {
+        // A file: URI has no MIME type, so only the file name says this is a xopp file.
+        import(firstPageOfFixture("FirstPage.xopp"), ImportOptions(bookTitle = "ManualTitle"))
             .successData()
 
         assertEquals("ManualTitle", db.notebookDao().getAll().single().title)

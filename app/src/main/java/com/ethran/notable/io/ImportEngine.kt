@@ -93,8 +93,9 @@ class ImportEngine @Inject constructor(
         if (options.fileType != null && mimeType != options.fileType)
             return AppResult.Error(DomainError.UnexpectedState("File type mismatch. Expected: ${options.fileType}, Actual: $mimeType"))
 
-        val bookTitle = sanitizeNotebookName(options.bookTitle ?: getFileName(uri))
-        log.d("Starting import for uri: $uri, mimeType: $mimeType, fileName: $bookTitle")
+        val fileName = getFileName(uri)
+        val bookTitle = sanitizeNotebookName(options.bookTitle ?: fileName)
+        log.d("Starting import for uri: $uri, mimeType: $mimeType, fileName: $fileName, title: $bookTitle")
 
         // strip extension if present in bookTitle (from options or getFileName)
         val finalTitle = if (bookTitle.endsWith(".xopp", ignoreCase = true)) {
@@ -112,9 +113,10 @@ class ImportEngine @Inject constructor(
             bookTitle = finalTitle,
         )
 
+        // The type comes from the file's own name, never from a title given in the options.
         return when {
-            XoppFile.isXoppFile(mimeType, bookTitle) -> handleImportXopp(uri, optionsWithTitle)
-            isPdfFile(mimeType, bookTitle) -> handleImportPDF(uri, optionsWithTitle)
+            XoppFile.isXoppFile(mimeType, fileName) -> handleImportXopp(uri, optionsWithTitle)
+            isPdfFile(mimeType, fileName) -> handleImportPDF(uri, optionsWithTitle)
             else -> {
                 val errorMessage = "Unsupported file type: $mimeType"
                 log.w(errorMessage)
