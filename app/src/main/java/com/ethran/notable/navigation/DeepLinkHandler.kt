@@ -68,6 +68,8 @@ fun DeepLinkHandler(
 
     LaunchedEffect(links) {
         links.collect { link ->
+            // A new link replaces a question about an earlier one.
+            askToImport = null
             if (navigator.isOnWelcome) {
                 log.i("Ignoring $link until setup is finished")
                 snack("Finish setting up Notable first")
