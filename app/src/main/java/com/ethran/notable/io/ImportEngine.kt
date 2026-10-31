@@ -94,23 +94,15 @@ class ImportEngine @Inject constructor(
             return AppResult.Error(DomainError.UnexpectedState("File type mismatch. Expected: ${options.fileType}, Actual: $mimeType"))
 
         val fileName = getFileName(uri)
-        val bookTitle = sanitizeNotebookName(options.bookTitle ?: fileName)
+        // The extension comes off before sanitizing, which trims the end and caps the length.
+        val bookTitle = sanitizeNotebookName(withoutExtension(options.bookTitle ?: fileName))
         log.d("Starting import for uri: $uri, mimeType: $mimeType, fileName: $fileName, title: $bookTitle")
-
-        // strip extension if present in bookTitle (from options or getFileName)
-        val finalTitle = if (bookTitle.endsWith(".xopp", ignoreCase = true)) {
-            bookTitle.removeSuffix(".xopp")
-        } else if (bookTitle.endsWith(".pdf", ignoreCase = true)) {
-            bookTitle.removeSuffix(".pdf")
-        } else {
-            bookTitle
-        }
 
         if (options.saveToBookId != null)
             TODO("Implement logic to save into an existing book (ID: ${options.saveToBookId})")
 
         val optionsWithTitle = options.copy(
-            bookTitle = finalTitle,
+            bookTitle = bookTitle,
         )
 
         // The type comes from the file's own name, never from a title given in the options.
@@ -246,6 +238,11 @@ class ImportEngine @Inject constructor(
      */
     private fun getFileName(uri: Uri): String =
         uri.lastPathSegment?.substringAfterLast("/") ?: "Imported Book"
+
+    /** [name] without a `.xopp` or `.pdf` extension, in any case. */
+    private fun withoutExtension(name: String): String =
+        listOf(".xopp", ".pdf").firstOrNull { name.endsWith(it, ignoreCase = true) }
+            ?.let { name.dropLast(it.length) } ?: name
 
 
     private fun sanitizeNotebookName(raw: String, maxLen: Int = 100): String {

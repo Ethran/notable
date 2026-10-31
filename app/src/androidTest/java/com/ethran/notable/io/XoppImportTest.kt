@@ -123,6 +123,17 @@ class XoppImportTest {
         assertEquals("ManualTitle", db.notebookDao().getAll().single().title)
     }
 
+    /** The title is the file name without its extension, then cleaned of what a title can't hold. */
+    @Test(timeout = 60_000)
+    fun titleFromTheFileName_losesItsExtensionBeforeBeingCleaned() = runBlocking {
+        val long = "a".repeat(98)
+        for (name in listOf("Lecture (2).XOPP", "$long.xopp")) {
+            assertEquals(1, import(firstPageOfFixture(name)).successData().size)
+        }
+
+        assertEquals(listOf("Lecture 2", long), db.notebookDao().getAll().map { it.title }.sorted())
+    }
+
     /** The same strokes, in any order, every point within the 0.01 px the database keeps. */
     private fun assertSameStrokes(expected: List<FloatArray>, imported: List<FloatArray>) {
         assertEquals(expected.size, imported.size)
