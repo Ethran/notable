@@ -1,25 +1,18 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Shrink and optimize, but keep names and line numbers so crash logs stay readable.
+-dontobfuscate
+-keepattributes SourceFile,LineNumberTable
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# lz4-java picks its compressor implementation by class name.
+-keep class net.jpountz.** { *; }
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Onyx SDK: reflection into hidden APIs and its own classes; it ships no rules.
+-keep class com.onyx.** { *; }
+-dontwarn com.onyx.**
+# fastjson2, used by the Onyx SDK, (de)serializes by reflection.
+-keep class com.alibaba.fastjson2.** { *; }
+-dontwarn com.alibaba.fastjson2.**
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
-
-# Ignore optional dependencies used by libraries
-#-dontwarn org.joda.convert.FromString
-#-dontwarn org.joda.convert.ToString
+# MuPDF: native code calls back into these classes.
+-keep class com.artifex.mupdf.fitz.** { *; }
+# Optional annotations joda-time (from the Onyx SDK) refers to.
+-dontwarn org.joda.convert.**

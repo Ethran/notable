@@ -82,9 +82,17 @@ jobs:
       - name: Rename APK
         run: mv ${{ github.workspace }}/app/build/outputs/apk/release/app-release.apk ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.VERSION_NAME }}.apk
 
+      # R8 renumbers lines; `retrace mapping.txt trace.txt` turns a crash log back into source lines.
+      - name: Zip R8 Mapping
+        run: |
+          cd ${{ github.workspace }}/app/build/outputs/mapping/release
+          zip -q ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.VERSION_NAME }}-mapping.zip mapping.txt
+
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
-          files: ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.VERSION_NAME }}.apk
+          files: |
+            ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.VERSION_NAME }}.apk
+            ${{ github.workspace }}/app/build/outputs/apk/release/notable-${{ env.VERSION_NAME }}-mapping.zip
           tag_name: v${{ env.VERSION_NAME }}
           token: ${{ secrets.TOKEN }}
