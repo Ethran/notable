@@ -64,7 +64,6 @@ import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncRequest
 import com.ethran.notable.ui.LocalSnackContext
-import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.PagePreview
 import com.ethran.notable.ui.components.ScaledDialog
@@ -363,13 +362,6 @@ fun NotebookConfigDialog(
                 }
                 ActionButton(stringResource(R.string.copy_link)) {
                     copyLink(context, DeepLink.Book(bookId), book!!.title, snackManager::showOrUpdateSnack)
-                }
-                ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
-                    scope.launch {
-                        snackManager.displaySnack(
-                            SnackConf(text = "Not implemented!", duration = 2000)
-                        )
-                    }
                 }
 
             }
