@@ -1,7 +1,5 @@
 package com.ethran.notable.io
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
@@ -176,9 +174,7 @@ class ExportEngine @Inject constructor(
                         doc.writeTo(out)
                     }
                 }
-                if (options.copyToClipboard) copyPagePngLink(
-                    context, target.pageId
-                ) // You may want a separate PDF variant
+                if (options.copyToClipboard) copyPageLink(target.pageId)
             }
         }
 
@@ -218,9 +214,7 @@ class ExportEngine @Inject constructor(
                         ext, mime, options.overwrite, bytes
                     )
                 }
-                if (options.copyToClipboard && format == ExportFormat.PNG) {
-                    copyPagePngLink(context, pageId)
-                }
+                if (options.copyToClipboard) copyPageLink(pageId)
                 return "Page exported: $baseFileName.$ext"
             }
 
@@ -575,14 +569,9 @@ class ExportEngine @Inject constructor(
 
     /* -------------------- Clipboard Helpers -------------------- */
 
-    private fun copyPagePngLink(context: Context, pageId: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = """
-            [[../attachments/Notable/Pages/notable-page-$pageId.png]]
-            [[${DeepLink.Page(pageId).toUri()}][Notable Link]]
-        """.trimIndent()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Page Link", text))
-    }
+    // The export reports its own result, so the copy isn't confirmed separately.
+    private suspend fun copyPageLink(pageId: String) =
+        copyLink(context, DeepLink.Page(pageId), pageLinkTitle(appRepository, pageId)) {}
 
     /* -------------------- Utilities -------------------- */
 
