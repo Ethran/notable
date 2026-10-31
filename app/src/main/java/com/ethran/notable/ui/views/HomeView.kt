@@ -115,7 +115,9 @@ fun Library(
         onCreateNewQuickPage = { onCreateNewQuickPage(uiState.folderId) },
         onCreateNewFolder = viewModel::createNewFolder,
         onDeleteEmptyBook = viewModel::deleteEmptyBook,
-        onCreateNewNotebook = viewModel::onCreateNewNotebook,
+        onCreateNewNotebook = {
+            navController.navigate(NewNotebookDestination.createRoute(uiState.folderId))
+        },
         onImportPdf = viewModel::onPdfFile,
         onImportXopp = viewModel::onXoppFile,
         onPreviewMissing = viewModel::onPreviewRequested

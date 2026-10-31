@@ -18,6 +18,7 @@ import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.NewNotebookDestination
 import com.ethran.notable.ui.views.PagesDestination
 import com.ethran.notable.ui.views.SystemInformationDestination
 import com.ethran.notable.ui.views.WelcomeDestination
@@ -131,6 +132,13 @@ class NotableNavigator(
         }
         navController.navigate(EditorDestination.createRoute(pageId, bookId)) {
             if (sameBook != null) popUpTo(sameBook.destination.id) { inclusive = true }
+        }
+    }
+
+    /** Opens a notebook just made on the new-notebook screen, in that screen's place. */
+    fun openNewNotebook(pageId: String, bookId: String) {
+        navController.navigate(EditorDestination.createRoute(pageId, bookId)) {
+            popUpTo(NewNotebookDestination.routeWithArgs) { inclusive = true }
         }
     }
 
