@@ -30,9 +30,10 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.navigation.DeepLink
-import com.ethran.notable.navigation.LinkCopier
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.io.copyLink
+import com.ethran.notable.io.pageLinkTitle
 import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.ui.SnackConf
@@ -188,7 +189,6 @@ class EditorViewModel @Inject constructor(
     val appRepository: AppRepository,
     private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
-    private val linkCopier: LinkCopier,
     val pageDataManager: PageDataManager,
     val pageLeases: PageLeases,
     private val pageSaver: PageSaver,
@@ -360,8 +360,20 @@ class EditorViewModel @Inject constructor(
                 bookId?.let { handleExport(ExportTarget.Book(it), action.format) }
             }
 
-            ToolbarAction.CopyPageLink -> linkCopier.copy(DeepLink.Page(currentPageId))
-            ToolbarAction.CopyBookLink -> bookId?.let { linkCopier.copy(DeepLink.Book(it)) }
+            ToolbarAction.CopyPageLink -> {
+                val pageId = currentPageId
+                viewModelScope.launch {
+                    val title = pageLinkTitle(appRepository, pageId)
+                    copyLink(context, DeepLink.Page(pageId), title, snackDispatcher::showOrUpdateSnack)
+                }
+            }
+
+            ToolbarAction.CopyBookLink -> bookId?.let { id ->
+                viewModelScope.launch {
+                    val title = appRepository.bookRepository.getById(id)?.title ?: "Notable notebook"
+                    copyLink(context, DeepLink.Book(id), title, snackDispatcher::showOrUpdateSnack)
+                }
+            }
 
             is ToolbarAction.BackgroundChanged -> handleBackgroundChange(action.type, action.path)
 

@@ -23,8 +23,10 @@ import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.deletePage
+import com.ethran.notable.io.copyLink
+import com.ethran.notable.io.pageLinkTitle
 import com.ethran.notable.navigation.DeepLink
-import com.ethran.notable.navigation.rememberLinkCopier
+import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.utils.onSuccess
@@ -54,7 +56,7 @@ fun PageMenu(
     val pageSaver = remember(context) {
         EntryPoints.get(context.applicationContext, PageMenuEntryPoint::class.java).pageSaver()
     }
-    val linkCopier = rememberLinkCopier()
+    val snackState = LocalSnackContext.current
     ScaledPopup(
         alignment = Alignment.TopStart,
         onDismissRequest = { onClose() },
@@ -123,8 +125,11 @@ fun PageMenu(
                 Modifier
                     .padding(10.dp)
                     .noRippleClickable {
-                        linkCopier.copy(DeepLink.Page(pageId))
-                        onClose()
+                        scope.launch {
+                            val title = pageLinkTitle(appRepository, pageId)
+                            copyLink(context, DeepLink.Page(pageId), title, snackState::showOrUpdateSnack)
+                            onClose()
+                        }
                     }) {
                 Text(stringResource(R.string.copy_link))
             }

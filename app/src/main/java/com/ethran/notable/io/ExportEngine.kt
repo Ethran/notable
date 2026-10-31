@@ -1,5 +1,7 @@
 package com.ethran.notable.io
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
@@ -11,8 +13,6 @@ import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageSaver
-import com.ethran.notable.navigation.DeepLink
-import com.ethran.notable.navigation.LinkCopier
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -22,6 +22,7 @@ import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.di.IoDispatcher
+import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -71,7 +72,6 @@ class ExportEngine @Inject constructor(
     private val pageContentRenderer: PageContentRenderer,
     private val appEventBus: AppEventBus,
     private val pageSaver: PageSaver,
-    private val linkCopier: LinkCopier,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
@@ -176,7 +176,9 @@ class ExportEngine @Inject constructor(
                         doc.writeTo(out)
                     }
                 }
-                if (options.copyToClipboard) linkCopier.copy(DeepLink.Page(target.pageId))
+                if (options.copyToClipboard) copyPagePngLink(
+                    context, target.pageId
+                ) // You may want a separate PDF variant
             }
         }
 
@@ -217,7 +219,7 @@ class ExportEngine @Inject constructor(
                     )
                 }
                 if (options.copyToClipboard && format == ExportFormat.PNG) {
-                    linkCopier.copy(DeepLink.Page(pageId))
+                    copyPagePngLink(context, pageId)
                 }
                 return "Page exported: $baseFileName.$ext"
             }
@@ -570,6 +572,17 @@ class ExportEngine @Inject constructor(
         }
     }
 
+
+    /* -------------------- Clipboard Helpers -------------------- */
+
+    private fun copyPagePngLink(context: Context, pageId: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val text = """
+            [[../attachments/Notable/Pages/notable-page-$pageId.png]]
+            [[${DeepLink.Page(pageId).toUri()}][Notable Link]]
+        """.trimIndent()
+        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Page Link", text))
+    }
 
     /* -------------------- Utilities -------------------- */
 

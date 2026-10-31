@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -57,9 +58,9 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.io.copyLink
 import com.ethran.notable.io.getLinkedFilesDir
 import com.ethran.notable.navigation.DeepLink
-import com.ethran.notable.navigation.rememberLinkCopier
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncRequest
 import com.ethran.notable.ui.LocalSnackContext
@@ -85,7 +86,7 @@ fun NotebookConfigDialog(
     val book by bookRepository.getByIdLive(bookId).observeAsState()
     val scope = rememberCoroutineScope()
     val snackManager = LocalSnackContext.current
-    val linkCopier = rememberLinkCopier()
+    val context = LocalContext.current
 
     if (book == null) return
 
@@ -361,7 +362,7 @@ fun NotebookConfigDialog(
                     showExportDialog = true
                 }
                 ActionButton(stringResource(R.string.copy_link)) {
-                    linkCopier.copy(DeepLink.Book(bookId))
+                    copyLink(context, DeepLink.Book(bookId), book!!.title, snackManager::showOrUpdateSnack)
                 }
                 ActionButton(stringResource(R.string.details_notebook_buttons_copy)) {
                     scope.launch {

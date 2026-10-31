@@ -11,7 +11,7 @@ Overview
     - Book(bookId): all pages of a notebook
     - Page(pageId): a single page
 - Options (ExportOptions):
-    - copyToClipboard: on single-page PDF and PNG export, copy a `notable://` link to the page (LinkCopier, format from settings)
+    - copyToClipboard: copy a convenience link for some formats/targets
     - targetFolderUri: destination directory (SAF or file://)
     - overwrite: best-effort replacement of existing files (currently **not working** - replaces all the files.)
     - fileName: base name override (extension added automatically)
@@ -22,10 +22,10 @@ Core (Maintainer: @Ethran)
     - Book: multi-page; pagination via GlobalAppSettings.current.paginatePdf
     - Page: single page (or paginated)
     - Scales to A4 width; splits by A4 height if enabled
-    - Copies a link to the page on single-page export
+    - Copies a link on single-page export
 - PNG
     - Book: <file>-p1.png, <file>-p2.png, …
-    - Page: single PNG; copies a link to the page
+    - Page: single PNG; copies a wiki-style link
 - JPEG
     - Same as PNG, but no clipboard link
 - XOPP (Xournal++)
