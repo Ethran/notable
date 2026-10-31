@@ -13,6 +13,7 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.PageSyncState
 import com.ethran.notable.data.db.PageSyncStateRepository
+import com.ethran.notable.data.db.PageWithData
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.db.getPageIndex
@@ -132,38 +133,51 @@ class AppRepository @Inject constructor(
             log.w("duplicatePage: Missing page Data.")
             return
         }
-        val duplicatedPage = pageWithData.page.copy(
+        val notebookId = pageWithData.page.notebookId
+        val duplicatedPageId = copyPage(pageWithData, notebookId)
+        if (notebookId == null) return
+        val pageIndex = bookRepository.getById(notebookId)?.getPageIndex(pageId) ?: return
+        if (pageIndex != -1) bookRepository.addPage(notebookId, duplicatedPageId, pageIndex + 1)
+    }
+
+    /** Copies a notebook and its contents, excluding its external link. */
+    suspend fun duplicateNotebook(notebookId: String): String? = db.withTransaction {
+        val source = bookRepository.getById(notebookId) ?: return@withTransaction null
+        val pageIds = source.pageIds.map { UUID.randomUUID().toString() }
+        val copy = source.copy(
             id = UUID.randomUUID().toString(),
-            scroll = 0,
+            title = "${source.title} (copy)",
+            pageIds = pageIds,
+            openPageId = pageIds.firstOrNull(),
+            linkedExternalUri = null,
             createdAt = Date(),
             updatedAt = Date()
         )
-        pageRepository.create(duplicatedPage)
-        strokeRepository.create(pageWithData.strokes.map {
-            it.copy(
-                id = UUID.randomUUID().toString(),
-                pageId = duplicatedPage.id,
-                updatedAt = Date(),
-                createdAt = Date()
-            )
-        })
-        imageRepository.create(pageWithData.images.map {
-            it.copy(
-                id = UUID.randomUUID().toString(),
-                pageId = duplicatedPage.id,
-                updatedAt = Date(),
-                createdAt = Date()
-            )
-        })
-        val notebookId = pageWithData.page.notebookId
-        if (notebookId != null) {
-            val book = bookRepository.getById(notebookId) ?: return
-            val pageIndex = book.getPageIndex(pageWithData.page.id)
-            if (pageIndex == -1) return
-            val pageIds = book.pageIds.toMutableList()
-            pageIds.add(pageIndex + 1, duplicatedPage.id)
-            bookRepository.update(book.copy(pageIds = pageIds))
+        bookRepository.createEmpty(copy)
+        for ((sourcePageId, pageId) in source.pageIds.zip(pageIds)) {
+            // Throwing rolls the whole copy back.
+            val page = pageRepository.getWithDataById(sourcePageId)
+                ?: error("Page $sourcePageId of notebook $notebookId is missing")
+            copyPage(page, copy.id, pageId)
         }
+        copy.id
+    }
+
+    /** Copies [source] with its strokes and images into [notebookId] as page [id]; returns [id]. */
+    private suspend fun copyPage(
+        source: PageWithData, notebookId: String?, id: String = UUID.randomUUID().toString()
+    ): String {
+        val now = Date()
+        pageRepository.create(
+            source.page.copy(id = id, notebookId = notebookId, scroll = 0, createdAt = now, updatedAt = now)
+        )
+        strokeRepository.create(source.strokes.map {
+            it.copy(id = UUID.randomUUID().toString(), pageId = id, createdAt = now, updatedAt = now)
+        })
+        imageRepository.create(source.images.map {
+            it.copy(id = UUID.randomUUID().toString(), pageId = id, createdAt = now, updatedAt = now)
+        })
+        return id
     }
 
     suspend fun isObservable(notebookId: String?): Boolean {

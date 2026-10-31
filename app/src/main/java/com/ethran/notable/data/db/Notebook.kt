@@ -73,6 +73,19 @@ interface NotebookDao {
     @Query("UPDATE notebook SET openPageId=:pageId WHERE id=:notebookId")
     suspend fun setOpenPageId(notebookId: String, pageId: String)
 
+    @Query("UPDATE notebook SET title=:title, updatedAt=:updatedAt WHERE id=:notebookId")
+    suspend fun setTitle(notebookId: String, title: String, updatedAt: Date)
+
+    // A null background keeps the current one.
+    @Query("UPDATE notebook SET defaultBackgroundType=:type, defaultBackground=COALESCE(:background, defaultBackground), updatedAt=:updatedAt WHERE id=:notebookId")
+    suspend fun setDefaultBackground(notebookId: String, type: String, background: String?, updatedAt: Date)
+
+    @Query("UPDATE notebook SET linkedExternalUri=:uri, updatedAt=:updatedAt WHERE id=:notebookId")
+    suspend fun setLinkedExternalUri(notebookId: String, uri: String?, updatedAt: Date)
+
+    @Query("UPDATE notebook SET parentFolderId=:folderId, updatedAt=:updatedAt WHERE id=:notebookId")
+    suspend fun setParentFolder(notebookId: String, folderId: String?, updatedAt: Date)
+
     // Advances updatedAt alongside pageIds so a structural change (add/remove/reorder) marks the
     // notebook dirty for sync — otherwise the change would not be detected and could be lost.
     @Query("UPDATE notebook SET pageIds=:pageIds, updatedAt=:updatedAt WHERE id=:id")
@@ -171,6 +184,24 @@ class BookRepository @Inject constructor(
 
     suspend fun setOpenPageId(id: String, pageId: String) {
         notebookDao.setOpenPageId(id, pageId)
+    }
+
+    /** Updates only the title to preserve concurrent changes to other fields. */
+    suspend fun setTitle(id: String, title: String) {
+        notebookDao.setTitle(id, title, Date())
+    }
+
+    /** A null [background] keeps the current one. */
+    suspend fun setDefaultBackground(id: String, type: String, background: String?) {
+        notebookDao.setDefaultBackground(id, type, background, Date())
+    }
+
+    suspend fun setLinkedExternalUri(id: String, uri: String?) {
+        notebookDao.setLinkedExternalUri(id, uri, Date())
+    }
+
+    suspend fun setParentFolder(id: String, folderId: String?) {
+        notebookDao.setParentFolder(id, folderId, Date())
     }
 
     suspend fun addPage(bookId: String, pageId: String, index: Int? = null) {

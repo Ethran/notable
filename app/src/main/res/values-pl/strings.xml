@@ -19,7 +19,6 @@
     <string name="enable_smooth_scrolling">Włącz płynne przewijanie</string>
     <string name="continuous_zoom">Włącz płynne przybliżanie</string>
     <string name="continuous_stroke_slider">Płynny regulator grubości kreski</string>
-    <string name="rename_on_create">Otwórz ustawienia notatknika przy tworzeniu nowego</string>
     <string name="paginate_pdf">Podziel strony przy eksporcie</string>
     <string name="preview_pdf_pagination">Podgląd podziału stron</string>
 
@@ -60,6 +59,7 @@
     <string name="details_notebook_buttons_delete">Usuń</string>
     <string name="details_notebook_buttons_move">Przenieś</string>
     <string name="details_notebook_buttons_export">Eksportuj</string>
+    <string name="details_notebook_buttons_duplicate">Duplikuj</string>
     <string name="details_notebook_linked_to">Powiązane z: %1$s</string>
 
 

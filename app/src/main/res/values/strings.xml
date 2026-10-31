@@ -19,7 +19,6 @@
     <string name="enable_smooth_scrolling">Enable smooth scrolling</string>
     <string name="continuous_zoom">Continuous Zoom</string>
     <string name="continuous_stroke_slider">Continuous Stroke Slider</string>
-    <string name="rename_on_create">Open properties on new notebook</string>
     <string name="paginate_pdf">Paginate PDF</string>
     <string name="preview_pdf_pagination">Preview PDF Pagination</string>
     <string name="uiScale">UI Scale</string>
@@ -55,6 +54,7 @@
     <string name="details_notebook_buttons_delete">Delete</string>
     <string name="details_notebook_buttons_move">Move</string>
     <string name="details_notebook_buttons_export">Export</string>
+    <string name="details_notebook_buttons_duplicate">Duplicate</string>
     <string name="details_notebook_linked_to">Linked to: %1$s</string>
     <string name="welcome_view_title">Welcome to Notable</string>
     <string name="welcome_view_subtitle">For optimal experience, please complete these setup steps:</string>
