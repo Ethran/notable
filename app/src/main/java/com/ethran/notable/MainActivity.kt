@@ -42,6 +42,9 @@ import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.navigation.DeepLink
+import com.ethran.notable.navigation.DeepLinkResolver
+import com.ethran.notable.navigation.parseDeepLink
 import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.ui.AppEventUiBridge
 import com.ethran.notable.ui.LocalSnackContext
@@ -58,6 +61,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -100,6 +105,9 @@ class MainActivity : ComponentActivity() {
     lateinit var syncScheduler: dagger.Lazy<SyncScheduler>
 
     @Inject
+    lateinit var deepLinkResolver: dagger.Lazy<DeepLinkResolver>
+
+    @Inject
     lateinit var snackDispatcher: SnackDispatcher
 
     @Inject
@@ -107,6 +115,12 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var syncWorkUiBridge: SyncWorkUiBridge
+
+    /** Links waiting for the UI; only the latest is kept. */
+    private val deepLinks = Channel<DeepLink>(Channel.CONFLATED)
+
+    // One flow for the activity: a new one on each composition would restart its collector.
+    private val deepLinkFlow = deepLinks.receiveAsFlow()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,6 +140,9 @@ class MainActivity : ComponentActivity() {
         SCREEN_HEIGHT = applicationContext.resources.displayMetrics.heightPixels
 
         trackSystemGestureBlocking()
+
+        // A recreated activity gets its launching intent again; that link was already opened.
+        if (savedInstanceState == null) receiveDeepLink(intent)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -177,7 +194,9 @@ class MainActivity : ComponentActivity() {
                             exportEngine = exportEngineLazy.get(),
                             snackState = snackState,
                             snackDispatcher = snackDispatcher,
-                            appRepository = appRepositoryLazy.get()
+                            appRepository = appRepositoryLazy.get(),
+                            deepLinks = deepLinkFlow,
+                            deepLinkResolver = deepLinkResolver.get(),
                         )
                     } else {
                         ShowInitMessage()
@@ -211,6 +230,28 @@ class MainActivity : ComponentActivity() {
             )
         )
         return true
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receiveDeepLink(intent)
+    }
+
+    private fun receiveDeepLink(intent: Intent) {
+        if (intent.action != Intent.ACTION_VIEW) return
+        // Reopened from recents: the link that started the task was already opened.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val uri = intent.dataString ?: return
+        val link = parseDeepLink(uri)
+        if (link == null) {
+            Log.w(TAG, "Not a Notable link: $uri")
+            snackDispatcher.showOrUpdateSnack(
+                SnackConf(text = "Unrecognized link. Maybe it's from a newer version of Notable?", duration = 3000)
+            )
+            return
+        }
+        Log.i(TAG, "Received link $link")
+        deepLinks.trySend(link)
     }
 
     private fun triggerInitialSync() {

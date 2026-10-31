@@ -117,6 +117,26 @@ class NotableNavigator(
         navController.navigate(EditorDestination.createRoute(pageId, bookId))
     }
 
+    /**
+     * Like [goToEditor], but stays put when [pageId] is already open in the editor, and replaces
+     * the editor when it has another page of the same notebook open, so following links doesn't
+     * pile up pages to go back through.
+     */
+    fun showPage(pageId: String, bookId: String?) {
+        val editor = navController.currentBackStackEntry
+            ?.takeIf { it.destination.route == EditorDestination.routeWithArgs }
+        if (editor != null && pageId == currentPageId) return
+        val sameBook = editor?.takeIf {
+            bookId != null && it.arguments?.getString(EditorDestination.BOOK_ID_ARG) == bookId
+        }
+        navController.navigate(EditorDestination.createRoute(pageId, bookId)) {
+            if (sameBook != null) popUpTo(sameBook.destination.id) { inclusive = true }
+        }
+    }
+
+    val isOnWelcome: Boolean
+        get() = navController.currentDestination?.route == WelcomeDestination.route
+
     fun goBack() {
         navController.popBackStack()
     }

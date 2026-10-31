@@ -12,6 +12,7 @@ import androidx.room.Update
 import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -65,6 +66,9 @@ interface NotebookDao {
 
     @Query("SELECT * FROM notebook WHERE id = (:notebookId)")
     suspend fun getById(notebookId: String): Notebook?
+
+    @Query("SELECT * FROM notebook WHERE defaultBackgroundType = :type")
+    suspend fun getAllWithBackgroundType(type: String): List<Notebook>
 
     @Query("UPDATE notebook SET openPageId=:pageId WHERE id=:notebookId")
     suspend fun setOpenPageId(notebookId: String, pageId: String)
@@ -145,6 +149,20 @@ class BookRepository @Inject constructor(
     fun getByIdLive(notebookId: String): LiveData<Notebook?> {
         return notebookDao.getByIdLive(notebookId)
     }
+
+    /**
+     * The notebook linked to the PDF at [path], the most recently edited one if there are
+     * several. Paths are compared resolved, so `/sdcard/…` finds `/storage/emulated/0/…`.
+     */
+    suspend fun getLinkedToPdf(path: String): Notebook? {
+        val target = canonicalPath(path)
+        return notebookDao.getAllWithBackgroundType(BackgroundType.AutoPdf.key)
+            .filter { canonicalPath(it.defaultBackground) == target }
+            .maxByOrNull { it.updatedAt }
+    }
+
+    private fun canonicalPath(path: String): String =
+        runCatching { File(path).canonicalPath }.getOrDefault(path)
 
     /** Advances the edit timestamp of the notebook holding [pageId]; no-op for a loose page. */
     suspend fun touchUpdatedAtForPage(pageId: String, updatedAt: Date = Date()) {

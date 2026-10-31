@@ -185,6 +185,9 @@ class ImportEngine @Inject constructor(
             ?: return AppResult.Error(DomainError.UnexpectedState("Couldn't determine file path. Does the app have permission to read external storage?"))
 
         val filePath = fileToSave.toString()
+        // Checked before the notebook exists, so an unreadable PDF leaves nothing behind.
+        if (getPdfPageCount(filePath) == 0)
+            return AppResult.Error(DomainError.UnexpectedState("No pages could be read from ${fileToSave.name}"))
 
         val book = Notebook(
             title = options.bookTitle,

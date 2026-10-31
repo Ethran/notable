@@ -29,8 +29,11 @@ import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.navigation.DeepLink
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
+import com.ethran.notable.io.copyLink
+import com.ethran.notable.io.pageLinkTitle
 import com.ethran.notable.sync.SyncOrchestrator
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.ui.SnackConf
@@ -138,6 +141,8 @@ sealed class ToolbarAction {
     data class ImagePicked(val uri: Uri) : ToolbarAction()
     data class ExportPage(val format: ExportFormat) : ToolbarAction()
     data class ExportBook(val format: ExportFormat) : ToolbarAction()
+    object CopyPageLink : ToolbarAction()
+    object CopyBookLink : ToolbarAction()
     data class BackgroundChanged(val type: String, val path: String?) : ToolbarAction()
 
     object NavigateToLibrary : ToolbarAction()
@@ -353,6 +358,21 @@ class EditorViewModel @Inject constructor(
 
             is ToolbarAction.ExportBook -> {
                 bookId?.let { handleExport(ExportTarget.Book(it), action.format) }
+            }
+
+            ToolbarAction.CopyPageLink -> {
+                val pageId = currentPageId
+                viewModelScope.launch {
+                    val title = pageLinkTitle(appRepository, pageId)
+                    copyLink(context, DeepLink.Page(pageId), title, snackDispatcher::showOrUpdateSnack)
+                }
+            }
+
+            ToolbarAction.CopyBookLink -> bookId?.let { id ->
+                viewModelScope.launch {
+                    val title = appRepository.bookRepository.getById(id)?.title ?: "Notable notebook"
+                    copyLink(context, DeepLink.Book(id), title, snackDispatcher::showOrUpdateSnack)
+                }
             }
 
             is ToolbarAction.BackgroundChanged -> handleBackgroundChange(action.type, action.path)

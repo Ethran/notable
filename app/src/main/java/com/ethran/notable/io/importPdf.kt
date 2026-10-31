@@ -1,5 +1,6 @@
 package com.ethran.notable.io
 
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -29,9 +30,12 @@ fun handleFileSaving(
 ): File? {
     ensureNotMainThread("Importing")
 
-    //copy file:
-    val flag = Intent.FLAG_GRANT_READ_URI_PERMISSION
-    context.contentResolver.takePersistableUriPermission(uri, flag)
+    // A plain file has no permission to keep; reading it relies on storage access.
+    if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+        context.contentResolver.takePersistableUriPermission(
+            uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
+    }
     val subfolder = BackgroundType.Pdf(0).folderName
     return if (!options.linkToExternalFile) copyBackgroundToDatabase(context, uri, subfolder)
     else {

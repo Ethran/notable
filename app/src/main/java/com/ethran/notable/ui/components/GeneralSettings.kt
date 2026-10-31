@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.navigation.LinkFormat
 
 
 @Composable
@@ -30,6 +31,14 @@ fun GeneralSettings(
                 )
             ), value = settings.toolbarPosition, onValueChange = { newPosition ->
                 onSettingsChange(settings.copy(toolbarPosition = newPosition))
+            })
+        SelectorRow(
+            label = stringResource(R.string.link_format), options = listOf(
+                LinkFormat.Plain to "Plain",
+                LinkFormat.Markdown to "Markdown",
+                LinkFormat.Org to "Org",
+            ), value = settings.linkFormat, onValueChange = {
+                onSettingsChange(settings.copy(linkFormat = it))
             })
 
         SettingToggleRow(

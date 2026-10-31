@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ethran.notable.io.ExportEngine
 import com.ethran.notable.io.ExportFormat
-import com.ethran.notable.io.ExportOptions
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.ui.SnackState
 import com.ethran.notable.ui.components.ScaledDialog
@@ -121,9 +120,6 @@ fun ShowExportDialog(
                                 exportEngine.export(
                                     target = ExportTarget.Book(bookId = bookId),
                                     format = ExportFormat.PDF,
-                                    options = ExportOptions(
-                                        copyToClipboard = false,
-                                    )
                                 )
 
                             }

@@ -1,7 +1,5 @@
 package com.ethran.notable.io
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
@@ -56,7 +54,6 @@ sealed class ExportTarget {
 }
 
 data class ExportOptions(
-    val copyToClipboard: Boolean = true,
     val targetFolderUri: Uri? = null, // can be made to also get from it fileName.
     val overwrite: Boolean = false,   // TODO: Fix it -- for now it does not work correctly (it overwrites the files too often)
     val fileName: String? = null
@@ -123,7 +120,7 @@ class ExportEngine @Inject constructor(
                     .flatMap {
                         val (folderUri, fileName) = createFileNameAndFolder(
                             target, ExportFormat.XOPP,
-                            ExportOptions(copyToClipboard = false, targetFolderUri = uriStr.toUri()),
+                            ExportOptions(targetFolderUri = uriStr.toUri()),
                         )
                         writeFile(folderUri, "$fileName.xopp", "application/x-xopp", overwrite = true) { out ->
                             xoppFile.writeToXoppStream(target, out)
@@ -175,9 +172,6 @@ class ExportEngine @Inject constructor(
                         doc.writeTo(out)
                     }
                 }
-                if (options.copyToClipboard) copyPagePngLink(
-                    context, target.pageId
-                ) // You may want a separate PDF variant
             }
         }
 
@@ -217,9 +211,6 @@ class ExportEngine @Inject constructor(
                         ext, mime, options.overwrite, bytes
                     )
                 }
-                if (options.copyToClipboard && format == ExportFormat.PNG) {
-                    copyPagePngLink(context, pageId)
-                }
                 return "Page exported: $baseFileName.$ext"
             }
 
@@ -233,9 +224,6 @@ class ExportEngine @Inject constructor(
                         val bytes = bmp.toBytes(compressFormat)
                         saveBytes(folderUri, fileName, ext, mime, options.overwrite, bytes)
                     }
-                }
-                if (options.copyToClipboard) {
-                    log.w("Can't copy book links or images to clipboard -- batch export.")
                 }
                 return "Book exported: ${book.title} (${book.pageIds.size} pages)"
             }
@@ -571,26 +559,6 @@ class ExportEngine @Inject constructor(
         }
     }
 
-
-    /* -------------------- Clipboard Helpers -------------------- */
-
-    private fun copyPagePngLink(context: Context, pageId: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = """
-            [[../attachments/Notable/Pages/notable-page-$pageId.png]]
-            [[Notable Link][notable://page-$pageId]]
-        """.trimIndent()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Page Link", text))
-    }
-
-    private fun copyBookPdfLink(context: Context, bookId: String, bookName: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = """
-            [[../attachments/Notable/Notebooks/$bookName.pdf]]
-            [[Notable Book Link][notable://book-$bookId]]
-        """.trimIndent()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Book PDF Link", text))
-    }
 
     /* -------------------- Utilities -------------------- */
 

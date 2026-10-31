@@ -8,9 +8,15 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
+import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.navigation.DeepLink
+import com.ethran.notable.navigation.toMarkup
+import com.ethran.notable.ui.SnackConf
 import io.shipbook.shipbooksdk.ShipBook
 import java.io.File
 import java.io.FileOutputStream
@@ -104,4 +110,23 @@ private fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
         "com.ethran.notable.provider", //(use your app signature + ".provider" )
         bitmapFile
     )
+}
+/**
+ * Puts [link] on the clipboard as markup in the format chosen in settings, shown as [title]. Below
+ * Android 13 it confirms with [showSnack]; from 13 the system confirms a copy itself.
+ */
+fun copyLink(context: Context, link: DeepLink, title: String, showSnack: (SnackConf) -> Unit) {
+    val text = link.toMarkup(title, GlobalAppSettings.current.linkFormat)
+    context.getSystemService(ClipboardManager::class.java)
+        ?.setPrimaryClip(ClipData.newPlainText("Notable link", text))
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+        showSnack(SnackConf(text = "Link copied", duration = 2000))
+}
+
+/** The title of a link to [pageId]: its notebook and page number. */
+suspend fun pageLinkTitle(appRepository: AppRepository, pageId: String): String {
+    val book = appRepository.pageRepository.getById(pageId)?.notebookId
+        ?.let { appRepository.bookRepository.getById(it) }
+    val index = book?.pageIds?.indexOf(pageId) ?: -1
+    return if (book != null && index >= 0) "${book.title}, p. ${index + 1}" else "Notable page"
 }
