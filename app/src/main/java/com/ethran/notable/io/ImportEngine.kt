@@ -93,28 +93,22 @@ class ImportEngine @Inject constructor(
         if (options.fileType != null && mimeType != options.fileType)
             return AppResult.Error(DomainError.UnexpectedState("File type mismatch. Expected: ${options.fileType}, Actual: $mimeType"))
 
-        val bookTitle = sanitizeNotebookName(options.bookTitle ?: getFileName(uri))
-        log.d("Starting import for uri: $uri, mimeType: $mimeType, fileName: $bookTitle")
-
-        // strip extension if present in bookTitle (from options or getFileName)
-        val finalTitle = if (bookTitle.endsWith(".xopp", ignoreCase = true)) {
-            bookTitle.removeSuffix(".xopp")
-        } else if (bookTitle.endsWith(".pdf", ignoreCase = true)) {
-            bookTitle.removeSuffix(".pdf")
-        } else {
-            bookTitle
-        }
+        val fileName = getFileName(uri)
+        // The extension comes off before sanitizing, which trims the end and caps the length.
+        val bookTitle = sanitizeNotebookName(withoutExtension(options.bookTitle ?: fileName))
+        log.d("Starting import for uri: $uri, mimeType: $mimeType, fileName: $fileName, title: $bookTitle")
 
         if (options.saveToBookId != null)
             TODO("Implement logic to save into an existing book (ID: ${options.saveToBookId})")
 
         val optionsWithTitle = options.copy(
-            bookTitle = finalTitle,
+            bookTitle = bookTitle,
         )
 
+        // The type comes from the file's own name, never from a title given in the options.
         return when {
-            XoppFile.isXoppFile(mimeType, bookTitle) -> handleImportXopp(uri, optionsWithTitle)
-            isPdfFile(mimeType, bookTitle) -> handleImportPDF(uri, optionsWithTitle)
+            XoppFile.isXoppFile(mimeType, fileName) -> handleImportXopp(uri, optionsWithTitle)
+            isPdfFile(mimeType, fileName) -> handleImportPDF(uri, optionsWithTitle)
             else -> {
                 val errorMessage = "Unsupported file type: $mimeType"
                 log.w(errorMessage)
@@ -239,18 +233,16 @@ class ImportEngine @Inject constructor(
 
 
     /**
-     * Extracts the book title from a file URI.
+     * The file name of a URI, with its extension, which tells the file type when the URI has
+     * no MIME type, as a `file:` URI doesn't.
      */
-    private fun getFileName(uri: Uri): String {
-        val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "Imported Book"
-        return if (fileName.endsWith(".xopp", ignoreCase = true)) {
-            fileName.removeSuffix(".xopp")
-        } else if (fileName.endsWith(".pdf", ignoreCase = true)) {
-            fileName.removeSuffix(".pdf")
-        } else {
-            fileName
-        }
-    }
+    private fun getFileName(uri: Uri): String =
+        uri.lastPathSegment?.substringAfterLast("/") ?: "Imported Book"
+
+    /** [name] without a `.xopp` or `.pdf` extension, in any case. */
+    private fun withoutExtension(name: String): String =
+        listOf(".xopp", ".pdf").firstOrNull { name.endsWith(it, ignoreCase = true) }
+            ?.let { name.dropLast(it.length) } ?: name
 
 
     private fun sanitizeNotebookName(raw: String, maxLen: Int = 100): String {

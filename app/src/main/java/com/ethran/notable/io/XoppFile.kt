@@ -55,6 +55,94 @@ private const val PRESSURE_FACTOR = 0.5f
  */
 private const val STROKE_SAVE_BATCH_SIZE = 500
 
+// -----------------------------------------------------------------------------------------
+// Float parsing — zero per-stroke allocation after warm-up
+//
+// Outside XoppFile because they run for every number in a file: a test that mocks XoppFile
+// makes MockK intercept every call to its methods, which would slow later imports ten-fold.
+// -----------------------------------------------------------------------------------------
+
+/**
+ * Parses whitespace-separated floats from [input] into [buf], growing [buf] only when
+ * the current capacity is exhausted. Returns the (possibly grown) buffer and the count
+ * of values written.
+ *
+ * Single-pass, no preliminary space-count scan, no intermediate String or List
+ * allocation. The caller keeps the returned buffer reference across calls so it survives
+ * as a long-lived object and is never re-allocated once it has grown to the maximum
+ * stroke size encountered.
+ */
+private fun extractFloatsInto(input: String, buf: FloatArray): Pair<FloatArray, Int> {
+    var result = buf
+    var resultIdx = 0
+    val len = input.length
+    var start = 0
+
+    // XML whitespace (space, tab, CR, LF) is all at or below ' ', and this test is much cheaper
+    // than Char.isWhitespace.
+    while (start < len) {
+        while (start < len && input[start] <= ' ') start++
+        if (start >= len) break
+
+        var end = start
+        while (end < len && input[end] > ' ') end++
+
+        try {
+            val value = parseCoordinateFast(input, start, end)
+            if (resultIdx == result.size) {
+                result = result.copyOf(result.size * 2)
+            }
+            result[resultIdx++] = value
+        } catch (_: Exception) {
+            // Ignore malformed tokens
+        }
+        start = end
+    }
+    return result to resultIdx
+}
+
+/**
+ * Parses a standard decimal float directly from a [String] slice [[start], [end])
+ * without allocating an intermediate String. Falls back to [String.toFloat] only for
+ * rare scientific-notation values (e.g. "1.5e-3").
+ */
+private fun parseCoordinateFast(input: String, start: Int, end: Int): Float {
+    var isNegative = false
+    var i = start
+    if (i < end && input[i] == '-') {
+        isNegative = true
+        i++
+    } else if (i < end && input[i] == '+') {
+        i++
+    }
+
+    var intPart = 0.0
+    var fraction = 0.0
+    var divisor = 1.0
+    var isFraction = false
+
+    while (i < end) {
+        when (val c = input[i]) {
+            '.' -> isFraction = true
+            in '0'..'9' -> {
+                val digit = c - '0'
+                if (isFraction) {
+                    divisor *= 10.0
+                    fraction += digit / divisor
+                } else {
+                    intPart = intPart * 10.0 + digit
+                }
+            }
+            // Anything else, such as scientific notation, is rare; only then pay the allocation cost
+            else -> return input.substring(start, end).toFloat()
+        }
+        i++
+    }
+
+    val finalValue = (intPart + fraction).toFloat()
+    return if (isNegative) -finalValue else finalValue
+}
+
 class XoppFile @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val pageRepo: PageRepository,
@@ -73,9 +161,6 @@ class XoppFile @Inject constructor(
      * independent state with no risk of data races.
      */
     private class ParseState {
-        /** Accumulates the raw text content of a <stroke> element. Cleared, never re-created. */
-        val textBuffer = StringBuilder(256)
-
         /**
          * Reusable float storage for stroke point coordinates.
          * Grows to fit the largest stroke seen so far, then stays at that size.
@@ -426,90 +511,6 @@ class XoppFile @Inject constructor(
     }
 
     // -----------------------------------------------------------------------------------------
-    // Float parsing — zero per-stroke allocation after warm-up
-    // -----------------------------------------------------------------------------------------
-
-    /**
-     * Parses whitespace-separated floats from [input] into [buf], growing [buf] only when
-     * the current capacity is exhausted. Returns the (possibly grown) buffer and the count
-     * of values written.
-     *
-     * Single-pass, no preliminary space-count scan, no intermediate String or List
-     * allocation. The caller keeps the returned buffer reference across calls so it survives
-     * as a long-lived object and is never re-allocated once it has grown to the maximum
-     * stroke size encountered.
-     */
-    private fun extractFloatsInto(input: CharSequence, buf: FloatArray): Pair<FloatArray, Int> {
-        var result = buf
-        var resultIdx = 0
-        val len = input.length
-        var start = 0
-
-        while (start < len) {
-            while (start < len && input[start].isWhitespace()) start++
-            if (start >= len) break
-
-            var end = start
-            while (end < len && !input[end].isWhitespace()) end++
-
-            try {
-                val value = parseCoordinateFast(input, start, end)
-                if (resultIdx == result.size) {
-                    result = result.copyOf(result.size * 2)
-                }
-                result[resultIdx++] = value
-            } catch (_: Exception) {
-                // Ignore malformed tokens
-            }
-            start = end
-        }
-        return result to resultIdx
-    }
-
-    /**
-     * Parses a standard decimal float directly from a [CharSequence] slice [[start], [end])
-     * without allocating an intermediate String. Falls back to [String.toFloat] only for
-     * rare scientific-notation values (e.g. "1.5e-3").
-     */
-    private fun parseCoordinateFast(input: CharSequence, start: Int, end: Int): Float {
-        var isNegative = false
-        var i = start
-        if (i < end && input[i] == '-') {
-            isNegative = true
-            i++
-        } else if (i < end && input[i] == '+') {
-            i++
-        }
-
-        var intPart = 0.0
-        var fraction = 0.0
-        var divisor = 1.0
-        var isFraction = false
-
-        while (i < end) {
-            when (val c = input[i]) {
-                '.' -> isFraction = true
-                in '0'..'9' -> {
-                    val digit = c - '0'
-                    if (isFraction) {
-                        divisor *= 10.0
-                        fraction += digit / divisor
-                    } else {
-                        intPart = intPart * 10.0 + digit
-                    }
-                }
-                // Scientific notation is rare; only then pay the allocation cost
-                'e', 'E' -> return input.subSequence(start, end).toString().toFloat()
-                else -> return input.subSequence(start, end).toString().toFloat()
-            }
-            i++
-        }
-
-        val finalValue = (intPart + fraction).toFloat()
-        return if (isNegative) -finalValue else finalValue
-    }
-
-    // -----------------------------------------------------------------------------------------
     // Stroke parsing
     // -----------------------------------------------------------------------------------------
 
@@ -529,22 +530,21 @@ class XoppFile @Inject constructor(
         state.widthsBuffer = newWidthsBuf
         val strokeSize = if (widthCount > 0) state.widthsBuffer[0] / scaleFactor else 1.0f
 
-        // Accumulate all TEXT children of <stroke> into the reusable buffer.
-        // setLength(0) resets the internal counter with zero allocation.
-        state.textBuffer.setLength(0)
+        // The text of <stroke>: almost always one TEXT event, which the parser already made a String.
+        var text = ""
         var eventType = parser.next()
         while (eventType != XmlPullParser.END_DOCUMENT &&
             !(eventType == XmlPullParser.END_TAG && parser.name == "stroke")
         ) {
             if (eventType == XmlPullParser.TEXT) {
-                state.textBuffer.append(parser.text)
+                text = if (text.isEmpty()) parser.text else text + parser.text
             }
             eventType = parser.next()
         }
 
         // Parse coordinate pairs into reusable buffer. copyOf only occurs when this stroke
         // is larger than any previously seen — after warm-up, no allocation at all.
-        val (newCoordsBuf, coordCount) = extractFloatsInto(state.textBuffer, state.coordsBuffer)
+        val (newCoordsBuf, coordCount) = extractFloatsInto(text, state.coordsBuffer)
         state.coordsBuffer = newCoordsBuf
         val pointsCount = coordCount / 2
 
