@@ -115,7 +115,7 @@ fun NotebookConfigDialog(
     }
     if (showMoveDialog) {
         ShowFolderSelectionDialog(
-            notebookName = book.title,
+            title = "Choose folder to move \"${book.title}\":",
             initialFolderId = book.parentFolderId,
             folderContents = viewModel::folderContents,
             onCancel = { showMoveDialog = false },

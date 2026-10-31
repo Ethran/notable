@@ -21,11 +21,16 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.asFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.ScaledDialog
+import com.ethran.notable.ui.components.getFolderList
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 
 
 /** A folder as the picker shows it: the path to it, its parent and the folders in it. */
@@ -35,10 +40,21 @@ data class FolderContents(
     val children: List<Folder>,
 )
 
-/** Picks a folder to move [notebookName] to; [folderContents] says what a folder holds. */
+/** What the folder picker shows of [folderId]; null is the library's top level. */
+fun folderContents(appRepository: AppRepository, folderId: String?): Flow<FolderContents> {
+    val folderRepository = appRepository.folderRepository
+    return combine(
+        folderRepository.getAllInFolder(folderId).asFlow(),
+        if (folderId == null) flowOf(null) else folderRepository.getParentLive(folderId).asFlow(),
+    ) { children, parentId ->
+        FolderContents(getFolderList(appRepository, folderId), parentId, children)
+    }
+}
+
+/** Picks a folder, under the heading [title]; [folderContents] says what a folder holds. */
 @Composable
 fun ShowFolderSelectionDialog(
-    notebookName: String,
+    title: String,
     initialFolderId: String?,
     folderContents: (folderId: String?) -> Flow<FolderContents>,
     onCancel: () -> Unit,
@@ -62,7 +78,7 @@ fun ShowFolderSelectionDialog(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Choose folder to move \"$notebookName\":",
+                text = title,
                 fontWeight = FontWeight.Bold,
                 fontSize = 24.sp,
                 modifier = Modifier.padding(bottom = 8.dp)

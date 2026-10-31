@@ -3,7 +3,6 @@ package com.ethran.notable.ui.components
 import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ScrollState
@@ -22,13 +21,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -45,7 +41,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -927,30 +922,6 @@ private fun PenEditDialog(
             }
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Buttons
-// ---------------------------------------------------------------------------
-
-/** Pure black-on-white, square-cornered button — no theme grays, e-ink friendly. */
-@Composable
-private fun EInkButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable RowScope.() -> Unit,
-) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RectangleShape,
-        border = BorderStroke(1.dp, Color.Black),
-        colors = ButtonDefaults.outlinedButtonColors(
-            backgroundColor = Color.White,
-            contentColor = Color.Black,
-        ),
-        content = content,
-    )
 }
 
 // ---------------------------------------------------------------------------

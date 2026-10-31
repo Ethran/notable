@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -85,6 +86,7 @@ import com.ethran.notable.editor.drawing.drawLinedBg
 import com.ethran.notable.editor.drawing.drawSquaredBg
 import com.ethran.notable.editor.utils.autoEInkAnimationOnScroll
 import com.ethran.notable.io.getPdfPageCount
+import com.ethran.notable.ui.components.EInkButton
 import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.components.ScaledDialog
 import compose.icons.FeatherIcons
@@ -107,6 +109,36 @@ fun BackgroundSelector(
     pageNumberInBook: Int = -1,
     onChange: (backgroundType: String, background: String?) -> Unit,
     onClose: () -> Unit
+) {
+    ScaledDialog(onDismissRequest = { onClose() }) {
+        BackgroundSelectorContent(
+            initialPageBackgroundType = initialPageBackgroundType,
+            initialPageBackground = initialPageBackground,
+            initialPageNumberInPdf = initialPageNumberInPdf,
+            isNotebookBgSelector = isNotebookBgSelector,
+            notebookId = notebookId,
+            pageNumberInBook = pageNumberInBook,
+            onChange = onChange,
+            modifier = Modifier
+                .background(Color.White)
+                .fillMaxWidth()
+                .height(550.dp)
+                .border(2.dp, Color.Black, RectangleShape)
+        )
+    }
+}
+
+/** The kinds of background as tabs, and the options of the chosen kind. */
+@Composable
+fun BackgroundSelectorContent(
+    initialPageBackgroundType: String,
+    initialPageBackground: String,
+    initialPageNumberInPdf: Int = 0,
+    isNotebookBgSelector: Boolean = false, // for notebook default background
+    notebookId: String? = null,
+    pageNumberInBook: Int = -1,
+    onChange: (backgroundType: String, background: String?) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -200,149 +232,137 @@ fun BackgroundSelector(
         }
     }
 
-    val modalHeight = 550.dp
-    ScaledDialog(onDismissRequest = { onClose() }) {
-        Column(
+    Column(modifier = modifier) {
+        Box(
             modifier = Modifier
-                .background(Color.White)
                 .fillMaxWidth()
-                .height(modalHeight)
-                .border(2.dp, Color.Black, RectangleShape)
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                contentAlignment = Alignment.Center
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Background Mode Buttons
-                    listOf("Native", "Image", "Cover", "PDF").forEach { modeName ->
-                        Button(
-                            onClick = {
-                                selectedBackgroundMode = modeName
-                            },
-                            modifier = Modifier.padding(horizontal = 5.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                backgroundColor = if (selectedBackgroundMode == modeName) Color.Gray else Color.LightGray
-                            )
-                        ) {
-                            Text(modeName)
-                        }
+                // Background Mode Buttons
+                listOf("Native", "Image", "Cover", "PDF").forEach { modeName ->
+                    EInkButton(
+                        onClick = {
+                            selectedBackgroundMode = modeName
+                        },
+                        modifier = Modifier.padding(horizontal = 5.dp),
+                        inverted = selectedBackgroundMode == modeName
+                    ) {
+                        Text(modeName)
                     }
                 }
             }
-            Box(
-                Modifier
-                    .height(0.5.dp)
-                    .fillMaxWidth()
-                    .background(Color.Black)
-            )
-            Column(Modifier.padding(20.dp, 10.dp)) {
-                when (selectedBackgroundMode) {
-                    "Image" -> {
-                        val currentBackgroundType =
-                            if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image)
-                                pageBackgroundType else BackgroundType.Image
-                        ShowImageOption(
-                            currentBackground = pageBackground,
-                            currentBackgroundType = currentBackgroundType,
-                            onBackgroundChange = { background, type ->
-                                onChange(type.key, background)
-                                pageBackground = background
-                                pageBackgroundType = type
-                            },
-                            onRequestFilePicker = {
-                                pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
-                            }
-                        )
-                        if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image) {
-                            Spacer(Modifier.height(10.dp))
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.repeat_background))
-                                Spacer(Modifier.width(10.dp))
-                                OnOffSwitch(
-                                    checked = pageBackgroundType == BackgroundType.ImageRepeating,
-                                    onCheckedChange = { isChecked ->
-                                        pageBackgroundType =
-                                            if (isChecked) BackgroundType.ImageRepeating else BackgroundType.Image
-
-                                        onChange(pageBackgroundType.key, null)
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    "Cover" -> {
-                        ShowImageOption(
-                            currentBackground = pageBackground,
-                            currentBackgroundType = BackgroundType.CoverImage,
-                            onBackgroundChange = { background, type ->
-                                onChange(type.key, background)
-                                pageBackground = background
-                                log.e("onBackgroundChange: $type")
-                                pageBackgroundType = type
-                            },
-                            onRequestFilePicker = {
-                                log.e("onRequestFilePicker: $pageBackgroundType")
-                                pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
-                            }
-                        )
-                    }
-
-                    "Native" -> {
-                        ShowNativeOption(
-                            currentBackground = pageBackground,
-                            currentBackgroundType = BackgroundType.Native,
-                            onBackgroundChange = { background, type ->
-                                onChange(type.key, background)
-                                pageBackground = background
-                                pageBackgroundType = type
-                            },
-                        )
-                    }
-
-                    "PDF" -> {
-                        val currentBackgroundType =
-                            if (pageBackgroundType == BackgroundType.AutoPdf || pageBackgroundType is BackgroundType.Pdf)
-                                pageBackgroundType else BackgroundType.Pdf(1)
-
-                        fun onBackgroundChange(type: BackgroundType, background: String) {
+        }
+        Box(
+            Modifier
+                .height(0.5.dp)
+                .fillMaxWidth()
+                .background(Color.Black)
+        )
+        Column(Modifier.padding(20.dp, 10.dp)) {
+            when (selectedBackgroundMode) {
+                "Image" -> {
+                    val currentBackgroundType =
+                        if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image)
+                            pageBackgroundType else BackgroundType.Image
+                    ShowImageOption(
+                        currentBackground = pageBackground,
+                        currentBackgroundType = currentBackgroundType,
+                        onBackgroundChange = { background, type ->
                             onChange(type.key, background)
                             pageBackground = background
                             pageBackgroundType = type
-                            maxPages = getPdfPageCount(background)
+                        },
+                        onRequestFilePicker = {
+                            pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
                         }
-                        ShowPdfOption(
-                            currentBackground = pageBackground,
-                            currentBackgroundType = currentBackgroundType,
-                            onBackgroundChange = ::onBackgroundChange,
-                            onRequestFilePicker = {
-                                log.e("onRequestFilePicker: $pageBackgroundType")
-                                pickPdf.launch(arrayOf("application/pdf"))
-                            }
-                        )
-                        PageNumberSelector(
-                            currentBackground = pageBackground,
-                            currentBackgroundType = pageBackgroundType,
-                            maxPages = maxPages,
-                            currentPage = currentPage,
-                            onBackgroundChange = ::onBackgroundChange,
-                            showAutoPdfOption = (notebookId != null) && ((maxPages
-                                ?: 0) > pageNumberInBook),
-                            isNotebookBgSelector = isNotebookBgSelector
-                        )
+                    )
+                    if (pageBackgroundType == BackgroundType.ImageRepeating || pageBackgroundType == BackgroundType.Image) {
+                        Spacer(Modifier.height(10.dp))
 
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.repeat_background))
+                            Spacer(Modifier.width(10.dp))
+                            OnOffSwitch(
+                                checked = pageBackgroundType == BackgroundType.ImageRepeating,
+                                onCheckedChange = { isChecked ->
+                                    pageBackgroundType =
+                                        if (isChecked) BackgroundType.ImageRepeating else BackgroundType.Image
+
+                                    onChange(pageBackgroundType.key, null)
+                                }
+                            )
+                        }
                     }
+                }
+
+                "Cover" -> {
+                    ShowImageOption(
+                        currentBackground = pageBackground,
+                        currentBackgroundType = BackgroundType.CoverImage,
+                        onBackgroundChange = { background, type ->
+                            onChange(type.key, background)
+                            pageBackground = background
+                            log.d("onBackgroundChange: $type")
+                            pageBackgroundType = type
+                        },
+                        onRequestFilePicker = {
+                            log.d("onRequestFilePicker: $pageBackgroundType")
+                            pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+                        }
+                    )
+                }
+
+                "Native" -> {
+                    ShowNativeOption(
+                        currentBackground = pageBackground,
+                        currentBackgroundType = BackgroundType.Native,
+                        onBackgroundChange = { background, type ->
+                            onChange(type.key, background)
+                            pageBackground = background
+                            pageBackgroundType = type
+                        },
+                    )
+                }
+
+                "PDF" -> {
+                    val currentBackgroundType =
+                        if (pageBackgroundType == BackgroundType.AutoPdf || pageBackgroundType is BackgroundType.Pdf)
+                            pageBackgroundType else BackgroundType.Pdf(1)
+
+                    fun onBackgroundChange(type: BackgroundType, background: String) {
+                        onChange(type.key, background)
+                        pageBackground = background
+                        pageBackgroundType = type
+                        maxPages = getPdfPageCount(background)
+                    }
+                    ShowPdfOption(
+                        currentBackground = pageBackground,
+                        currentBackgroundType = currentBackgroundType,
+                        onBackgroundChange = ::onBackgroundChange,
+                        onRequestFilePicker = {
+                            log.d("onRequestFilePicker: $pageBackgroundType")
+                            pickPdf.launch(arrayOf("application/pdf"))
+                        }
+                    )
+                    PageNumberSelector(
+                        currentBackground = pageBackground,
+                        currentBackgroundType = pageBackgroundType,
+                        maxPages = maxPages,
+                        currentPage = currentPage,
+                        onBackgroundChange = ::onBackgroundChange,
+                        showAutoPdfOption = (notebookId != null) && ((maxPages
+                            ?: 0) > pageNumberInBook),
+                        isNotebookBgSelector = isNotebookBgSelector
+                    )
 
                 }
+
             }
         }
     }

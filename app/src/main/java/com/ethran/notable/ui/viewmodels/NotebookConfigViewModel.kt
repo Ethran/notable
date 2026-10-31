@@ -17,6 +17,7 @@ import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.ui.dialogs.FolderContents
+import com.ethran.notable.ui.dialogs.folderContents
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -27,9 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -52,7 +51,6 @@ class NotebookConfigViewModel @AssistedInject constructor(
 
     private val log = ShipBook.getLogger("NotebookConfigViewModel")
     private val bookRepository = appRepository.bookRepository
-    private val folderRepository = appRepository.folderRepository
 
     /** Null until loaded, and once the notebook is deleted. */
     val book: StateFlow<Notebook?> = bookRepository.getByIdLive(bookId).asFlow()
@@ -65,12 +63,8 @@ class NotebookConfigViewModel @AssistedInject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** What the folder picker shows of [folderId]; null is the library's top level. */
-    fun folderContents(folderId: String?): Flow<FolderContents> = combine(
-        folderRepository.getAllInFolder(folderId).asFlow(),
-        if (folderId == null) flowOf(null) else folderRepository.getParentLive(folderId).asFlow(),
-    ) { children, parentId ->
-        FolderContents(getFolderList(appRepository, folderId), parentId, children)
-    }
+    fun folderContents(folderId: String?): Flow<FolderContents> =
+        folderContents(appRepository, folderId)
 
     fun setTitle(title: String) {
         if (book.value?.title == title) return

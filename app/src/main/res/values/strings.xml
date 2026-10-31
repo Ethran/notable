@@ -56,6 +56,10 @@
     <string name="details_notebook_buttons_export">Export</string>
     <string name="details_notebook_buttons_duplicate">Duplicate</string>
     <string name="details_notebook_linked_to">Linked to: %1$s</string>
+    <string name="new_notebook_screen_title">New notebook</string>
+    <string name="new_notebook_create">Create</string>
+    <string name="new_notebook_change_folder">Change</string>
+    <string name="new_notebook_choose_folder">Choose a folder for the notebook:</string>
     <string name="welcome_view_title">Welcome to Notable</string>
     <string name="welcome_view_subtitle">For optimal experience, please complete these setup steps:</string>
     <string name="welcome_view_file_access">File Access</string>

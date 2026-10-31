@@ -61,6 +61,10 @@
     <string name="details_notebook_buttons_export">Eksportuj</string>
     <string name="details_notebook_buttons_duplicate">Duplikuj</string>
     <string name="details_notebook_linked_to">Powiązane z: %1$s</string>
+    <string name="new_notebook_screen_title">Nowy zeszyt</string>
+    <string name="new_notebook_create">Utwórz</string>
+    <string name="new_notebook_change_folder">Zmień</string>
+    <string name="new_notebook_choose_folder">Wybierz folder dla zeszytu:</string>
 
 
     <!-- Welcome / guide strings -->

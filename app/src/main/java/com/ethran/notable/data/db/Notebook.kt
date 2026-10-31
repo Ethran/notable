@@ -120,7 +120,8 @@ class BookRepository @Inject constructor(
         return notebookDao.getAllFlow()
     }
 
-    suspend fun create(notebook: Notebook) {
+    /** Creates [notebook] with one page; returns that page's id. */
+    suspend fun create(notebook: Notebook): String {
         notebookDao.create(notebook)
         val page = Page(
             notebookId = notebook.id,
@@ -131,6 +132,7 @@ class BookRepository @Inject constructor(
 
         notebookDao.setPageIds(notebook.id, listOf(page.id), Date())
         notebookDao.setOpenPageId(notebook.id, page.id)
+        return page.id
     }
 
     suspend fun createEmpty(notebook: Notebook) {

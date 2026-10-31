@@ -7,11 +7,9 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
-import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.io.ImportEngine
 import com.ethran.notable.io.ImportOptions
 import com.ethran.notable.io.ThumbnailBackfillQueue
@@ -162,18 +160,6 @@ class LibraryViewModel @Inject constructor(
     fun deleteEmptyBook(bookId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             bookRepository.delete(bookId)
-        }
-    }
-
-    fun onCreateNewNotebook() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val settings = GlobalAppSettings.current
-            val notebook = Notebook(
-                parentFolderId = _folderId.value,
-                defaultBackground = settings.defaultNativeTemplate,
-                defaultBackgroundType = BackgroundType.Native.key
-            )
-            bookRepository.create(notebook)
         }
     }
 

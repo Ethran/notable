@@ -18,6 +18,8 @@ import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.BugReportScreen
 import com.ethran.notable.ui.views.Library
 import com.ethran.notable.ui.views.LibraryDestination
+import com.ethran.notable.ui.views.NewNotebookDestination
+import com.ethran.notable.ui.views.NewNotebookView
 import com.ethran.notable.ui.views.PagesDestination
 import com.ethran.notable.ui.views.PagesView
 import com.ethran.notable.ui.views.SettingsDestination
@@ -63,6 +65,18 @@ fun NotableNavHost(
                             folderId
                         )
                     }
+                )
+                appNavigator.cleanCurrentPageId()
+            }
+            composable(
+                route = NewNotebookDestination.routeWithArgs,
+                arguments = listOf(navArgument(NewNotebookDestination.FOLDER_ID_ARG) {
+                    nullable = true
+                }),
+            ) {
+                NewNotebookView(
+                    onBack = { appNavigator.goBack() },
+                    onCreated = { pageId, bookId -> appNavigator.openNewNotebook(pageId, bookId) },
                 )
                 appNavigator.cleanCurrentPageId()
             }
