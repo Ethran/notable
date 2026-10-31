@@ -91,6 +91,7 @@ class DeepLinkTest {
             val org = link.toMarkup(title, LinkFormat.Org)
             assertTrue(org, org.startsWith("[[$uri]["))
             assertEquals(org, 3, org.count { it == ']' })
+            assertEquals(uri, link.toMarkup(title, LinkFormat.Plain))
         }
     }
 }

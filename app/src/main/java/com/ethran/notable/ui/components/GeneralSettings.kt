@@ -34,6 +34,7 @@ fun GeneralSettings(
             })
         SelectorRow(
             label = stringResource(R.string.link_format), options = listOf(
+                LinkFormat.Plain to stringResource(R.string.link_format_plain),
                 LinkFormat.Markdown to "Markdown",
                 LinkFormat.Org to "Org",
             ), value = settings.linkFormat, onValueChange = {

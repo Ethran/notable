@@ -37,13 +37,14 @@ sealed interface DeepLink {
 }
 
 /** How a link is written when copied, to paste into a notes app. */
-enum class LinkFormat { Markdown, Org }
+enum class LinkFormat { Plain, Markdown, Org }
 
-/** The link as [format] markup, shown as [title]. */
+/** The link as [format] markup, shown as [title]; a [LinkFormat.Plain] link is the bare address. */
 fun DeepLink.toMarkup(title: String, format: LinkFormat): String {
     // Brackets would end the title early in both syntaxes.
     val text = title.replace('[', '(').replace(']', ')')
     return when (format) {
+        LinkFormat.Plain -> toUri()
         LinkFormat.Markdown -> "[$text](${toUri()})"
         LinkFormat.Org -> "[[${toUri()}][$text]]"
     }

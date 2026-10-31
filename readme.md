@@ -264,7 +264,7 @@ Notable opens `notable://` links, from a notes app such as Obsidian or Logseq, a
 
 To get a link, use **Copy link to page** or **Copy link to book** in the editor menu, **Copy link**
 in a page's menu, or **Copy link** in the notebook's settings. The link is copied as Markdown,
-`[Title](notable://…)`, or as an Org link; choose the format in Settings → General.
+`[Title](notable://…)`, as an Org link, or plain; choose the format in Settings → General.
 Exporting a single page copies an Org link to the exported image and to the page.
 
 ---
