@@ -82,6 +82,17 @@ class EncodePolylineTest {
     }
 
     @Test
+    fun stored_bytes_stay_the_same_for_every_length_and_sign_of_delta() {
+        // Stored strokes hold these bytes, so they must never change. The deltas take 1, 1, 3, 4,
+        // 5, 6, 7 and 7 characters, both signs, up to 6,000,000 px from 0.
+        val values = floatArrayOf(0f, -0.01f, 12.34f, -5000.5f, 50000f, 1e6f, -6e6f, 7f)
+        val fixture = "?@elAfar]chunI_{ietD~nrcvh@wjclwb@".toByteArray()
+
+        assertArrayEquals(fixture, encode(values, precision = 2))
+        assertArrayEquals(values, decode(fixture, precision = 2), 0f)
+    }
+
+    @Test
     fun a_value_cut_off_at_the_end_is_dropped() {
         val values = floatArrayOf(12.34f, -5000.5f, 7f)
         val encoded = encode(values, precision = 2)
