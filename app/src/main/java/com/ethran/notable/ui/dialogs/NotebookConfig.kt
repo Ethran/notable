@@ -79,7 +79,6 @@ fun NotebookConfigDialog(
     val snackManager = LocalSnackContext.current
     val context = LocalContext.current
 
-    var bookTitle by remember { mutableStateOf(book.title) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -92,38 +91,28 @@ fun NotebookConfigDialog(
             isNotebookBgSelector = true,
             notebookId = book.id,
             onChange = viewModel::setDefaultBackground
-        ) {
-            showBackgroundSelector = false
-        }
+        ) { showBackgroundSelector = false }
     }
-    // Confirmation Dialog for Deletion
     if (showDeleteDialog) {
         ShowSimpleConfirmationDialog(
             title = "Confirm Deletion",
             message = "Are you sure you want to delete \"${book.title}\"?",
             onConfirm = {
                 viewModel.delete()
-                showDeleteDialog = false
                 onClose()
             },
-            onCancel = {
-                showDeleteDialog = false
-            })
+            onCancel = { showDeleteDialog = false })
         return
     }
     if (showExportDialog) {
         ShowExportDialog(
             onExport = { format ->
                 viewModel.export(format)
-                showExportDialog = false
                 onClose()
             },
-            onCancel = {
-                showExportDialog = false
-            })
+            onCancel = { showExportDialog = false })
         return
     }
-    // Folder Selection Dialog
     if (showMoveDialog) {
         ShowFolderSelectionDialog(
             notebookName = book.title,
@@ -131,18 +120,15 @@ fun NotebookConfigDialog(
             folderContents = viewModel::folderContents,
             onCancel = { showMoveDialog = false },
             onConfirm = { selectedFolder ->
-                showMoveDialog = false
-                onClose()
                 viewModel.moveTo(selectedFolder)
+                onClose()
             })
     }
 
     ScaledDialog(onDismissRequest = onClose) {
         NotebookConfigContent(
             book = book,
-            title = bookTitle,
-            onTitleChange = { bookTitle = it },
-            onTitleDone = { viewModel.setTitle(bookTitle) },
+            onRename = viewModel::setTitle,
             breadcrumbFolders = breadcrumbFolders,
             onChangeBackground = { showBackgroundSelector = !showBackgroundSelector },
             onLinkedChange = viewModel::setLinked,
@@ -157,13 +143,11 @@ fun NotebookConfigDialog(
     }
 }
 
-/** The dialog's card for [book]; [title] is the title being edited. */
+/** The dialog's card for [book]; [onRename] gets the edited title when the field loses focus. */
 @Composable
 private fun NotebookConfigContent(
     book: Notebook,
-    title: String,
-    onTitleChange: (String) -> Unit,
-    onTitleDone: () -> Unit,
+    onRename: (String) -> Unit,
     breadcrumbFolders: List<Folder>,
     onChangeBackground: () -> Unit,
     onLinkedChange: (Boolean) -> Unit,
@@ -174,6 +158,7 @@ private fun NotebookConfigContent(
     onDuplicate: () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
+    var title by remember { mutableStateOf(book.title) }
     val formattedCreatedAt = remember(book.createdAt) { DateFormat.format("dd MMM yyyy HH:mm", book.createdAt) }
     val formattedUpdatedAt = remember(book.updatedAt) { DateFormat.format("dd MMM yyyy HH:mm", book.updatedAt) }
 
@@ -219,7 +204,7 @@ private fun NotebookConfigContent(
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text, imeAction = ImeAction.Done
                     ),
-                    onValueChange = onTitleChange,
+                    onValueChange = { title = it },
                     keyboardActions = KeyboardActions(onDone = {
                         focusManager.clearFocus()
                     }),
@@ -228,7 +213,7 @@ private fun NotebookConfigContent(
                         .background(Color(230, 230, 230, 255))
                         .padding(10.dp, 0.dp)
                         .onFocusChanged { focusState ->
-                            if (!focusState.isFocused) onTitleDone()
+                            if (!focusState.isFocused) onRename(title)
                         }
                 )
             }
@@ -336,9 +321,7 @@ private fun NotebookConfigContent(
 private fun NotebookConfigPreview() {
     NotebookConfigContent(
         book = Notebook(title = "Lecture notes", pageIds = listOf("p1", "p2", "p3")),
-        title = "Lecture notes",
-        onTitleChange = {},
-        onTitleDone = {},
+        onRename = {},
         breadcrumbFolders = listOf(Folder(title = "Studies")),
         onChangeBackground = {},
         onLinkedChange = {},

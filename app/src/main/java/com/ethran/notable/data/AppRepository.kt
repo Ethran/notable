@@ -133,16 +133,11 @@ class AppRepository @Inject constructor(
             log.w("duplicatePage: Missing page Data.")
             return
         }
-        val duplicatedPageId = copyPage(pageWithData, pageWithData.page.notebookId)
         val notebookId = pageWithData.page.notebookId
-        if (notebookId != null) {
-            val book = bookRepository.getById(notebookId) ?: return
-            val pageIndex = book.getPageIndex(pageWithData.page.id)
-            if (pageIndex == -1) return
-            val pageIds = book.pageIds.toMutableList()
-            pageIds.add(pageIndex + 1, duplicatedPageId)
-            bookRepository.update(book.copy(pageIds = pageIds))
-        }
+        val duplicatedPageId = copyPage(pageWithData, notebookId)
+        if (notebookId == null) return
+        val pageIndex = bookRepository.getById(notebookId)?.getPageIndex(pageId) ?: return
+        if (pageIndex != -1) bookRepository.addPage(notebookId, duplicatedPageId, pageIndex + 1)
     }
 
     /** Copies a notebook and its contents, excluding its external link. */
