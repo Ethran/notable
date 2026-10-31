@@ -308,11 +308,11 @@ fun BackgroundSelectorContent(
                         onBackgroundChange = { background, type ->
                             onChange(type.key, background)
                             pageBackground = background
-                            log.e("onBackgroundChange: $type")
+                            log.d("onBackgroundChange: $type")
                             pageBackgroundType = type
                         },
                         onRequestFilePicker = {
-                            log.e("onRequestFilePicker: $pageBackgroundType")
+                            log.d("onRequestFilePicker: $pageBackgroundType")
                             pickMedia.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
                         }
                     )
@@ -346,7 +346,7 @@ fun BackgroundSelectorContent(
                         currentBackgroundType = currentBackgroundType,
                         onBackgroundChange = ::onBackgroundChange,
                         onRequestFilePicker = {
-                            log.e("onRequestFilePicker: $pageBackgroundType")
+                            log.d("onRequestFilePicker: $pageBackgroundType")
                             pickPdf.launch(arrayOf("application/pdf"))
                         }
                     )

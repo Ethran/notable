@@ -8,11 +8,15 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.ui.SnackConf
+import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.ui.components.getFolderList
 import com.ethran.notable.ui.dialogs.FolderContents
 import com.ethran.notable.ui.dialogs.folderContents
 import com.ethran.notable.ui.views.NewNotebookDestination
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +48,10 @@ data class CreatedNotebook(val bookId: String, val pageId: String)
 class NewNotebookViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val appRepository: AppRepository,
+    private val snackDispatcher: SnackDispatcher,
 ) : ViewModel() {
+
+    private val log = ShipBook.getLogger("NewNotebookViewModel")
 
     private val _state = MutableStateFlow(
         NewNotebookState(
@@ -89,8 +96,18 @@ class NewNotebookViewModel @Inject constructor(
             defaultBackgroundType = state.backgroundType,
         )
         viewModelScope.launch {
-            val pageId = appRepository.bookRepository.create(notebook)
-            createdChannel.send(CreatedNotebook(notebook.id, pageId))
+            try {
+                val pageId = appRepository.bookRepository.create(notebook)
+                createdChannel.send(CreatedNotebook(notebook.id, pageId))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.e("Creating notebook failed: ${e.message}", e)
+                snackDispatcher.showOrUpdateSnack(
+                    SnackConf(text = "Creating notebook failed: ${e.message}", duration = 3000)
+                )
+                isCreating = false
+            }
         }
     }
 }
