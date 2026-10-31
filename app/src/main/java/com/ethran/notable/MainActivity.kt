@@ -37,6 +37,7 @@ import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.withSeededToolbarLayout
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
 import com.ethran.notable.editor.canvas.CanvasEventBus
@@ -157,7 +158,14 @@ class MainActivity : ComponentActivity() {
                                 AppSettings(version = 1)
                             )
 
-                        GlobalAppSettings.update(savedSettings)
+                        // Seed a newer element into a saved toolbar layout once, anchored next to an
+                        // existing one; the flag prevents re-adding a button the user removed.
+                        val settings = savedSettings.withSeededToolbarLayout()
+                        if (settings !== savedSettings) {
+                            kvProxy.get().setAppSettings(settings)
+                        } else {
+                            GlobalAppSettings.update(settings)
+                        }
                         strokeMigrationHelper.get().reencodeStrokePointsToBinary()
                         pageDataManager.get()
                             .registerComponentCallbacks(this@MainActivity.applicationContext)

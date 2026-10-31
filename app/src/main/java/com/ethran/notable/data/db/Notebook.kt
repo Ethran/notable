@@ -9,7 +9,9 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.FitMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.Flow
 import java.util.Date
@@ -39,7 +41,15 @@ data class Notebook(
     @ColumnInfo(defaultValue = "native")
     val defaultBackgroundType: String = "native",
 
-    // File that its linked to:
+    val pageMode: PageMode? = null,
+
+    @ColumnInfo(defaultValue = "REAL")
+    val fitPortrait: FitMode = FitMode.REAL,
+
+    @ColumnInfo(defaultValue = "REAL")
+    val fitLandscape: FitMode = FitMode.REAL,
+
+    // File that it's linked to:
     val linkedExternalUri: String? = null,
     val createdAt: Date = Date(),
     val updatedAt: Date = Date()
@@ -68,6 +78,10 @@ interface NotebookDao {
 
     @Query("UPDATE notebook SET openPageId=:pageId WHERE id=:notebookId")
     suspend fun setOpenPageId(notebookId: String, pageId: String)
+
+    // Writes the whole fit pair, and bumps updatedAt so the fit reaches the sync manifest.
+    @Query("UPDATE notebook SET fitPortrait=:fitPortrait, fitLandscape=:fitLandscape, updatedAt=:updatedAt WHERE id=:notebookId")
+    suspend fun setFitModes(notebookId: String, fitPortrait: FitMode, fitLandscape: FitMode, updatedAt: Date)
 
     // Advances updatedAt alongside pageIds so a structural change (add/remove/reorder) marks the
     // notebook dirty for sync — otherwise the change would not be detected and could be lost.
@@ -108,7 +122,8 @@ class BookRepository @Inject constructor(
         val page = Page(
             notebookId = notebook.id,
             background = notebook.defaultBackground,
-            backgroundType = notebook.defaultBackgroundType
+            backgroundType = notebook.defaultBackgroundType,
+            pageMode = notebook.pageMode
         )
         pageDao.create(page)
 
@@ -153,6 +168,16 @@ class BookRepository @Inject constructor(
 
     suspend fun setOpenPageId(id: String, pageId: String) {
         notebookDao.setOpenPageId(id, pageId)
+    }
+
+    /** Saves the notebook's per-orientation sheet fit, bumping updatedAt. */
+    suspend fun setFitModes(
+        id: String,
+        fitPortrait: FitMode,
+        fitLandscape: FitMode,
+        updatedAt: Date = Date(),
+    ) {
+        notebookDao.setFitModes(id, fitPortrait, fitLandscape, updatedAt)
     }
 
     suspend fun addPage(bookId: String, pageId: String, index: Int? = null) {
@@ -218,7 +243,8 @@ fun Notebook.newPage(): Page {
     return Page(
         notebookId = id,
         background = defaultBackground,
-        backgroundType = defaultBackgroundType
+        backgroundType = defaultBackgroundType,
+        pageMode = pageMode
     )
 }
 

@@ -1,5 +1,6 @@
 package com.ethran.notable.sync.serializers
 
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
 import com.ethran.notable.data.db.Page
@@ -54,16 +55,20 @@ class NotebookSerializerPageTest {
     private fun samplePage(
         id: String = "page-1",
         notebookId: String? = "nb-1",
-        scroll: Int = 0,
+        scrollY: Int = 0,
+        scrollX: Int = 0,
+        pageMode: PageMode? = null,
         parentFolderId: String? = null,
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
     ) = Page(
         id = id,
-        scroll = scroll,
+        scrollY = scrollY,
+        scrollX = scrollX,
         notebookId = notebookId,
         background = "blank",
         backgroundType = "native",
+        pageMode = pageMode,
         parentFolderId = parentFolderId,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -130,6 +135,36 @@ class NotebookSerializerPageTest {
         }
     }
 
+    // The scroll a reader left a page at travels with it, so a notebook opened on another device
+    // comes back where it was left on this one.
+    @Test
+    fun page_round_trip_preserves_both_scroll_axes() {
+        val page = samplePage(scrollY = 300, scrollX = 120)
+        val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
+        val result = NotebookSerializer.deserializePage(json)
+
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data.first
+        assertEquals(300, restored.scrollY)
+        assertEquals(120, restored.scrollX)
+    }
+
+    // A page file uploaded by an app that had no horizontal scroll must still read back, that axis
+    // left at its default rather than failing the parse.
+    @Test
+    fun page_file_without_scrollX_reads_back_unscrolled_horizontally() {
+        val page = samplePage(scrollY = 300, scrollX = 120)
+        val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
+        val legacyJson = json.replace(Regex("\"scrollX\"\\s*:\\s*\\d+\\s*,\\s*"), "")
+        assertTrue("scrollX missing from the payload: $json", legacyJson != json)
+
+        val result = NotebookSerializer.deserializePage(legacyJson)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data.first
+        assertEquals(300, restored.scrollY)
+        assertEquals(0, restored.scrollX)
+    }
+
     @Test
     fun page_round_trip_preserves_metadata_strokes_and_images() {
         val page = samplePage()
@@ -146,7 +181,8 @@ class NotebookSerializerPageTest {
         assertEquals(page.notebookId, restoredPage.notebookId)
         assertEquals(page.background, restoredPage.background)
         assertEquals(page.backgroundType, restoredPage.backgroundType)
-        assertEquals(page.scroll, restoredPage.scroll)
+        assertEquals(page.scrollY, restoredPage.scrollY)
+        assertEquals(page.scrollX, restoredPage.scrollX)
         assertEquals(page.createdAt, restoredPage.createdAt)
         assertEquals(page.updatedAt, restoredPage.updatedAt)
 
@@ -177,6 +213,49 @@ class NotebookSerializerPageTest {
         assertEquals("images/abc123.jpg", restoredImages[0].uri)
         // Null URI must survive as null.
         assertEquals(null, restoredImages[1].uri)
+    }
+
+    @Test
+    fun page_round_trip_preserves_page_mode() {
+        // Regression 88d398a2: Page.pageMode was missing from the page header DTO, so the sheet
+        // size was silently dropped on every upload and the peer ended up with an unset page mode.
+        val page = samplePage(pageMode = PageMode.A4)
+
+        val json = NotebookSerializer.serializePage(page, emptyList(), emptyList())
+        assertTrue("pageMode missing from payload: $json", json.contains("\"pageMode\":\"A4\""))
+
+        val result = NotebookSerializer.deserializePage(json)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val (restoredPage, _, _) = (result as AppResult.Success).data
+        assertEquals(PageMode.A4, restoredPage.pageMode)
+    }
+
+    @Test
+    fun page_round_trip_preserves_infinite_page_mode() {
+        // INFINITE is a real value, not "unset": it must survive the trip as itself.
+        val page = samplePage(pageMode = PageMode.INFINITE)
+
+        val json = NotebookSerializer.serializePage(page, emptyList(), emptyList())
+        val result = NotebookSerializer.deserializePage(json)
+
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val (restoredPage, _, _) = (result as AppResult.Success).data
+        assertEquals(PageMode.INFINITE, restoredPage.pageMode)
+    }
+
+    @Test
+    fun page_deserialization_handles_legacy_json_without_page_mode() {
+        // Payloads written before the pageMode column existed (DB version < 38) must still load,
+        // with the sheet size left unset instead of throwing on the missing field.
+        val page = samplePage(pageMode = PageMode.A5)
+        val json = NotebookSerializer.serializePage(page, emptyList(), emptyList())
+        val legacyJson = json.replace(Regex("\"pageMode\"\\s*:\\s*\"[^\"]*\"\\s*,\\s*"), "")
+        assertTrue("payload must have lost the pageMode field: $legacyJson", !legacyJson.contains("pageMode"))
+
+        val result = NotebookSerializer.deserializePage(legacyJson)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val (restoredPage, _, _) = (result as AppResult.Success).data
+        assertEquals(null, restoredPage.pageMode)
     }
 
     @Test

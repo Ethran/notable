@@ -13,9 +13,11 @@ import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.EditorViewModel.Companion.DEFAULT_PEN_SETTINGS
 import com.ethran.notable.editor.canvas.CanvasEventBus
@@ -85,6 +87,11 @@ data class ToolbarUiState(
     val isBackgroundSelectorModalOpen: Boolean = false,
     val showResetView: Boolean = false,
 
+    /** The shown page's sheet; null for an infinite canvas and imported files, which have nothing to fit. */
+    val pageMode: PageMode? = null,
+    val fitMode: FitMode = FitMode.REAL,
+    val isFitModeMenuOpen: Boolean = false,
+
     // Canvas / drawing
     val mode: Mode = Mode.Draw,
     /** Base type of the active pen preset — what strokes persist and renderers key on. */
@@ -126,6 +133,7 @@ sealed class ToolbarAction {
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
     object ToggleMenu : ToolbarAction()
     data class ToggleEraserManu(val isOpen: Boolean) : ToolbarAction()
+    data class ToggleFitModeMenu(val isOpen: Boolean) : ToolbarAction()
     data class ToggleBackgroundSelector(val isOpen: Boolean) : ToolbarAction()
     data class ToggleScribbleToErase(val enabled: Boolean) : ToolbarAction()
 
@@ -133,6 +141,7 @@ sealed class ToolbarAction {
     object Redo : ToolbarAction()
     object Paste : ToolbarAction()
     object ResetView : ToolbarAction()
+    data class ChangeFitMode(val mode: FitMode) : ToolbarAction()
     object ClearAllStrokes : ToolbarAction()
 
     data class ImagePicked(val uri: Uri) : ToolbarAction()
@@ -159,6 +168,8 @@ sealed class CanvasCommand {
     object Redo : CanvasCommand()
     object Paste : CanvasCommand()
     object ResetView : CanvasCommand()
+    /** Store [mode] as the fit for the current orientation and move the page to the viewport it asks for. */
+    data class ChangeFitMode(val mode: FitMode) : CanvasCommand()
     object ClearAllStrokes : CanvasCommand()
     object RefreshCanvas : CanvasCommand()
     data class CopyImageToCanvas(val uri: Uri) : CanvasCommand()
@@ -339,6 +350,10 @@ class EditorViewModel @Inject constructor(
 //                updateDrawingState() // on focus change is doing this
             }
 
+            is ToolbarAction.ToggleFitModeMenu -> {
+                _toolbarState.update { it.copy(isFitModeMenuOpen = action.isOpen) }
+            }
+
             is ToolbarAction.ToggleBackgroundSelector -> {
                 _toolbarState.update { it.copy(isBackgroundSelectorModalOpen = action.isOpen) }
 //                updateDrawingState() // on focus change is doing this
@@ -361,6 +376,7 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.Redo -> sendCanvasCommand(CanvasCommand.Redo)
             ToolbarAction.Paste -> sendCanvasCommand(CanvasCommand.Paste)
             ToolbarAction.ResetView -> sendCanvasCommand(CanvasCommand.ResetView)
+            is ToolbarAction.ChangeFitMode -> sendCanvasCommand(CanvasCommand.ChangeFitMode(action.mode))
             ToolbarAction.ClearAllStrokes -> sendCanvasCommand(CanvasCommand.ClearAllStrokes)
 
             ToolbarAction.NavigateToLibrary -> handleNavigateToLibrary()
@@ -433,7 +449,8 @@ class EditorViewModel @Inject constructor(
             it.copy(
                 isMenuOpen = false,
                 isStrokeSelectionOpen = false,
-                isBackgroundSelectorModalOpen = false
+                isBackgroundSelectorModalOpen = false,
+                isFitModeMenuOpen = false
             )
         }
         updateDrawingState()
@@ -597,7 +614,8 @@ class EditorViewModel @Inject constructor(
                 currentPageNumber = pageIndex,
                 backgroundType = page.backgroundType,
                 backgroundPath = page.background,
-                backgroundPageNumber = bgPageNumber
+                backgroundPageNumber = bgPageNumber,
+                pageMode = page.pageMode
             )
         }
 
@@ -819,6 +837,10 @@ class EditorViewModel @Inject constructor(
 
     fun setShowResetView(showResetView: Boolean) {
         _toolbarState.update { it.copy(showResetView = showResetView) }
+    }
+
+    fun setAppliedFitMode(fitMode: FitMode) {
+        _toolbarState.update { it.copy(fitMode = fitMode) }
     }
 
     fun setSelectionActive(active: Boolean) {

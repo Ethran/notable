@@ -49,7 +49,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.ethran.notable.R
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.editor.EditorDestination
@@ -67,7 +66,8 @@ import com.ethran.notable.ui.components.ShowPagesRow
 import com.ethran.notable.ui.dialogs.ConflictResolutionDialog
 import com.ethran.notable.ui.dialogs.EmptyBookWarningHandler
 import com.ethran.notable.ui.dialogs.FolderConfigDialog
-import com.ethran.notable.ui.dialogs.NotebookConfigDialog
+import com.ethran.notable.ui.dialogs.NotebookEditDialog
+import com.ethran.notable.ui.dialogs.NotebookCreateDialog
 import com.ethran.notable.ui.dialogs.PdfImportChoiceDialog
 import com.ethran.notable.ui.noRippleClickable
 import com.ethran.notable.ui.viewmodels.LibraryUiState
@@ -101,25 +101,40 @@ fun Library(
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val newlyCreatedBookId by viewModel.newlyCreatedBookId.collectAsStateWithLifecycle()
 
     LaunchedEffect(folderId) {
         viewModel.loadFolder(folderId)
     }
 
-    // Show config dialog for newly created notebooks so user can rename immediately
-    if (newlyCreatedBookId != null) {
-        if (GlobalAppSettings.current.renameOnCreate && uiState.books.any { it.id == newlyCreatedBookId }) {
-            NotebookConfigDialog(
-                appRepository = viewModel.appRepository,
-                exportEngine = viewModel.exportEngine,
-                syncScheduler = viewModel.syncScheduler,
-                bookId = newlyCreatedBookId!!,
-                onClose = { viewModel.clearNewlyCreatedBookId() }
-            )
-        } else {
-            viewModel.clearNewlyCreatedBookId()
-        }
+    val createNotebookDialog by viewModel.openCreateNewNotebookDialog.collectAsStateWithLifecycle()
+    // Show config dialog when user creates a notebook
+    if (createNotebookDialog) {
+        log.v("Opening dialog to create new notebook")
+        val folderId by viewModel.folderId.collectAsStateWithLifecycle()
+        NotebookCreateDialog(
+            appRepository = viewModel.appRepository,
+            initialFolderId = folderId,
+            onCreate = { title, defaultBackground, defaultBackgroundType, pageMode ->
+                // Create notebook
+                viewModel.createNotebook(
+                    title = title,
+                    background = defaultBackground,
+                    backgroundType = defaultBackgroundType,
+                    pageMode = pageMode,
+                    onCreated = { pageId, notebookId ->
+                        // Open just created notebook
+                        navController.navigate(
+                            EditorDestination.createRoute(
+                                pageId, notebookId
+                            )
+                        )
+                    }
+                )
+            },
+            onClose = {
+                viewModel.onCreateNewNotebookDialogClosed()
+            }
+        )
     }
 
     LibraryContent(
@@ -354,7 +369,7 @@ fun NotebookGrid(
                 )
 
                 if (isSettingsOpen) {
-                    NotebookConfigDialog(
+                    NotebookEditDialog(
                         appRepository,
                         exportEngine = exportEngine,
                         syncScheduler = syncScheduler,
@@ -473,51 +488,6 @@ fun NotebookImportPanel(
     }
 }
 
-
-@Preview(
-    showBackground = true,
-    name = "Library - Default State",
-    widthDp = 800,
-    heightDp = 1200
-)
-@Composable
-fun LibraryContentPreview() {
-    // 1. Create a dummy UI state with mock data
-    val mockUiState = LibraryUiState(
-        folderId = null,
-        isLatestVersion = true,
-        isImporting = false,
-        breadcrumbFolders = listOf(
-            // Optional: Add mock breadcrumbs if you want to preview nested folder state
-             Folder(id = "root", title = "Home", parentFolderId = null)
-        ),
-        folders = listOf(
-            // Adjust constructor arguments based on your exact entity definition
-            Folder(id = "folder_1", title = "Work Notes", parentFolderId = null),
-            Folder(id = "folder_2", title = "Personal", parentFolderId = null)
-        ),
-        books = listOf(
-            // Needs pageIds to render the card (empty books show a warning)
-            Notebook(id = "book_1", title = "Meeting Minutes", pageIds = listOf("page1", "page2")),
-            Notebook(id = "book_2", title = "Journal", pageIds = listOf("page3"))
-        ),
-        singlePages = emptyList() // Populate with mock Page() objects if you want to see Quick Pages
-    )
-
-    // 2. Render the stateless component with empty lambdas
-//    LibraryContent(
-//        uiState = mockUiState,
-//        onNavigateToFolder = {},
-//        onNavigateToSettings = {},
-//        onNavigateToEditor = { _, _ -> },
-//        goToPage = {},
-//        onCreateNewQuickPage = {},
-//        onCreateNewFolder = {},
-//        onDeleteEmptyBook = {},
-//        onCreateNewNotebook = {},
-//        onImportPdf = { _, _ -> },
-//        onImportXopp = {})
-}
 
 @Suppress("UnusedVariable")
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)

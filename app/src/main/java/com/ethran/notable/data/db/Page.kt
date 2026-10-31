@@ -12,6 +12,7 @@ import androidx.room.Query
 import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.Log
@@ -33,10 +34,14 @@ import javax.inject.Inject
     )]
 )
 data class Page(
-    @PrimaryKey val id: String = UUID.randomUUID().toString(), val scroll: Int = 0,
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val scrollY: Int = 0,
+    @ColumnInfo(defaultValue = "0")
+    val scrollX: Int = 0,
     @ColumnInfo(index = true) val notebookId: String? = null,
     @ColumnInfo(defaultValue = "blank") val background: String = "blank", // path or native subtype
     @ColumnInfo(defaultValue = "native") val backgroundType: String = "native", // image, imageRepeating, coverImage, native
+    val pageMode: PageMode? = null,
     @ColumnInfo(index = true) val parentFolderId: String? = null,
     val createdAt: Date = Date(), val updatedAt: Date = Date()
 )
@@ -69,8 +74,8 @@ interface PageDao {
     @Query("SELECT * FROM page WHERE id =:pageId")
     suspend fun getPageWithDataById(pageId: String): PageWithData?
 
-    @Query("UPDATE page SET scroll=:scroll WHERE id =:pageId")
-    suspend fun updateScroll(pageId: String, scroll: Int)
+    @Query("UPDATE page SET scrollY=:scrollY, scrollX=:scrollX WHERE id =:pageId")
+    suspend fun updateScroll(pageId: String, scrollY: Int, scrollX: Int)
 
     // Bump only the edit timestamp, without a read-modify-write of the whole row. updatedAt is
     // stored as epoch millis (Date <-> Long converter), so a Long here matches the column format.
@@ -102,8 +107,8 @@ class PageRepository @Inject constructor(
         return db.create(page)
     }
 
-    suspend fun updateScroll(id: String, scroll: Int) {
-        return db.updateScroll(id, scroll)
+    suspend fun updateScroll(id: String, scrollY: Int, scrollX: Int) {
+        return db.updateScroll(id, scrollY, scrollX)
     }
 
     /** Advance a page's edit timestamp — the per-page dirty signal for incremental sync. */

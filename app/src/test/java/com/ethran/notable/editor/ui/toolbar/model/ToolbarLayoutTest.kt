@@ -126,4 +126,59 @@ class ToolbarLayoutTest {
         assertEquals(listOf("PEN:ball"), decoded.scrollable)
         assertEquals(listOf("MENU"), decoded.pinned)
     }
+
+    // --- one-time seeds: an element added in a later version reaching saved layouts ---
+
+    @Test
+    fun `seeding puts a new element directly after its anchor and leaves the rest alone`() {
+        val seeded = ToolbarLayout(
+            scrollable = listOf("PEN:ball", "ERASER", "DIVIDER", "PASTE", "RESET_VIEW", "DIVIDER"),
+            pinned = listOf("UNDO", "REDO", "MENU"),
+        ).withSeeded(ToolbarElementId.FIT_MODE, ToolbarElementId.RESET_VIEW)
+        assertEquals(
+            "the new entry lands next to its anchor, wherever the anchor sits",
+            listOf(
+                "PEN:ball", "ERASER", "DIVIDER", "PASTE", "RESET_VIEW",
+                ToolbarElementId.FIT_MODE.name, "DIVIDER",
+            ),
+            seeded.scrollable,
+        )
+        assertEquals(listOf("UNDO", "REDO", "MENU"), seeded.pinned)
+    }
+
+    @Test
+    fun `seeding follows the anchor into whichever zone holds it`() {
+        val seeded = ToolbarLayout(
+            scrollable = listOf("PEN:ball"),
+            pinned = listOf("RESET_VIEW", "MENU"),
+        ).withSeeded(ToolbarElementId.FIT_MODE, ToolbarElementId.RESET_VIEW)
+        assertTrue(
+            "the entry must not be pushed into the scrolling zone",
+            ToolbarElementId.FIT_MODE.name !in seeded.scrollable,
+        )
+        assertEquals(
+            listOf("RESET_VIEW", ToolbarElementId.FIT_MODE.name, "MENU"),
+            seeded.pinned,
+        )
+    }
+
+    @Test
+    fun `seeding changes nothing when the element is already placed`() {
+        assertEquals(
+            "DEFAULT places the entry itself, so seeding it is a no-op",
+            ToolbarLayout.DEFAULT,
+            ToolbarLayout.DEFAULT.withSeeded(ToolbarElementId.FIT_MODE, ToolbarElementId.RESET_VIEW),
+        )
+    }
+
+    @Test
+    fun `seeding respects a user who hid the anchor element`() {
+        // No anchor means no place to seed into: putting the new button somewhere the user never
+        // asked for would ignore a deliberate choice.
+        val hidden = ToolbarLayout(
+            scrollable = listOf("PEN:ball", "ERASER"),
+            pinned = listOf("MENU"),
+        )
+        assertEquals(hidden, hidden.withSeeded(ToolbarElementId.FIT_MODE, ToolbarElementId.RESET_VIEW))
+    }
 }

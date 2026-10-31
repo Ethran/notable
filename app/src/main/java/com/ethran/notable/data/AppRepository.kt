@@ -134,7 +134,8 @@ class AppRepository @Inject constructor(
         }
         val duplicatedPage = pageWithData.page.copy(
             id = UUID.randomUUID().toString(),
-            scroll = 0,
+            scrollY = 0,
+            scrollX = 0,
             createdAt = Date(),
             updatedAt = Date()
         )

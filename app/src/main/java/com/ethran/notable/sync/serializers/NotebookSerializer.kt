@@ -1,5 +1,6 @@
 package com.ethran.notable.sync.serializers
 
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page
@@ -7,6 +8,7 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.data.db.encodeStrokePoints
 import com.ethran.notable.data.db.withNormalizedPressure
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
@@ -56,6 +58,9 @@ object NotebookSerializer {
             parentFolderId = notebook.parentFolderId,
             defaultBackground = notebook.defaultBackground,
             defaultBackgroundType = notebook.defaultBackgroundType,
+            pageMode = notebook.pageMode,
+            fitPortrait = notebook.fitPortrait,
+            fitLandscape = notebook.fitLandscape,
             linkedExternalUri = notebook.linkedExternalUri,
             createdAt = notebook.createdAt.toInstant().toString(),
             updatedAt = notebook.updatedAt.toInstant().toString(),
@@ -90,6 +95,9 @@ object NotebookSerializer {
                     parentFolderId = manifestDto.parentFolderId,
                     defaultBackground = manifestDto.defaultBackground,
                     defaultBackgroundType = manifestDto.defaultBackgroundType,
+                    pageMode = manifestDto.pageMode,
+                    fitPortrait = manifestDto.fitPortrait,
+                    fitLandscape = manifestDto.fitLandscape,
                     linkedExternalUri = manifestDto.linkedExternalUri,
                     createdAt = createdAt,
                     updatedAt = updatedAt
@@ -135,7 +143,9 @@ object NotebookSerializer {
             background = page.background,
             backgroundType = page.backgroundType,
             parentFolderId = page.parentFolderId,
-            scroll = page.scroll,
+            pageMode = page.pageMode,
+            scroll = page.scrollY,
+            scrollX = page.scrollX,
             createdAt = page.createdAt.toInstant().toString(),
             updatedAt = page.updatedAt.toInstant().toString()
         )
@@ -209,9 +219,11 @@ object NotebookSerializer {
                 background = pageDto.background,
                 backgroundType = pageDto.backgroundType,
                 parentFolderId = pageDto.parentFolderId,
-                scroll = pageDto.scroll,
+                scrollY = pageDto.scroll,
+                scrollX = pageDto.scrollX,
                 createdAt = pageCreated,
-                updatedAt = pageUpdated
+                updatedAt = pageUpdated,
+                pageMode = pageDto.pageMode
             )
 
             val strokes = pageDto.strokes.mapNotNull { strokeDto ->
@@ -341,6 +353,9 @@ object NotebookSerializer {
         val parentFolderId: String?,
         val defaultBackground: String,
         val defaultBackgroundType: String,
+        val pageMode: PageMode? = null,
+        val fitPortrait: FitMode = FitMode.REAL,
+        val fitLandscape: FitMode = FitMode.REAL,
         val linkedExternalUri: String?,
         val createdAt: String,
         val updatedAt: String,
@@ -358,7 +373,9 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
+        val pageMode: PageMode?,
         val scroll: Int,
+        val scrollX: Int = 0,
         val createdAt: String,
         val updatedAt: String
     )
@@ -371,7 +388,9 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
+        val pageMode: PageMode? = null,
         val scroll: Int,
+        val scrollX: Int = 0,
         val createdAt: String,
         val updatedAt: String,
         val strokes: List<StrokeDto>,

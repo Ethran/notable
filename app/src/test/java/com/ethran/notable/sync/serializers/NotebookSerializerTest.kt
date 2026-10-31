@@ -1,9 +1,12 @@
 package com.ethran.notable.sync.serializers
 
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -25,6 +28,7 @@ class NotebookSerializerTest {
         pageIds: List<String> = listOf("p-1", "p-2"),
         openPageId: String? = "p-1",
         parentFolderId: String? = "folder-1",
+        pageMode: PageMode? = PageMode.A4,
         linkedExternalUri: String? = null,
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
@@ -36,6 +40,7 @@ class NotebookSerializerTest {
         parentFolderId = parentFolderId,
         defaultBackground = "blank",
         defaultBackgroundType = "native",
+        pageMode = pageMode,
         linkedExternalUri = linkedExternalUri,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -59,6 +64,7 @@ class NotebookSerializerTest {
         assertEquals(original.parentFolderId, restored.parentFolderId)
         assertEquals(original.defaultBackground, restored.defaultBackground)
         assertEquals(original.defaultBackgroundType, restored.defaultBackgroundType)
+        assertEquals(original.pageMode, restored.pageMode)
         assertEquals(original.linkedExternalUri, restored.linkedExternalUri)
         // ISO 8601 round-trip is millisecond-precise — exact equality is reasonable here.
         assertEquals(original.createdAt, restored.createdAt)
@@ -70,6 +76,7 @@ class NotebookSerializerTest {
         val original = sampleNotebook(
             openPageId = null,
             parentFolderId = null,
+            pageMode = null,
             linkedExternalUri = null,
             pageIds = emptyList(),
         )
@@ -80,6 +87,7 @@ class NotebookSerializerTest {
 
         assertNull(restored.openPageId)
         assertNull(restored.parentFolderId)
+        assertNull(restored.pageMode)
         assertNull(restored.linkedExternalUri)
         assertEquals(emptyList<String>(), restored.pageIds)
     }
@@ -133,6 +141,60 @@ class NotebookSerializerTest {
         val result = NotebookSerializer.deserializeManifest(augmented)
         assertTrue("expected Success, got $result", result is AppResult.Success)
         assertEquals(original.id, (result as AppResult.Success).data.id)
+    }
+
+    @Test
+    fun deserializeManifest_reads_prePageMode_manifest_as_null_pageMode() {
+        // Manifests written before page modes existed carry no `pageMode` key; the DTO's default
+        // must decode them to null rather than fail or invent a mode.
+        val original = sampleNotebook(pageMode = PageMode.A4)
+        val json = NotebookSerializer.serializeManifest(original)
+        assertTrue("expected a pageMode line in the manifest: $json", Regex(""""pageMode"\s*:\s*"A4"\s*,\s*\n""").containsMatchIn(json))
+        val legacyJson = json.replace(Regex(""""pageMode"\s*:\s*"A4"\s*,\s*\n"""), "")
+
+        val result = NotebookSerializer.deserializeManifest(legacyJson)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        assertNull((result as AppResult.Success).data.pageMode)
+    }
+
+    @Test
+    fun manifest_round_trip_preserves_the_fit_modes() {
+        // The fit pair is a document preference, so it rides the manifest like `title`: a downloading
+        // device gets the same **intent** and applies it to its own viewport (the zoom it produces is
+        // its own, which is exactly why no zoom number is ever serialised).
+        val original = sampleNotebook().copy(
+            fitPortrait = FitMode.FIT_TO_WIDTH,
+            fitLandscape = FitMode.REAL,
+        )
+        val json = NotebookSerializer.serializeManifest(original)
+
+        val result = NotebookSerializer.deserializeManifest(json)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data
+        assertEquals(FitMode.FIT_TO_WIDTH, restored.fitPortrait)
+        assertEquals(FitMode.REAL, restored.fitLandscape)
+    }
+
+    @Test
+    fun deserializeManifest_reads_preFit_manifest_as_real() {
+        // Manifests written before the fit preference existed carry neither key. The DTO's defaults
+        // decode them to REAL — the sheet at its true size, which is what those clients showed.
+        val original = sampleNotebook().copy(
+            fitPortrait = FitMode.FIT_TO_WIDTH,
+            fitLandscape = FitMode.FIT_TO_WIDTH,
+        )
+        var json = NotebookSerializer.serializeManifest(original)
+        listOf("fitPortrait", "fitLandscape").forEach { key ->
+            json = json.replace(Regex(""""$key"\s*:\s*"FIT_TO_WIDTH"\s*,\s*\n"""), "")
+        }
+        assertFalse("expected both fit keys stripped, got: $json", "fitPortrait" in json)
+        assertFalse("expected both fit keys stripped, got: $json", "fitLandscape" in json)
+
+        val result = NotebookSerializer.deserializeManifest(json)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data
+        assertEquals(FitMode.REAL, restored.fitPortrait)
+        assertEquals(FitMode.REAL, restored.fitLandscape)
     }
 
     @Test

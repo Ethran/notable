@@ -2,14 +2,31 @@ package com.ethran.notable.data.datastore
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
+import com.ethran.notable.editor.ui.toolbar.model.ToolbarElementId
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import kotlinx.serialization.Serializable
+import com.ethran.notable.R
 
+/**
+ * Enum class to store the different sheets size.
+ */
+enum class PageMode(val width: Int, val height: Int, val displayNameId:Int) {
+    INFINITE(0, 0, (R.string.page_mode_infinite)),
 
-// Define the target page size (A4 in points: 595 x 842)
-const val A4_WIDTH = 595
-const val A4_HEIGHT = 842
+    // ISO 216
+    A3(842, 1191, R.string.page_mode_a3),
+    A4(595, 842, R.string.page_mode_a4),
+    A5(420, 595, R.string.page_mode_a5),
+    // ISO 216
+    A6(298, 420, R.string.page_mode_a6),
+
+    // ANSI
+    LETTER(612, 792, R.string.page_mode_letter),
+    LEGAL(612, 1008, R.string.page_mode_legal),
+    TABLOID(792, 1224, R.string.page_mode_tabloid),
+}
+
 const val BUTTON_SIZE = 37
 
 
@@ -38,6 +55,7 @@ data class AppSettings(
     val version: Int,
     val monitorBgFiles: Boolean = false,
     val defaultNativeTemplate: String = "blank",
+    val defaultPageMode: PageMode = PageMode.A4,
     val quickNavPages: List<String> = listOf(),
     val scribbleToEraseEnabled: Boolean = false,
     val toolbarPosition: Position = Position.Top,
@@ -45,13 +63,13 @@ data class AppSettings(
     val continuousZoom: Boolean = false,
     val continuousStrokeSlider: Boolean = false,
     val paginatePdf: Boolean = true,
-    val visualizePdfPagination: Boolean = false,
     // null → ToolbarLayout.DEFAULT. Sanitize with ToolbarLayout.validated() when reading:
     // persisted layouts may predate elements or omit the mandatory MENU entry.
     val toolbarLayout: ToolbarLayout? = null,
     // User-created pen instances; layouts reference them as "PEN:<id>". The preset is the
     // single source of truth for a pen's color/size — StrokeMenu edits write back here.
     val toolbarPens: List<ToolbarPen> = ToolbarPen.DEFAULT_PENS,
+    val toolbarLayoutSeeded: Boolean = false,
     val uiScale: Float = 1.0f, // Scale factor for the entire UI
 
     // Gestures
@@ -70,7 +88,6 @@ data class AppSettings(
     // same SystemUI pipeline serves the side/bottom edge navigation swipes, so those
     // stop working inside the app while this is on — hence opt-in.
     val blockSystemGestures: Boolean = false,
-    val renameOnCreate: Boolean = true,
 
     // Debug
     val showWelcome: Boolean = true,
@@ -89,4 +106,16 @@ data class AppSettings(
     enum class Position {
         Top, Bottom, // Left,Right,
     }
+}
+
+/**
+ * [AppSettings] with the toolbar layout seeds applied, or the same value when there is nothing to seed.
+ */
+fun AppSettings.withSeededToolbarLayout(): AppSettings {
+    if (toolbarLayoutSeeded) return this
+    val seeded = toolbarLayout?.withSeeded(
+        ToolbarElementId.FIT_MODE,
+        ToolbarElementId.RESET_VIEW,
+    )
+    return copy(toolbarLayout = seeded, toolbarLayoutSeeded = true)
 }

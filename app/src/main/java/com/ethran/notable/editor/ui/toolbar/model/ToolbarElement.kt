@@ -3,6 +3,7 @@ package com.ethran.notable.editor.ui.toolbar.model
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
@@ -94,6 +95,20 @@ data class ModeElement(
     val submenu: SubmenuSpec? = null,
 ) : ToolbarElement {
     override fun isSelected(state: ToolbarUiState): Boolean = state.mode == mode
+}
+
+/**
+ * The sheet-fit button: one popup listing the [FitMode]s. Not a [Mode] tool, it changes how the
+ * page is shown; selected means a fit other than the default is in force.
+ */
+data class FitModeElement(
+    override val id: ToolbarElementId,
+    override val icon: IconRef,
+    override val contentDescription: String,
+    override val visibleWhen: VisibleWhen = ALWAYS,
+    val submenu: FitModeSubmenuSpec,
+) : ToolbarElement {
+    override fun isSelected(state: ToolbarUiState): Boolean = state.fitMode != FitMode.REAL
 }
 
 /** Stateless action buttons: undo, redo, paste, reset view, home, toolbar toggle. */

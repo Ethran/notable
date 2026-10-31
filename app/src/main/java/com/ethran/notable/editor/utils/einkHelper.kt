@@ -17,6 +17,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.canvas.DrawCanvas
+import com.ethran.notable.ui.sideBarsRectangles
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_NORMAL
@@ -154,6 +156,19 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
     val viewWidth = view.width
     val viewHeight = view.height
 
+    // Get elements to calculate adjusted page width
+    val page = (view as DrawCanvas).page
+    val zoomLevel = page.zoom
+    val pageMode = page.openPage.pageMode
+    val context = page.context
+    log.i("Surface is of type: $pageMode")
+
+    // Determine the exclusion areas
+    val excludeRectList = mutableListOf<Rect>()
+
+    // Exclude area based on page mode
+    excludeRectList.addAll(sideBarsRectangles(pageMode, viewWidth, viewHeight, zoomLevel, context))
+
     // Determine the exclusion area based on toolbar position
     val excludeRect: Rect =
         if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
@@ -161,17 +176,20 @@ fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
         } else {
             Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
         }
+    excludeRectList.add(excludeRect)
 
-    val limitRect =
-        if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
-            Rect(0, toolbarHeight, viewWidth, viewHeight)
-        else
-            Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
+    // Include area, based on view (screen) dimensions
+    val allowedRect = Rect(0, 0, viewWidth, viewHeight)
 
-    touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
+    /**
+     * Configures raw drawing bounds for the Onyx E-Ink hardware driver:
+     * - [setLimitRect]: Specifies the primary bounding box(es) where stylus input is allowed.
+     * - [setExcludeRect]: Specifies subtractive exclusion zones (e.g., floating toolbars or UI elements)
+     *   where stylus input is explicitly blocked.
+     */
+    touchHelper.setLimitRect(mutableListOf(allowedRect)).setExcludeRect(excludeRectList)
         .openRawDrawing()
     log.i("Setup editable surface completed")
-
 }
 
 /**

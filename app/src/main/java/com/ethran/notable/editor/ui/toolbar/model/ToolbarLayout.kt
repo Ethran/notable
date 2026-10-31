@@ -57,6 +57,26 @@ data class ToolbarLayout(
         return ToolbarLayout(cleanScrollable, cleanPinned)
     }
 
+    /**
+     * This layout with [entry] placed directly after [after], in whichever zone holds [after].
+     * Returns this layout unchanged when [entry] is already placed or [after] is absent.
+     * Call once and persist the result.
+     */
+    fun withSeeded(entry: ToolbarElementId, after: ToolbarElementId): ToolbarLayout {
+        val name = entry.name
+        val anchor = after.name
+        if (name in scrollable || name in pinned) return this
+        val inScrollable = scrollable.indexOf(anchor)
+        if (inScrollable >= 0) {
+            return copy(scrollable = scrollable.toMutableList().apply { add(inScrollable + 1, name) })
+        }
+        val inPinned = pinned.indexOf(anchor)
+        if (inPinned >= 0) {
+            return copy(pinned = pinned.toMutableList().apply { add(inPinned + 1, name) })
+        }
+        return this
+    }
+
     companion object {
         /** References the stable seed ids of [ToolbarPen.DEFAULT_PENS]. */
         val DEFAULT = ToolbarLayout(
@@ -64,6 +84,7 @@ data class ToolbarLayout(
                 "PEN:ball", "PEN:red", "PEN:blue", "PEN:green", "PEN:pencil", "PEN:brush",
                 "PEN:fountain", "SHAPE", "DIVIDER", "PEN:marker", "DIVIDER", "ERASER",
                 "DIVIDER", "SELECT", "DIVIDER", "IMAGE", "DIVIDER", "PASTE", "RESET_VIEW",
+                "FIT_MODE",
             ),
             pinned = listOf(
                 "DIVIDER", "UNDO", "REDO", "DIVIDER", "PAGE_NAV", "HOME", "DIVIDER", "MENU",
