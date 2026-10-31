@@ -1,7 +1,6 @@
 plugins {
     alias libs.plugins.android.application
     alias libs.plugins.google.devtools.ksp
-    id 'kotlin-parcelize'
     alias libs.plugins.google.gms.google.services
     alias libs.plugins.jetbrains.kotlin.plugin.compose
     alias libs.plugins.jetbrains.kotlin.plugin.serialization
@@ -22,55 +21,31 @@ android {
             def timestamp = new Date().format('dd.MM.YYYY-HH:mm')
             versionName = "${versionName}-next-${timestamp}"
         }
+        buildConfigField("boolean", "IS_NEXT", IS_NEXT)
+        buildConfigField "String", "SHIPBOOK_APP_ID", "\"${System.getenv("SHIPBOOK_APP_ID") ?: "default-secret"}\""
+        buildConfigField "String", "SHIPBOOK_APP_KEY", "\"${System.getenv("SHIPBOOK_APP_KEY") ?: "default-secret2"}\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary = true
-        }
         ksp {
             arg('room.schemaLocation', "${project.projectDir}/schemas")
         }
     }
 
     signingConfigs {
-        debug {
-            if (System.getenv("STORE_FILE") != null) {
-                storeFile file(System.getenv("STORE_FILE"))
-                storePassword System.getenv("STORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD")
-
-                v1SigningEnabled true
-                v2SigningEnabled true
-            } else {
-                println "Running locally, skipping release signing..."
-            }
-        }
         release {
             if (System.getenv("STORE_FILE") != null) {
                 storeFile file(System.getenv("STORE_FILE"))
                 storePassword System.getenv("STORE_PASSWORD")
                 keyAlias System.getenv("KEY_ALIAS")
                 keyPassword System.getenv("KEY_PASSWORD")
-
-                v1SigningEnabled true
-                v2SigningEnabled true
             } else {
                 println "Running locally, skipping release signing..."
             }
         }
-
     }
-
 
     buildTypes {
         debug {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // signingConfig signingConfigs.debug
-            buildConfigField("boolean", "IS_NEXT", IS_NEXT)
-            buildConfigField "String", "SHIPBOOK_APP_ID", "\"${System.getenv("SHIPBOOK_APP_ID") ?: "default-secret"}\""
-            buildConfigField "String", "SHIPBOOK_APP_KEY", "\"${System.getenv("SHIPBOOK_APP_KEY") ?: "default-secret2"}\""
             if (System.getenv("STORE_FILE") != null) {
                 signingConfig signingConfigs.release
             }
@@ -78,9 +53,6 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField("boolean", "IS_NEXT", IS_NEXT)
-            buildConfigField "String", "SHIPBOOK_APP_ID", "\"${System.getenv("SHIPBOOK_APP_ID") ?: "default-secret"}\""
-            buildConfigField "String", "SHIPBOOK_APP_KEY", "\"${System.getenv("SHIPBOOK_APP_KEY") ?: "default-secret2"}\""
             if (System.getenv("STORE_FILE") != null) {
                 signingConfig signingConfigs.release
             }
@@ -94,11 +66,7 @@ android {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.get()
-    }
     packaging {
-
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
@@ -110,28 +78,6 @@ android {
     sourceSets {
         androidTest.assets.srcDirs += files("${project.projectDir}/schemas")
     }
-    testOptions {
-        unitTests {
-            includeAndroidResources = true
-            // Robolectric drives android.* APIs (Base64, Log, ...) in JVM unit tests.
-            // HiddenApiBypass needs deep reflection into java.lang on JDK 17+, which
-            // requires explicit --add-opens flags. Without these, Robolectric tests
-            // fail at class-init with ExceptionInInitializerError / NoSuchMethodException.
-        }
-    }
-}
-
-tasks.withType(Test).configureEach {
-    jvmArgs += [
-            '--add-opens=java.base/java.lang=ALL-UNNAMED',
-            '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
-            '--add-opens=java.base/java.io=ALL-UNNAMED',
-            '--add-opens=java.base/java.net=ALL-UNNAMED',
-            '--add-opens=java.base/java.nio=ALL-UNNAMED',
-            '--add-opens=java.base/java.util=ALL-UNNAMED',
-            '--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED',
-            '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
-    ]
 }
 
 dependencies {
@@ -147,7 +93,6 @@ dependencies {
     implementation libs.androidx.input.motionprediction
     androidTestImplementation libs.androidx.junit.ktx
 
-    //implementation fileTree(dir: 'libs', include: ['*.aar'])
     implementation(libs.onyxsdk.device) {
         exclude group: 'com.android.support', module: 'support-compat'
     }
@@ -165,10 +110,11 @@ dependencies {
         exclude group: 'com.tencent', module: 'mmkv'
     }
 
-    // Temporary (?) fix for https://github.com/gaborauth/toolsboox-android/issues/305
-    implementation(libs.hiddenapibypass) // required by onyx sdk
+    // Lets the Onyx SDK call hidden Android APIs (exempted in NotableApp);
+    // see https://github.com/gaborauth/toolsboox-android/issues/305
+    implementation(libs.hiddenapibypass)
 
-    // used in RawInputManager.
+    // RxJava 2, which the Onyx SDK runs on (RxManager, RawInputManager)
     implementation libs.rxjava
     implementation libs.rxandroid
 
@@ -185,19 +131,16 @@ dependencies {
 
     implementation libs.androidx.navigation.compose
 
-    def room_version = "2.8.4"
-
     implementation libs.androidx.room.runtime
     implementation libs.androidx.room.ktx
     ksp libs.androidx.room.compiler
 
-    // For testing:
+    // Room testing
     androidTestImplementation libs.androidx.room.testing.android
     testImplementation libs.androidx.room.testing
     testImplementation libs.androidx.core.testing
 
     implementation libs.coil.compose
-
 
     implementation libs.jnanoid
 
@@ -207,34 +150,23 @@ dependencies {
     implementation libs.feather
     implementation libs.klaxon
 
-    //noinspection GradleDynamicVersion
     implementation libs.shipbooksdk
 
-    // For xopp file format
-    implementation(libs.commons.compress) // GZip support
-    implementation libs.lz4.java // LZ4 support
+    // Xournal++ (.xopp) files: GZip and LZ4
+    implementation libs.commons.compress
+    implementation libs.lz4.java
 
-    // for PDF support:
-    implementation(libs.fitz)
+    // PDF rendering
+    implementation libs.fitz
 
     // Hilt
     implementation libs.hilt.android
     ksp libs.hilt.compiler
     implementation libs.androidx.hilt.navigation.compose
 
-    // WebDAV sync dependencies
-    implementation libs.androidx.work.runtime.ktx          // Background sync
-    implementation libs.okhttp              // HTTP/WebDAV client
-//    implementation("com.google.crypto.tink:tink-android:1.21.0")    // provides encryption for sync credentials
-
-    // Added so that R8 optimization don't fail
-    // SLF4J backend: provides a simple logger so (probably) ShipBook can output logs.
-    // Needed because SLF4J is just an API; without a binding, logging calls are ignored.
-//    implementation 'org.slf4j:slf4j-simple:2.0.17'
-
-    // implementation 'org.joda:joda-convert:3.0.1'
-    // optional dependency of joda-convert:
-    // implementation 'org.threeten:threetenbp:1.7.2'
+    // WebDAV sync: background work and the HTTP client
+    implementation libs.androidx.work.runtime.ktx
+    implementation libs.okhttp
 }
 
 tasks.register('printVersionName') {

@@ -1,7 +1,6 @@
 [versions]
 activityCompose = "1.13.0"
-agp = "9.4.1"
-compose = "1.11.3"
+agp = "9.5.0"
 coilCompose = "2.7.0"
 commonsCompress = "1.28.0"
 coreKtx = "1.19.1"
@@ -9,24 +8,21 @@ coreTesting = "2.2.0"
 dagger = "2.60.1"
 espressoCore = "3.7.0"
 feather = "1.0.0"
-firebaseBom = "34.16.0"
+firebaseBom = "35.1.0"
 fitz = "1.28.5"
 fragmentKtx = "1.9.1"
 googleDaggerHiltAndroid = "2.60.1"
-googleDevtoolsKsp = "2.3.12"
-googleFirebase = "22.5.0"
+googleDevtoolsKsp = "2.3.13"
 googleGmsGoogleServices = "4.5.0"
 graphicsCore = "1.0.4"
 hiddenapibypass = "6.2"
 hiltNavigationCompose = "1.4.0"
 inputMotionprediction = "1.0.0"
-jetbrainsKotlinJvm = "2.4.21"
-jetbrainsKotlinPluginCompose = "2.4.21"
-jetbrainsKotlinPluginSerialization = "2.4.21"
 jnanoid = "2.0.0"
 junit = "1.3.0"
 junitVersion = "4.13.2"
 klaxon = "5.6"
+kotlin = "2.4.21"
 kotlinxSerializationJson = "1.12.0"
 lifecycleRuntimeKtx = "2.11.0"
 lz4Java = "1.12.1"
@@ -42,7 +38,7 @@ room = "2.8.5"
 runtime = "1.12.1"
 rxandroid = "2.1.1"
 rxjava = "2.2.21"
-shipbooksdk = "1.9.2"
+shipbooksdk = "1.10.0"
 ui = "1.12.1"
 workRuntimeKtx = "2.12.0"
 
@@ -78,7 +74,7 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 feather = { group = "br.com.devsrsouza.compose.icons.android", name = "feather", version.ref = "feather" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
-firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics-ktx", version.ref = "googleFirebase" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 fitz = { group = "com.artifex.mupdf", name = "fitz", version.ref = "fitz" }
 hiddenapibypass = { group = "org.lsposed.hiddenapibypass", name = "hiddenapibypass", version.ref = "hiddenapibypass" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "dagger" }
@@ -99,10 +95,8 @@ shipbooksdk = { group = "io.shipbook", name = "shipbooksdk", version.ref = "ship
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-android-library = { id = "com.android.library", version.ref = "agp" }
 google-dagger-hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "googleDaggerHiltAndroid" }
 google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }
 google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGmsGoogleServices" }
-jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "jetbrainsKotlinJvm" }
-jetbrains-kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "jetbrainsKotlinPluginCompose" }
-jetbrains-kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "jetbrainsKotlinPluginSerialization" }
+jetbrains-kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+jetbrains-kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

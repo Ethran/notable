@@ -17,12 +17,8 @@ dependencyResolutionManagement {
             url = "http://repo.boox.com/repository/maven-public/"
             allowInsecureProtocol = true
         }
-        maven { url = "https://jitpack.io" }
         maven { url = "https://maven.ghostscript.com" }
     }
 }
 rootProject.name = "Notable"
 include ':app'
-
-
-
