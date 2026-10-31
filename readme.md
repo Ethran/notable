@@ -45,6 +45,7 @@ Handwritten notes for Onyx BOOX e-ink tablets. Continues the archived [olup/nota
 - [Bug Reporting](#bug-reporting)
 - [Screenshots](#screenshots)
 - [Working with LaTeX](#working-with-latex)
+- [Links](#links)
 - [App Distribution](#app-distribution)
 - [For Developers & Contributing](#for-developers--contributing)
 
@@ -239,6 +240,48 @@ in real time on your tablet.
 - Import your compiled PDF document into Notable, and choose to observe the PDF file.
 
 > After each recompilation, Notable will detect the updated PDF and automatically refresh the view.
+
+Instead of importing by hand, you can open the PDF with a [link](#links). The first time Notable
+asks whether to observe or copy it. Choose to observe it: after that the same link jumps to the
+page. A copy is not tied to the original file, so the link would ask to import it again.
+
+```sh
+adb push build/main.pdf /sdcard/Documents/main.pdf
+adb shell am start -a android.intent.action.VIEW \
+  -d "'notable://pdf?path=/sdcard/Documents/main.pdf&page=12'"
+```
+
+---
+
+## Links
+
+Notable opens `notable://` links, from a notes app such as Obsidian or Logseq, a browser, or `adb`.
+A link only opens something; the one exception, importing a PDF that is not in Notable yet, asks
+first.
+
+| Link | Opens |
+|---|---|
+| `notable://page/<pageId>` | the page |
+| `notable://book/<bookId>` | the notebook, at the page last open |
+| `notable://pdf?path=<absolute path>&page=<N>` | the notebook that observes this PDF, at page N of the PDF (counted from 1; `page` is optional). If there is none, asks to import it into the library; only an observed PDF is found again by later links. If several notebooks observe it, the one edited last |
+
+To get a link, use **Copy link to page** or **Copy link to book** in the editor menu, **Copy link**
+in a page's menu, or **Copy link** in the notebook's settings. Exporting a single page copies its
+link too. The link is copied as Markdown, `[Title](notable://…)`, or as an Org link; choose the
+format in Settings → General. Org mode opens only link types it knows, so in Emacs register it
+once:
+
+```elisp
+(org-link-set-parameters "notable" :follow (lambda (path) (browse-url (concat "notable:" path))))
+```
+
+In a path, encode spaces as `%20` (`/sdcard/My%20Notes/a.pdf`); a path typed with plain spaces
+also works when the link is quoted. A `+` is a plus sign, not a space, so don't build links with
+a form encoder (Python's `urlencode`); `urllib.parse.quote(path)` is right.
+
+Links that work now keep working in later versions. Parameter names are case-sensitive, and
+parameters Notable doesn't know are ignored, so new optional ones can be added. A link of a kind
+your Notable doesn't know says that it needs a newer version.
 
 ---
 

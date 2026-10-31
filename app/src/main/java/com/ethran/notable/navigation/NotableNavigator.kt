@@ -117,6 +117,14 @@ class NotableNavigator(
         navController.navigate(EditorDestination.createRoute(pageId, bookId))
     }
 
+    /** Like [goToEditor], but stays put when [pageId] is already open. */
+    fun showPage(pageId: String, bookId: String?) {
+        if (pageId != currentPageId) goToEditor(pageId, bookId)
+    }
+
+    val isOnWelcome: Boolean
+        get() = navController.currentDestination?.route == WelcomeDestination.route
+
     fun goBack() {
         navController.popBackStack()
     }

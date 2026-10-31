@@ -1,6 +1,7 @@
 package com.ethran.notable.io
 
 import android.content.ContentUris
+import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
@@ -148,6 +149,11 @@ fun getFileNameFromUri(
         if (nameIndex >= 0 && cursor.moveToFirst()) {
             fileName = cursor.getString(nameIndex)
         }
+    }
+
+    // A file: Uri has no provider; its last segment is the name.
+    if (fileName.isNullOrBlank() && fileUri.scheme == ContentResolver.SCHEME_FILE) {
+        fileName = fileUri.lastPathSegment
     }
 
     // Fallback if provider did not supply a name

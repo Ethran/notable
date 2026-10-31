@@ -100,6 +100,10 @@ private fun ToolbarMenuContent(
             onAction(ToolbarAction.ExportPage(ExportFormat.XOPP))
             onAction(ToolbarAction.ToggleMenu)
         }
+        MenuItem(stringResource(R.string.copy_page_link)) {
+            onAction(ToolbarAction.CopyPageLink)
+            onAction(ToolbarAction.ToggleMenu)
+        }
         DividerCentered()
 
         // Book exports
@@ -114,6 +118,10 @@ private fun ToolbarMenuContent(
             }
             MenuItem(stringResource(R.string.export_book_to, "xopp")) {
                 onAction(ToolbarAction.ExportBook(ExportFormat.XOPP))
+                onAction(ToolbarAction.ToggleMenu)
+            }
+            MenuItem(stringResource(R.string.copy_book_link)) {
+                onAction(ToolbarAction.CopyBookLink)
                 onAction(ToolbarAction.ToggleMenu)
             }
             DividerCentered()

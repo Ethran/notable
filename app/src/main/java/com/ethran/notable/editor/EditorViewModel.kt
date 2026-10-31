@@ -29,6 +29,8 @@ import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
 import com.ethran.notable.io.ExportEngine
+import com.ethran.notable.navigation.DeepLink
+import com.ethran.notable.navigation.LinkCopier
 import com.ethran.notable.io.ExportFormat
 import com.ethran.notable.io.ExportTarget
 import com.ethran.notable.sync.SyncOrchestrator
@@ -138,6 +140,8 @@ sealed class ToolbarAction {
     data class ImagePicked(val uri: Uri) : ToolbarAction()
     data class ExportPage(val format: ExportFormat) : ToolbarAction()
     data class ExportBook(val format: ExportFormat) : ToolbarAction()
+    object CopyPageLink : ToolbarAction()
+    object CopyBookLink : ToolbarAction()
     data class BackgroundChanged(val type: String, val path: String?) : ToolbarAction()
 
     object NavigateToLibrary : ToolbarAction()
@@ -184,6 +188,7 @@ class EditorViewModel @Inject constructor(
     val appRepository: AppRepository,
     private val editorSettingCacheManager: EditorSettingCacheManager,
     private val exportEngine: ExportEngine,
+    private val linkCopier: LinkCopier,
     val pageDataManager: PageDataManager,
     val pageLeases: PageLeases,
     private val pageSaver: PageSaver,
@@ -354,6 +359,9 @@ class EditorViewModel @Inject constructor(
             is ToolbarAction.ExportBook -> {
                 bookId?.let { handleExport(ExportTarget.Book(it), action.format) }
             }
+
+            ToolbarAction.CopyPageLink -> linkCopier.copy(DeepLink.Page(currentPageId))
+            ToolbarAction.CopyBookLink -> bookId?.let { linkCopier.copy(DeepLink.Book(it)) }
 
             is ToolbarAction.BackgroundChanged -> handleBackgroundChange(action.type, action.path)
 

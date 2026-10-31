@@ -1,7 +1,5 @@
 package com.ethran.notable.io
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
@@ -13,6 +11,8 @@ import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageSaver
+import com.ethran.notable.navigation.DeepLink
+import com.ethran.notable.navigation.LinkCopier
 import com.ethran.notable.data.datastore.A4_HEIGHT
 import com.ethran.notable.data.datastore.A4_WIDTH
 import com.ethran.notable.data.datastore.GlobalAppSettings
@@ -71,6 +71,7 @@ class ExportEngine @Inject constructor(
     private val pageContentRenderer: PageContentRenderer,
     private val appEventBus: AppEventBus,
     private val pageSaver: PageSaver,
+    private val linkCopier: LinkCopier,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @param:ApplicationScope private val applicationScope: CoroutineScope
 ) {
@@ -175,9 +176,7 @@ class ExportEngine @Inject constructor(
                         doc.writeTo(out)
                     }
                 }
-                if (options.copyToClipboard) copyPagePngLink(
-                    context, target.pageId
-                ) // You may want a separate PDF variant
+                if (options.copyToClipboard) linkCopier.copy(DeepLink.Page(target.pageId))
             }
         }
 
@@ -218,7 +217,7 @@ class ExportEngine @Inject constructor(
                     )
                 }
                 if (options.copyToClipboard && format == ExportFormat.PNG) {
-                    copyPagePngLink(context, pageId)
+                    linkCopier.copy(DeepLink.Page(pageId))
                 }
                 return "Page exported: $baseFileName.$ext"
             }
@@ -571,26 +570,6 @@ class ExportEngine @Inject constructor(
         }
     }
 
-
-    /* -------------------- Clipboard Helpers -------------------- */
-
-    private fun copyPagePngLink(context: Context, pageId: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = """
-            [[../attachments/Notable/Pages/notable-page-$pageId.png]]
-            [[Notable Link][notable://page-$pageId]]
-        """.trimIndent()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Page Link", text))
-    }
-
-    private fun copyBookPdfLink(context: Context, bookId: String, bookName: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = """
-            [[../attachments/Notable/Notebooks/$bookName.pdf]]
-            [[Notable Book Link][notable://book-$bookId]]
-        """.trimIndent()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Notable Book PDF Link", text))
-    }
 
     /* -------------------- Utilities -------------------- */
 
