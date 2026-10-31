@@ -1,6 +1,6 @@
 package com.ethran.notable.navigation
 
-import java.io.ByteArrayOutputStream
+import java.net.URLEncoder
 
 const val DEEP_LINK_SCHEME = "notable"
 
@@ -30,7 +30,7 @@ sealed interface DeepLink {
         is Page -> "$DEEP_LINK_SCHEME://page/${encode(pageId)}"
         is Book -> "$DEEP_LINK_SCHEME://book/${encode(bookId)}"
         is Pdf -> buildString {
-            append("$DEEP_LINK_SCHEME://pdf?path=").append(encode(path, keep = "/"))
+            append("$DEEP_LINK_SCHEME://pdf?path=").append(encode(path, keepSlashes = true))
             if (page != null) append("&page=").append(page)
         }
     }
@@ -84,33 +84,13 @@ private fun parseQuery(query: String): Map<String, String> = buildMap {
     }
 }
 
-private const val UNRESERVED = "-._~"
-
-private fun encode(value: String, keep: String = ""): String = buildString {
-    for (byte in value.encodeToByteArray()) {
-        val c = (byte.toInt() and 0xFF).toChar()
-        if (c.code < 0x80 && (c.isLetterOrDigit() || c in UNRESERVED || c in keep)) append(c)
-        else append('%').append("%02X".format(byte.toInt() and 0xFF))
-    }
+private fun encode(value: String, keepSlashes: Boolean = false): String {
+    val encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+    return if (keepSlashes) encoded.replace("%2F", "/") else encoded
 }
 
-/** Decodes `%XX` sequences as UTF-8; anything else, a `%` without two hex digits too, is kept. */
-private fun decode(value: String): String {
-    val bytes = ByteArrayOutputStream()
-    var i = 0
-    while (i < value.length) {
-        val hex = value.substring(i + 1, minOf(i + 3, value.length))
-        if (value[i] == '%' && hex.length == 2 && hex.all { it in HEX_DIGITS }) {
-            bytes.write(hex.toInt(16))
-            i += 3
-        } else {
-            // Up to the next %, as a whole, so that a character outside the BMP keeps both halves.
-            val end = value.indexOf('%', i + 1).takeIf { it >= 0 } ?: value.length
-            bytes.write(value.substring(i, end).encodeToByteArray())
-            i = end
-        }
+/** Decodes runs of `%XX` as UTF-8; anything else, a `%` without two hex digits too, is kept. */
+private fun decode(value: String): String =
+    Regex("(?:%[0-9A-Fa-f]{2})+").replace(value) { run ->
+        run.value.chunked(3).map { it.drop(1).toInt(16).toByte() }.toByteArray().decodeToString()
     }
-    return bytes.toByteArray().decodeToString()
-}
-
-private const val HEX_DIGITS = "0123456789abcdefABCDEF"
