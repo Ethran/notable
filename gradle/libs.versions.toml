@@ -1,32 +1,23 @@
 [versions]
 activityCompose = "1.13.0"
-agp = "9.4.1"
-compose = "1.11.3"
+agp = "9.5.0"
 coilCompose = "2.7.0"
 commonsCompress = "1.28.0"
 coreKtx = "1.19.1"
-coreTesting = "2.2.0"
 dagger = "2.60.1"
-espressoCore = "3.7.0"
 feather = "1.0.0"
-firebaseBom = "34.16.0"
+firebaseBom = "35.1.0"
 fitz = "1.28.5"
-fragmentKtx = "1.9.1"
 googleDaggerHiltAndroid = "2.60.1"
-googleDevtoolsKsp = "2.3.12"
-googleFirebase = "22.5.0"
+googleDevtoolsKsp = "2.3.13"
 googleGmsGoogleServices = "4.5.0"
 graphicsCore = "1.0.4"
 hiddenapibypass = "6.2"
 hiltNavigationCompose = "1.4.0"
 inputMotionprediction = "1.0.0"
-jetbrainsKotlinJvm = "2.4.21"
-jetbrainsKotlinPluginCompose = "2.4.21"
-jetbrainsKotlinPluginSerialization = "2.4.21"
-jnanoid = "2.0.0"
 junit = "1.3.0"
 junitVersion = "4.13.2"
-klaxon = "5.6"
+kotlin = "2.4.21"
 kotlinxSerializationJson = "1.12.0"
 lifecycleRuntimeKtx = "2.11.0"
 lz4Java = "1.12.1"
@@ -42,21 +33,17 @@ room = "2.8.5"
 runtime = "1.12.1"
 rxandroid = "2.1.1"
 rxjava = "2.2.21"
-shipbooksdk = "1.9.2"
+shipbooksdk = "1.10.0"
 ui = "1.12.1"
 workRuntimeKtx = "2.12.0"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
-androidx-core-testing = { group = "androidx.arch.core", name = "core-testing", version.ref = "coreTesting" }
-androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
-androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragmentKtx" }
 androidx-graphics-core = { group = "androidx.graphics", name = "graphics-core", version.ref = "graphicsCore" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-input-motionprediction = { group = "androidx.input", name = "input-motionprediction", version.ref = "inputMotionprediction" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junit" }
-androidx-junit-ktx = { group = "androidx.test.ext", name = "junit-ktx", version.ref = "junit" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-material = { group = "androidx.compose.material", name = "material", version.ref = "material" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
@@ -64,10 +51,8 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
-androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 androidx-room-testing-android = { group = "androidx.room", name = "room-testing-android", version.ref = "room" }
 androidx-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "runtime" }
-androidx-runtime-livedata = { group = "androidx.compose.runtime", name = "runtime-livedata", version.ref = "runtime" }
 androidx-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "ui" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4", version.ref = "ui" }
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest", version.ref = "ui" }
@@ -78,14 +63,12 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 feather = { group = "br.com.devsrsouza.compose.icons.android", name = "feather", version.ref = "feather" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
-firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics-ktx", version.ref = "googleFirebase" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 fitz = { group = "com.artifex.mupdf", name = "fitz", version.ref = "fitz" }
 hiddenapibypass = { group = "org.lsposed.hiddenapibypass", name = "hiddenapibypass", version.ref = "hiddenapibypass" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "dagger" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "dagger" }
-jnanoid = { group = "com.aventrix.jnanoid", name = "jnanoid", version.ref = "jnanoid" }
 junit = { group = "junit", name = "junit", version.ref = "junitVersion" }
-klaxon = { group = "com.beust", name = "klaxon", version.ref = "klaxon" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 lz4-java = { group = "at.yawk.lz4", name = "lz4-java", version.ref = "lz4Java" }
 mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
@@ -99,10 +82,8 @@ shipbooksdk = { group = "io.shipbook", name = "shipbooksdk", version.ref = "ship
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-android-library = { id = "com.android.library", version.ref = "agp" }
 google-dagger-hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "googleDaggerHiltAndroid" }
 google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }
 google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGmsGoogleServices" }
-jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "jetbrainsKotlinJvm" }
-jetbrains-kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "jetbrainsKotlinPluginCompose" }
-jetbrains-kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "jetbrainsKotlinPluginSerialization" }
+jetbrains-kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+jetbrains-kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

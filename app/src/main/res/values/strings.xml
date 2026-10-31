@@ -3,7 +3,6 @@
     <string name="home_quick_pages">Quick pages</string>
     <string name="home_notebooks">Notebooks</string>
     <string name="home_add_new_folder">Add new folder</string>
-    <string name="home_new_folder">New Folder</string>
     <string name="home_view_name">Library</string>
     <string name="settings_title">Settings</string>
     <string name="settings_tab_general_name">General</string>
@@ -24,7 +23,6 @@
     <string name="uiScale">UI Scale</string>
     <string name="app_new_version">It seems a new version of Notable is available on GitHub!</string>
     <string name="app_see_release">See release in browser</string>
-    <string name="app_latest_version">You are on the latest version.</string>
     <string name="app_check_updates">Check for newer version</string>
     <string name="gestures_double_tap_action">Double Tap Action</string>
     <string name="gestures_two_finger_tap_action">Two Finger Tap Action</string>
@@ -34,7 +32,6 @@
     <string name="gestures_three_finger_swipe_right_action">Three Finger Swipe Right Action</string>
     <string name="enable_quick_nav">Swipe up with three fingers to open QuickNav</string>
     <string name="block_system_gestures">Block system gestures while in Notable — fixes three-finger gestures when the system screenshot gesture is on, but edge navigation swipes stop working in the app</string>
-    <string name="work_in_progress">(work in progress)</string>
     <string name="toolbar_position_top">Top</string>
     <string name="toolbar_position_bottom">Bottom</string>
     <string name="sponsor_button_text">Sponsor</string>
@@ -86,17 +83,13 @@
     <string name="welcome_view_quick_start_tips_details">• Use \'Selection Export\' to quickly share images.\n• Tap the page number to quickly jump between pages.\n• Try enabling \'Scribble to Erase\' in Settings for natural erasing.\n• Double tap to undo, or on a selection to copy it.\n• You can use Notable as a live PDF viewer for LaTeX—see README.\n• You can customize gesture actions in Settings.</string>
 
     <string name="export_page_to">Export page to %1$s</string>
-    <string name="export_page_to_error">Error exporting page to %1$s</string>
-    <string name="exporting_the_page_to">Exporting the page to %1$s…</string>
 
     <string name="export_book_to">Export book to %1$s</string>
     <string name="copy_page_link">Copy link to page</string>
     <string name="copy_book_link">Copy link to book</string>
     <string name="copy_link">Copy link</string>
     <string name="link_format">Copied link format</string>
-    <string name="exporting_the_book_to">Exporting the book to %1$s…</string>
     <string name="clean_all_strokes">Clean all strokes</string>
-    <string name="cleared_all_strokes">Cleared all strokes</string>
     <string name="change_background">Change Background</string>
     <string name="bug_report">Bug Report</string>
     <string name="choose_pdf_background">Choose PDF background</string>
@@ -158,9 +151,7 @@
     <string name="sync_status_syncing">Syncing…</string>
 
     <!-- Sync Status Messages -->
-    <string name="sync_credentials_saved">Credentials saved</string>
     <string name="sync_connected_successfully">Connected successfully</string>
-    <string name="sync_connection_failed">Connection failed</string>
     <string name="sync_completed_successfully">Sync completed successfully</string>
     <string name="sync_failed_message">Sync failed: %1$s</string>
     <string name="sync_skipped">Sync skipped</string>
@@ -169,8 +160,6 @@
     <string name="sync_finished">Sync finished</string>
     <string name="sync_last_synced">Last sync: %1$s</string>
     <string name="sync_last_synced_never">Never</string>
-    <string name="sync_scheduled_started">Starting scheduled sync…</string>
-    <string name="sync_scheduled_completed">Scheduled sync completed</string>
     <string name="sync_connection_setup">Connection Setup</string>
     <string name="sync_server_configured">Server: %1$s…</string>
     <string name="sync_missing_config_hint">Complete the connection setup above to enable sync features.</string>
@@ -194,12 +183,8 @@
     <string name="sync_fast_sync_hint">Uses folder ETags to skip per-notebook checks on servers that support it. Turn off to force standard sync.</string>
 
     <!-- Sync Summary Messages -->
-    <string name="sync_summary">Synced: %1$d, Downloaded: %2$d, Deleted: %3$d (%4$dms)</string>
-    <string name="sync_error_at_step">Failed at %1$s: %2$s%3$s</string>
-    <string name="sync_can_retry"> (can retry)</string>
 
     <!-- Sync Progress -->
-    <string name="sync_progress_details">%1$s (%2$d%%)</string>
     <string name="sync_progress_step">Step %1$d of %2$d: %3$s</string>
     <string name="sync_progress_item">Notebook %1$d of %2$d · %3$s</string>
 
@@ -214,13 +199,8 @@
 
     <!-- Sync Force Operations -->
     <string name="sync_force_operations_title">DANGER ZONE</string>
-    <string name="sync_force_operations_warning">Use these only when setting up a new device or resetting sync. These operations will delete data!</string>
     <string name="sync_force_upload_button">Upload All</string>
     <string name="sync_force_download_button">Download All</string>
-    <string name="sync_force_upload_success">Server replaced with local data</string>
-    <string name="sync_force_upload_failed">Force upload failed</string>
-    <string name="sync_force_download_success">Local data replaced with server data</string>
-    <string name="sync_force_download_failed">Force download failed</string>
 
     <!-- Sync Confirmation Dialogs -->
     <string name="sync_confirm_force_upload_title">Replace Server Data?</string>
@@ -231,13 +211,8 @@
     <string name="sync_dialog_confirm">Confirm</string>
 
     <!-- Sync Clock Skew -->
-    <plurals name="sync_clock_skew_warning">
-        <item quantity="one">Connected successfully, but your device clock differs from the server by %1$d second. Sync may produce incorrect results until this is corrected.</item>
-        <item quantity="other">Connected successfully, but your device clock differs from the server by %1$d seconds. Sync may produce incorrect results until this is corrected.</item>
-    </plurals>
 
     <!-- Sync WiFi-only -->
-    <string name="sync_wifi_required_message">Not syncing: WiFi-only sync is enabled and you\'re on mobile data. Connect to WiFi or disable the WiFi-only setting.</string>
 
     <!-- Sync Log -->
     <string name="sync_log_title">Activity Log</string>
@@ -267,7 +242,6 @@
     <string name="toolbar_settings_import_confirm_title">Import toolbar layout?</string>
     <string name="toolbar_settings_import_confirm_message">This replaces your current toolbar layout and all pen presets. This cannot be undone.</string>
     <string name="toolbar_settings_pick_pen_type">Pen type</string>
-    <string name="toolbar_settings_edit_pen">Edit pen</string>
     <string name="toolbar_settings_delete">Delete</string>
     <string name="toolbar_settings_hide">Hide</string>
     <string name="toolbar_settings_menu_locked">The menu button can\'t be hidden — it\'s the only way to open the toolbar menu</string>
@@ -280,7 +254,6 @@
     <string name="pen_name_fountain">Fountain pen</string>
     <string name="pen_name_marker">Marker</string>
     <string name="pen_name_charcoal">Charcoal</string>
-    <string name="pen_name_charcoal_classic">Charcoal (classic)</string>
     <string name="pen_name_calligraphy">Calligraphy</string>
 
     <string name="toolbar_element_shape">Shape</string>

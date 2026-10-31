@@ -3,7 +3,6 @@
     <string name="home_quick_pages">Szybkie notatki</string>
     <string name="home_notebooks">Zeszyty</string>
     <string name="home_add_new_folder">Dodaj nowy folder</string>
-    <string name="home_new_folder">Nowy folder</string>
     <string name="home_view_name">Biblioteka</string>
     <string name="settings_title">Ustawienia</string>
     <string name="settings_tab_general_name">Główne</string>
@@ -24,7 +23,6 @@
 
     <string name="app_new_version">Wygląda na to, że nowa wersja Notable jest dostępna na GitHubie!</string>
     <string name="app_see_release">Zobacz wersję w przeglądarce</string>
-    <string name="app_latest_version">Aplikacja jest aktualna.</string>
     <string name="app_check_updates">Sprawdź dostępność aktualizacji</string>
 
     <string name="gestures_double_tap_action">Podwójne stuknięcie</string>
@@ -43,7 +41,6 @@
 
     <string name="enable_quick_nav">Przeciągnij trzema palcami w górę aby pokazać QuickNav</string>
     <string name="block_system_gestures">Blokuj gesty systemowe w Notable — naprawia gesty trzema palcami przy włączonym systemowym zrzucie ekranu, ale krawędziowe gesty nawigacji przestaną działać w aplikacji</string>
-    <string name="work_in_progress">(w trakcie implementacji)</string>
     <string name="toolbar_position_top">Góra</string>
     <string name="toolbar_position_bottom">Dół</string>
     <string name="sponsor_button_text">Wesprzyj</string>
@@ -98,17 +95,13 @@
     <string name="welcome_view_quick_start_tips_details">• Użyj  opcji eksportowania zanacznia, aby szybko udostępniać obrazy.\n• Stuknij numer strony, aby szybko przejść do wybranej strony.\n• Spróbuj włączyć  \'Zamaż aby usnąć\'(\'Scribble to Erase\') w Ustawieniach, aby naturalnie wymazywać.\n• Podwójne stuknięcie cofa, a podwójne stuknięcie na zaznaczeniu kopiuje je.\n• Możesz używać Notable jako podglądu PDF w czasie rzeczywistym dla LaTeX — zobacz README.\n• Możesz dostosować akcje gestów w Ustawieniach.</string>
 
     <string name="export_page_to">Eksportuj stronę do %1$s</string>
-    <string name="export_page_to_error">Błąd podczas eksportu strony do %1$s</string>
-    <string name="exporting_the_page_to">Eksportowanie strony do %1$s…</string>
 
     <string name="export_book_to">Eksportuj zeszyt do %1$s</string>
     <string name="copy_page_link">Kopiuj link do strony</string>
     <string name="copy_book_link">Kopiuj link do zeszytu</string>
     <string name="copy_link">Kopiuj link</string>
     <string name="link_format">Format kopiowanego linku</string>
-    <string name="exporting_the_book_to">Eksportowanie zeszytu do %1$s…</string>
     <string name="clean_all_strokes">Wyczyść wszystkie kreski</string>
-    <string name="cleared_all_strokes">Wyczyszczono wszystkie kreski</string>
     <string name="change_background">Zmień tło</string>
     <string name="bug_report">Zgłoś błąd</string>
 
@@ -169,9 +162,7 @@
     <string name="sync_status_syncing">Synchronizowanie…</string>
 
     <!-- Sync Status Messages -->
-    <string name="sync_credentials_saved">Dane logowania zapisane</string>
     <string name="sync_connected_successfully">Połączono pomyślnie</string>
-    <string name="sync_connection_failed">Połączenie nieudane</string>
     <string name="sync_completed_successfully">Synchronizacja zakończona pomyślnie</string>
     <string name="sync_failed_message">Synchronizacja nie powiodła się: %1$s</string>
     <string name="sync_skipped">Synchronizacja pominięta</string>
@@ -179,20 +170,14 @@
     <string name="sync_finished">Synchronizacja zakończona</string>
     <string name="sync_last_synced">Ostatnia synchronizacja: %1$s</string>
     <string name="sync_last_synced_never">Nigdy</string>
-    <string name="sync_scheduled_started">Rozpoczynam zaplanowaną synchronizację…</string>
-    <string name="sync_scheduled_completed">Zaplanowana synchronizacja zakończona</string>
     <string name="sync_connection_setup">Konfiguracja połączenia</string>
     <string name="sync_server_configured">Serwer: %1$s…</string>
     <string name="sync_missing_config_hint">Dokończ konfigurację połączenia powyżej, aby włączyć funkcje synchronizacji.</string>
     <string name="sync_clock_skew_short">Połączono (różnica czasu: %1$ds)</string>
 
     <!-- Sync Summary Messages -->
-    <string name="sync_summary">Zsynchronizowano: %1$d, Pobrano: %2$d, Usunięto: %3$d (%4$dms)</string>
-    <string name="sync_error_at_step">Błąd w kroku %1$s: %2$s%3$s</string>
-    <string name="sync_can_retry"> (możesz spróbować ponownie)</string>
 
     <!-- Sync Progress -->
-    <string name="sync_progress_details">%1$s (%2$d%%)</string>
     <string name="sync_progress_step">Krok %1$d z %2$d: %3$s</string>
     <string name="sync_progress_item">Zeszyt %1$d z %2$d · %3$s</string>
 
@@ -207,13 +192,8 @@
 
     <!-- Sync Force Operations -->
     <string name="sync_force_operations_title">STREFA ZAGROŻENIA</string>
-    <string name="sync_force_operations_warning">Używaj tylko podczas konfiguracji nowego urządzenia lub resetowania synchronizacji. Te operacje usuwają dane!</string>
     <string name="sync_force_upload_button">Zastąp serwer danymi lokalnymi</string>
     <string name="sync_force_download_button">Zastąp dane lokalne danymi z serwera</string>
-    <string name="sync_force_upload_success">Serwer zastąpiony danymi lokalnymi</string>
-    <string name="sync_force_upload_failed">Wymuszony upload nie powiódł się</string>
-    <string name="sync_force_download_success">Dane lokalne zastąpione danymi z serwera</string>
-    <string name="sync_force_download_failed">Wymuszony download nie powiódł się</string>
 
     <!-- Sync Confirmation Dialogs -->
     <string name="sync_confirm_force_upload_title">Zastąpić dane serwera?</string>
@@ -224,15 +204,8 @@
     <string name="sync_dialog_confirm">Potwierdź</string>
 
     <!-- Sync Clock Skew -->
-    <plurals name="sync_clock_skew_warning">
-        <item quantity="one">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekundę. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
-        <item quantity="few">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekundy. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
-        <item quantity="many">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekund. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
-        <item quantity="other">Połączono pomyślnie, ale zegar urządzenia różni się od serwera o %1$d sekund. Synchronizacja może dawać nieprawidłowe wyniki do momentu poprawienia czasu.</item>
-    </plurals>
 
     <!-- Sync WiFi-only -->
-    <string name="sync_wifi_required_message">Synchronizacja wstrzymana: włączono synchronizację tylko przez WiFi, a obecnie korzystasz z danych mobilnych. Połącz się z WiFi lub wyłącz to ustawienie.</string>
 
     <!-- Sync Log -->
     <string name="sync_log_title">Dziennik aktywności</string>
@@ -262,7 +235,6 @@
     <string name="toolbar_settings_import_confirm_title">Zaimportować układ paska narzędzi?</string>
     <string name="toolbar_settings_import_confirm_message">Zastąpi to obecny układ paska narzędzi i wszystkie pisaki. Tej operacji nie można cofnąć.</string>
     <string name="toolbar_settings_pick_pen_type">Rodzaj pisaka</string>
-    <string name="toolbar_settings_edit_pen">Edytuj pisak</string>
     <string name="toolbar_settings_delete">Usuń</string>
     <string name="toolbar_settings_hide">Ukryj</string>
     <string name="toolbar_settings_menu_locked">Przycisku menu nie można ukryć — to jedyny sposób na otwarcie menu paska narzędzi</string>
