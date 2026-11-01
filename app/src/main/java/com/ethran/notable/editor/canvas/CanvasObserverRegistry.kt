@@ -156,7 +156,7 @@ class CanvasObserverRegistry(
                     drawCanvas.refreshManager.drawCanvasToView(null)
                     viewModel.updateDrawingState()
                 } else {
-                    CanvasEventBus.isDrawing.emit(false)
+                    viewModel.requestDrawing(false)
                 }
             }
         }
@@ -173,7 +173,7 @@ class CanvasObserverRegistry(
 
     private fun observeDrawingState() {
         observerScope.launch {
-            CanvasEventBus.isDrawing.collect {
+            viewModel.rawDrawingRequests.collect {
                 log.v("drawing state changed to $it!")
                 viewModel.setDrawingStateFromCanvas(it)
             }

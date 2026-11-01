@@ -119,11 +119,7 @@ class EditorControlTower(
     }
 
 
-    override fun setIsDrawing(value: Boolean) {
-        // Changing no matter the state, otherwise we can have some strange race conditions
-        // ie with selection
-        scope.launch { CanvasEventBus.isDrawing.emit(value) }
-    }
+    override fun setIsDrawing(value: Boolean) = viewModel.requestDrawing(value)
 
     override fun toggleTool() {
         val mode = viewModel.toolbarState.value.mode

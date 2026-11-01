@@ -45,8 +45,11 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -205,6 +208,16 @@ class EditorViewModel @Inject constructor(
     // The page the [PageView] shows, set by [onPageShown], or null while no view is open; drives
     // [prefetchAround].
     private val shownPageId = MutableStateFlow<String?>(null)
+
+    // Only [drawingRequests] emits here, so every request that reaches the canvas goes through it.
+    private val _rawDrawingRequests = MutableSharedFlow<Boolean>()
+    val rawDrawingRequests: SharedFlow<Boolean> = _rawDrawingRequests.asSharedFlow()
+
+    private val drawingRequests = DrawingStateRequests(
+        scope = viewModelScope,
+        waitForSettle = { DeviceCompat.delayBeforeResumingDrawing() },
+        publish = { _rawDrawingRequests.emit(it) },
+    )
 
     init {
         viewModelScope.launch {
@@ -563,12 +576,11 @@ class EditorViewModel @Inject constructor(
         val shouldBeDrawing = _toolbarState.value.isDrawingAllowed
         _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
         log.d("updateDrawingState: Drawing state: $shouldBeDrawing")
-        viewModelScope.launch {
-            if (shouldBeDrawing)
-                DeviceCompat.delayBeforeResumingDrawing()
-            CanvasEventBus.isDrawing.emit(shouldBeDrawing)
-        }
+        drawingRequests.request(shouldBeDrawing, settle = true)
     }
+
+    /** Switches raw drawing on or off right away; the newest request wins. */
+    fun requestDrawing(isDrawing: Boolean) = drawingRequests.request(isDrawing)
 
     // --------------------------------------------------------
     // Book / Page Data
@@ -845,9 +857,7 @@ class EditorViewModel @Inject constructor(
         log.v("setSelectionActive: $active")
         if (_toolbarState.value.isSelectionActive != active) {
             if (active) //selection is active, we can directly update it, and skip other checks
-                viewModelScope.launch {
-                    CanvasEventBus.isDrawing.emit(false)
-                }
+                requestDrawing(false)
             _toolbarState.update { it.copy(isSelectionActive = active) }
             if (!active)
                 updateDrawingState()
