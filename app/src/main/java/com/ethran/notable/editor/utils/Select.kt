@@ -138,6 +138,8 @@ fun selectImagesAndStrokes(
     // isDrawing==true, armed resetScreenFreeze's delayed resume, and re-froze the screen
     // after updateIsDrawing() had disabled raw drawing — the "frozen after select" bug.
     viewModel.setDrawingStateFromCanvas(false)
+    // Also cancels a settling resume, which would otherwise turn drawing back on mid-selection.
+    viewModel.requestDrawing(false)
     page.drawAreaPageCoordinates(
         pageBounds,
         ignoredImageIds = imagesToSelect.map { it.id },

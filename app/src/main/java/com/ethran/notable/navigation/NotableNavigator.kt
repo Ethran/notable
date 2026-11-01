@@ -14,7 +14,6 @@ import androidx.navigation.compose.rememberNavController
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.EditorDestination
-import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.ui.views.BugReportDestination
 import com.ethran.notable.ui.views.LibraryDestination
@@ -64,12 +63,10 @@ class NotableNavigator(
             "quickNavSourcePageId", currentPageId
         )
         isQuickNavOpen = true
-        updateDrawingState()
     }
 
     fun closeQuickNav() {
         isQuickNavOpen = false
-        updateDrawingState()
         if (quickNavSourcePageId == currentPageId) {
             // User didn't use the QuickNav, so remove the savedStateHandle
             navController.currentBackStackEntry?.savedStateHandle?.remove<String>("quickNavSourcePageId")
@@ -100,14 +97,6 @@ class NotableNavigator(
 
     fun shouldAnchorBeVisible(): Boolean {
         return isQuickNavOpen && quickNavSourcePageId != currentPageId
-    }
-
-    // Updates the drawing state based on whether QuickNav is open
-    fun updateDrawingState() {
-        coroutineScope.launch {
-            log.d("Changing drawing state, isQuickNavOpen: $isQuickNavOpen")
-            CanvasEventBus.isDrawing.emit(!isQuickNavOpen)
-        }
     }
 
     fun goToLibrary(folderId: String?) {

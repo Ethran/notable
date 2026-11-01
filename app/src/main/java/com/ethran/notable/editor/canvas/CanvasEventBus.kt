@@ -21,8 +21,6 @@ object CanvasEventBus {
     val reloadFromDb = MutableSharedFlow<Unit>()
 
 
-    val isDrawing = MutableSharedFlow<Boolean>()
-
     // used for managing drawing state on regain focus
     val onFocusChange = MutableSharedFlow<Boolean>()
 
