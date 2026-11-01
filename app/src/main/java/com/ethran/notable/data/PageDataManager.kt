@@ -106,8 +106,8 @@ internal class PageCacheEntry(val pageId: String) {
 
     var backgroundKey: String? = null
 
-    // The file this page's background is from. Kept when its render is evicted or dropped: the
-    // screen bitmap, or a render begun before the drop, may still show the file.
+    // The file this page's background is from. Kept when its render is evicted or dropped, and set
+    // for a render returned uncached: the screen bitmap may still show the file.
     var backgroundPath: String? = null
 
     // Native (dotted/lined/blank) backgrounds have no bitmap; caching this lets
@@ -159,6 +159,9 @@ internal class PageChanges {
 
 // How long the hint that a background file changed stays up.
 private const val FILE_CHANGED_HINT_MS = 4000
+
+// How many times a background is rendered while its file keeps changing during the render.
+private const val MAX_BACKGROUND_RENDERS = 3
 
 // Cache manager companion object
 @Singleton
@@ -1106,13 +1109,27 @@ class PageDataManager @Inject constructor(
     /**
      * Renders page [pageNumber] of [path] (-1 for an image) at [scale] as the background of
      * [pageId], and caches it and watches its file (see [linkBackground]). Caller must hold no lock.
+     *
+     * A render during which a background file changed may show the file as it was, so it is not
+     * cached but rendered again, [MAX_BACKGROUND_RENDERS] times at most. If files still change, the
+     * last render is returned uncached, and the page is marked as showing [path], for the next
+     * change of it to find.
      */
     fun renderBackground(pageId: String, path: String, pageNumber: Int, scale: Float): Bitmap? {
-        val fileChanges = synchronized(lock) { backgroundFileChanges }
-        val background = CachedBackground(path, pageNumber, scale)
-        log.d("Rendered background: $background")
-        if (linkBackground(pageId, background, fileChanges)) armBackgroundWatch(pageId, background)
-        return background.bitmap
+        var renders = 0
+        while (true) {
+            val fileChanges = synchronized(lock) { backgroundFileChanges }
+            val background = CachedBackground(path, pageNumber, scale)
+            log.d("Rendered background: $background")
+            if (linkBackground(pageId, background, fileChanges)) {
+                armBackgroundWatch(pageId, background)
+                return background.bitmap
+            }
+            if (++renders == MAX_BACKGROUND_RENDERS) {
+                synchronized(lock) { getOrCreateEntryLocked(pageId).backgroundPath = path }
+                return background.bitmap
+            }
+        }
     }
 
     /**
