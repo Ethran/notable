@@ -37,6 +37,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.FileInputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** A page's background follows its file: once the file is there, and after the file changes. */
@@ -183,26 +184,44 @@ class BackgroundFileChangeTest {
     }
 
     @Test(timeout = 30000)
-    fun backgroundFileReplacedByRenamingANewOneOverIt_isStillFollowed() = runBlocking {
+    fun backgroundFileReplacedByRenamingANewOneOverIt_isStillFollowed() =
+        backgroundFileReplacedByRenaming_isStillFollowed(keepOldOpen = false)
+
+    // While the old file is open it isn't deleted, so its watch gets only ATTRIB for the rename:
+    // what shared storage (FUSE) reports on some devices, also once the file is closed.
+    @Test(timeout = 30000)
+    fun backgroundFileReplacedByRenamingWhileTheOldOneIsOpen_isStillFollowed() =
+        backgroundFileReplacedByRenaming_isStillFollowed(keepOldOpen = true)
+
+    /**
+     * A page following a file shows it after a new file is renamed over it, twice, as sync tools
+     * and atomic writers replace files; with the replaced files kept open if [keepOldOpen].
+     */
+    private fun backgroundFileReplacedByRenaming_isStillFollowed(keepOldOpen: Boolean) = runBlocking {
         val pdf = File(dir, "background.pdf")
         writePdf(pdf, Color.RED)
         val pageId = createPage(followingNotebook(pdf), pdf, BackgroundType.Pdf(0))
         assertTrue(shows(pageId, Color.RED))
 
-        // As sync tools and atomic writers do: the new file is written aside and renamed over.
+        val opened = mutableListOf<FileInputStream>()
         fun replace(color: Int) {
+            if (keepOldOpen) opened += FileInputStream(pdf)
             val next = File(dir, "background.pdf.part")
             writePdf(next, color)
             assertTrue(next.renameTo(pdf))
         }
-        assertTrue("replacement shown", waitForCondition(10000) {
-            replace(Color.BLUE)
-            waitForCondition(1000) { shows(pageId, Color.BLUE) }
-        })
-        assertTrue("later replacement shown", waitForCondition(10000) {
-            replace(Color.GREEN)
-            waitForCondition(1000) { shows(pageId, Color.GREEN) }
-        })
+        try {
+            assertTrue("replacement shown", waitForCondition(10000) {
+                replace(Color.BLUE)
+                waitForCondition(1000) { shows(pageId, Color.BLUE) }
+            })
+            assertTrue("later replacement shown", waitForCondition(10000) {
+                replace(Color.GREEN)
+                waitForCondition(1000) { shows(pageId, Color.GREEN) }
+            })
+        } finally {
+            opened.forEach { it.close() }
+        }
     }
 
     @Test(timeout = 30000)
