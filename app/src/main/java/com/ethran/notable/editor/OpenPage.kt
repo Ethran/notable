@@ -1,7 +1,7 @@
 package com.ethran.notable.editor
 
 import com.ethran.notable.data.AppRepository
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType

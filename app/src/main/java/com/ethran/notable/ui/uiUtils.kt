@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.math.ceil
 import kotlin.math.roundToInt

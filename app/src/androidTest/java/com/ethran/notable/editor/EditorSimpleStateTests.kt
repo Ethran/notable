@@ -12,7 +12,6 @@ import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.PagePreviewStore
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
-import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.CryptoHelper
@@ -24,6 +23,7 @@ import com.ethran.notable.data.db.NotebookSyncStateRepository
 import com.ethran.notable.data.db.PageRepository
 import com.ethran.notable.data.db.PageSyncStateRepository
 import com.ethran.notable.data.db.StrokeRepository
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.io.ExportEngine

@@ -9,7 +9,7 @@ import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.data.model.FitMode
 import io.shipbook.shipbooksdk.ShipBook

@@ -2,7 +2,7 @@ package com.ethran.notable.editor.ui.toolbar.model
 
 import androidx.compose.ui.graphics.Color
 import com.ethran.notable.R
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState

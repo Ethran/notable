@@ -2,7 +2,7 @@ package com.ethran.notable.testing
 
 import android.content.Context
 import com.ethran.notable.data.PageDataManager
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.db.Page

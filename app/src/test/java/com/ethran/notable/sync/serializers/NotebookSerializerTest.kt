@@ -1,6 +1,6 @@
 package com.ethran.notable.sync.serializers
 
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.utils.AppResult

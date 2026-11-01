@@ -1,7 +1,7 @@
 package com.ethran.notable.editor.ui.toolbar.model
 
 import com.ethran.notable.data.datastore.AppSettings
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.ToolbarUiState

@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.withScale
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.utils.scaleRect
 import com.ethran.notable.ui.convertPointsToPixel

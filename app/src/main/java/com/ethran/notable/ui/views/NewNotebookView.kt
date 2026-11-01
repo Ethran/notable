@@ -42,7 +42,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.R
 import com.ethran.notable.data.db.Folder
-import com.ethran.notable.data.datastore.PageMode
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.components.BreadCrumb
