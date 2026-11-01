@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -35,6 +36,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
@@ -43,6 +45,8 @@ import com.ethran.notable.editor.ui.toolbar.model.CustomElement
 import com.ethran.notable.editor.ui.toolbar.model.CustomKind
 import com.ethran.notable.editor.ui.toolbar.model.DividerElement
 import com.ethran.notable.editor.ui.toolbar.model.EraserSubmenuSpec
+import com.ethran.notable.editor.ui.toolbar.model.FitModeElement
+import com.ethran.notable.editor.ui.toolbar.model.FitModeSubmenuSpec
 import com.ethran.notable.editor.ui.toolbar.model.IconRef
 import com.ethran.notable.editor.ui.toolbar.model.ModeElement
 import com.ethran.notable.editor.ui.toolbar.model.PenElement
@@ -52,6 +56,9 @@ import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
+import compose.icons.FeatherIcons
+import compose.icons.feathericons.Maximize
+import compose.icons.feathericons.Minimize
 
 /**
  * The single generic renderer for toolbar elements: draws the button (via [ToolbarButton]),
@@ -92,6 +99,8 @@ fun ToolbarElementView(
             )
 
         is ModeElement -> ModeElementView(element, uiState, onAction)
+
+        is FitModeElement -> FitModeElementView(element, uiState, onAction)
 
         is ActionElement ->
             ToolbarButton(
@@ -223,6 +232,118 @@ private fun eraserIcon(eraser: Eraser): Int =
         Eraser.PEN -> R.drawable.eraser
         Eraser.SELECT -> R.drawable.eraser_select
     }
+
+/** The sheet-fit button: one popup listing every [FitMode]; its icon and tick follow `uiState.fitMode`. */
+@Composable
+private fun FitModeElementView(
+    element: FitModeElement,
+    uiState: ToolbarUiState,
+    onAction: (ToolbarAction) -> Unit,
+) {
+    Box {
+        ToolbarButton(
+            isSelected = element.isSelected(uiState),
+            onSelect = { onAction(ToolbarAction.ToggleFitModeMenu(!uiState.isFitModeMenuOpen)) },
+            vectorIcon = fitModeIcon(uiState.fitMode),
+            contentDescription = stringResource(R.string.toolbar_fit_mode),
+        )
+
+        if (uiState.isFitModeMenuOpen) {
+            FitModeSubmenu(
+                spec = element.submenu,
+                uiState = uiState,
+                onAction = onAction,
+            )
+        }
+    }
+}
+
+private fun fitModeIcon(mode: FitMode): ImageVector =
+    when (mode) {
+        FitMode.FIT_TO_WIDTH -> FeatherIcons.Maximize
+        FitMode.REAL -> FeatherIcons.Minimize
+    }
+
+private fun fitModeLabel(mode: FitMode): Int =
+    when (mode) {
+        FitMode.FIT_TO_WIDTH -> R.string.toolbar_fit_mode_fit_to_width
+        FitMode.REAL -> R.string.toolbar_fit_mode_real
+    }
+
+/** The fit popup: every mode as an icon-and-label button, the applied one ticked. */
+@Composable
+private fun FitModeSubmenu(
+    spec: FitModeSubmenuSpec,
+    uiState: ToolbarUiState,
+    onAction: (ToolbarAction) -> Unit,
+) {
+    val density = LocalDensity.current
+
+    ScaledPopup(
+        offset = with(density) {
+            IntOffset(
+                0,
+                43.dp.roundToPx()
+            )
+        },
+        onDismissRequest = {
+            onAction(ToolbarAction.ToggleFitModeMenu(false))
+        },
+        properties = PopupProperties(focusable = true),
+        alignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .width(IntrinsicSize.Max)
+                .padding(bottom = (BUTTON_SIZE + 5).dp)
+                .background(Color.White)
+                .border(1.dp, Color.Black)
+                .height(IntrinsicSize.Max)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.toolbar_fit_mode),
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Max)
+                    .border(1.dp, Color.Black),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                spec.modes.forEach { mode ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        ToolbarButton(
+                            vectorIcon = fitModeIcon(mode),
+                            isSelected = uiState.fitMode == mode,
+                            onSelect = { onAction(ToolbarAction.ChangeFitMode(mode)) },
+                            contentDescription = stringResource(fitModeLabel(mode)),
+                            modifier = Modifier.height(BUTTON_SIZE.dp)
+                        )
+                        BasicText(
+                            text = stringResource(fitModeLabel(mode)),
+                            modifier = Modifier.padding(bottom = 4.dp),
+                            style = TextStyle(
+                                color = Color.Black,
+                                fontSize = 11.sp
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 /** The eraser popup: eraser-type picker plus the global scribble-to-erase toggle. */
 @Composable

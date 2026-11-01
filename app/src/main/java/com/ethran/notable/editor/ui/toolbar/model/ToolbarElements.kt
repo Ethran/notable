@@ -2,6 +2,8 @@ package com.ethran.notable.editor.ui.toolbar.model
 
 import androidx.compose.ui.graphics.Color
 import com.ethran.notable.R
+import com.ethran.notable.data.model.PageMode
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
@@ -11,6 +13,7 @@ import com.ethran.notable.editor.utils.Pen
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Clipboard
 import compose.icons.feathericons.EyeOff
+import compose.icons.feathericons.Maximize
 import compose.icons.feathericons.RefreshCcw
 
 /**
@@ -68,6 +71,17 @@ object ToolbarElements {
             contentDescription = "reset zoom and scroll",
             visibleWhen = { state, _ -> state.showResetView },
             action = ToolbarAction.ResetView,
+        ),
+
+        FitModeElement(
+            id = ToolbarElementId.FIT_MODE,
+            // TODO: placeholder icon — replace with a sheet-with-margins glyph when the art exists.
+            icon = IconRef.Vector(FeatherIcons.Maximize),
+            contentDescription = "fit mode",
+            visibleWhen = { state, _ ->
+                state.notebookId != null && state.pageMode?.let { it != PageMode.INFINITE } == true
+            },
+            submenu = FitModeSubmenuSpec(modes = FitMode.entries),
         ),
 
         ActionElement(

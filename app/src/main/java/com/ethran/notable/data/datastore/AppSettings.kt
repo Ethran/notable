@@ -2,15 +2,12 @@ package com.ethran.notable.data.datastore
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
 import com.ethran.notable.navigation.LinkFormat
 import kotlinx.serialization.Serializable
 
-
-// Define the target page size (A4 in points: 595 x 842)
-const val A4_WIDTH = 595
-const val A4_HEIGHT = 842
 const val BUTTON_SIZE = 37
 
 
@@ -39,6 +36,7 @@ data class AppSettings(
     val version: Int,
     val monitorBgFiles: Boolean = false,
     val defaultNativeTemplate: String = "blank",
+    val defaultPageMode: PageMode = PageMode.A4,
     val quickNavPages: List<String> = listOf(),
     val scribbleToEraseEnabled: Boolean = false,
     val toolbarPosition: Position = Position.Top,
@@ -46,7 +44,6 @@ data class AppSettings(
     val continuousZoom: Boolean = false,
     val continuousStrokeSlider: Boolean = false,
     val paginatePdf: Boolean = true,
-    val visualizePdfPagination: Boolean = false,
     // null → ToolbarLayout.DEFAULT. Sanitize with ToolbarLayout.validated() when reading:
     // persisted layouts may predate elements or omit the mandatory MENU entry.
     val toolbarLayout: ToolbarLayout? = null,

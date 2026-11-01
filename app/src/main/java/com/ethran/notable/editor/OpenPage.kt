@@ -1,9 +1,11 @@
 package com.ethran.notable.editor
 
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.FitMode
 import io.shipbook.shipbooksdk.ShipBook
 
 /**
@@ -21,12 +23,20 @@ data class OpenPage(
     val record: Page? = null,
     /** Position within the notebook, or -1 for a loose page or before [load]. */
     val pageNumber: Int = -1,
+    val fitPortrait: FitMode = FitMode.REAL,
+    val fitLandscape: FitMode = FitMode.REAL,
 ) {
     val backgroundName: String
         get() = record?.background ?: "blank"
 
     val backgroundType: BackgroundType?
         get() = record?.getBackgroundType()
+
+    /** The sheet this page is laid out on, or null while it keeps the infinite canvas. */
+    val pageMode: PageMode?
+        get() = record?.pageMode
+
+    fun fitModeFor(isLandscape: Boolean): FitMode = if (isLandscape) fitLandscape else fitPortrait
 
     /**
      * Whether scroll and zoom are allowed: only once [load] has read the page's record, so its
@@ -50,10 +60,15 @@ data class OpenPage(
                 log.e("Page($pageId) not found")
                 return OpenPage(pageId)
             }
-            val pageNumber = record.notebookId
-                ?.let { appRepository.bookRepository.getById(it)?.pageIds?.indexOf(pageId) }
-                ?: -1
-            return OpenPage(pageId, record, pageNumber)
+            val notebook = record.notebookId?.let { appRepository.bookRepository.getById(it) }
+            val pageNumber = notebook?.pageIds?.indexOf(pageId) ?: -1
+            return OpenPage(
+                pageId,
+                record,
+                pageNumber,
+                notebook?.fitPortrait ?: FitMode.REAL,
+                notebook?.fitLandscape ?: FitMode.REAL,
+            )
         }
     }
 }

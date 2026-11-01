@@ -1,5 +1,6 @@
 package com.ethran.notable.data
 
+import androidx.compose.ui.unit.IntOffset
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ethran.notable.data.db.Image
@@ -235,9 +236,10 @@ class PageSaverTest {
         suspend fun pageUpdatedAt(id: String) = data.db.pageDao().getById(id)!!.updatedAt
         suspend fun notebookUpdatedAt(id: String) = data.db.notebookDao().getById(id)!!.updatedAt
 
-        pageDataManager.recordScroll(pageId, 750)
+        pageDataManager.recordScroll(pageId, IntOffset(120, 750))
         assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
-        assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
+        assertEquals(750, data.db.pageDao().getById(pageId)!!.scrollY)
+        assertEquals(120, data.db.pageDao().getById(pageId)!!.scrollX)
         assertEquals(longAgo, pageUpdatedAt(pageId))
         assertEquals(longAgo, notebookUpdatedAt(notebook.notebookId))
 
@@ -249,7 +251,8 @@ class PageSaverTest {
         // The page is stamped with the time of its edit, the notebook with the time of the save.
         assertTrue(pageUpdatedAt(pageId).time in beforeEdit..afterEdit)
         assertTrue(notebookUpdatedAt(notebook.notebookId).time > afterEdit)
-        assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
+        assertEquals(750, data.db.pageDao().getById(pageId)!!.scrollY)
+        assertEquals(120, data.db.pageDao().getById(pageId)!!.scrollX)
         assertEquals(longAgo, pageUpdatedAt(otherNotebook.pageIds.single()))
         assertEquals(longAgo, notebookUpdatedAt(otherNotebook.notebookId))
     }

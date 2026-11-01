@@ -946,6 +946,7 @@ private fun elementNameRes(id: ToolbarElementId): Int = when (id) {
     ToolbarElementId.IMAGE -> R.string.toolbar_element_image
     ToolbarElementId.PASTE -> R.string.toolbar_element_paste
     ToolbarElementId.RESET_VIEW -> R.string.toolbar_element_reset_view
+    ToolbarElementId.FIT_MODE -> R.string.toolbar_element_fit_mode
     ToolbarElementId.UNDO -> R.string.toolbar_element_undo
     ToolbarElementId.REDO -> R.string.toolbar_element_redo
     ToolbarElementId.PAGE_NAV -> R.string.toolbar_element_page_nav

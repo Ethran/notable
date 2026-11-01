@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.model.BackgroundType
@@ -39,6 +40,7 @@ data class NewNotebookState(
     val folderId: String?,
     val backgroundType: String,
     val background: String,
+    val pageMode: PageMode,
 )
 
 data class CreatedNotebook(val bookId: String, val pageId: String)
@@ -59,6 +61,7 @@ class NewNotebookViewModel @Inject constructor(
             folderId = savedStateHandle[NewNotebookDestination.FOLDER_ID_ARG],
             backgroundType = BackgroundType.Native.key,
             background = GlobalAppSettings.current.defaultNativeTemplate,
+            pageMode = GlobalAppSettings.current.defaultPageMode,
         )
     )
     val state: StateFlow<NewNotebookState> = _state.asStateFlow()
@@ -85,6 +88,8 @@ class NewNotebookViewModel @Inject constructor(
         it.copy(backgroundType = type, background = background ?: it.background)
     }
 
+    fun setPageMode(mode: PageMode) = _state.update { it.copy(pageMode = mode) }
+
     fun create() {
         if (isCreating) return
         isCreating = true
@@ -94,6 +99,7 @@ class NewNotebookViewModel @Inject constructor(
             parentFolderId = state.folderId,
             defaultBackground = state.background,
             defaultBackgroundType = state.backgroundType,
+            pageMode = state.pageMode,
         )
         viewModelScope.launch {
             try {

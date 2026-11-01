@@ -64,6 +64,7 @@ data class ToolbarLayout(
                 "PEN:ball", "PEN:red", "PEN:blue", "PEN:green", "PEN:pencil", "PEN:brush",
                 "PEN:fountain", "SHAPE", "DIVIDER", "PEN:marker", "DIVIDER", "ERASER",
                 "DIVIDER", "SELECT", "DIVIDER", "IMAGE", "DIVIDER", "PASTE", "RESET_VIEW",
+                "FIT_MODE",
             ),
             pinned = listOf(
                 "DIVIDER", "UNDO", "REDO", "DIVIDER", "PAGE_NAV", "HOME", "DIVIDER", "MENU",

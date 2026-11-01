@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.R
+import com.ethran.notable.data.model.PageMode
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.model.BackgroundType
@@ -264,6 +265,14 @@ private fun NotebookConfigContent(
 
             /* -------------- Other book info -----------*/
             Text(stringResource(R.string.details_notebook_pages, book.pageIds.size))
+            // Display only: the sheet is chosen when the notebook is made. A notebook imported
+            // without one has no width to report, so the row is left out.
+            book.pageMode?.displayNameId?.let { pageMode ->
+                Text(
+                    "${stringResource(R.string.details_notebook_pageMode)}: " +
+                            stringResource(pageMode)
+                )
+            }
             Text("Size: TODO!")
             Row {
                 Text(stringResource(R.string.details_notebook_in_folder))
@@ -320,7 +329,11 @@ private fun NotebookConfigContent(
 @Composable
 private fun NotebookConfigPreview() {
     NotebookConfigContent(
-        book = Notebook(title = "Lecture notes", pageIds = listOf("p1", "p2", "p3")),
+        book = Notebook(
+            title = "Lecture notes",
+            pageIds = listOf("p1", "p2", "p3"),
+            pageMode = PageMode.A4,
+        ),
         onRename = {},
         breadcrumbFolders = listOf(Folder(title = "Studies")),
         onChangeBackground = {},

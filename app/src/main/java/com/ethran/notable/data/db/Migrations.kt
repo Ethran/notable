@@ -65,6 +65,16 @@ class AutoMigration31to32 : AutoMigrationSpec
 )
 class AutoMigration35to36 : AutoMigrationSpec
 
+// Renames `scroll` to `scrollY`, keeping its value
+@RenameColumn.Entries(
+    RenameColumn(
+        tableName = "Page",
+        fromColumnName = "scroll",
+        toColumnName = "scrollY"
+    )
+)
+class AutoMigration37to38 : AutoMigrationSpec
+
 
 
 // Migration 32 -> 33:
