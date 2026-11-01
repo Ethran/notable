@@ -16,3 +16,5 @@
 -keep class com.artifex.mupdf.fitz.** { *; }
 # Optional annotations joda-time (from the Onyx SDK) refers to.
 -dontwarn org.joda.convert.**
+# Ktor's debugger check uses JVM management classes Android doesn't have; it's never reached there.
+-dontwarn java.lang.management.**

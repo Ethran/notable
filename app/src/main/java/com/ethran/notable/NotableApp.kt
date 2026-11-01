@@ -2,6 +2,8 @@ package com.ethran.notable
 
 import android.app.Application
 import android.util.Log
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.ethran.notable.receiver.PdfReceiver
 import com.onyx.android.sdk.base.utils.ResManager
 import com.onyx.android.sdk.rx.RxManager
 import dagger.hilt.android.HiltAndroidApp
@@ -12,10 +14,14 @@ import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
 import java.util.concurrent.atomic.AtomicInteger
+import javax.inject.Inject
 import androidx.core.content.edit
 
 @HiltAndroidApp
 class NotableApp : Application() {
+
+    @Inject
+    lateinit var pdfReceiver: PdfReceiver
 
     override fun onCreate() {
         Log.i("NotableApp", "onCreate START")
@@ -32,6 +38,7 @@ class NotableApp : Application() {
         // first stroke render throws UninitializedPropertyAccessException.
         ResManager.init(this)
         checkHiddenApiBypass()
+        ProcessLifecycleOwner.get().lifecycle.addObserver(pdfReceiver)
         Log.i("NotableApp", "onCreate FINISH")
     }
 

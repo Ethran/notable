@@ -19,6 +19,7 @@ junit = "1.3.0"
 junitVersion = "4.13.2"
 kotlin = "2.4.21"
 kotlinxSerializationJson = "1.12.0"
+ktor = "3.5.2"
 lifecycleRuntimeKtx = "2.11.0"
 lz4Java = "1.12.1"
 mockk = "1.14.11"
@@ -44,6 +45,7 @@ androidx-graphics-core = { group = "androidx.graphics", name = "graphics-core", 
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 androidx-input-motionprediction = { group = "androidx.input", name = "input-motionprediction", version.ref = "inputMotionprediction" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junit" }
+androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleRuntimeKtx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-material = { group = "androidx.compose.material", name = "material", version.ref = "material" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
@@ -70,6 +72,8 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "dagger" }
 junit = { group = "junit", name = "junit", version.ref = "junitVersion" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
 lz4-java = { group = "at.yawk.lz4", name = "lz4-java", version.ref = "lz4Java" }
 mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }

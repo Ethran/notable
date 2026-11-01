@@ -72,6 +72,7 @@ data class AppSettings(
     // stop working inside the app while this is on — hence opt-in.
     val blockSystemGestures: Boolean = false,
     val linkFormat: LinkFormat = LinkFormat.Markdown,
+    val receivePdfs: Boolean = false,
 
     // Debug
     val showWelcome: Boolean = true,

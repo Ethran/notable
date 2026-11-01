@@ -88,6 +88,7 @@ dependencies {
     implementation libs.androidx.ui.tooling.preview
     implementation libs.androidx.material.icons.extended
     implementation libs.androidx.lifecycle.runtime.ktx
+    implementation libs.androidx.lifecycle.process
     implementation libs.androidx.activity.compose
     implementation libs.androidx.graphics.core
     implementation libs.androidx.input.motionprediction
@@ -159,6 +160,10 @@ dependencies {
     // WebDAV sync: background work and the HTTP client
     implementation libs.androidx.work.runtime.ktx
     implementation libs.okhttp
+
+    // PDF receiver: a small HTTP server for PDFs pushed from a computer
+    implementation libs.ktor.server.cio
+    testImplementation libs.ktor.server.test.host
 }
 
 tasks.register('printVersionName') {

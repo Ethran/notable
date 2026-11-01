@@ -22,6 +22,7 @@ import com.ethran.notable.data.model.BackgroundType.CoverImage
 import com.ethran.notable.data.model.BackgroundType.ImageRepeating
 import com.ethran.notable.editor.PageViewport
 import com.ethran.notable.editor.canvas.CanvasEventBus
+import com.ethran.notable.io.isReceivedFile
 import com.ethran.notable.io.loadBackgroundBitmap
 import com.ethran.notable.utils.logCallStack
 import io.shipbook.shipbooksdk.ShipBook
@@ -1172,8 +1173,10 @@ class PageDataManager @Inject constructor(
      * Arm the inotify watch for [background] off the lock. Registering it stats the file and arms an
      * inotify watch (blocking I/O), so it never runs with the drawing path blocked behind it, and it
      * is deliberately not joined by the load — invalidation, not the initial render, needs it.
+     * Received files aren't watched: the receiver reports them ([backgroundFileWritten]).
      */
     private fun armBackgroundWatch(pageId: String, background: CachedBackground) {
+        if (isReceivedFile(background.path)) return
         dataScope.launch {
             val notebookId = appRepository.pageRepository.getById(pageId)?.notebookId
             val observeBg = appRepository.isObservable(notebookId)
@@ -1213,6 +1216,15 @@ class PageDataManager @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Shows the new version of the background file at [path], which the app has just written, on
+     * the pages showing it. Without the hint a change from outside gets: the writer reports it.
+     */
+    fun backgroundFileWritten(path: String) {
+        log.i("Background file written: $path")
+        if (dropBackgroundsOf(setOf(path))) dataLoadingScope.launch { CanvasEventBus.forceUpdate.emit(null) }
     }
 
     /**
