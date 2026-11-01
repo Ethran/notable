@@ -24,7 +24,6 @@ import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
-import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
@@ -45,11 +44,8 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -105,18 +101,25 @@ data class ToolbarUiState(
     val penSettings: Map<String, PenSetting> = DEFAULT_PEN_SETTINGS,
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
-    val isDrawing: Boolean = true,
     val isQuickNavOpen: Boolean = false,
+    val hasWindowFocus: Boolean = true,
+    /** A finger is holding/dragging a selection rectangle on the canvas. */
+    val isSelectionGestureActive: Boolean = false,
 ) {
     /** The active preset's setting — what the drawing pipeline draws with. The fallback
      * only triggers if the active preset was deleted mid-session. */
     val activePenSetting: PenSetting
         get() = penSettings[penPresetId] ?: PenSetting(5f, android.graphics.Color.BLACK)
 
-    val isDrawingAllowed: Boolean
-        get() = !isSelectionActive &&
-                !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
-                && !isQuickNavOpen
+    /**
+     * Whether the pen draws (raw drawing on). Derived only, never stored: to change it,
+     * change one of its inputs, and the canvas follows the latest state.
+     */
+    val isDrawing: Boolean
+        get() = hasWindowFocus &&
+                !isSelectionGestureActive && !isSelectionActive &&
+                !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen) &&
+                !isQuickNavOpen
 }
 
 
@@ -209,19 +212,14 @@ class EditorViewModel @Inject constructor(
     // [prefetchAround].
     private val shownPageId = MutableStateFlow<String?>(null)
 
-    // Only [drawingRequests] emits here, so every request that reaches the canvas goes through it.
-    private val _rawDrawingRequests = MutableSharedFlow<Boolean>()
-    val rawDrawingRequests: SharedFlow<Boolean> = _rawDrawingRequests.asSharedFlow()
-
-    private val drawingRequests = DrawingStateRequests(
-        scope = viewModelScope,
-        waitForSettle = { DeviceCompat.delayBeforeResumingDrawing() },
-        publish = { _rawDrawingRequests.emit(it) },
-    )
-
     init {
         viewModelScope.launch {
             ClipboardStore.content.collect { setHasClipboard(it != null) }
+        }
+        viewModelScope.launch {
+            CanvasEventBus.windowFocus.collect { hasFocus ->
+                _toolbarState.update { it.copy(hasWindowFocus = hasFocus) }
+            }
         }
         // The pen presets in AppSettings are the source of truth for per-pen color/size;
         // mirror them into ToolbarUiState.penSettings so the (non-Compose) drawing
@@ -333,13 +331,11 @@ class EditorViewModel @Inject constructor(
         when (action) {
             is ToolbarAction.ToggleToolbar -> {
                 _toolbarState.update { it.copy(isToolbarOpen = !it.isToolbarOpen) }
-                updateDrawingState()
                 saveToolbarState()
             }
 
             is ToolbarAction.ChangeMode -> {
                 _toolbarState.update { it.copy(mode = action.mode) }
-                updateDrawingState()
                 saveToolbarState()
             }
 
@@ -349,17 +345,14 @@ class EditorViewModel @Inject constructor(
             is ToolbarAction.ChangeEraser -> handleEraserChange(action.eraser)
             is ToolbarAction.ToggleMenu -> {
                 _toolbarState.update { it.copy(isMenuOpen = !it.isMenuOpen) }
-//                updateDrawingState() // on focus change is doing this
             }
 
             is ToolbarAction.ToggleEraserManu -> {
                 _toolbarState.update { it.copy(isStrokeSelectionOpen = action.isOpen) }
-//                updateDrawingState() // on focus change is doing this
             }
 
             is ToolbarAction.ToggleBackgroundSelector -> {
                 _toolbarState.update { it.copy(isBackgroundSelectorModalOpen = action.isOpen) }
-//                updateDrawingState() // on focus change is doing this
             }
 
             is ToolbarAction.ToggleScribbleToErase -> updateScribbleToErase(action.enabled)
@@ -404,7 +397,6 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.CloseAllMenus -> handleCloseAllMenus()
             is ToolbarAction.UpdateQuickNavOpen -> {
                 _toolbarState.update { it.copy(isQuickNavOpen = action.isOpen) }
-                updateDrawingState()
             }
         }
     }
@@ -424,7 +416,6 @@ class EditorViewModel @Inject constructor(
             }
             saveToolbarState()
         }
-        updateDrawingState()
         viewModelScope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
         }
@@ -432,7 +423,6 @@ class EditorViewModel @Inject constructor(
 
     private fun handleEraserChange(eraser: Eraser) {
         _toolbarState.update { it.copy(eraser = eraser) }
-        updateDrawingState()
         saveToolbarState()
     }
 
@@ -469,7 +459,6 @@ class EditorViewModel @Inject constructor(
                 isBackgroundSelectorModalOpen = false
             )
         }
-        updateDrawingState()
     }
 
     private fun updateScribbleToErase(enabled: Boolean) {
@@ -568,19 +557,9 @@ class EditorViewModel @Inject constructor(
     // Drawing State
     // --------------------------------------------------------
 
-    /**
-     * Re-evaluates whether drawing should be enabled based on menu and selection states.
-     */
-    fun updateDrawingState() {
-        // It get called three times on canvas creation.
-        val shouldBeDrawing = _toolbarState.value.isDrawingAllowed
-        _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
-        log.d("updateDrawingState: Drawing state: $shouldBeDrawing")
-        drawingRequests.request(shouldBeDrawing, settle = true)
+    fun setSelectionGestureActive(active: Boolean) {
+        _toolbarState.update { it.copy(isSelectionGestureActive = active) }
     }
-
-    /** Switches raw drawing on or off right away; the newest request wins. */
-    fun requestDrawing(isDrawing: Boolean) = drawingRequests.request(isDrawing)
 
     // --------------------------------------------------------
     // Book / Page Data
@@ -855,17 +834,7 @@ class EditorViewModel @Inject constructor(
 
     fun setSelectionActive(active: Boolean) {
         log.v("setSelectionActive: $active")
-        if (_toolbarState.value.isSelectionActive != active) {
-            if (active) //selection is active, we can directly update it, and skip other checks
-                requestDrawing(false)
-            _toolbarState.update { it.copy(isSelectionActive = active) }
-            if (!active)
-                updateDrawingState()
-        }
-    }
-
-    fun setDrawingStateFromCanvas(isDrawing: Boolean) {
-        _toolbarState.update { it.copy(isDrawing = isDrawing) }
+        _toolbarState.update { it.copy(isSelectionActive = active) }
     }
 
     // --------------------------------------------------------

@@ -119,7 +119,8 @@ class EditorControlTower(
     }
 
 
-    override fun setIsDrawing(value: Boolean) = viewModel.requestDrawing(value)
+    override fun setSelectionGestureActive(active: Boolean) =
+        viewModel.setSelectionGestureActive(active)
 
     override fun toggleTool() {
         val mode = viewModel.toolbarState.value.mode
@@ -229,7 +230,6 @@ class EditorControlTower(
 
     fun deleteSelection() {
         viewModel.selectionState.deleteSelectionAndCommit(page, history)
-        setIsDrawing(true)
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
         }

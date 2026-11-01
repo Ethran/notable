@@ -195,7 +195,7 @@ class OnyxInputHandler(
 
     suspend fun updateIsDrawing() {
         if(touchHelper == null) return
-        log.i("Update is drawing: $toolbarState.isDrawing")
+        log.i("Update is drawing: ${toolbarState.isDrawing}, $toolbarState")
         if (toolbarState.isDrawing) {
             enableRawDrawing()
         } else {
