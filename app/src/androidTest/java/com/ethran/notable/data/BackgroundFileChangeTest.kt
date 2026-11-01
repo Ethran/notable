@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfDocument
+import android.system.Os
 import androidx.core.graphics.createBitmap
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -23,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -38,6 +40,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** A page's background follows its file: once the file is there, and after the file changes. */
@@ -247,6 +250,24 @@ class BackgroundFileChangeTest {
     }
 
     @Test(timeout = 30000)
+    fun backgroundRenderedWhileItsFileChanges_showsTheFileAsItIsNow() = runBlocking {
+        // The file is a pipe at first, so that it changes while the render reads it.
+        val image = File(dir, "background.png")
+        Os.mkfifo(image.path, "600".toInt(8))
+        val rendering = async(Dispatchers.IO) { pageDataManager.renderBackground("page", image.path, -1, 1f) }
+        // Opening the pipe for writing waits until the render has opened it for reading.
+        val old = FileOutputStream(image)
+        val next = File(dir, "background.png.part")
+        next.outputStream().use { solid(Color.BLUE).compress(Bitmap.CompressFormat.PNG, 100, it) }
+        assertTrue(next.renameTo(image))
+        pageDataManager.dropBackgroundsOf(setOf(image.path))
+        old.use { solid(Color.RED).compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+        assertEquals("returned", Color.BLUE, rendering.await()?.center())
+        assertEquals("cached", Color.BLUE, pageDataManager.getBackground("page").bitmap?.center())
+    }
+
+    @Test(timeout = 30000)
     fun fileChangedAgainBeforeThePageRendersIt_isDroppedAndRepaintedAgain() = runBlocking {
         val pdf = File(dir, "background.pdf").also { writePdf(it, Color.RED) }
         val pageId = createPage(notebookId = null, pdf, BackgroundType.Pdf(0))
@@ -254,7 +275,7 @@ class BackgroundFileChangeTest {
         pageDataManager.hold(pageId)
         assertTrue(pageDataManager.dropBackgroundsOf(setOf(pdf.path)))
 
-        // Drawn meanwhile with a render begun before the first change, which isn't cached.
+        // Drawn again before a render of the new file is cached.
         pageDataManager.onExit(pageId, createBitmap(10, 10), PageViewport())
 
         assertTrue("repaint", pageDataManager.dropBackgroundsOf(setOf(pdf.path)))
