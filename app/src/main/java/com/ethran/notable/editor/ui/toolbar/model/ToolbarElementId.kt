@@ -19,10 +19,6 @@ enum class ToolbarElementId {
     SHAPE, ERASER, SELECT, IMAGE, PASTE, RESET_VIEW,
     UNDO, REDO, PAGE_NAV, HOME, MENU,
 
-    /**
-     * The sheet-fit button: picks how a finite sheet is scaled to the viewport. Shown only for
-     * pages with a sheet and a notebook.
-     */
     FIT_MODE,
 
     /** Placeable pseudo-element: a vertical divider. May appear multiple times in a layout. */

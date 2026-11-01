@@ -98,8 +98,7 @@ data class ModeElement(
 }
 
 /**
- * The sheet-fit button: one popup listing the [FitMode]s. Not a [Mode] tool, it changes how the
- * page is shown; selected means a fit other than the default is in force.
+ * The sheet-fit button, changes how the page is shown
  */
 data class FitModeElement(
     override val id: ToolbarElementId,

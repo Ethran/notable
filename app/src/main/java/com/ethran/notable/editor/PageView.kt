@@ -316,11 +316,6 @@ class PageView(
         return PreparedPage(page, viewport, shelved ?: newBitmap(page, viewport), fromShelf = shelved != null)
     }
 
-    /**
-     * The viewport [page] had when this view left it, or else the zoom prescribed for a first
-     * showing together with its saved scroll. Scroll x is re-fitted either way; a page this view
-     * has left keeps the zoom the reader left it at.
-     */
     private fun viewportToShow(page: OpenPage): PageViewport {
         val kept = synchronized(pageLock) { leftPages[page.pageId] }
             ?: run {
@@ -672,9 +667,7 @@ class PageView(
         get() = viewWidth > viewHeight
 
     /**
-     * The zoom making [pageMode]'s sheet as wide as this view, clamped to the zoom the gestures
-     * allow. Fitting is always a zoom, never a resize of the sheet: a sheet wider than the view is
-     * scaled below 1x, an infinite page stays at 1x.
+     * Zoom required to fix the sheet width to screen width
      */
     private fun fitZoom(pageMode: PageMode?): Float {
         if (pageMode == null || pageMode == PageMode.INFINITE) return 1f
@@ -694,8 +687,7 @@ class PageView(
     private fun isApprox(a: Float, b: Float): Boolean = abs(a - b) <= ZOOM_APPROX_EPSILON
 
     /**
-     * The largest scroll x keeping [pageMode]'s sheet inside a view of this width at [zoom]: the
-     * half-slack that centres a narrower sheet, its far edge when wider, 0 when there is no sheet.
+     * Scroll on x to center the sheet
      */
     private fun scrollToCenterSheet(pageMode: PageMode?, zoom: Float): Float {
         if (pageMode == null || pageMode == PageMode.INFINITE) return 0f
@@ -860,11 +852,6 @@ class PageView(
         )
     }
 
-    /**
-     * Stores [mode] as the notebook's fit for the view's current orientation and moves the shown
-     * page to the viewport the new fit prescribes, re-fitting scroll x and keeping vertical scroll.
-     * A no-op when there is no sheet to fit or no notebook to store it on.
-     */
     suspend fun setFitMode(pageId: String, mode: FitMode) {
         waitForDrawingWithSnack()
         val start = viewportStart(pageId) ?: return
@@ -1113,11 +1100,6 @@ class PageView(
         }
     }
 
-    /**
-     * Resizes the screen bitmap and re-fits every page this view holds to the active fit: the zoom
-     * that fitted the old size fits none at the new one. Pages left behind are re-fitted at the
-     * shown page's sheet geometry, a notebook's pages sharing its sheet.
-     */
     private fun updateCanvasDimensions() {
         checkMainThread("updateDimensions")
         // A zoom fitted to the old size does not fit the new one, on any page.

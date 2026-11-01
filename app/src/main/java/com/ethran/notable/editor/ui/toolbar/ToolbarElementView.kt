@@ -258,9 +258,6 @@ private fun FitModeElementView(
     }
 }
 
-// TODO: placeholder icons — Maximize/Minimize stand in for a sheet-with-margins glyph and a 1:1
-//  true-size glyph. Both come from the Feather set the toolbar already draws from, so replacing them
-//  needs no new dependency and touches nothing but these two mappings.
 private fun fitModeIcon(mode: FitMode): ImageVector =
     when (mode) {
         FitMode.FIT_TO_WIDTH -> FeatherIcons.Maximize
