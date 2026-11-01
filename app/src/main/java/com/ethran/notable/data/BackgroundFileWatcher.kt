@@ -20,8 +20,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Watches the image/PDF files that pages use as backgrounds and reports which pages need their
- * cached background dropped when one changes on disk.
+ * Watches the image/PDF files that pages use as backgrounds and reports which of them changed on
+ * disk. Which pages show a file, and what a change means for them, is [PageDataManager]'s business;
+ * the pages here only decide how long a file is watched.
  *
  * Registering a file is blocking disk I/O and an inotify registration, so it is kept out of the
  * page cache's lock:
@@ -29,8 +30,6 @@ import javax.inject.Singleton
  *   other lock held, and none of them calls back into [PageDataManager].
  * - **Callers must not hold the page-cache lock** when calling [watch] / [unwatch]: both touch the
  *   filesystem.
- * - The class reports *page ids*, never file paths, so the mapping from file to pages — the part
- *   that needs the lock — never escapes.
  */
 @Singleton
 class BackgroundFileWatcher @Inject constructor(
@@ -45,27 +44,20 @@ class BackgroundFileWatcher @Inject constructor(
     /** Absolute file path -> the running observer for it. */
     private val observers = mutableMapOf<String, FileObserver>()
 
-    /** Absolute file path -> the pages whose background is that file. */
+    /** Absolute file path -> the pages it is watched for; the file is watched while there are any. */
     private val pagesByFile = mutableMapOf<String, MutableSet<String>>()
 
     private val fileChanges = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
     /**
-     * Batches of page ids whose background file just changed, de-duplicated within a 10 ms window
-     * (a single save often produces several inotify events). Collect this to drop the cached
-     * bitmaps; the watcher itself holds no cache state and does not know what invalidation means.
+     * Absolute paths of files that just changed. One save can report a file more than once; reports
+     * that queue up while the collector is busy come as one batch.
      */
-    val invalidatedPages: Flow<List<String>> =
-        fileChanges.chunked(10).map { batch ->
-            val paths = batch.distinct()
-            synchronized(registryLock) {
-                paths.flatMap { pagesByFile[it].orEmpty() }.distinct()
-            }
-        }
+    val changedFiles: Flow<Set<String>> = fileChanges.chunked(10).map { it.toSet() }
 
     /**
-     * Start reporting changes to [filePath] against [pageId]. Registering the same file for a second
-     * page only adds the id — one observer per file.
+     * Watch [filePath] for [pageId]. Registering the same file for a second page only adds the id —
+     * one observer per file.
      *
      * Touches the filesystem: **must not** be called while holding the page-cache lock.
      */
@@ -121,7 +113,7 @@ class BackgroundFileWatcher @Inject constructor(
     }
 
     /**
-     * Stop reporting for [pageId], shutting down any observer left with no pages. Touches the
+     * Stop watching files for [pageId], shutting down any observer left with no pages. Touches the
      * filesystem — see [unwatchAsync] if a lock is held.
      */
     fun unwatch(pageId: String) {
