@@ -77,7 +77,6 @@ class CanvasObserverRegistry(
         observeRefreshUi()
         observeFocusChange()
         observeZoom()
-        observeDrawingState()
         observeSelectionGesture()
         observeClearPage()
         observeRestartAfterConfChange()
@@ -147,16 +146,15 @@ class CanvasObserverRegistry(
         }
     }
 
+    // Raw drawing itself follows focus through ToolbarUiState.isDrawing; this only refreshes
+    // what another app might have changed while we were in the background.
     private fun observeFocusChange() {
         observerScope.launch {
-            CanvasEventBus.onFocusChange.collect { hasFocus ->
+            CanvasEventBus.windowFocus.drop(1).collect { hasFocus ->
                 log.v("App has focus: $hasFocus")
                 if (hasFocus) {
-                    inputHandler.updatePenAndStroke() // The setting might been changed by other app.
+                    inputHandler.updatePenAndStroke()
                     drawCanvas.refreshManager.drawCanvasToView(null)
-                    viewModel.updateDrawingState()
-                } else {
-                    viewModel.requestDrawing(false)
                 }
             }
         }
@@ -167,15 +165,6 @@ class CanvasObserverRegistry(
             page.viewport.map { it.zoom }.distinctUntilChanged().drop(1).collect { zoom ->
                 log.v("zoom level change: $zoom")
                 inputHandler.updatePenAndStroke()
-            }
-        }
-    }
-
-    private fun observeDrawingState() {
-        observerScope.launch {
-            viewModel.rawDrawingRequests.collect {
-                log.v("drawing state changed to $it!")
-                viewModel.setDrawingStateFromCanvas(it)
             }
         }
     }
@@ -265,11 +254,6 @@ class CanvasObserverRegistry(
                 .drop(1)
                 .collect {
                     log.v("isDrawing change to $it")
-                    // We need to close all menus
-                    if (it) {
-                        CanvasEventBus.closeMenusSignal.emit(Unit)
-//                        waitForEpdRefresh()
-                    }
                     inputHandler.updateIsDrawing()
                 }
         }

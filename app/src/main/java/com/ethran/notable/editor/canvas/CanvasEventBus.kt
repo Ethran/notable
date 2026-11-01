@@ -21,8 +21,8 @@ object CanvasEventBus {
     val reloadFromDb = MutableSharedFlow<Unit>()
 
 
-    // used for managing drawing state on regain focus
-    val onFocusChange = MutableSharedFlow<Boolean>()
+    /** Whether the activity is resumed and its window has focus. Written only by MainActivity. */
+    val windowFocus = MutableStateFlow(true)
 
     // It might be bad idea, but plan is to insert graphic in this, and then take it from it
     // There is probably better way
@@ -34,10 +34,6 @@ object CanvasEventBus {
 
     // For cleaning whole page, activated from toolbar menu
     val clearPageSignal = MutableSharedFlow<Unit>()
-
-    // Signal to UI to close any open menus/modals,
-    // observed in EditorView
-    val closeMenusSignal = MutableSharedFlow<Unit>()
 
 
     // For QuickNav scrolling with previews
