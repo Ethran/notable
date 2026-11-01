@@ -14,6 +14,7 @@ import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.editor.PageLeases
 import com.ethran.notable.editor.PageView
+import com.ethran.notable.editor.PageViewport
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.testing.PageDataTestHarness
 import com.ethran.notable.testing.waitForCondition
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -178,6 +180,67 @@ class BackgroundFileChangeTest {
             writePdf(pdf, Color.GREEN)
             waitForCondition(500) { shows(pageId, Color.GREEN) }
         })
+    }
+
+    @Test(timeout = 30000)
+    fun backgroundFileReplacedByRenamingANewOneOverIt_isStillFollowed() = runBlocking {
+        val pdf = File(dir, "background.pdf")
+        writePdf(pdf, Color.RED)
+        val pageId = createPage(followingNotebook(pdf), pdf, BackgroundType.Pdf(0))
+        assertTrue(shows(pageId, Color.RED))
+
+        // As sync tools and atomic writers do: the new file is written aside and renamed over.
+        fun replace(color: Int) {
+            val next = File(dir, "background.pdf.part")
+            writePdf(next, color)
+            assertTrue(next.renameTo(pdf))
+        }
+        assertTrue("replacement shown", waitForCondition(10000) {
+            replace(Color.BLUE)
+            waitForCondition(1000) { shows(pageId, Color.BLUE) }
+        })
+        assertTrue("later replacement shown", waitForCondition(10000) {
+            replace(Color.GREEN)
+            waitForCondition(1000) { shows(pageId, Color.GREEN) }
+        })
+    }
+
+    @Test(timeout = 30000)
+    fun changedFile_isDroppedFromThePagesShowingIt_andOnlyFromThem() = runBlocking {
+        val changed = File(dir, "changed.pdf").also { writePdf(it, Color.RED) }
+        val other = File(dir, "other.pdf").also { writePdf(it, Color.RED) }
+        val showingChanged = createPage(notebookId = null, changed, BackgroundType.Pdf(0))
+        val showingOther = createPage(notebookId = null, other, BackgroundType.Pdf(0))
+        for (pageId in listOf(showingChanged, showingOther)) {
+            pageDataManager.requestPageLoadJoin(pageId)
+            pageDataManager.onExit(pageId, createBitmap(10, 10), PageViewport())
+        }
+        pageDataManager.hold(showingOther)
+
+        val repaint = pageDataManager.dropBackgroundsOf(setOf(changed.path))
+
+        assertFalse("no repaint when no held page shows the file", repaint)
+        assertNull("background dropped", pageDataManager.getBackground(showingChanged).bitmap)
+        assertNull("screen bitmap dropped", pageDataManager.takeBitmapToSave(showingChanged))
+        assertNotNull("other background kept", pageDataManager.getBackground(showingOther).bitmap)
+        assertNotNull("other screen bitmap kept", pageDataManager.takeBitmapToSave(showingOther))
+        pageDataManager.release(showingOther)
+    }
+
+    @Test(timeout = 30000)
+    fun fileChangedAgainBeforeThePageRendersIt_isDroppedAndRepaintedAgain() = runBlocking {
+        val pdf = File(dir, "background.pdf").also { writePdf(it, Color.RED) }
+        val pageId = createPage(notebookId = null, pdf, BackgroundType.Pdf(0))
+        pageDataManager.requestPageLoadJoin(pageId)
+        pageDataManager.hold(pageId)
+        assertTrue(pageDataManager.dropBackgroundsOf(setOf(pdf.path)))
+
+        // Drawn meanwhile with a render begun before the first change, which isn't cached.
+        pageDataManager.onExit(pageId, createBitmap(10, 10), PageViewport())
+
+        assertTrue("repaint", pageDataManager.dropBackgroundsOf(setOf(pdf.path)))
+        assertNull("screen bitmap dropped", pageDataManager.takeBitmapToSave(pageId))
+        pageDataManager.release(pageId)
     }
 
     /** Creates a notebook following [pdf]: the backgrounds of its pages are watched. */
