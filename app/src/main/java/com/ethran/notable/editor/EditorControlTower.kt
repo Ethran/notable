@@ -119,11 +119,8 @@ class EditorControlTower(
     }
 
 
-    override fun setIsDrawing(value: Boolean) {
-        // Changing no matter the state, otherwise we can have some strange race conditions
-        // ie with selection
-        scope.launch { CanvasEventBus.isDrawing.emit(value) }
-    }
+    override fun setSelectionGestureActive(active: Boolean) =
+        viewModel.setSelectionGestureActive(active)
 
     override fun toggleTool() {
         val mode = viewModel.toolbarState.value.mode
@@ -233,7 +230,6 @@ class EditorControlTower(
 
     fun deleteSelection() {
         viewModel.selectionState.deleteSelectionAndCommit(page, history)
-        setIsDrawing(true)
         scope.launch {
             CanvasEventBus.refreshUi.emit(Unit)
         }

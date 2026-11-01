@@ -21,7 +21,6 @@ import com.ethran.notable.editor.EditorViewModel
 @Composable
 fun PositionedToolbar(
     viewModel: EditorViewModel,
-    onDrawingStateCheck: () -> Unit
 ) {
     val position = GlobalAppSettings.current.toolbarPosition
     val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
@@ -30,7 +29,6 @@ fun PositionedToolbar(
         ToolbarContent(
             uiState = toolbarState,
             onAction = viewModel::onToolbarAction,
-            onDrawingStateCheck = onDrawingStateCheck
         )
     }
 

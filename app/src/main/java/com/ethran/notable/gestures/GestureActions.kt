@@ -18,7 +18,9 @@ interface GestureActions {
     fun toggleZen()
     fun undo()
     fun redo()
-    fun setIsDrawing(value: Boolean)
+
+    /** A selection rectangle is being held/dragged; the pen stays off meanwhile. */
+    fun setSelectionGestureActive(active: Boolean)
     fun showHint(text: String)
 
     /** Select the page content inside [rect] (screen coordinates). */

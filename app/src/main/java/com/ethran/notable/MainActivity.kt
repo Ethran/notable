@@ -289,6 +289,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // So the next onResume is a change, and the canvas redraws after waking up.
+        CanvasEventBus.windowFocus.value = false
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
             CanvasEventBus.refreshUi.emit(Unit)
@@ -307,17 +309,13 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) {
             enableFullScreen()
         }
-        lifecycleScope.launch {
-            CanvasEventBus.onFocusChange.emit(hasFocus)
-        }
+        CanvasEventBus.windowFocus.value = hasFocus
     }
 
     override fun onResume() {
         super.onResume()
         enableFullScreen()
-        lifecycleScope.launch {
-            CanvasEventBus.onFocusChange.emit(true)
-        }
+        CanvasEventBus.windowFocus.value = true
     }
 
     // Onyx SystemUI's TouchInteractionService swallows multi-finger touches for its
