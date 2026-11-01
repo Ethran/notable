@@ -43,6 +43,14 @@ fun getLinkedFilesDir(): File {
     return dbDir
 }
 
+/** Where the PDF receiver writes the files pushed to it. */
+fun getReceivedFilesDir(): File =
+    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "notable/Received")
+
+/** Whether [path] is a file the PDF receiver writes: it reports its changes itself, unwatched. */
+fun isReceivedFile(path: String): Boolean =
+    File(path).absoluteFile.parentFile == getReceivedFilesDir().absoluteFile
+
 
 fun saveImageFromContentUri(context: Context, fileUri: Uri, outputDir: File): File {
     val fileName = getFileNameFromUri(context, fileUri)

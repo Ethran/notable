@@ -101,6 +101,11 @@
     <string name="copy_book_link">Kopiuj link do zeszytu</string>
     <string name="copy_link">Kopiuj link</string>
     <string name="link_format">Format kopiowanego linku</string>
+    <string name="receive_pdfs">Odbieraj pliki PDF z komputera</string>
+    <string name="receive_pdfs_token">Token: %1$s</string>
+    <string name="receive_pdfs_usb">Przez USB uruchom na komputerze: adb forward tcp:%1$d tcp:%1$d</string>
+    <string name="copy_token">Kopiuj token</string>
+    <string name="new_token">Nowy token</string>
     <string name="clean_all_strokes">Wyczyść wszystkie kreski</string>
     <string name="change_background">Zmień tło</string>
     <string name="bug_report">Zgłoś błąd</string>
