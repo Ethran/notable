@@ -42,10 +42,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ethran.notable.R
 import com.ethran.notable.data.db.Folder
+import com.ethran.notable.data.datastore.PageMode
 import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.components.BreadCrumb
 import com.ethran.notable.ui.components.EInkButton
+import com.ethran.notable.ui.components.SelectorRow
 import com.ethran.notable.ui.dialogs.BackgroundSelectorContent
 import com.ethran.notable.ui.dialogs.ShowFolderSelectionDialog
 import com.ethran.notable.ui.theme.InkaTheme
@@ -96,6 +98,7 @@ fun NewNotebookView(
             onCreate = viewModel::create,
             onTitleChange = viewModel::setTitle,
             onChangeFolder = { showFolderPicker = true },
+            onPageModeChange = viewModel::setPageMode,
             backgroundSelector = {
                 BackgroundSelectorContent(
                     initialPageBackgroundType = state.backgroundType,
@@ -117,6 +120,7 @@ private fun NewNotebookContent(
     onCreate: () -> Unit,
     onTitleChange: (String) -> Unit,
     onChangeFolder: () -> Unit,
+    onPageModeChange: (PageMode) -> Unit,
     backgroundSelector: @Composable () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
@@ -175,6 +179,13 @@ private fun NewNotebookContent(
                     }
                 }
 
+                SelectorRow(
+                    label = stringResource(R.string.details_notebook_pageMode),
+                    options = PageMode.entries.map { it to stringResource(it.displayNameId) },
+                    value = state.pageMode,
+                    onValueChange = onPageModeChange,
+                )
+
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = stringResource(R.string.details_notebook_default_background_template),
@@ -195,12 +206,14 @@ private fun NewNotebookPreview() {
             folderId = "f1",
             backgroundType = BackgroundType.Native.key,
             background = "lined",
+            pageMode = PageMode.A4,
         ),
         breadcrumbFolders = listOf(Folder(title = "Studies")),
         onBack = {},
         onCreate = {},
         onTitleChange = {},
         onChangeFolder = {},
+        onPageModeChange = {},
         backgroundSelector = {
             Box(
                 Modifier
