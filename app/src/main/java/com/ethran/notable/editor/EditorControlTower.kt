@@ -120,10 +120,8 @@ class EditorControlTower(
 
 
     override fun setIsDrawing(value: Boolean) {
-        if (viewModel.toolbarState.value.isDrawing == value) {
-            logEditorControlTower.w("IsDrawing already set to $value")
-            return
-        }
+        // Changing no matter the state, otherwise we can have some strange race conditions
+        // ie with selection
         scope.launch { CanvasEventBus.isDrawing.emit(value) }
     }
 
