@@ -106,6 +106,10 @@ internal class PageCacheEntry(val pageId: String) {
 
     var backgroundKey: String? = null
 
+    // The file this page's background is from. Kept when its render is evicted or dropped, and set
+    // for a render returned uncached: the screen bitmap may still show the file.
+    var backgroundPath: String? = null
+
     // Native (dotted/lined/blank) backgrounds have no bitmap; caching this lets
     // ensureBackgroundLoaded skip a pointless reload. null = not yet known.
     var backgroundIsNative: Boolean? = null
@@ -155,6 +159,9 @@ internal class PageChanges {
 
 // How long the hint that a background file changed stays up.
 private const val FILE_CHANGED_HINT_MS = 4000
+
+// How many times a background is rendered while its file keeps changing during the render.
+private const val MAX_BACKGROUND_RENDERS = 3
 
 // Cache manager companion object
 @Singleton
@@ -242,9 +249,9 @@ class PageDataManager @Inject constructor(
     // pathologically large background cannot justify keeping the whole pool resident.
     private val maxBackgroundFloorFraction = 0.25
 
-    // Background files are watched by [BackgroundFileWatcher], which owns that registry and its own
-    // lock. It is called only OUTSIDE [lock] (it touches the filesystem) and never calls back in;
-    // it reports page ids to invalidate through a flow, collected in [init].
+    // Background files are watched by [BackgroundFileWatcher], which has its own lock. It is called
+    // only OUTSIDE [lock] (it touches the filesystem) and never calls back in; it reports changed
+    // files through a flow, collected in [init], and the pages showing them are found here.
 
     val dataLoadingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -1102,13 +1109,27 @@ class PageDataManager @Inject constructor(
     /**
      * Renders page [pageNumber] of [path] (-1 for an image) at [scale] as the background of
      * [pageId], and caches it and watches its file (see [linkBackground]). Caller must hold no lock.
+     *
+     * A render during which a background file changed may show the file as it was, so it is not
+     * cached but rendered again, [MAX_BACKGROUND_RENDERS] times at most. If files still change, the
+     * last render is returned uncached, and the page is marked as showing [path], for the next
+     * change of it to find.
      */
     fun renderBackground(pageId: String, path: String, pageNumber: Int, scale: Float): Bitmap? {
-        val fileChanges = synchronized(lock) { backgroundFileChanges }
-        val background = CachedBackground(path, pageNumber, scale)
-        log.d("Rendered background: $background")
-        if (linkBackground(pageId, background, fileChanges)) armBackgroundWatch(pageId, background)
-        return background.bitmap
+        var renders = 0
+        while (true) {
+            val fileChanges = synchronized(lock) { backgroundFileChanges }
+            val background = CachedBackground(path, pageNumber, scale)
+            log.d("Rendered background: $background")
+            if (linkBackground(pageId, background, fileChanges)) {
+                armBackgroundWatch(pageId, background)
+                return background.bitmap
+            }
+            if (++renders == MAX_BACKGROUND_RENDERS) {
+                synchronized(lock) { getOrCreateEntryLocked(pageId).backgroundPath = path }
+                return background.bitmap
+            }
+        }
     }
 
     /**
@@ -1136,7 +1157,10 @@ class PageDataManager @Inject constructor(
             }
 
             // Link this page to the background key.
-            getOrCreateEntryLocked(pageId).backgroundKey = background.id
+            getOrCreateEntryLocked(pageId).apply {
+                backgroundKey = background.id
+                backgroundPath = background.path
+            }
 
             // Keep the pool within its own budget line right after every addition.
             trimBackgroundsLocked()
@@ -1171,24 +1195,15 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    /**
-     * Drops the cached background of every page whose file changed on disk, and repaints if a
-     * held page used one of them.
-     *
-     * The watcher reports page ids (already batched and de-duplicated), so the file→pages mapping
-     * and its lock stay inside [BackgroundFileWatcher] instead of being read from here without one.
-     */
+    /** Repaints the pages whose background file changed on disk, with a hint if one is on screen. */
     private fun collectBackgroundFileChanges() {
         dataLoadingScope.launch {
             // A file replaced by a new one is often reported twice: when the old one goes, and when
             // the new one is written. Both repaint, but the hint is shown once while it is up.
             var hintShownAtMs = 0L
-            backgroundFileWatcher.invalidatedPages.collect { pageIds ->
-                if (pageIds.isEmpty()) return@collect
-                log.i("Background file(s) changed, invalidating pages: $pageIds")
-                // Not short-circuited: every page is invalidated.
-                val heldChanged = pageIds.map { invalidateBackground(it) }.any { it }
-                if (heldChanged) {
+            backgroundFileWatcher.changedFiles.collect { paths ->
+                log.i("Background file(s) changed: $paths")
+                if (dropBackgroundsOf(paths)) {
                     CanvasEventBus.forceUpdate.emit(null)
                     val now = SystemClock.elapsedRealtime()
                     if (now - hintShownAtMs >= FILE_CHANGED_HINT_MS) {
@@ -1200,21 +1215,20 @@ class PageDataManager @Inject constructor(
         }
     }
 
-    /** Drops the background of [pageId] and of every page sharing it; true if one of them is held. */
-    private fun invalidateBackground(pageId: String): Boolean {
+    /**
+     * Drops every cached render of the files at [paths] and the screen bitmaps of the pages showing
+     * one, as they show the old file; true if one of those pages is held.
+     */
+    internal fun dropBackgroundsOf(paths: Set<String>): Boolean {
         synchronized(lock) {
             backgroundFileChanges++
-            val entry = entries[pageId] ?: return pageId in held
-            // Drop the pooled bitmap for every page using it, not only the watched one: they all
-            // show the old file.
-            val key = entry.backgroundKey
-            val users = if (key == null) listOf(entry) else entries.values.filter { it.backgroundKey == key }
-            if (key != null) backgroundCache.remove(key)
+            backgroundCache.values.removeAll { it.path in paths }
+            val users = entries.values.filter { it.backgroundPath in paths }
             for (user in users) {
                 user.backgroundKey = null
-                clearBitmapLocked(user) // its screen bitmap shows the old background
+                clearBitmapLocked(user)
             }
-            log.d("Invalidated background of page $pageId, key=$key")
+            log.d("Dropped backgrounds of $paths, pages ${users.map { it.pageId }}")
             return users.any { it.pageId in held }
         }
     }
