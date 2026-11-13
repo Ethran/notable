@@ -127,6 +127,12 @@ fun isThreeFingerTap(
     mode: GestureMode,
     thresholds: GestureThresholds,
 ): Boolean {
+    // Same guard as [isTwoFingerTap]: a modal gesture (hold, scroll, pan/pinch)
+    // is closed out by `finishModalGesture` before anything is classified, so
+    // this cannot fire today — it pins the invariant on the predicate itself,
+    // for any caller that classifies without that pump in front of it.
+    if (mode != GestureMode.Normal) return false
+
     val fingers = tracker.maxConcurrentPressed
     val duration = tracker.inputDuration()
     val travel = tracker.totalTravel()
