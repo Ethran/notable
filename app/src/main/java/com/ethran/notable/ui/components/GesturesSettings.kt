@@ -35,6 +35,9 @@ fun GesturesSettings(
             )
         }
 
+        val threeFingerGesturesAvailable =
+            !DeviceCompat.isOnyxDevice || settings.blockSystemGestures
+
         listOfGestures.forEach { config ->
 
             GestureSelectorRow(
@@ -43,19 +46,18 @@ fun GesturesSettings(
                 onActionSelected = { action -> config.onUpdate(action) },
                 availableGestures = availableGestures,
                 enabled = (
-                        if (config.blockedByOnyxGestures) settings.blockSystemGestures else true
+                        if (config.blockedByOnyxGestures) threeFingerGesturesAvailable else true
                         ),
             )
         }
 
-        val quickNavAvailable = !DeviceCompat.isOnyxDevice || settings.blockSystemGestures
         SettingToggleRow(
             label = stringResource(R.string.enable_quick_nav),
-            value = settings.enableQuickNav && quickNavAvailable,
+            value = settings.enableQuickNav && threeFingerGesturesAvailable,
             onToggle = { isChecked ->
                 onSettingsChange(settings.copy(enableQuickNav = isChecked))
             },
-            enabled = quickNavAvailable
+            enabled = threeFingerGesturesAvailable
         )
 
     }
