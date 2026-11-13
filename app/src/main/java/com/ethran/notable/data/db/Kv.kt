@@ -97,6 +97,7 @@ class KvProxy @Inject constructor(
 ) {
     private val log = ShipBook.getLogger("KvProxy")
     private val syncSettingsMutex = Mutex()
+    private val appSettingsMutex = Mutex()
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
@@ -144,6 +145,13 @@ class KvProxy @Inject constructor(
         setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
         GlobalAppSettings.update(value)
     }
+
+    suspend fun updateAppSettings(transform: (AppSettings) -> AppSettings) =
+        appSettingsMutex.withLock {
+            val current = GlobalAppSettings.current
+            val updated = transform(current)
+            if (updated != current) setAppSettings(updated)
+        }
 
 
     // Helper functions that handle sync settings, as it needs to be decrypted and encrypted

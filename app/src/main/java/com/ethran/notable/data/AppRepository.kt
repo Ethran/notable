@@ -45,20 +45,16 @@ class AppRepository @Inject constructor(
         val pageId = settings.lastOpenedPageId ?: return null
         val target = resolveLastOpenedPage(settings, pageRepository.getById(pageId))
         if (target == null && settings.reopenLastNoteOnLaunch) {
-            val updated = settings.copy(lastOpenedPageId = null)
-            GlobalAppSettings.update(updated)
-            kvProxy.setAppSettings(updated)
+            kvProxy.updateAppSettings { it.copy(lastOpenedPageId = null) }
         }
         return target
     }
 
     suspend fun recordLastOpenedPage(pageId: String) {
-        val settings = GlobalAppSettings.current
-        if (!settings.reopenLastNoteOnLaunch) return
-        if (pageId.isBlank() || settings.lastOpenedPageId == pageId) return
-        val updated = settings.copy(lastOpenedPageId = pageId)
-        GlobalAppSettings.update(updated)
-        kvProxy.setAppSettings(updated)
+        if (pageId.isBlank()) return
+        kvProxy.updateAppSettings {
+            if (it.reopenLastNoteOnLaunch) it.copy(lastOpenedPageId = pageId) else it
+        }
     }
 
     /**
