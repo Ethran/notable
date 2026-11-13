@@ -173,7 +173,11 @@ private suspend fun AwaitPointerEventScope.trackGesture(
             for (i in event.changes.indices) {
                 val change = event.changes[i]
                 if (change.type == PointerType.Touch && change.isConsumed) {
-                    log.i("Canceling gesture - already consumed")
+                    log.d(
+                        "Canceling gesture - already consumed: " +
+                                "id=${change.id}, " +
+                                "position=${change.position}"
+                    )
                     return TrackResult.ConsumedByOther
                 }
             }
@@ -345,12 +349,16 @@ private suspend fun AwaitPointerEventScope.handleGestureEnd(
  */
 private fun dispatchEvent(event: GestureEvent, ctx: GestureContext) {
     when (event) {
-        is GestureEvent.Tap -> when (event.fingers) {
+        is GestureEvent.Tap -> {
+            log.v("Tap detected with ${event.fingers} finger(s)")
+        when (event.fingers) {
             // A lone one-finger tap has no mapped action (it only seeds
-            // double-tap detection); 3+ fingers are reserved for QuickNav.
+            // double-tap detection);
             2 -> resolveGesture(ctx.appSettings.twoFingerTapAction, ctx)
+            3 -> resolveGesture(ctx.appSettings.threeFingerTapAction, ctx)
             else -> {}
         }
+    }
 
         GestureEvent.DoubleTap -> resolveGesture(ctx.appSettings.doubleTapAction, ctx)
 
@@ -366,8 +374,8 @@ private fun dispatchEvent(event: GestureEvent, ctx: GestureContext) {
                 // on rare churn edge cases (a finger lifting mid-gesture),
                 // where firing the same action is the sensible outcome.
                 else -> when (event.direction) {
-                    GestureEvent.Direction.Left -> ctx.appSettings.twoFingerSwipeLeftAction
-                    GestureEvent.Direction.Right -> ctx.appSettings.twoFingerSwipeRightAction
+                    GestureEvent.Direction.Left -> ctx.appSettings.threeFingerSwipeLeftAction
+                    GestureEvent.Direction.Right -> ctx.appSettings.threeFingerSwipeRightAction
                 }
             }
             resolveGesture(action, ctx)

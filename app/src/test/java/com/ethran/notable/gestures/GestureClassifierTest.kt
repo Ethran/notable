@@ -59,14 +59,67 @@ class GestureClassifierTest {
     }
 
     @Test
-    fun `three-finger touch emits no tap event`() {
+    fun `three-finger tap within the timing window`() {
         tracker.down(1, 100f, 100f, T0)
         tracker.down(2, 200f, 100f, T0 + 10)
         tracker.down(3, 300f, 100f, T0 + 15)
         tracker.up(1, 100f, 100f, T0 + 70)
         tracker.up(2, 200f, 100f, T0 + 72)
         tracker.up(3, 300f, 100f, T0 + 75)
+        assertEquals(listOf(GestureEvent.Tap(fingers = 3)), classify())
+    }
+
+    @Test
+    fun `three-finger touch shorter than the minimum is contact noise, not a tap`() {
+        tracker.down(1, 100f, 100f, T0)
+        tracker.down(2, 200f, 100f, T0 + 5)
+        tracker.down(3, 300f, 100f, T0 + 8)
+        tracker.up(1, 100f, 100f, T0 + 10)
+        tracker.up(2, 200f, 100f, T0 + 12)
+        tracker.up(3, 300f, 100f, T0 + 15)
         assertTrue(classify().isEmpty())
+    }
+
+    /**
+     * QuickNav owns the three-finger swipe-up, so the same finger count must
+     * never read as a tap once the fingers travel. The tap tolerance is what
+     * separates the two gestures, so keep it pinned.
+     */
+    @Test
+    fun `three-finger touch with travel is left to QuickNav, not a tap`() {
+        tracker.down(1, 100f, 300f, T0)
+        tracker.down(2, 200f, 300f, T0 + 10)
+        tracker.down(3, 300f, 300f, T0 + 15)
+        tracker.moveTo(1, 100f, 260f, T0 + 40)
+        tracker.moveTo(2, 200f, 260f, T0 + 45)
+        tracker.moveTo(3, 300f, 260f, T0 + 50)
+        tracker.up(1, 100f, 260f, T0 + 70)
+        tracker.up(2, 200f, 260f, T0 + 72)
+        tracker.up(3, 300f, 260f, T0 + 75)
+        assertTrue(classify().none { it is GestureEvent.Tap && it.fingers == 3 })
+    }
+
+    /**
+     * A modal gesture must never be re-read as a tap: `isTwoFingerTap` already
+     * refuses to run outside [GestureMode.Normal], and a three-finger tap maps
+     * to Redo by default, so a stray classification inside a pan/pinch would
+     * put a deleted stroke back on the page.
+     */
+    @Test
+    fun `three-finger tap is not recognized outside normal mode`() {
+        tracker.down(1, 100f, 100f, T0)
+        tracker.down(2, 200f, 100f, T0 + 10)
+        tracker.down(3, 300f, 100f, T0 + 15)
+        tracker.up(1, 100f, 100f, T0 + 70)
+        tracker.up(2, 200f, 100f, T0 + 72)
+        tracker.up(3, 300f, 100f, T0 + 75)
+
+        // Exactly the input that classifies as a tap when mode is Normal.
+        assertFalse(isThreeFingerTap(tracker, GestureMode.Transform, thresholds))
+        assertFalse(isThreeFingerTap(tracker, GestureMode.Scroll, thresholds))
+        assertFalse(isThreeFingerTap(tracker, GestureMode.Selection, thresholds))
+        assertTrue(classify(GestureMode.Transform).none { it is GestureEvent.Tap })
+        assertEquals(listOf(GestureEvent.Tap(fingers = 3)), classify(GestureMode.Normal))
     }
 
     // --- Hold (tap-vs-hold timing edges) --------------------------------------
