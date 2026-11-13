@@ -8,6 +8,7 @@
     <string name="settings_tab_general_name">General</string>
     <string name="settings_tab_gestures_name">Gestures</string>
     <string name="settings_tab_debug_name" translatable="false">Debug</string>
+    <string name="settings_more_information">More information</string>
     <string name="default_page_background_template">Default Page Background Template</string>
     <string name="blank_page">Blank page</string>
     <string name="dot_grid">Dot grid</string>

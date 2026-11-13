@@ -36,6 +36,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.editor.ui.SelectMenu
 import kotlin.math.roundToInt
@@ -118,7 +119,7 @@ fun SettingToggleRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.Info,
-                    contentDescription = "More information",
+                    contentDescription = stringResource(R.string.settings_more_information),
                 )
             }
         }
