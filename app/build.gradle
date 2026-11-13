@@ -162,5 +162,9 @@ dependencies {
 }
 
 tasks.register('printVersionName') {
-    println android.defaultConfig.versionName
+    // Read the model at configuration time: release.yml captures this task's output.
+    def versionName = android.defaultConfig.versionName
+    doLast {
+        println versionName
+    }
 }
