@@ -38,8 +38,6 @@ android {
                 storePassword System.getenv("STORE_PASSWORD")
                 keyAlias System.getenv("KEY_ALIAS")
                 keyPassword System.getenv("KEY_PASSWORD")
-            } else {
-                println "Running locally, skipping release signing..."
             }
         }
     }
@@ -100,7 +98,7 @@ dependencies {
         exclude group: 'com.android.support', module: 'support-compat'
         exclude group: 'com.android.support', module: 'appcompat-v7'
         exclude group: "com.onyx.android.sdk", module: "onyxsdk-geometry"
-        exclude group : "com.tencent", module: "mmkv"
+        exclude group: "com.tencent", module: "mmkv"
     }
 
     implementation(libs.onyxsdk.base) {
@@ -159,6 +157,14 @@ dependencies {
     // WebDAV sync: background work and the HTTP client
     implementation libs.androidx.work.runtime.ktx
     implementation libs.okhttp
+}
+
+tasks.matching { it.name == 'assembleRelease' }.configureEach {
+    doFirst {
+        if (System.getenv("STORE_FILE") == null) {
+            println "Running locally, skipping release signing..."
+        }
+    }
 }
 
 tasks.register('printVersionName') {
