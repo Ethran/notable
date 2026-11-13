@@ -32,6 +32,7 @@
     <string name="gestures_swipe_right_action">Przeciągnięcie w prawo</string>
     <string name="gestures_three_finger_swipe_left_action">Przeciągnięcie trzema palcami w lewo</string>
     <string name="gestures_three_finger_swipe_right_action">Przeciągnięcie trzema palcami w prawo</string>
+    <string name="gestures_hold_action">Przytrzymanie</string>
 
     <string name="gesture_action_undo">Cofnij</string>
     <string name="gesture_action_redo">Ponów</string>

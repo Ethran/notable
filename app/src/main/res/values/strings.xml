@@ -31,6 +31,7 @@
     <string name="gestures_swipe_right_action">Swipe Right Action</string>
     <string name="gestures_three_finger_swipe_left_action">Three Finger Swipe Left Action</string>
     <string name="gestures_three_finger_swipe_right_action">Three Finger Swipe Right Action</string>
+    <string name="gestures_hold_action">Press and Hold Action</string>
     <string name="enable_quick_nav">Swipe up with three fingers to open QuickNav</string>
     <string name="block_system_gestures">Block system gestures while in Notable</string>
     <string name="block_system_gestures_description">Prevents Onyx system gestures from interfering with Notable’s 3-finger gestures, but disables edge navigation swipes while in Notable.</string>

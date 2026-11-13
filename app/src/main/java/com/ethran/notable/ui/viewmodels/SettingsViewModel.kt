@@ -282,6 +282,10 @@ class SettingsViewModel @Inject constructor(
 
     fun getGestureRows(): List<GestureRowModel> = listOf(
         GestureRowModel(
+            R.string.gestures_hold_action,
+            settings.holdAction,
+        ) { a -> updateSettings(settings.copy(holdAction = a)) },
+        GestureRowModel(
             R.string.gestures_double_tap_action,
             settings.doubleTapAction,
         ) { a -> updateSettings(settings.copy(doubleTapAction = a)) },
