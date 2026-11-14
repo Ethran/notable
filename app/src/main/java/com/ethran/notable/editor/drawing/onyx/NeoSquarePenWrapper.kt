@@ -16,6 +16,8 @@ private val logger = ShipBook.getLogger("NeoSquarePenWrapper")
  * [NeoPenRender]. Mirrors kreader's `SquarePenShape.drawBrush` (config.width / brushAngle /
  * brushRatio). The chisel nib angle is fixed per pen preset (Notable ships +45°).
  */
+private data class SquareKey(val width: Float, val angle: Float)
+
 object NeoSquarePenWrapper {
 
     fun drawStroke(
@@ -36,26 +38,21 @@ object NeoSquarePenWrapper {
         val renderPoints = if (maxTouchPressure == 1f || maxTouchPressure <= 0f) points
         else points.map { p -> TouchPoint(p).apply { pressure /= maxTouchPressure } }
 
-        val config = NeoSquarePen.defaultPenConfig().apply {
-            // Match the stock SquarePenShape exactly (drawBrush): the nib width is TWICE the stroke
-            // size and the brush ratio is min(size, 10) — using size×1 / ratio 10 rendered the nib
-            // noticeably thinner than the firmware's live stroke. NOT a blind width bump.
-            width = strokeWidth * 2f
-            this.brushAngle = brushAngle
-            brushRatio = strokeWidth.coerceAtMost(10f)
-            // scale/smoothLevel keep NeoPenConfig defaults (smoothLevel 0.6).
+        val rendered = NeoPenPool.pool.use(
+            key = SquareKey(strokeWidth, brushAngle),
+            create = {
+                val config = NeoSquarePen.defaultPenConfig().apply {
+                    // Match the stock SquarePenShape (drawBrush): nib width is twice the stroke
+                    // size and brush ratio is min(size, 10).
+                    width = strokeWidth * 2f
+                    this.brushAngle = brushAngle
+                    brushRatio = strokeWidth.coerceAtMost(10f)
+                }
+                NeoSquarePen.create(config)
+            },
+        ) { neoPen ->
+            NeoPenRender(neoPen).render(canvas, paint, renderPoints)
         }
-        val neoPen = NeoSquarePen.create(config)
-        if (neoPen == null) {
-            logger.e("Drawing strokes failed: Pen creation failed")
-            return
-        }
-
-        val penRender = NeoPenRender(neoPen)
-        try {
-            penRender.render(canvas, paint, renderPoints)
-        } finally {
-            penRender.destroyPen()
-        }
+        if (rendered == null) logger.e("Drawing strokes failed: Pen creation failed")
     }
 }
