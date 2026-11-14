@@ -202,13 +202,8 @@ fun EditorView(
         // Only zoom matters here; collecting the whole viewport would recompose on every scroll.
         val zoomFlow = remember(page) { page.viewport.map { it.zoom }.distinctUntilChanged() }
         val zoomLevel by zoomFlow.collectAsStateWithLifecycle(page.zoom)
-        val selectionActive = viewModel.selectionState.isNonEmpty()
-        LaunchedEffect(
-            zoomLevel, selectionActive
-        ) {
-            log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
+        LaunchedEffect(zoomLevel) {
             viewModel.setShowResetView(zoomLevel != 1.0f)
-            viewModel.setSelectionActive(selectionActive)
         }
 
         DisposableEffect(Unit) {

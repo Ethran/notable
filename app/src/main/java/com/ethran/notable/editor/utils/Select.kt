@@ -120,7 +120,8 @@ fun selectImagesAndStrokes(
     }
     val startOffset = IntOffset(pageBounds.left, pageBounds.top) - viewport.scroll.toIntOffset()
 
-    // set state
+    // set state. These setters mark the selection active synchronously, so isDrawing is already
+    // false when the caller's refreshUi runs and no delayed screen-freeze resume gets armed.
     viewModel.selectionState.selectedImages = imagesToSelect
     viewModel.selectionState.selectedStrokes = strokesToSelect
     // Pre-edit originals for the undo baseline (see SelectionState.initialSelected*). Captured
@@ -133,11 +134,6 @@ fun selectImagesAndStrokes(
     viewModel.selectionState.selectionDisplaceOffset = IntOffset(0, 0)
     viewModel.selectionState.placementMode = PlacementMode.Move
     viewModel.selectionState.holdRefresh()
-    // Mark the selection active *before* the caller's refreshUi runs, so isDrawing is
-    // already false there: otherwise the Select-branch refreshUi in OnyxInputHandler arms
-    // resetScreenFreeze's delayed resume and re-freezes the screen after updateIsDrawing()
-    // has disabled raw drawing.
-    viewModel.setSelectionActive(true)
     page.drawAreaPageCoordinates(
         pageBounds,
         ignoredImageIds = imagesToSelect.map { it.id },

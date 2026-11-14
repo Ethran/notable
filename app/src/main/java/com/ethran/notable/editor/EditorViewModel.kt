@@ -99,6 +99,7 @@ data class ToolbarUiState(
      * AppSettings.toolbarPens kept in sync by the ViewModel (the preset is the source
      * of truth). */
     val penSettings: Map<String, PenSetting> = DEFAULT_PEN_SETTINGS,
+    /** Something is selected. Written only by [EditorViewModel.selectionState]. */
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
     val isQuickNavOpen: Boolean = false,
@@ -262,7 +263,11 @@ class EditorViewModel @Inject constructor(
     private val didInitSettings = AtomicBoolean(false)
 
     // ---- Selection state (kept for drawing logic compatibility) ----
-    val selectionState = SelectionState()
+    /** The only writer of [ToolbarUiState.isSelectionActive]. */
+    val selectionState = SelectionState { active ->
+        log.v("selection active: $active")
+        _toolbarState.update { it.copy(isSelectionActive = active) }
+    }
 
     // --------------------------------------------------------
     // Initialization from persisted settings
@@ -830,11 +835,6 @@ class EditorViewModel @Inject constructor(
 
     fun setShowResetView(showResetView: Boolean) {
         _toolbarState.update { it.copy(showResetView = showResetView) }
-    }
-
-    fun setSelectionActive(active: Boolean) {
-        log.v("setSelectionActive: $active")
-        _toolbarState.update { it.copy(isSelectionActive = active) }
     }
 
     // --------------------------------------------------------
