@@ -3,6 +3,7 @@ package com.ethran.notable.data.db
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
+import com.ethran.notable.editor.ui.toolbar.model.dropDividerAt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -22,7 +23,7 @@ class AppSettingsUpdateTest {
 
     @Before
     fun reset() {
-        GlobalAppSettings.update { AppSettings(version = 1) }
+        GlobalAppSettings.publishLoaded(AppSettings(version = 1))
     }
 
     private suspend fun loadDefaults() =
@@ -206,5 +207,101 @@ class AppSettingsUpdateTest {
         GlobalAppSettings.update { it.copy(simpleRendering = true) }
         writer.persist()
         assertEquals(1, stored.size)
+    }
+
+    @Test
+    fun updatesBeforeLoadAreReplayedOnTheStoredValueAndPersisted() = runBlocking {
+        GlobalAppSettings.resetLoadStateForTest()
+        GlobalAppSettings.update { it.copy(showWelcome = false) }
+        writer.persist()
+        assertTrue(stored.isEmpty())
+
+        val onDisk = AppSettings(version = 1, debugMode = true)
+        writer.load(load = { onDisk }, publish = { GlobalAppSettings.publishLoaded(it) })
+        writer.persist()
+
+        assertTrue(GlobalAppSettings.current.debugMode)
+        assertEquals(false, GlobalAppSettings.current.showWelcome)
+        assertEquals(GlobalAppSettings.current, stored.single())
+    }
+
+    @Test
+    fun updateDuringALoad_isNotOverwrittenByTheStoredValue() {
+        GlobalAppSettings.resetLoadStateForTest()
+        GlobalAppSettings.update { it.copy(simpleRendering = true) }
+
+        GlobalAppSettings.publishLoaded(AppSettings(version = 1, debugMode = true))
+
+        assertTrue(GlobalAppSettings.current.simpleRendering)
+        assertTrue(GlobalAppSettings.current.debugMode)
+    }
+
+    @Test
+    fun dividerDelete_ignoresAnIndexThatIsNoLongerADivider() {
+        val list = listOf("A", "DIVIDER", "B")
+
+        val once = list.dropDividerAt(1)
+
+        assertEquals(listOf("A", "B"), once)
+        assertEquals(once, once.dropDividerAt(1))
+    }
+
+    @Test
+    fun secondLoadIsSkippedWhenAlreadyLoaded() = runBlocking {
+        var reads = 0
+        var publishes = 0
+        repeat(2) {
+            writer.load(load = { reads++; AppSettings(version = 1) }, publish = { publishes++ })
+        }
+
+        assertEquals(1, reads)
+        assertEquals(1, publishes)
+    }
+
+    @Test
+    fun load_completesWhenTheCallerIsCancelled() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val job = launch {
+            writer.load(load = { entered.complete(Unit); release.await(); AppSettings(version = 1) }, publish = {})
+        }
+        entered.await()
+
+        job.cancel()
+        release.complete(Unit)
+        job.join()
+
+        assertTrue(writer.isLoaded)
+    }
+
+    @Test
+    fun updateThenAnotherLoad_isNotLost() = runBlocking {
+        loadDefaults()
+        GlobalAppSettings.update { it.copy(debugMode = true) }
+
+        var published = false
+        writer.load(load = { AppSettings(version = 1) }, publish = { published = true })
+        writer.persist()
+
+        assertEquals(false, published)
+        assertTrue(GlobalAppSettings.current.debugMode)
+        assertTrue(stored.single().debugMode)
+    }
+
+    @Test
+    fun failedLoadThenRetry_replaysUpdatesMadeInBetween() = runBlocking {
+        GlobalAppSettings.resetLoadStateForTest()
+        GlobalAppSettings.update { it.copy(showWelcome = false) }
+        runCatching { writer.load<AppSettings>(load = { error("no storage") }, publish = {}) }
+        GlobalAppSettings.update { it.copy(simpleRendering = true) }
+        writer.persist()
+        assertTrue(stored.isEmpty())
+
+        writer.load(load = { AppSettings(version = 1, debugMode = true) }, publish = { GlobalAppSettings.publishLoaded(it) })
+        writer.persist()
+
+        val result = stored.single()
+        assertTrue(result.debugMode && result.simpleRendering)
+        assertEquals(false, result.showWelcome)
     }
 }

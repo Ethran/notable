@@ -63,6 +63,7 @@ import com.ethran.notable.editor.ui.toolbar.model.ToolbarElements
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayoutFile
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
+import com.ethran.notable.editor.ui.toolbar.model.dropDividerAt
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
@@ -191,10 +192,9 @@ fun ToolbarSettings(
                 }
             },
             onDeleteDivider = { zone, index ->
-                fun List<String>.dropAt(i: Int) = filterIndexed { idx, _ -> idx != i }
                 commit { l, p ->
-                    (if (zone == Zone.SCROLLABLE) l.copy(scrollable = l.scrollable.dropAt(index))
-                    else l.copy(pinned = l.pinned.dropAt(index))) to p
+                    (if (zone == Zone.SCROLLABLE) l.copy(scrollable = l.scrollable.dropDividerAt(index))
+                    else l.copy(pinned = l.pinned.dropDividerAt(index))) to p
                 }
             },
         )

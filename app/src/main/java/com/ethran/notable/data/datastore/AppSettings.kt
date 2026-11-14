@@ -1,5 +1,6 @@
 package com.ethran.notable.data.datastore
 
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarLayout
@@ -19,12 +20,32 @@ object GlobalAppSettings {
     val current: AppSettings
         get() = _current.value
 
+    // Updates made before the stored value is published; replayed on top of it. Null once loaded.
+    private var pending: MutableList<(AppSettings) -> AppSettings>? = mutableListOf()
+
     /** Atomically applies [transform] to the latest settings; any thread, but not inside a Compose snapshot. */
     @Synchronized
     fun update(transform: (AppSettings) -> AppSettings) {
+        pending?.add(transform)
         // Own snapshot: writing from a background thread can race the recomposer.
         Snapshot.withMutableSnapshot {
             _current.value = transform(_current.value)
+        }
+    }
+
+    @VisibleForTesting
+    @Synchronized
+    internal fun resetLoadStateForTest() {
+        pending = mutableListOf()
+    }
+
+    /** Publishes [stored] with the updates recorded so far applied on top. */
+    @Synchronized
+    fun publishLoaded(stored: AppSettings) {
+        val replay = pending.orEmpty()
+        pending = null
+        Snapshot.withMutableSnapshot {
+            _current.value = replay.fold(stored) { settings, transform -> transform(settings) }
         }
     }
 }

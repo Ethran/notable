@@ -19,8 +19,12 @@ import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.hasFilePermission
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -147,15 +151,35 @@ class KvProxy @Inject constructor(
         onError = { log.e("Failed to save app settings; will retry on the next change", it) },
     )
 
-    /** Publishes the stored settings at startup, replacing earlier updates; saving waits for this. */
-    suspend fun loadAppSettings(default: AppSettings) = try {
-        appSettingsWriter.load(
-            load = { getOrDefault(APP_SETTINGS_KEY, AppSettings.serializer(), default) },
-            publish = { loaded -> GlobalAppSettings.update { loaded } },
-        )
-    } catch (e: Exception) {
-        log.e("Failed to load app settings; saving is disabled", e)
-        throw e
+    /** Publishes the stored settings, keeping updates made meanwhile; saving waits for this. */
+    suspend fun loadAppSettings(default: AppSettings) {
+        try {
+            appSettingsWriter.load(
+                load = { getOrDefault(APP_SETTINGS_KEY, AppSettings.serializer(), default) },
+                publish = GlobalAppSettings::publishLoaded,
+            )
+        } catch (e: Exception) {
+            log.e("Failed to load app settings; saving is disabled", e)
+            throw e
+        }
+        persistAppSettings()
+    }
+
+    private val saveScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> log.e("Background settings save failed", e) }
+    )
+
+    /** Applies [transform] now, then loads if startup could not and saves, off the caller's lifetime. */
+    fun updateAppSettingsInBackground(transform: (AppSettings) -> AppSettings) {
+        GlobalAppSettings.update(transform)
+        saveScope.launch {
+            try {
+                loadAppSettings(AppSettings(version = 1))
+            } catch (e: Exception) {
+                log.w("App settings not loaded; the update is kept in memory for the next load", e)
+            }
+        }
     }
 
     /** Updates the in-memory settings immediately, then persists the latest value. */
@@ -252,21 +276,27 @@ internal class LatestValueWriter<T>(
     private val write: suspend (T) -> Unit,
 ) {
     private val mutex = Mutex()
-    private var loaded = false
+    var isLoaded = false
+        private set
     private var saved: T? = null
 
-    suspend fun <L : T> load(load: suspend () -> L, publish: (L) -> Unit) = mutex.withLock {
-        val value = load()
-        publish(value)
-        saved = value
-        loaded = true
-    }
+    // NonCancellable: a cancelled caller must not leave the load half done. Loads once.
+    suspend fun <L : T> load(load: suspend () -> L, publish: (L) -> Unit) =
+        withContext(NonCancellable) {
+            mutex.withLock {
+                if (isLoaded) return@withLock
+                val value = load()
+                publish(value)
+                saved = value
+                isLoaded = true
+            }
+        }
 
     // NonCancellable: a cancelled caller must not leave memory ahead of storage.
     suspend fun persist() = withContext(NonCancellable) {
         mutex.withLock {
             val latest = read()
-            if (loaded && latest != saved) {
+            if (isLoaded && latest != saved) {
                 try {
                     write(latest)
                     saved = latest
