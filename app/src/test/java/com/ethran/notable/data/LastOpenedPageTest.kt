@@ -6,7 +6,16 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.LatestValueWriter
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.kvJson
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -145,6 +154,34 @@ class LastOpenedPageTest {
             GlobalAppSettings.update { it.withLastOpenedPage("q") }
             writer.persist()
             assertEquals("q", writes.single().lastOpenedPageId)
+        } finally {
+            GlobalAppSettings.update { before }
+        }
+    }
+
+    @Test
+    fun `recording updates memory at once and the save survives the caller being cancelled`() = runBlocking {
+        val before = GlobalAppSettings.current
+        try {
+            val saved = AppSettings(version = 1, reopenLastNoteOnLaunch = true)
+            GlobalAppSettings.update { saved }
+            val release = CompletableDeferred<Unit>()
+            val writes = mutableListOf<AppSettings>()
+            val writer = LatestValueWriter({ GlobalAppSettings.current }) { release.await(); writes += it }
+            writer.load(load = { saved }, publish = {})
+            val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+            val caller = launch {
+                GlobalAppSettings.update { it.withLastOpenedPage("p") }
+                writer.persistIn(appScope)
+                awaitCancellation()
+            }
+            while (GlobalAppSettings.current.lastOpenedPageId != "p") yield()
+            caller.cancelAndJoin()
+            release.complete(Unit)
+            appScope.coroutineContext[Job]!!.children.forEach { it.join() }
+
+            assertEquals("p", writes.single().lastOpenedPageId)
         } finally {
             GlobalAppSettings.update { before }
         }

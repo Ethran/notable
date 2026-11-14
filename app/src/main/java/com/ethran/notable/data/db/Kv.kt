@@ -190,6 +190,11 @@ class KvProxy @Inject constructor(
         persistAppSettings()
     }
 
+    /** Saves the in-memory settings on an application-lifetime scope. */
+    fun saveAppSettingsInBackground() {
+        appSettingsWriter.persistIn(saveScope)
+    }
+
     /** Saves the current in-memory settings; a stale value is never written over a newer one. */
     suspend fun persistAppSettings() = appSettingsWriter.persist()
 
@@ -293,6 +298,9 @@ internal class LatestValueWriter<T>(
                 isLoaded = true
             }
         }
+
+    /** Persists on [scope], which must outlive the caller. */
+    fun persistIn(scope: CoroutineScope) = scope.launch { persist() }
 
     // NonCancellable: a cancelled caller must not leave memory ahead of storage.
     suspend fun persist() = withContext(NonCancellable) {

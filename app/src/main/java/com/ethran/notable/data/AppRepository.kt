@@ -21,8 +21,6 @@ import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -48,8 +46,11 @@ class AppRepository @Inject constructor(
         clearSavedId = { kvProxy.updateAppSettings { it.copy(lastOpenedPageId = null) } },
     )
 
-    suspend fun recordLastOpenedPage(pageId: String) = withContext(Dispatchers.IO) {
-        if (pageId.isNotBlank()) kvProxy.updateAppSettings { it.withLastOpenedPage(pageId) }
+    /** Not tied to the caller's lifetime, so closing the editor can't drop the save. */
+    fun recordLastOpenedPage(pageId: String) {
+        if (pageId.isBlank()) return
+        GlobalAppSettings.update { it.withLastOpenedPage(pageId) }
+        kvProxy.saveAppSettingsInBackground()
     }
 
     /**
