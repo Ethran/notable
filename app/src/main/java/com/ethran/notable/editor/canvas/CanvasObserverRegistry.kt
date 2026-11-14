@@ -10,7 +10,6 @@ import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
-import com.ethran.notable.editor.utils.partialRefreshRegionOnce
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -127,9 +126,7 @@ class CanvasObserverRegistry(
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 launch(Dispatchers.Default) {
                     if (dirtyRectangle.isNull()) refreshManager.refreshUiSuspend()
-                    else {
-                        partialRefreshRegionOnce(drawCanvas, zoneToRedraw, inputHandler.touchHelper)
-                    }
+                    else refreshManager.refreshUi(zoneToRedraw)
                 }
             }
         }
@@ -154,7 +151,8 @@ class CanvasObserverRegistry(
                 log.v("App resumed: $resumed")
                 if (resumed) {
                     inputHandler.updatePenAndStroke()
-                    drawCanvas.refreshManager.drawCanvasToView(null)
+                    // Freezes the firmware render for the post if the pen is already back on.
+                    refreshManager.refreshUi(null)
                 }
             }
         }
@@ -244,11 +242,8 @@ class CanvasObserverRegistry(
             viewModel.toolbarState
                 .map { it.isDrawing }
                 .distinctUntilChanged()
-                .drop(1)
-                .collect {
-                    log.v("isDrawing change to $it")
-                    inputHandler.updateIsDrawing()
-                }
+                // Reconciling is idempotent, so the initial value is applied too.
+                .collect { inputHandler.updateIsDrawing() }
         }
     }
 

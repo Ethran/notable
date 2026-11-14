@@ -20,18 +20,13 @@ import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_NORMAL
-import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_SCRIBBLE
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.utils.DeviceInfoUtil
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 private val log = ShipBook.getLogger("einkHelper")
@@ -129,49 +124,16 @@ fun onSurfaceChanged(view: View) {
 }
 
 
-fun onSurfaceDestroy(view: View, touchHelper: TouchHelper?) {
-    if (touchHelper == null) return
-    log.v("onSurfaceDestroy, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
-    touchHelper.setRawDrawingEnabled(false)
-}
-
-
-/**
- * Recreates the raw-drawing session for [view] (limit/exclude rects around the toolbar) and leaves
- * it **disabled**: the caller arms it with `OnyxInputHandler.enableRawDrawing`, which also
- * configures the eraser channel and pen style.
- */
-fun setupSurface(view: View, touchHelper: TouchHelper?, toolbarHeight: Int) {
-    if (touchHelper == null) return
-    // Takes at least 50ms on Note 4c,
-    // and I don't think that we need it immediately
-    log.i("Setup editable surface")
-    touchHelper.debugLog(false)
-    touchHelper.setRawDrawingEnabled(false)
-    touchHelper.closeRawDrawing()
-
-    // Store view dimensions locally before using in Rect
+/** Where raw drawing works on [view]: everything but the toolbar. Returns (limit, exclude). */
+fun rawDrawingArea(view: View, toolbarHeight: Int): Pair<Rect, Rect> {
     val viewWidth = view.width
     val viewHeight = view.height
-
-    // Determine the exclusion area based on toolbar position
-    val excludeRect: Rect =
-        if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
-            Rect(0, 0, viewWidth, toolbarHeight)
-        } else {
-            Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
-        }
-
-    val limitRect =
-        if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top)
-            Rect(0, toolbarHeight, viewWidth, viewHeight)
-        else
-            Rect(0, 0, viewWidth, viewHeight - toolbarHeight)
-
-    touchHelper.setLimitRect(mutableListOf(limitRect)).setExcludeRect(listOf(excludeRect))
-        .openRawDrawing()
-    log.i("Setup editable surface completed")
-
+    return if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
+        Rect(0, toolbarHeight, viewWidth, viewHeight) to Rect(0, 0, viewWidth, toolbarHeight)
+    } else {
+        Rect(0, 0, viewWidth, viewHeight - toolbarHeight) to
+                Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
+    }
 }
 
 /**
@@ -277,15 +239,6 @@ fun configureCalligraphyLiveAngle(angleDegrees: Float, strokeWidth: Float) {
     }
 }
 
-fun prepareForPartialUpdate(view: View, touchHelper: TouchHelper?) {
-    if (touchHelper == null) return
-    EpdController.setDisplayScheme(SCHEME_SCRIBBLE)
-    EpdController.enableA2ForSpecificView(view)
-    EpdController.setEpdTurbo(100)
-    touchHelper.isRawDrawingRenderEnabled = false
-    touchHelper.isRawDrawingRenderEnabled = true
-}
-
 fun refreshScreenRegion(view: View, dirtyRect: Rect) {
     if (!view.isAttachedToWindow) {
         log.e("View is not attached to window")
@@ -309,39 +262,6 @@ fun restoreDefaults(view: View) {
     EpdController.setDisplayScheme(SCHEME_NORMAL)
 }
 
-fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, touchHelper: TouchHelper?) {
-    if (touchHelper == null) return
-    refreshScreenRegion(view, dirtyRect)
-    resetScreenFreeze(touchHelper)
-}
-
-// Single coroutine scope + job for the raw-drawing resume so overlapping calls coalesce.
-// Without this, a continuous scroll fires resetScreenFreeze on every frame, each arming a
-// fresh 500 ms resume timer — the timers stack and "Resuming raw drawing" floods at the end.
-private val screenFreezeScope = CoroutineScope(Dispatchers.Default)
-private var screenFreezeResetJob: Job? = null
-
-// When raw drawing is being turned off entirely (e.g. entering selection), a pending resume
-// must not fire afterwards: its delayed isRawDrawingRenderEnabled=true would hand the screen
-// back to the firmware with input disabled — a frozen screen nothing unfreezes.
-fun cancelPendingScreenFreezeReset() {
-    screenFreezeResetJob?.cancel()
-}
-
-fun resetScreenFreeze(touchHelper: TouchHelper?, view: View? = null) {
-    if (touchHelper == null) {
-        log.w("touchHelper is null")
-        return
-    }
-    // Cancel any pending resume and re-arm. While calls keep arriving (e.g. during a scroll)
-    // raw drawing stays disabled; only the last call's delay completes and re-enables it once.
-    screenFreezeResetJob?.cancel()
-    screenFreezeResetJob = screenFreezeScope.launch {
-        touchHelper.isRawDrawingRenderEnabled = false
-        DeviceCompat.delayBeforeResumingDrawing()
-        touchHelper.isRawDrawingRenderEnabled = true
-    }
-}
 
 
 /**
@@ -447,20 +367,20 @@ object DeviceCompat {
         }
     }
 
-    suspend fun delayBeforeResumingDrawing(isErasing: Boolean = false, areaErase: Boolean = false) {
-        if (!isOnyxDevice) return
-        // Delays mirror kreader's WaitForUpdateFinishedAction:
-        //  - erase: 150ms stroke, 500ms area (lasso). Safe at 150ms because commitErase uses the
-        //    heavy setRawDrawingEnabled toggle which hands the screen back atomically.
-        //  - normal pen: 500ms color, 300ms monochrome.
-        // See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
-        val delay = when {
-            isErasing -> if (areaErase) 500.milliseconds else 150.milliseconds
-            isColorDevice() -> 500.milliseconds
-            else -> 300.milliseconds
+    /**
+     * How long the panel needs to show a post before raw drawing takes the screen back.
+     * Delays mirror kreader's WaitForUpdateFinishedAction:
+     *  - erase: 150ms stroke, 500ms area (lasso). Safe at 150ms because the erase commit uses the
+     *    heavy setRawDrawingEnabled toggle which hands the screen back atomically.
+     *  - normal pen: 500ms color, 300ms monochrome.
+     * See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
+     */
+    fun resumeDelayMillis(isErasing: Boolean = false, areaErase: Boolean = false): Long {
+        if (!isOnyxDevice) return 0
+        return when {
+            isErasing -> if (areaErase) 500 else 150
+            isColorDevice() -> 500
+            else -> 300
         }
-        log.d("delayBeforeResumingDrawing(isErasing=$isErasing): Delaying raw drawing resume for ${delay}ms")
-        delay(delay)
-        log.d("delayBeforeResumingDrawing: Resuming raw drawing")
     }
 }

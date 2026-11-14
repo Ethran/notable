@@ -11,13 +11,9 @@ import com.ethran.notable.editor.drawing.OpenGLRenderer
 import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.onSurfaceChanged
-import com.ethran.notable.editor.utils.onSurfaceDestroy
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 
-
-// keep reference of the surface view presently associated to the singleton touchhelper
-var referencedSurfaceView: String = ""
 
 @SuppressLint("ViewConstructor") // we never execute constructor from XML
 class DrawCanvas(
@@ -51,7 +47,7 @@ class DrawCanvas(
 
             // NATIVE ERASER INDICATOR:
             // On Onyx devices the eraser stroke is now rendered natively by the firmware
-            // (see einkHelper.setupSurface -> setEraserRawDrawingEnabled), so we no longer
+            // (see einkHelper.enableNativeEraser), so we no longer
             // route erase touches into the OpenGL front-buffer renderer. Non-Onyx devices
             // still use OpenGL as their only renderer. The original condition is kept
             // (commented) as a reference. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
@@ -76,7 +72,7 @@ class DrawCanvas(
 
     val inputHandler =
         OnyxInputHandler(this, page, viewModel, history, coroutineScope)
-    val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
+    val refreshManager = CanvasRefreshManager(this, page, viewModel)
 
 
     private val observers = CanvasObserverRegistry(
@@ -118,16 +114,10 @@ class DrawCanvas(
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                log.i(
-                    "surface destroyed ${
-                        this@DrawCanvas.hashCode()
-                    } - ref $referencedSurfaceView"
-                )
+                log.i("surface destroyed ${this@DrawCanvas.hashCode()}")
                 holder.removeCallback(this)
-                if (referencedSurfaceView == this@DrawCanvas.hashCode().toString()) {
-                    inputHandler.touchHelper?.closeRawDrawing()
-                }
-                onSurfaceDestroy(this@DrawCanvas, inputHandler.touchHelper)
+                // Each DrawCanvas has its own TouchHelper, so its session is closed unconditionally.
+                inputHandler.rawDrawing?.closeSession()
             }
         }
 

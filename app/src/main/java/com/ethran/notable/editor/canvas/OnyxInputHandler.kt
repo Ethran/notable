@@ -14,7 +14,6 @@ import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
-import com.ethran.notable.editor.utils.cancelPendingScreenFreezeReset
 import com.ethran.notable.editor.utils.copyInput
 import com.ethran.notable.editor.utils.configureCalligraphyLiveAngle
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
@@ -27,7 +26,7 @@ import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
 import com.ethran.notable.editor.utils.penToStroke
-import com.ethran.notable.editor.utils.setupSurface
+import com.ethran.notable.editor.utils.rawDrawingArea
 import com.ethran.notable.editor.utils.transformToLine
 import com.ethran.notable.ui.convertDpToPixel
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -71,7 +70,6 @@ class OnyxInputHandler(
     val touchHelper by lazy {
         val helper = if (DeviceCompat.isOnyxDevice) {
             try {
-                referencedSurfaceView = this.hashCode().toString()
                 TouchHelper.create(drawCanvas, inputCallback)
             } catch (t: Throwable) {
                 Log.w("OnyxInputHandler", "TouchHelper.create failed: ${t.message}")
@@ -79,6 +77,28 @@ class OnyxInputHandler(
             }
         } else null
         helper
+    }
+
+    /** The only owner of raw drawing on this surface; null without an Onyx pen. */
+    val rawDrawing: RawDrawingController? by lazy {
+        val helper = touchHelper ?: return@lazy null
+        RawDrawingController(
+            device = TouchHelperPenDevice(helper) {
+                val toolbarHeight = if (toolbarState.isToolbarOpen)
+                    convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
+                rawDrawingArea(drawCanvas, toolbarHeight)
+            },
+            wanted = { toolbarState.isDrawing },
+            armPen = ::armPen,
+            drawPage = { drawCanvas.refreshManager.drawCanvasToViewSync(it) },
+            forcePage = { drawCanvas.refreshManager.forceCanvasToViewSync(it) },
+            timer = ScopeMainTimer(coroutineScope),
+            renderResumeMillis = { DeviceCompat.resumeDelayMillis() },
+            eraseSettleMillis = { area ->
+                DeviceCompat.resumeDelayMillis(isErasing = true, areaErase = area)
+            },
+            checkThread = ::checkRawDrawingMainThread,
+        )
     }
 
     @Suppress("RedundantOverride")
@@ -193,8 +213,9 @@ class OnyxInputHandler(
         }
     }
 
-    suspend fun updateIsDrawing() {
-        if(touchHelper == null) return
+    /** Brings raw drawing in line with [ToolbarUiState.isDrawing]. Main thread. */
+    fun updateIsDrawing() {
+        val controller = rawDrawing ?: return
         val state = toolbarState
         log.d(
             "Update is drawing: ${state.isDrawing} (resumed=${state.isResumed}, " +
@@ -204,33 +225,18 @@ class OnyxInputHandler(
                 "quickNav=${state.isQuickNavOpen}, selection=${state.isSelectionActive}, " +
                 "selectionGesture=${state.isSelectionGestureActive})"
         )
-        if (state.isDrawing) {
-            // Show the page before the firmware takes the screen: once raw drawing is on, a plain
-            // post can be swallowed, and a closed popup's area would stay stale.
-            drawCanvas.refreshManager.drawCanvasToViewSync(null)
-            enableRawDrawing()
-        } else {
-            // A pending resetScreenFreeze resume would re-freeze the screen after we disable
-            // raw drawing (e.g. lasso select: the select-stroke refreshUi armed it) — kill it.
-            cancelPendingScreenFreezeReset()
-            // Check if drawing is completed
-            CanvasEventBus.waitForDrawing()
-            // draw to view, before showing drawing, avoid stutter
-            drawCanvas.refreshManager.drawCanvasToView(null)
-            touchHelper!!.setRawDrawingEnabled(false)
-        }
+        controller.reconcile()
     }
 
     /**
-     * The only way raw drawing is (re)enabled. Every setRawDrawingEnabled call resets the
+     * Run by [rawDrawing] after every enable. Every setRawDrawingEnabled call resets the
      * firmware's eraser channel (TouchHelper.resetPenDefaultRawDrawing), and SDK callbacks are
      * posted to the UI thread after the firmware has already started a stroke, so the eraser track
-     * and the pen style must be configured here, synchronously, before any stroke can begin.
+     * and the pen style must be configured right after the enable, before any stroke can begin.
      * See docs/onyx-sdk/onyx-native-eraser-indicator.md.
      */
-    fun enableRawDrawing() {
+    private fun armPen() {
         val helper = touchHelper ?: return
-        helper.setRawDrawingEnabled(true)
         enableNativeEraser(helper, toolbarState.eraser)
         updatePenAndStroke()
     }
@@ -239,10 +245,10 @@ class OnyxInputHandler(
      * Re-styles the native eraser track for the current eraser type. Must run when the type
      * changes: the re-assert in onBeginRawErasing lands after the firmware has latched the style,
      * so without this the first button-erase after switching would still use the old track.
-     * While raw drawing is off there is nothing to update; [enableRawDrawing] applies it on resume.
+     * While raw drawing is off there is nothing to update; [armPen] applies it on the next enable.
      */
     fun updateEraserTrack() {
-        if (!toolbarState.isDrawing) return
+        if (rawDrawing?.enabled != true) return
         enableNativeEraser(touchHelper, toolbarState.eraser)
     }
 
@@ -261,14 +267,9 @@ class OnyxInputHandler(
                 return@launch
             }
             onSurfaceInit(drawCanvas)
-            val toolbarHeight =
-                if (toolbarState.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
-            setupSurface(drawCanvas, touchHelper, toolbarHeight)
-            // Armed inside the same coroutine, after the session is recreated: a caller that sets
-            // the pen style right after updateActiveSurface() would otherwise race this launch.
-            // Only when drawing is on: if updateIsDrawing() disabled it while the surface did not
-            // exist yet (QuickNav open across a page navigation), nothing would disable it again.
-            if (toolbarState.isDrawing) enableRawDrawing()
+            // Recreates the session over the area outside the toolbar and turns the pen back on
+            // if it should draw; the pen style is armed in the same step.
+            rawDrawing?.rebuildSession()
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {
@@ -386,9 +387,14 @@ class OnyxInputHandler(
                                 scaledPoints
                             )
                             val width = (toolbarState.activePenSetting.strokeSize * viewport.zoom).toInt()
-                            drawCanvas.refreshManager.addFirmwareInk(
-                                trackArea(plist).apply { inset(-width, -width) }
-                            )
+                            val strokeArea = trackArea(plist).apply { inset(-width, -width) }
+                            if (rawDrawing?.enabled == true) {
+                                drawCanvas.refreshManager.addFirmwareInk(strokeArea)
+                            } else {
+                                // The pen went off before this stroke arrived, and its page was
+                                // pushed without it: the firmware no longer shows it, so post it.
+                                drawCanvas.refreshManager.refreshUi(strokeArea)
+                            }
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
                             // Union the scribble track (firmware screen coords) with the erased
