@@ -34,11 +34,12 @@ private val log = ShipBook.getLogger("NotableAppState")
 @Composable
 fun rememberNotableAppState(
     navController: NavHostController = rememberNavController(),
-    coroutineScope: CoroutineScope = rememberCoroutineScope()
+    coroutineScope: CoroutineScope = rememberCoroutineScope(),
+    initialRoute: String? = null,
 ): NotableNavigator {
     val context = LocalContext.current
     return remember(navController, context, coroutineScope) {
-        NotableNavigator(navController, hasUsableStorage(context), coroutineScope)
+        NotableNavigator(navController, hasUsableStorage(context), coroutineScope, initialRoute)
     }
 }
 
@@ -46,8 +47,11 @@ fun rememberNotableAppState(
 class NotableNavigator(
     val navController: NavHostController,
     private val hasUsableStorage: Boolean,
-    private val coroutineScope: CoroutineScope
+    private val coroutineScope: CoroutineScope,
+    initialRoute: String? = null,
 ) {
+    private val pendingInitialRoute = PendingInitialRoute(initialRoute)
+
     var isQuickNavOpen by mutableStateOf(false)
     var currentPageId by mutableStateOf<String?>(null)
 
@@ -55,6 +59,13 @@ class NotableNavigator(
     val startDestination: String
         get() = if (GlobalAppSettings.current.showWelcome || !hasUsableStorage) WelcomeDestination.route
         else LibraryDestination.route
+
+    /** Pushes the reopened editor on top of the library, so Back leads to the library. */
+    fun openInitialRoute() {
+        if (startDestination != LibraryDestination.route) return
+        pendingInitialRoute.consume(libraryOnly = navController.previousBackStackEntry == null)
+            ?.let { navController.navigate(it) }
+    }
 
     val quickNavSourcePageId: String?
         get() = navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId")
@@ -223,4 +234,9 @@ class NotableNavigator(
     fun cleanCurrentPageId() {
         currentPageId = null
     }
+}
+
+/** The reopened editor route: pushed at most once, and only while the library is the whole back stack. */
+internal class PendingInitialRoute(private var route: String?) {
+    fun consume(libraryOnly: Boolean): String? = route.takeIf { libraryOnly }.also { route = null }
 }

@@ -21,6 +21,8 @@ import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.model.BackgroundType
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -40,6 +42,16 @@ class AppRepository @Inject constructor(
     val kvProxy: KvProxy,
     private val db: AppDatabase
 ) {
+    suspend fun restoreLastOpened(): LastOpenedPageTarget? = restoreLastOpenedPage(
+        GlobalAppSettings.current,
+        getPage = { pageRepository.getById(it) },
+        clearSavedId = { kvProxy.updateAppSettings { it.copy(lastOpenedPageId = null) } },
+    )
+
+    suspend fun recordLastOpenedPage(pageId: String) = withContext(Dispatchers.IO) {
+        if (pageId.isNotBlank()) kvProxy.updateAppSettings { it.withLastOpenedPage(pageId) }
+    }
+
     /**
      * The atomic sync commit point, at page granularity. In one Room
      * transaction: mark the notebook synced, upsert the freshly transferred pages' [PageSyncState]

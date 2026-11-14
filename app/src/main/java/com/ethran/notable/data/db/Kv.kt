@@ -34,6 +34,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 
+internal val kvJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+}
+
 @Entity
 data class Kv(
     @PrimaryKey
@@ -102,10 +107,7 @@ class KvProxy @Inject constructor(
 ) {
     private val log = ShipBook.getLogger("KvProxy")
     private val syncSettingsMutex = Mutex()
-    private val json = Json {
-        ignoreUnknownKeys = true
-        coerceInputValues = true
-    }
+    private val json = kvJson
 
 
     suspend fun <T> get(key: String, serializer: KSerializer<T>): T? = withContext(Dispatchers.IO) {

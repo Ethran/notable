@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.ethran.notable.R
 import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.withReopenLastNote
 import com.ethran.notable.navigation.LinkFormat
 
 
@@ -66,6 +67,13 @@ fun GeneralSettings(
             value = settings.continuousStrokeSlider,
             onToggle = { isChecked ->
                 onSettingsChange { s -> s.copy(continuousStrokeSlider = isChecked) }
+            })
+
+        SettingToggleRow(
+            label = stringResource(R.string.reopen_last_note_on_launch),
+            value = settings.reopenLastNoteOnLaunch,
+            onToggle = { isChecked ->
+                onSettingsChange { it.withReopenLastNote(isChecked) }
             })
 
         SettingToggleRow(
