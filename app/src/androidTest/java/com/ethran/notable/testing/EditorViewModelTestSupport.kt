@@ -124,8 +124,8 @@ internal fun SelectionState.snapshotDelegateStatesForTest(): Set<Any> {
     return setOf(
         delegate("firstPageCut\$delegate"),
         delegate("secondPageCut\$delegate"),
-        delegate("selectedStrokes\$delegate"),
-        delegate("selectedImages\$delegate"),
+        delegate("strokes\$delegate"),
+        delegate("images\$delegate"),
         delegate("selectedBitmap\$delegate"),
         delegate("selectionStartOffset\$delegate"),
         delegate("selectionDisplaceOffset\$delegate"),

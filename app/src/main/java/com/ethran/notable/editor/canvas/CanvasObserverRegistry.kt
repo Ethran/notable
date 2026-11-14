@@ -144,8 +144,6 @@ class CanvasObserverRegistry(
         }
     }
 
-    // Raw drawing itself follows focus through ToolbarUiState.isDrawing; this only refreshes
-    // what another app might have changed while we were in the background.
     /**
      * Redraws after a resume (wake-up, return from another app): the panel may show something else
      * by then, and with a popup still open the pen stays off, so no enable path draws the page.
