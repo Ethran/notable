@@ -11,11 +11,15 @@ import java.io.File
  */
 class RawDrawingOwnershipTest {
 
+    // With or without a receiver (`with(helper) { … }`), as a call or the Kotlin property setter.
     private val sdkCall = Regex(
-        """\.(setRawDrawingEnabled\(|isRawDrawingRenderEnabled\s*=|setRawInputReaderEnable\(|""" +
-                """openRawDrawing\(|closeRawDrawing\()"""
+        """\b(setRawDrawingEnabled|setRawDrawingRenderEnabled|setRawInputReaderEnable|""" +
+                """openRawDrawing|closeRawDrawing|resetPenDefaultRawDrawing)\s*\(""" +
+                """|\bisRawDrawingRenderEnabled\s*="""
     )
-    private val owners = setOf("TouchHelperPenDevice.kt", "RawDrawingController.kt")
+
+    // TouchHelperPenDevice, the only caller, lives here.
+    private val owners = setOf("PenDevice.kt")
 
     @Test
     fun onlyThePenDeviceAdapterCallsTheSdk() {

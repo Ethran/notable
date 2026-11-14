@@ -19,7 +19,6 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
-import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_NORMAL
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.Device
@@ -256,10 +255,6 @@ fun refreshScreenRegion(view: View, dirtyRect: Rect) {
 
 fun refreshScreen() {
     EpdController.repaintEveryThing(UpdateMode.REGAL_PLUS)
-}
-
-fun restoreDefaults(view: View) {
-    EpdController.setDisplayScheme(SCHEME_NORMAL)
 }
 
 

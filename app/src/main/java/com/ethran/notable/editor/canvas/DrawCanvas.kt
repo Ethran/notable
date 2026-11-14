@@ -45,13 +45,9 @@ class DrawCanvas(
             parent?.requestDisallowInterceptTouchEvent(true)
 
 
-            // NATIVE ERASER INDICATOR:
-            // On Onyx devices the eraser stroke is now rendered natively by the firmware
-            // (see einkHelper.enableNativeEraser), so we no longer
-            // route erase touches into the OpenGL front-buffer renderer. Non-Onyx devices
-            // still use OpenGL as their only renderer. The original condition is kept
-            // (commented) as a reference. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
-            // if (!DeviceCompat.isOnyxDevice || inputHandler.isErasing) {
+            // On Onyx devices the firmware renders pen and eraser strokes (see
+            // einkHelper.enableNativeEraser), so only other devices use the OpenGL front-buffer
+            // renderer. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
             if (!DeviceCompat.isOnyxDevice) {
                 glRenderer.onTouchListener.onTouch(this, event)
             }
@@ -95,8 +91,8 @@ class DrawCanvas(
                 // The surface is only drawable once this callback fires; any
                 // refreshUi attempts before this silently no-op (lockCanvas
                 // returns null). Paint now so the newly-created surface
-                // isn't left blank.
-                this@DrawCanvas.post { refreshManager.refreshUi(null) }
+                // isn't left blank (refreshUi posts the draw).
+                refreshManager.refreshUi(null)
             }
 
             override fun surfaceChanged(

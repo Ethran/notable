@@ -51,7 +51,6 @@ class OnyxInputHandler(
     private val history: History,
     private val coroutineScope: CoroutineScope,
 ) {
-    var isErasing: Boolean = false
     var lastStrokeEndTime: Long = 0
 
     // The page the pen went down on, for the gesture under way. Pen callbacks arrive on the main
@@ -134,7 +133,6 @@ class OnyxInputHandler(
             // the global setStrokeColor. Set it here (width comes from the style's params, so this
             // touches colour only, not thickness). This is the one thing we still set on begin.
             touchHelper?.setStrokeColor(ERASER_INDICATOR_COLOR)
-            isErasing = true
         }
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
@@ -388,12 +386,13 @@ class OnyxInputHandler(
                             )
                             val width = (toolbarState.activePenSetting.strokeSize * viewport.zoom).toInt()
                             val strokeArea = trackArea(plist).apply { inset(-width, -width) }
-                            if (rawDrawing?.enabled == true) {
-                                drawCanvas.refreshManager.addFirmwareInk(strokeArea)
-                            } else {
+                            val controller = rawDrawing
+                            if (controller != null && !controller.enabled) {
                                 // The pen went off before this stroke arrived, and its page was
                                 // pushed without it: the firmware no longer shows it, so post it.
                                 drawCanvas.refreshManager.refreshUi(strokeArea)
+                            } else {
+                                drawCanvas.refreshManager.addFirmwareInk(strokeArea)
                             }
                         } else {
                             log.d("Erased by scribble, $erasedByScribbleDirtyRect")
@@ -440,8 +439,6 @@ class OnyxInputHandler(
     }
 
     private fun onRawErasingList(plist: TouchPointList?, pageId: String) {
-        isErasing = false
-
         if (plist == null) return
         val strokeArea = trackArea(plist)
         if (pageId != page.currentPageId) {

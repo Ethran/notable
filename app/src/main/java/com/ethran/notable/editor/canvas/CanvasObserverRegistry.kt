@@ -126,7 +126,7 @@ class CanvasObserverRegistry(
                 page.drawAreaScreenCoordinates(zoneToRedraw)
                 launch(Dispatchers.Default) {
                     if (dirtyRectangle.isNull()) refreshManager.refreshUiSuspend()
-                    else refreshManager.refreshUi(zoneToRedraw)
+                    else refreshManager.refreshRegion(zoneToRedraw)
                 }
             }
         }
@@ -151,7 +151,6 @@ class CanvasObserverRegistry(
                 log.v("App resumed: $resumed")
                 if (resumed) {
                     inputHandler.updatePenAndStroke()
-                    // Freezes the firmware render for the post if the pen is already back on.
                     refreshManager.refreshUi(null)
                 }
             }

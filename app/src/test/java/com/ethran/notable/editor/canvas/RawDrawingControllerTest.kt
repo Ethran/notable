@@ -18,10 +18,10 @@ class RawDrawingControllerTest {
         var render = false
         var input = false
 
-        /** The pen style was set after the last setRawDrawingEnabled, which resets it. */
+        /** The pen style was set after the last setDrawingEnabled, which resets it. */
         var armed = false
 
-        override fun setRawDrawingEnabled(enabled: Boolean) {
+        override fun setDrawingEnabled(enabled: Boolean) {
             setRenderEnabled(enabled)
             setInputEnabled(enabled)
             armed = false
@@ -84,11 +84,12 @@ class RawDrawingControllerTest {
         val device = FakePenDevice()
         val timer = FakeTimer()
         var wanted = true
+        var fullPageDraws = 0
         val controller = RawDrawingController(
             device = device,
             wanted = { wanted },
             armPen = { device.armed = true },
-            drawPage = {},
+            drawPage = { fullPageDraws += if (it == null) 1 else 0 },
             forcePage = {},
             timer = timer,
             renderResumeMillis = { 300 },
@@ -199,5 +200,32 @@ class RawDrawingControllerTest {
         assertFalse(h.device.input)
         h.timer.advanceBy(150)
         assertTrue(h.device.input)
+    }
+
+    @Test
+    fun theEndOfAnEraseSettleDoesNotRedrawThePageTheCommitPushed() {
+        val h = Harness()
+        h.controller.rebuildSession()
+        h.controller.commitErase(null, areaErase = true)
+        val draws = h.fullPageDraws
+        h.timer.advanceUntilIdle()
+        assertTrue(h.device.input)
+        assertEquals(draws, h.fullPageDraws)
+    }
+
+    @Test
+    fun anInputChangeDuringAnEraseSettleRedrawsBeforeThePenComesBack() {
+        val h = Harness()
+        h.controller.rebuildSession()
+        h.controller.commitErase(null, areaErase = false)
+        // A popup opens and closes within the settle; the area it covered may be stale.
+        h.wanted = false
+        h.controller.reconcile()
+        h.wanted = true
+        h.controller.reconcile()
+        val draws = h.fullPageDraws
+        h.timer.advanceUntilIdle()
+        assertTrue(h.device.input)
+        assertEquals(draws + 1, h.fullPageDraws)
     }
 }

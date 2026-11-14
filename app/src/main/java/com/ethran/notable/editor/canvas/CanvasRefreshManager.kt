@@ -39,9 +39,18 @@ class CanvasRefreshManager(
      */
     fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoom}")
-        if (CanvasEventBus.drawingInProgress.isLocked)
-            log.w("Drawing is still in progress there might be a bug.")
         drawCanvas.post { postPage(dirtyRect) }
+    }
+
+    /**
+     * [refreshUi] followed by a regional EPD refresh of [dirtyRect] (`refreshScreenRegion`), from
+     * any thread.
+     */
+    fun refreshRegion(dirtyRect: Rect) {
+        drawCanvas.post {
+            postPage(dirtyRect)
+            refreshScreenRegion(drawCanvas, dirtyRect)
+        }
     }
 
     /** [refreshUi] of the whole page, after the stroke being drawn (if any) is in the bitmap. */

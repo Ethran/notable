@@ -1,32 +1,12 @@
 package com.ethran.notable.editor.canvas
 
 import android.graphics.Rect
-
-/**
- * The raw-drawing calls of one Onyx `TouchHelper`, as the SDK (onyxsdk-pen 1.5.8) implements them:
- * - [setRenderEnabled] and [setInputEnabled] do nothing unless a session is open and their own
- *   flag differs from the value;
- * - [setRawDrawingEnabled] is render, then input, then a reset of the pen defaults (eraser
- *   channel, stroke style), which runs every time;
- * - [openSession] clears both flags; after [closeSession] every setter is a no-op.
- *
- * Only [RawDrawingController] calls these.
- */
-interface PenDevice {
-    fun setRawDrawingEnabled(enabled: Boolean)
-    fun setRenderEnabled(enabled: Boolean)
-    fun setInputEnabled(enabled: Boolean)
-
-    /** Opens a session over the current drawing area; render and input start off. */
-    fun openSession()
-    fun closeSession()
-}
-
-/** Runs actions later on the main thread. */
-fun interface MainTimer {
-    /** Runs [action] after [delayMillis]; the returned function cancels it. */
-    fun schedule(delayMillis: Long, action: () -> Unit): () -> Unit
-}
+import android.os.Looper
+import com.ethran.notable.BuildConfig
+import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Sole owner of one surface's raw-drawing state. Everything that turns the pen, its render or its
@@ -74,49 +54,63 @@ class RawDrawingController(
     private var cancelRenderResume: (() -> Unit)? = null
 
     /**
+     * The panel shows the current page: an erase commit pushed it, and no input change or session
+     * rebuild has happened since. The next enable then skips drawing the page again.
+     */
+    private var panelCurrent = false
+
+    /**
      * The surface was created or resized, or the toolbar moved: recreates the session over the new
      * drawing area, then turns the pen back on if wanted.
      */
     fun rebuildSession() {
         checkThread()
         stopRenderResume()
-        device.setRawDrawingEnabled(false)
+        device.setDrawingEnabled(false)
         device.closeSession()
         device.openSession()
         sessionOpen = true
         enabled = false // openSession cleared the SDK's flags
-        reconcile()
+        panelCurrent = false
+        apply()
     }
 
     /** The surface was destroyed. */
     fun closeSession() {
         checkThread()
         stopRenderResume()
-        device.setRawDrawingEnabled(false)
+        device.setDrawingEnabled(false)
         device.closeSession()
         sessionOpen = false
         enabled = false
     }
 
-    /** Applies [wanted]. Call after any of its inputs changes; holds call it when they end. */
+    /** Applies [wanted]. Call after any of its inputs changes. */
     fun reconcile() {
         checkThread()
+        // An input changed (a popup, focus, a selection): what the panel shows may be stale.
+        panelCurrent = false
+        apply()
+    }
+
+    private fun apply() {
         val want = sessionOpen && erasing == 0 && wanted()
         if (want == enabled) return
         stopRenderResume()
         if (want) {
             // The panel shows the page before the firmware takes the screen.
-            drawPage(null)
-            device.setRawDrawingEnabled(true)
+            if (!panelCurrent) drawPage(null)
+            device.setDrawingEnabled(true)
             armPen()
         } else {
             // Freeze the firmware render, show the page, then drop the firmware layer: the
             // newest strokes never blink.
             device.setRenderEnabled(false)
             drawPage(null)
-            device.setRawDrawingEnabled(false)
+            device.setDrawingEnabled(false)
         }
         enabled = want
+        panelCurrent = false
     }
 
     /**
@@ -151,12 +145,13 @@ class RawDrawingController(
         stopRenderResume()
         device.setInputEnabled(false)
         forcePage(dirty)
-        device.setRawDrawingEnabled(false)
+        device.setDrawingEnabled(false)
         enabled = false
         erasing++
+        panelCurrent = true
         timer.schedule(eraseSettleMillis(areaErase)) {
             erasing--
-            reconcile()
+            apply()
         }
     }
 
@@ -164,4 +159,29 @@ class RawDrawingController(
         cancelRenderResume?.invoke()
         cancelRenderResume = null
     }
+}
+
+/** Runs actions later on the main thread. */
+fun interface MainTimer {
+    /** Runs [action] after [delayMillis]; the returned function cancels it. */
+    fun schedule(delayMillis: Long, action: () -> Unit): () -> Unit
+}
+
+/** A [MainTimer] on [scope], which must run on the main thread; cancelled with it. */
+class ScopeMainTimer(private val scope: CoroutineScope) : MainTimer {
+    override fun schedule(delayMillis: Long, action: () -> Unit): () -> Unit {
+        val job = scope.launch {
+            delay(delayMillis)
+            action()
+        }
+        return { job.cancel() }
+    }
+}
+
+/** Fails in debug builds, logs in release, when called off the main thread. */
+fun checkRawDrawingMainThread() {
+    if (Looper.myLooper() == Looper.getMainLooper()) return
+    val message = "RawDrawingController called off the main thread"
+    if (BuildConfig.DEBUG) error(message)
+    else ShipBook.getLogger("RawDrawing").e(message)
 }
