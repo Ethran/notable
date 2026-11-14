@@ -15,7 +15,7 @@ import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
-import com.ethran.notable.editor.utils.selectRectangle as selectInRectangle
+import com.ethran.notable.editor.utils.selectContentInRectangle
 import com.ethran.notable.gestures.GestureActions
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -319,7 +319,7 @@ class EditorControlTower(
      * and the pen never turns on in between. The selection takes its own EPD refresh handle
      * before the gesture receiver releases the gesture's.
      */
-    override fun selectRectangle(rect: Rect) = selectInRectangle(page, scope, viewModel, rect)
+    override fun selectRectangle(rect: Rect) = selectContentInRectangle(page, scope, viewModel, rect)
 
     override fun redrawCanvas() {
         scope.launch {

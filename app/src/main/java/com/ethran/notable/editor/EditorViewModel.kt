@@ -138,7 +138,7 @@ sealed class ToolbarAction {
     object ToggleToolbar : ToolbarAction()
     data class ChangeMode(val mode: Mode) : ToolbarAction()
     /** A pen button was tapped: selects the pen, or toggles its stroke menu if already selected. */
-    data class ChangePen(val presetId: String) : ToolbarAction()
+    data class PenButtonTapped(val presetId: String) : ToolbarAction()
     object ClosePenMenu : ToolbarAction()
     data class ChangePenSetting(val presetId: String, val setting: PenSetting) : ToolbarAction()
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
@@ -366,7 +366,7 @@ class EditorViewModel @Inject constructor(
                 saveToolbarState()
             }
 
-            is ToolbarAction.ChangePen -> handlePenChange(action.presetId)
+            is ToolbarAction.PenButtonTapped -> handlePenButtonTap(action.presetId)
             ToolbarAction.ClosePenMenu -> _toolbarState.update { it.copy(penMenuPresetId = null) }
             is ToolbarAction.ChangePenSetting ->
                 handlePenSettingChange(action.presetId, action.setting)
@@ -432,7 +432,7 @@ class EditorViewModel @Inject constructor(
     // Toolbar Action Handlers (private)
     // --------------------------------------------------------
 
-    private fun handlePenChange(presetId: String) {
+    private fun handlePenButtonTap(presetId: String) {
         val preset = GlobalAppSettings.current.toolbarPens.find { it.id == presetId } ?: return
         val state = _toolbarState.value
         // Same condition as PenElement.isSelected: the pen stays selected in Line mode too.
@@ -450,9 +450,9 @@ class EditorViewModel @Inject constructor(
                 )
             }
             saveToolbarState()
-        }
-        viewModelScope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            viewModelScope.launch {
+                CanvasEventBus.refreshUi.emit(Unit)
+            }
         }
     }
 

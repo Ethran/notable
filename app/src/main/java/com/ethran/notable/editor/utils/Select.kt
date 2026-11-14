@@ -266,7 +266,7 @@ fun handleSelect(
 /**
  * handles selection, and decide if we should exit the animation mode
  */
-fun selectRectangle(
+fun selectContentInRectangle(
     page: PageView,
     coroutineScope: CoroutineScope,
     viewModel: EditorViewModel,
