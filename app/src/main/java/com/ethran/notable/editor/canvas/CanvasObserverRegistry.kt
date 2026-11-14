@@ -145,19 +145,33 @@ class CanvasObserverRegistry(
     }
 
     /**
-     * Redraws after a resume (wake-up, return from another app): the panel may show something else
-     * by then, and with a popup still open the pen stays off, so no enable path draws the page.
+     * Redraws after a resume (wake-up, return from another app) or a focus regain (a popup, dialog
+     * or another window closed): the panel may show something else by then.
      */
     private fun observeResume() {
         observerScope.launch {
             CanvasEventBus.isResumed.drop(1).collect { resumed ->
                 log.v("App resumed: $resumed")
-                if (resumed) {
-                    inputHandler.updatePenAndStroke()
-                    drawCanvas.refreshManager.drawCanvasToView(null)
-                }
+                if (resumed) redrawIfPenStaysOff()
             }
         }
+        observerScope.launch {
+            CanvasEventBus.hasWindowFocus.drop(1).collect { hasFocus ->
+                log.v("Window focus: $hasFocus")
+                if (hasFocus) redrawIfPenStaysOff()
+            }
+        }
+    }
+
+    /**
+     * If the pen turns on, the enable path draws the page first, so drawing it here too would be a
+     * second full-page draw. If something still keeps the pen off (a popup open across a wake-up,
+     * a selection), nothing else draws it. The ViewModel mirrors resume and focus inline on Main,
+     * before this observer runs, so `isDrawing` is already current here.
+     */
+    private fun redrawIfPenStaysOff() {
+        if (viewModel.toolbarState.value.isDrawing) return
+        drawCanvas.refreshManager.drawCanvasToView(null)
     }
 
     private fun observeZoom() {
