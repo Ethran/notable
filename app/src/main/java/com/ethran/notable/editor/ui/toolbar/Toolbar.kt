@@ -50,7 +50,11 @@ fun ToolbarContent(
     }
 
     // On exit or change of toolbar states, check if we should allow raw drawing
-    LaunchedEffect(uiState.isBackgroundSelectorModalOpen, uiState.isMenuOpen) {
+    LaunchedEffect(
+        uiState.isBackgroundSelectorModalOpen,
+        uiState.isMenuOpen,
+        uiState.isZoomMenuOpen,
+    ) {
         onDrawingStateCheck()
     }
 

@@ -69,6 +69,12 @@ import kotlin.system.measureTimeMillis
 
 const val OVERLAP = 2
 
+internal fun fitZoom(viewWidth: Int, viewHeight: Int, contentWidth: Int, contentHeight: Int): Float =
+    minOf(
+        viewWidth.toFloat() / contentWidth.coerceAtLeast(1),
+        viewHeight.toFloat() / contentHeight.coerceAtLeast(1),
+    ).coerceIn(MIN_ZOOM, MAX_ZOOM)
+
 // Backgrounds are rendered this much larger than the current zoom so a small zoom-in reuses the
 // cached bitmap instead of re-rendering (trades a little memory/render cost for fewer reloads).
 private const val BACKGROUND_ZOOM_HEADROOM = 1.2f
@@ -736,6 +742,44 @@ class PageView(
         waitForDrawingWithSnack()
         val start = viewportStart(pageId) ?: return
         redrawAt(pageId, PageViewport(scroll = Offset(0f, start.scroll.y)))
+    }
+
+    fun fitWidthZoom(): Float =
+        fitZoom(viewWidth, Int.MAX_VALUE, pageDataManager.computeWidth(currentPageId), 1)
+
+    fun fitPageZoom(): Float = fitZoom(
+        viewWidth,
+        viewHeight,
+        pageDataManager.computeWidth(currentPageId),
+        pageDataManager.contentHeight(currentPageId),
+    )
+
+    /** Zooms [pageId] around the centre of the screen. */
+    suspend fun zoomAroundCenter(pageId: String, newZoom: Float) {
+        waitForDrawingWithSnack()
+        val start = viewportStart(pageId) ?: return
+        if (newZoom == start.zoom) return
+        val center = Offset(viewWidth / 2f, viewHeight / 2f)
+        val pagePointAtCenter = start.scroll + center / start.zoom
+        val scroll = Offset(
+            (pagePointAtCenter.x - center.x / newZoom).coerceAtLeast(0f),
+            (pagePointAtCenter.y - center.y / newZoom).coerceAtLeast(0f),
+        )
+        redrawAt(pageId, PageViewport(scroll, newZoom))
+    }
+
+    /** Zooms [pageId] to fit the page width, keeping its vertical scroll. */
+    suspend fun fitWidth(pageId: String) {
+        waitForDrawingWithSnack()
+        val start = viewportStart(pageId) ?: return
+        redrawAt(pageId, PageViewport(Offset(0f, start.scroll.y), fitWidthZoom()))
+    }
+
+    /** Zooms [pageId] to show the whole page. */
+    suspend fun fitPage(pageId: String) {
+        waitForDrawingWithSnack()
+        if (viewportStart(pageId) == null) return
+        redrawAt(pageId, PageViewport(Offset.Zero, fitPageZoom()))
     }
 
     /** Moves [pageId]'s view to [next] and redraws it whole. */

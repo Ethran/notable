@@ -189,6 +189,23 @@ class EditorControlTower(
         }
     }
 
+    fun setZoom(zoom: Float) = applyMenuZoom { page.zoomAroundCenter(it, zoom) }
+
+    fun fitWidth() = applyMenuZoom { page.fitWidth(it) }
+
+    fun fitPage() = applyMenuZoom { page.fitPage(it) }
+
+    private fun applyMenuZoom(zoom: suspend (pageId: String) -> Unit) {
+        if (!page.isTransformationAllowed) return
+        if (viewModel.selectionState.isNonEmpty() || viewModel.selectionState.firstPageCut != null)
+            return
+        val pageId = page.currentPageId
+        scope.launch {
+            scrollInProgress.withLock { zoom(pageId) }
+            CanvasEventBus.refreshUiImmediately.emit(Unit)
+        }
+    }
+
     fun resetZoomAndScroll() {
         val pageId = page.currentPageId
         scope.launch {

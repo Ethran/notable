@@ -255,6 +255,10 @@
     <string name="toolbar_element_reset_view">Resetuj widok</string>
     <string name="toolbar_element_undo">Cofnij</string>
     <string name="toolbar_element_redo">Ponów</string>
+    <string name="toolbar_element_zoom">Powiększenie</string>
+    <string name="zoom_content_description">Poziom powiększenia</string>
+    <string name="zoom_fit_width">Dopasuj szerokość</string>
+    <string name="zoom_fit_page">Dopasuj stronę</string>
     <string name="toolbar_element_page_nav">Numer strony</string>
     <string name="toolbar_element_home">Biblioteka</string>
     <string name="toolbar_element_menu">Menu</string>

@@ -264,6 +264,10 @@
     <string name="toolbar_element_reset_view">Reset view</string>
     <string name="toolbar_element_undo">Undo</string>
     <string name="toolbar_element_redo">Redo</string>
+    <string name="toolbar_element_zoom">Zoom</string>
+    <string name="zoom_content_description">Zoom level</string>
+    <string name="zoom_fit_width">Fit width</string>
+    <string name="zoom_fit_page">Fit page</string>
     <string name="toolbar_element_page_nav">Page number</string>
     <string name="toolbar_element_home">Library</string>
     <string name="toolbar_element_menu">Menu</string>

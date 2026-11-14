@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import com.ethran.notable.R
+import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.ToolbarAction
@@ -126,6 +128,8 @@ fun ToolbarElementView(
                     )
                 }
 
+            CustomKind.ZOOM -> ZoomControl(uiState, onAction)
+
             CustomKind.MENU ->
                 Column {
                     ToolbarButton(
@@ -141,6 +145,82 @@ fun ToolbarElementView(
                     }
                 }
         }
+    }
+}
+
+@Composable
+private fun ZoomControl(
+    uiState: ToolbarUiState,
+    onAction: (ToolbarAction) -> Unit,
+) {
+    val density = LocalDensity.current
+    val isBottomToolbar = GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Bottom
+    fun close() = onAction(ToolbarAction.ToggleZoomMenu(false))
+
+    Box {
+        ToolbarButton(
+            text = "${ZoomPresets.label(uiState.zoomLevel)} ▾",
+            contentDescription = stringResource(R.string.zoom_content_description),
+            onSelect = { onAction(ToolbarAction.ToggleZoomMenu(!uiState.isZoomMenuOpen)) },
+        )
+        if (uiState.isZoomMenuOpen) ScaledPopup(
+            alignment = if (isBottomToolbar) Alignment.BottomStart else Alignment.TopStart,
+            offset = with(density) {
+                IntOffset(0, (if (isBottomToolbar) -43 else 43).dp.roundToPx())
+            },
+            onDismissRequest = { close() },
+            properties = PopupProperties(focusable = true),
+        ) {
+            Column(
+                Modifier
+                    .width(IntrinsicSize.Max)
+                    .widthIn(min = 120.dp)
+                    .background(Color.White)
+                    .border(1.dp, Color.Black)
+                    .padding(vertical = 4.dp)
+            ) {
+                ZoomMenuItem(stringResource(R.string.zoom_fit_width)) {
+                    onAction(ToolbarAction.FitWidth)
+                    close()
+                }
+                ZoomMenuItem(stringResource(R.string.zoom_fit_page)) {
+                    onAction(ToolbarAction.FitPage)
+                    close()
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color.Black)
+                )
+                ZoomPresets.levels.forEach { level ->
+                    ZoomMenuItem(ZoomPresets.label(level), selected = level == uiState.zoomLevel) {
+                        onAction(ToolbarAction.SetZoom(level))
+                        close()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomMenuItem(text: String, selected: Boolean = false, onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.CenterStart,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .background(if (selected) Color.Black else Color.White)
+            .noRippleClickable { onClick() }
+    ) {
+        Text(
+            text,
+            fontSize = 16.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) Color.White else Color.Black,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
     }
 }
 

@@ -948,6 +948,7 @@ private fun elementNameRes(id: ToolbarElementId): Int = when (id) {
     ToolbarElementId.RESET_VIEW -> R.string.toolbar_element_reset_view
     ToolbarElementId.UNDO -> R.string.toolbar_element_undo
     ToolbarElementId.REDO -> R.string.toolbar_element_redo
+    ToolbarElementId.ZOOM -> R.string.toolbar_element_zoom
     ToolbarElementId.PAGE_NAV -> R.string.toolbar_element_page_nav
     ToolbarElementId.HOME -> R.string.toolbar_element_home
     ToolbarElementId.MENU -> R.string.toolbar_element_menu
