@@ -160,15 +160,15 @@ dependencies {
 }
 
 tasks.matching { it.name == 'assembleRelease' }.configureEach {
-    doFirst {
+    doLast {
         if (System.getenv("STORE_FILE") == null) {
-            println "Running locally, skipping release signing..."
+            println "STORE_FILE is not set: the release APK is unsigned."
         }
     }
 }
 
 tasks.register('printVersionName') {
-    // Read the model at configuration time: release.yml captures this task's output.
+    // Read at configuration time: with the configuration cache, a task action cannot reach the project model.
     def versionName = android.defaultConfig.versionName
     doLast {
         println versionName
