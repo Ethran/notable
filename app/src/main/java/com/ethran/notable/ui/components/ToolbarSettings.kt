@@ -86,18 +86,15 @@ import android.graphics.Color as AndroidColor
 @Composable
 fun ToolbarSettings(
     settings: AppSettings,
-    onSettingsChange: (AppSettings) -> Unit,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     /** The settings page's own scroll — auto-scrolled when a drag nears the screen edge. */
     pageScrollState: ScrollState = rememberScrollState(),
 ) {
     val pens = settings.toolbarPens
     val layout = (settings.toolbarLayout ?: ToolbarLayout.DEFAULT).validated(pens)
 
-    fun commit(newLayout: ToolbarLayout, newPens: List<ToolbarPen> = pens) {
-        onSettingsChange(
-            settings.copy(toolbarLayout = newLayout.validated(newPens), toolbarPens = newPens)
-        )
-    }
+    fun commit(edit: (ToolbarLayout, List<ToolbarPen>) -> Pair<ToolbarLayout, List<ToolbarPen>>) =
+        onSettingsChange { it.withToolbarEdit(edit) }
 
     var addPenOpen by remember { mutableStateOf(false) }
     var editedPresetId by remember { mutableStateOf<String?>(null) }
@@ -154,9 +151,9 @@ fun ToolbarSettings(
             title = stringResource(R.string.toolbar_settings_import_confirm_title),
             message = stringResource(R.string.toolbar_settings_import_confirm_message),
             onConfirm = {
-                onSettingsChange(
-                    settings.copy(toolbarLayout = result.layout, toolbarPens = result.pens)
-                )
+                onSettingsChange { s ->
+                    s.copy(toolbarLayout = result.layout, toolbarPens = result.pens)
+                }
                 snack(
                     if (result.droppedCount == 0) importDoneMsg
                     else String.format(locale, importDroppedMsg, result.droppedCount)
@@ -182,25 +179,23 @@ fun ToolbarSettings(
             layout = layout,
             pens = pens,
             pageScrollState = pageScrollState,
-            onLayoutChange = { commit(it) },
+            onLayoutChange = { new -> commit { _, p -> new to p } },
             onEditPen = { editedPresetId = it },
             onDeletePen = { presetId ->
                 val entry = ToolbarPen.LAYOUT_PREFIX + presetId
-                commit(
+                commit { l, p ->
                     ToolbarLayout(
-                        layout.scrollable.filterNot { it == entry },
-                        layout.pinned.filterNot { it == entry },
-                    ),
-                    pens.filterNot { it.id == presetId },
-                )
+                        l.scrollable.filterNot { it == entry },
+                        l.pinned.filterNot { it == entry },
+                    ) to p.filterNot { it.id == presetId }
+                }
             },
             onDeleteDivider = { zone, index ->
                 fun List<String>.dropAt(i: Int) = filterIndexed { idx, _ -> idx != i }
-                commit(
-                    if (zone == Zone.SCROLLABLE)
-                        layout.copy(scrollable = layout.scrollable.dropAt(index))
-                    else layout.copy(pinned = layout.pinned.dropAt(index))
-                )
+                commit { l, p ->
+                    (if (zone == Zone.SCROLLABLE) l.copy(scrollable = l.scrollable.dropAt(index))
+                    else l.copy(pinned = l.pinned.dropAt(index))) to p
+                }
             },
         )
 
@@ -215,7 +210,7 @@ fun ToolbarSettings(
             }
             EInkButton(
                 onClick = {
-                    commit(layout.copy(scrollable = layout.scrollable + ToolbarElementId.DIVIDER.name))
+                    commit { l, p -> l.copy(scrollable = l.scrollable + ToolbarElementId.DIVIDER.name) to p }
                 },
                 modifier = Modifier.weight(1f)
             ) {
@@ -249,9 +244,9 @@ fun ToolbarSettings(
         }
         EInkButton(
             onClick = {
-                onSettingsChange(
-                    settings.copy(toolbarLayout = null, toolbarPens = ToolbarPen.DEFAULT_PENS)
-                )
+                onSettingsChange { s ->
+                    s.copy(toolbarLayout = null, toolbarPens = ToolbarPen.DEFAULT_PENS)
+                }
             },
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -269,10 +264,7 @@ fun ToolbarSettings(
                     color = if (pen == Pen.MARKER) AndroidColor.LTGRAY else AndroidColor.BLACK,
                     size = if (pen == Pen.MARKER) 40f else 5f,
                 )
-                commit(
-                    layout.copy(scrollable = layout.scrollable + preset.layoutEntry),
-                    pens + preset,
-                )
+                commit { l, p -> l.copy(scrollable = l.scrollable + preset.layoutEntry) to p + preset }
                 addPenOpen = false
                 editedPresetId = preset.id
             },
@@ -284,7 +276,7 @@ fun ToolbarSettings(
         PenEditDialog(
             preset = preset,
             onChange = { updated ->
-                commit(layout, pens.map { if (it.id == updated.id) updated else it })
+                commit { l, p -> l to p.map { if (it.id == updated.id) updated else it } }
             },
             onClose = { editedPresetId = null },
         )

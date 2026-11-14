@@ -3,8 +3,6 @@ package com.ethran.notable.data
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
-import com.ethran.notable.APP_SETTINGS_KEY
-import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.editor.utils.deletePagePreviews
 import com.ethran.notable.io.createFileFromContentUri
 import com.ethran.notable.io.isImageUri
@@ -89,7 +87,6 @@ fun copyImageToDatabase(context: Context, fileUri: Uri, subfolder: String? = nul
 suspend fun deletePage(appRepository: AppRepository, pageId: String, filesDir: File) = withContext(Dispatchers.IO) {
     val page = appRepository.pageRepository.getById(pageId) ?: return@withContext
     val proxy = appRepository.kvProxy
-    val settings = proxy.get(APP_SETTINGS_KEY, AppSettings.serializer())
 
     // remove from book
     if (page.notebookId != null) {
@@ -97,13 +94,7 @@ suspend fun deletePage(appRepository: AppRepository, pageId: String, filesDir: F
     }
 
     // remove from quick nav
-    if (settings != null && settings.quickNavPages.contains(pageId)) {
-        proxy.setKv(
-            APP_SETTINGS_KEY,
-            settings.copy(quickNavPages = settings.quickNavPages - pageId),
-            AppSettings.serializer()
-        )
-    }
+    proxy.updateAppSettings { it.copy(quickNavPages = it.quickNavPages - pageId) }
     appRepository.pageRepository.delete(pageId)
     deletePagePreviews(filesDir, pageId)
 }

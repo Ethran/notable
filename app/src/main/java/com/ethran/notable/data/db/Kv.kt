@@ -20,6 +20,7 @@ import com.ethran.notable.utils.hasFilePermission
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -136,14 +137,35 @@ class KvProxy @Inject constructor(
 
     suspend fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
         val jsonValue = json.encodeToString(serializer, value)
-        log.i("Setting $key to $value")
+        log.i("Setting $key")
         kvRepository.set(Kv(key, jsonValue))
     }
 
-    suspend fun setAppSettings(value: AppSettings) {
-        setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
-        GlobalAppSettings.update(value)
+    private val appSettingsWriter = LatestValueWriter(
+        read = { GlobalAppSettings.current },
+        write = { setKv(APP_SETTINGS_KEY, it, AppSettings.serializer()) },
+        onError = { log.e("Failed to save app settings; will retry on the next change", it) },
+    )
+
+    /** Publishes the stored settings at startup, replacing earlier updates; saving waits for this. */
+    suspend fun loadAppSettings(default: AppSettings) = try {
+        appSettingsWriter.load(
+            load = { getOrDefault(APP_SETTINGS_KEY, AppSettings.serializer(), default) },
+            publish = { loaded -> GlobalAppSettings.update { loaded } },
+        )
+    } catch (e: Exception) {
+        log.e("Failed to load app settings; saving is disabled", e)
+        throw e
     }
+
+    /** Updates the in-memory settings immediately, then persists the latest value. */
+    suspend fun updateAppSettings(transform: (AppSettings) -> AppSettings) {
+        GlobalAppSettings.update(transform)
+        persistAppSettings()
+    }
+
+    /** Saves the current in-memory settings; a stale value is never written over a newer one. */
+    suspend fun persistAppSettings() = appSettingsWriter.persist()
 
 
     // Helper functions that handle sync settings, as it needs to be decrypted and encrypted
@@ -222,3 +244,36 @@ internal fun applySyncSettingsUpdate(
     transform: (SyncSettings) -> SyncSettings
 ): SyncSettings = transform(stored.copy(password = ""))
     .copy(password = encryptedNewPassword ?: stored.password)
+
+/** Persists the latest value of [read] one write at a time; does nothing until [load] has run. */
+internal class LatestValueWriter<T>(
+    private val read: () -> T,
+    private val onError: (Exception) -> Unit = {},
+    private val write: suspend (T) -> Unit,
+) {
+    private val mutex = Mutex()
+    private var loaded = false
+    private var saved: T? = null
+
+    suspend fun <L : T> load(load: suspend () -> L, publish: (L) -> Unit) = mutex.withLock {
+        val value = load()
+        publish(value)
+        saved = value
+        loaded = true
+    }
+
+    // NonCancellable: a cancelled caller must not leave memory ahead of storage.
+    suspend fun persist() = withContext(NonCancellable) {
+        mutex.withLock {
+            val latest = read()
+            if (loaded && latest != saved) {
+                try {
+                    write(latest)
+                    saved = latest
+                } catch (e: Exception) {
+                    onError(e)
+                }
+            }
+        }
+    }
+}

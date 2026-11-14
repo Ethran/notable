@@ -19,16 +19,12 @@ object GlobalAppSettings {
     val current: AppSettings
         get() = _current.value
 
-    /**
-     * Updates the globally observed settings. This is a Compose snapshot state read all over the UI
-     * during composition, yet [update] is called from background coroutines (e.g. when persisting
-     * settings on Dispatchers.IO). Writing the snapshot state directly from a non-composition thread
-     * can race the recomposer and throw "Unsupported concurrent change during composition", so the
-     * write is committed inside its own global mutable snapshot.
-     */
-    fun update(settings: AppSettings) {
+    /** Atomically applies [transform] to the latest settings; any thread, but not inside a Compose snapshot. */
+    @Synchronized
+    fun update(transform: (AppSettings) -> AppSettings) {
+        // Own snapshot: writing from a background thread can race the recomposer.
         Snapshot.withMutableSnapshot {
-            _current.value = settings
+            _current.value = transform(_current.value)
         }
     }
 }
@@ -83,6 +79,14 @@ data class AppSettings(
     val destructiveMigrations: Boolean = false,
 
     ) {
+    /** Applies [edit] to the current layout and pens, keeping the layout valid for the new pens. */
+    fun withToolbarEdit(
+        edit: (ToolbarLayout, List<ToolbarPen>) -> Pair<ToolbarLayout, List<ToolbarPen>>
+    ): AppSettings {
+        val (layout, pens) = edit((toolbarLayout ?: ToolbarLayout.DEFAULT).validated(toolbarPens), toolbarPens)
+        return copy(toolbarLayout = layout.validated(pens), toolbarPens = pens)
+    }
+
     enum class GestureAction {
         None, Undo, Redo, PreviousPage, NextPage, ChangeTool, ToggleZen, Select
     }
