@@ -157,7 +157,6 @@ sealed class ToolbarAction {
     object NavigateToPages : ToolbarAction()
     object NavigateToHome : ToolbarAction()
 
-    object CloseAllMenus : ToolbarAction()
     data class UpdateQuickNavOpen(val isOpen: Boolean) : ToolbarAction()
 }
 
@@ -399,7 +398,6 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.NavigateToPages -> handleNavigateToPages()
             ToolbarAction.NavigateToHome -> sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
 
-            ToolbarAction.CloseAllMenus -> handleCloseAllMenus()
             is ToolbarAction.UpdateQuickNavOpen -> {
                 _toolbarState.update { it.copy(isQuickNavOpen = action.isOpen) }
             }
@@ -452,17 +450,6 @@ class EditorViewModel @Inject constructor(
         }
         viewModelScope.launch(Dispatchers.IO) {
             appRepository.kvProxy.setAppSettings(updated)
-        }
-    }
-
-    private fun handleCloseAllMenus() {
-        log.d("Closing all menus in EditorViewModel")
-        _toolbarState.update {
-            it.copy(
-                isMenuOpen = false,
-                isStrokeSelectionOpen = false,
-                isBackgroundSelectorModalOpen = false
-            )
         }
     }
 
