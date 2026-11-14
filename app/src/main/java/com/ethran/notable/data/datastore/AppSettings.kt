@@ -72,6 +72,8 @@ data class AppSettings(
     // stop working inside the app while this is on — hence opt-in.
     val blockSystemGestures: Boolean = false,
     val linkFormat: LinkFormat = LinkFormat.Markdown,
+    val reopenLastNoteOnLaunch: Boolean = false,
+    val lastOpenedPageId: String? = null,
 
     // Debug
     val showWelcome: Boolean = true,

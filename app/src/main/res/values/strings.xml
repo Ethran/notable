@@ -52,6 +52,7 @@
     <string name="details_notebook_buttons_move">Move</string>
     <string name="details_notebook_buttons_export">Export</string>
     <string name="details_notebook_buttons_duplicate">Duplicate</string>
+    <string name="reopen_last_note_on_launch">Reopen last note on launch</string>
     <string name="details_notebook_linked_to">Linked to: %1$s</string>
     <string name="new_notebook_screen_title">New notebook</string>
     <string name="new_notebook_create">Create</string>

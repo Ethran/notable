@@ -97,6 +97,13 @@ class KvProxy @Inject constructor(
 ) {
     private val log = ShipBook.getLogger("KvProxy")
     private val syncSettingsMutex = Mutex()
+    private val appSettingsWriter = SerializedWriter(
+        read = { GlobalAppSettings.current },
+        write = { value ->
+            setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
+            GlobalAppSettings.update(value)
+        },
+    )
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
@@ -140,11 +147,14 @@ class KvProxy @Inject constructor(
         kvRepository.set(Kv(key, jsonValue))
     }
 
-    suspend fun setAppSettings(value: AppSettings) {
-        setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
-        GlobalAppSettings.update(value)
-    }
+    /** Replaces the whole settings object under the lock. */
+    suspend fun setAppSettings(value: AppSettings) = appSettingsWriter.replace(value)
 
+    /** Read-modify-write under the settings lock. */
+    suspend fun updateAppSettings(
+        persistIfUnchanged: Boolean = false,
+        transform: (AppSettings) -> AppSettings,
+    ) = appSettingsWriter.update(persistIfUnchanged, transform)
 
     // Helper functions that handle sync settings, as it needs to be decrypted and encrypted
 
@@ -222,3 +232,20 @@ internal fun applySyncSettingsUpdate(
     transform: (SyncSettings) -> SyncSettings
 ): SyncSettings = transform(stored.copy(password = ""))
     .copy(password = encryptedNewPassword ?: stored.password)
+
+/** Serializes writes of one value so concurrent updates aren't lost. */
+internal class SerializedWriter<T>(
+    private val read: () -> T,
+    private val write: suspend (T) -> Unit,
+) {
+    private val mutex = Mutex()
+
+    suspend fun replace(value: T) = mutex.withLock { write(value) }
+
+    suspend fun update(persistIfUnchanged: Boolean = false, transform: (T) -> T) =
+        mutex.withLock {
+            val current = read()
+            val updated = transform(current)
+            if (persistIfUnchanged || updated != current) write(updated)
+        }
+}

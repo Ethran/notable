@@ -34,11 +34,12 @@ private val log = ShipBook.getLogger("NotableAppState")
 @Composable
 fun rememberNotableAppState(
     navController: NavHostController = rememberNavController(),
-    coroutineScope: CoroutineScope = rememberCoroutineScope()
+    coroutineScope: CoroutineScope = rememberCoroutineScope(),
+    initialRoute: String? = null,
 ): NotableNavigator {
     val context = LocalContext.current
     return remember(navController, context, coroutineScope) {
-        NotableNavigator(navController, hasUsableStorage(context), coroutineScope)
+        NotableNavigator(navController, hasUsableStorage(context), coroutineScope, initialRoute)
     }
 }
 
@@ -46,7 +47,8 @@ fun rememberNotableAppState(
 class NotableNavigator(
     val navController: NavHostController,
     private val hasUsableStorage: Boolean,
-    private val coroutineScope: CoroutineScope
+    private val coroutineScope: CoroutineScope,
+    private val initialRoute: String? = null,
 ) {
     var isQuickNavOpen by mutableStateOf(false)
     var currentPageId by mutableStateOf<String?>(null)
@@ -54,7 +56,7 @@ class NotableNavigator(
 
     val startDestination: String
         get() = if (GlobalAppSettings.current.showWelcome || !hasUsableStorage) WelcomeDestination.route
-        else LibraryDestination.route
+        else initialRoute ?: LibraryDestination.route
 
     val quickNavSourcePageId: String?
         get() = navController.currentBackStackEntry?.savedStateHandle?.get<String>("quickNavSourcePageId")
