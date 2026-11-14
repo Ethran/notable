@@ -35,9 +35,12 @@ class ToolbarElementsTest {
     }
 
     @Test
-    fun `only structural divider lacks an icon among placeable buttons`() {
+    fun `only structural elements lack an icon among placeable buttons`() {
         ToolbarElements.all.values.forEach { element ->
-            if (element.id != ToolbarElementId.DIVIDER && element.id != ToolbarElementId.PAGE_NAV) {
+            if (element.id != ToolbarElementId.DIVIDER &&
+                element.id != ToolbarElementId.PAGE_NAV &&
+                element.id != ToolbarElementId.ZOOM
+            ) {
                 assertNotNull("${element.id} has no icon", element.icon)
             }
         }

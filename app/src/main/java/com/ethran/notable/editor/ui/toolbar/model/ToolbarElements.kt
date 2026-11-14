@@ -83,6 +83,12 @@ object ToolbarElements {
             action = ToolbarAction.Redo,
         ),
         CustomElement(
+            id = ToolbarElementId.ZOOM,
+            icon = null,
+            contentDescription = "zoom controls",
+            kind = CustomKind.ZOOM,
+        ),
+        CustomElement(
             id = ToolbarElementId.PAGE_NAV,
             icon = null,
             contentDescription = "page navigation",

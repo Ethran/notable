@@ -84,9 +84,11 @@ data class ToolbarUiState(
     // Toolbar visibility & menus
     val isToolbarOpen: Boolean = false,
     val isMenuOpen: Boolean = false,
+    val isZoomMenuOpen: Boolean = false,
     val isStrokeSelectionOpen: Boolean = false,
     val isBackgroundSelectorModalOpen: Boolean = false,
     val showResetView: Boolean = false,
+    val zoomLevel: Float = 1f,
 
     // Canvas / drawing
     val mode: Mode = Mode.Draw,
@@ -112,7 +114,7 @@ data class ToolbarUiState(
 
     val isDrawingAllowed: Boolean
         get() = !isSelectionActive &&
-                !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
+                !(isMenuOpen || isZoomMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
                 && !isQuickNavOpen
 }
 
@@ -128,6 +130,7 @@ sealed class ToolbarAction {
     data class ChangePenSetting(val presetId: String, val setting: PenSetting) : ToolbarAction()
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
     object ToggleMenu : ToolbarAction()
+    data class ToggleZoomMenu(val isOpen: Boolean) : ToolbarAction()
     data class ToggleEraserManu(val isOpen: Boolean) : ToolbarAction()
     data class ToggleBackgroundSelector(val isOpen: Boolean) : ToolbarAction()
     data class ToggleScribbleToErase(val enabled: Boolean) : ToolbarAction()
@@ -136,6 +139,9 @@ sealed class ToolbarAction {
     object Redo : ToolbarAction()
     object Paste : ToolbarAction()
     object ResetView : ToolbarAction()
+    data class SetZoom(val zoom: Float) : ToolbarAction()
+    object FitWidth : ToolbarAction()
+    object FitPage : ToolbarAction()
     object ClearAllStrokes : ToolbarAction()
 
     data class ImagePicked(val uri: Uri) : ToolbarAction()
@@ -166,6 +172,9 @@ sealed class CanvasCommand {
     object ResetView : CanvasCommand()
     object ClearAllStrokes : CanvasCommand()
     object RefreshCanvas : CanvasCommand()
+    data class SetZoom(val zoom: Float) : CanvasCommand()
+    object FitWidth : CanvasCommand()
+    object FitPage : CanvasCommand()
     data class CopyImageToCanvas(val uri: Uri) : CanvasCommand()
 }
 
@@ -339,6 +348,10 @@ class EditorViewModel @Inject constructor(
 //                updateDrawingState() // on focus change is doing this
             }
 
+            is ToolbarAction.ToggleZoomMenu -> {
+                _toolbarState.update { it.copy(isZoomMenuOpen = action.isOpen) }
+            }
+
             is ToolbarAction.ToggleEraserManu -> {
                 _toolbarState.update { it.copy(isStrokeSelectionOpen = action.isOpen) }
 //                updateDrawingState() // on focus change is doing this
@@ -381,6 +394,9 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.Redo -> sendCanvasCommand(CanvasCommand.Redo)
             ToolbarAction.Paste -> sendCanvasCommand(CanvasCommand.Paste)
             ToolbarAction.ResetView -> sendCanvasCommand(CanvasCommand.ResetView)
+            is ToolbarAction.SetZoom -> sendCanvasCommand(CanvasCommand.SetZoom(action.zoom))
+            ToolbarAction.FitWidth -> sendCanvasCommand(CanvasCommand.FitWidth)
+            ToolbarAction.FitPage -> sendCanvasCommand(CanvasCommand.FitPage)
             ToolbarAction.ClearAllStrokes -> sendCanvasCommand(CanvasCommand.ClearAllStrokes)
 
             ToolbarAction.NavigateToLibrary -> handleNavigateToLibrary()
@@ -452,6 +468,7 @@ class EditorViewModel @Inject constructor(
         _toolbarState.update {
             it.copy(
                 isMenuOpen = false,
+                isZoomMenuOpen = false,
                 isStrokeSelectionOpen = false,
                 isBackgroundSelectorModalOpen = false
             )
@@ -564,8 +581,10 @@ class EditorViewModel @Inject constructor(
         _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
         log.d("updateDrawingState: Drawing state: $shouldBeDrawing")
         viewModelScope.launch {
-            if (shouldBeDrawing)
+            if (shouldBeDrawing) {
                 DeviceCompat.delayBeforeResumingDrawing()
+                if (!_toolbarState.value.isDrawingAllowed) return@launch
+            }
             CanvasEventBus.isDrawing.emit(shouldBeDrawing)
         }
     }
@@ -839,6 +858,10 @@ class EditorViewModel @Inject constructor(
 
     fun setShowResetView(showResetView: Boolean) {
         _toolbarState.update { it.copy(showResetView = showResetView) }
+    }
+
+    fun setZoomLevel(zoomLevel: Float) {
+        _toolbarState.update { it.copy(zoomLevel = zoomLevel) }
     }
 
     fun setSelectionActive(active: Boolean) {
