@@ -451,9 +451,9 @@ private fun applyGestureMode(
         }
 
         GestureMode.Normal -> {
-            // If the gesture produced a selection, the selection flow has
-            // already acquired its own handle (EditorControlTower
-            // .selectRectangle), so releasing ours keeps the mode on until
+            // If the gesture produced a selection, the selection has
+            // already acquired its own handle (selectImagesAndStrokes in
+            // Select.kt), so releasing ours keeps the mode on until
             // the selection is dismissed. The settle window lets a follow-up
             // flick re-acquire before quality refresh returns.
             ctx.refreshHandle?.releaseAfterMillis(GESTURE_REFRESH_SETTLE_MS)

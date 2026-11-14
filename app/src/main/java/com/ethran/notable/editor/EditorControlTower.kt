@@ -15,6 +15,7 @@ import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.utils.offsetStroke
 import com.ethran.notable.editor.utils.refreshScreen
 import com.ethran.notable.editor.utils.selectImagesAndStrokes
+import com.ethran.notable.editor.utils.selectRectangle as selectInRectangle
 import com.ethran.notable.gestures.GestureActions
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -313,17 +314,12 @@ class EditorControlTower(
 
     override fun showHint(text: String) = viewModel.showHint(text)
 
-    override fun selectRectangle(rect: Rect) {
-        // Take shared ownership of the EPD animation mode now, before the
-        // gesture receiver releases its handle: the selection flow runs
-        // asynchronously, and the overlap keeps fast refresh on across the
-        // hand-over. Released in SelectionState.reset() or by Select.kt if
-        // the rectangle selects nothing.
-        viewModel.selectionState.holdRefresh()
-        scope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.emit(rect)
-        }
-    }
+    /**
+     * Selects synchronously, so the selection is active before the gesture clears its own flag
+     * and the pen never turns on in between. The selection takes its own EPD refresh handle
+     * before the gesture receiver releases the gesture's.
+     */
+    override fun selectRectangle(rect: Rect) = selectInRectangle(page, scope, viewModel, rect)
 
     override fun redrawCanvas() {
         scope.launch {

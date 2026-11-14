@@ -11,7 +11,6 @@ import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
-import com.ethran.notable.editor.utils.selectRectangle
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -77,7 +76,6 @@ class CanvasObserverRegistry(
         observeRefreshUi()
         observeResume()
         observeZoom()
-        observeSelectionGesture()
         observeClearPage()
         observeRestartAfterConfChange()
         observeReloadFromDb()
@@ -169,15 +167,6 @@ class CanvasObserverRegistry(
             page.viewport.map { it.zoom }.distinctUntilChanged().drop(1).collect { zoom ->
                 log.v("zoom level change: $zoom")
                 inputHandler.updatePenAndStroke()
-            }
-        }
-    }
-
-    private fun observeSelectionGesture() {
-        observerScope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.collect {
-                log.v("Area to Select (screen): $it")
-                selectRectangle(page, drawCanvas.coroutineScope, viewModel, it)
             }
         }
     }
