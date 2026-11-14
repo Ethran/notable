@@ -926,9 +926,12 @@ class PageDataManager @Inject constructor(
 
     fun computeWidth(pageId: String): Int {
         synchronized(lock) {
-            val list = entries[pageId]?.strokes
-            if (list.isNullOrEmpty()) return SCREEN_WIDTH
-            return max(list.maxOf { it.right }.plus(50).toInt(), SCREEN_WIDTH)
+            val entry = entries[pageId]
+            return contentWidth(
+                entry?.strokes?.maxOfOrNull { it.right.toInt() },
+                entry?.images?.maxOfOrNull { it.x + it.width },
+                SCREEN_WIDTH,
+            )
         }
     }
 
@@ -1366,4 +1369,10 @@ class PageDataManager @Inject constructor(
         context.registerComponentCallbacks(callbacks)
         return callbacks
     }
+}
+
+/** Width needed by content ending at [strokesRight] / [imagesRight], with padding; at least one screen. */
+internal fun contentWidth(strokesRight: Int?, imagesRight: Int?, minWidth: Int): Int {
+    val right = listOfNotNull(strokesRight, imagesRight).maxOrNull() ?: return minWidth
+    return max(right + 50, minWidth)
 }

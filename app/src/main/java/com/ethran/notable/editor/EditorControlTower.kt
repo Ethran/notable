@@ -195,13 +195,18 @@ class EditorControlTower(
 
     fun fitPage() = applyMenuZoom { page.fitPage(it) }
 
+    private fun hasSelection() =
+        viewModel.selectionState.isNonEmpty() || viewModel.selectionState.firstPageCut != null
+
     private fun applyMenuZoom(zoom: suspend (pageId: String) -> Unit) {
-        if (!page.isTransformationAllowed) return
-        if (viewModel.selectionState.isNonEmpty() || viewModel.selectionState.firstPageCut != null)
-            return
+        if (!page.isTransformationAllowed || CanvasEventBus.drawingInProgress.isLocked) return
+        if (hasSelection()) return
         val pageId = page.currentPageId
         scope.launch {
-            scrollInProgress.withLock { zoom(pageId) }
+            scrollInProgress.withLock {
+                if (hasSelection()) return@launch
+                zoom(pageId)
+            }
             CanvasEventBus.refreshUiImmediately.emit(Unit)
         }
     }

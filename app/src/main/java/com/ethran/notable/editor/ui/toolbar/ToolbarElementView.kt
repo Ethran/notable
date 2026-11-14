@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -177,6 +179,7 @@ private fun ZoomControl(
                     .widthIn(min = 120.dp)
                     .background(Color.White)
                     .border(1.dp, Color.Black)
+                    .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp)
             ) {
                 ZoomMenuItem(stringResource(R.string.zoom_fit_width)) {

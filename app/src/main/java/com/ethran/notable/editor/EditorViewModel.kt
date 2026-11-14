@@ -581,8 +581,10 @@ class EditorViewModel @Inject constructor(
         _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
         log.d("updateDrawingState: Drawing state: $shouldBeDrawing")
         viewModelScope.launch {
-            if (shouldBeDrawing)
+            if (shouldBeDrawing) {
                 DeviceCompat.delayBeforeResumingDrawing()
+                if (!_toolbarState.value.isDrawingAllowed) return@launch
+            }
             CanvasEventBus.isDrawing.emit(shouldBeDrawing)
         }
     }
