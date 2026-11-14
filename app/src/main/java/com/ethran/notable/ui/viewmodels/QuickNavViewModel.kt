@@ -109,14 +109,16 @@ class QuickNavViewModel(
 
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                val settings = GlobalAppSettings.current
-                val currentFavorites = settings.quickNavPages
-                val newFavorites = if (pageId in currentFavorites) {
-                    currentFavorites.filterNot { it == pageId }
-                } else {
-                    currentFavorites + pageId
+                kv.updateAppSettings { settings ->
+                    val currentFavorites = settings.quickNavPages
+                    settings.copy(
+                        quickNavPages = if (pageId in currentFavorites) {
+                            currentFavorites.filterNot { it == pageId }
+                        } else {
+                            currentFavorites + pageId
+                        }
+                    )
                 }
-                kv.setAppSettings(settings.copy(quickNavPages = newFavorites))
             }
             // Reloading settings.
             loadPageData(requestedPageId)

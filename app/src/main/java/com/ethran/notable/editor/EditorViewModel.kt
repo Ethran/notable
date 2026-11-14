@@ -12,6 +12,7 @@ import com.ethran.notable.data.PagePreviewStore
 import com.ethran.notable.data.PageSaver
 import com.ethran.notable.data.copyImageToDatabase
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
+import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.getParentFolder
@@ -431,19 +432,20 @@ class EditorViewModel @Inject constructor(
      * so rapid StrokeMenu slider changes stay ordered; only the DB write is async.
      */
     private fun handlePenSettingChange(presetId: String, setting: PenSetting) {
-        val settings = GlobalAppSettings.current
-        val updated = settings.copy(
-            toolbarPens = settings.toolbarPens.map {
-                if (it.id == presetId) it.copy(color = setting.color, size = setting.strokeSize)
-                else it
-            }
-        )
-        GlobalAppSettings.update(updated)
+        val applyChange = { settings: AppSettings ->
+            settings.copy(
+                toolbarPens = settings.toolbarPens.map {
+                    if (it.id == presetId) it.copy(color = setting.color, size = setting.strokeSize)
+                    else it
+                }
+            )
+        }
+        GlobalAppSettings.update(applyChange(GlobalAppSettings.current))
         _toolbarState.update {
             it.copy(penSettings = it.penSettings + (presetId to setting))
         }
         viewModelScope.launch(Dispatchers.IO) {
-            appRepository.kvProxy.setAppSettings(updated)
+            appRepository.kvProxy.updateAppSettings(persistIfUnchanged = true, transform = applyChange)
         }
     }
 
@@ -461,9 +463,7 @@ class EditorViewModel @Inject constructor(
 
     private fun updateScribbleToErase(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
-            appRepository.kvProxy.setAppSettings(
-                GlobalAppSettings.current.copy(scribbleToEraseEnabled = enabled)
-            )
+            appRepository.kvProxy.updateAppSettings { it.copy(scribbleToEraseEnabled = enabled) }
         }
     }
 
