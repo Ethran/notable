@@ -314,8 +314,10 @@ class EditorViewModel @Inject constructor(
      * Performs cleanup, exports linked files, and triggers auto-sync.
      */
     fun onDispose(page: PageView) {
-        // 1. Finish selection operation
+        // 1. Finish selection operation, and release its EPD refresh handle: nothing else would,
+        // and a held handle keeps the next screen on fast refresh.
         selectionState.applySelectionDisplace(page)
+        selectionState.reset()
         bookId?.let { bookId ->
             exportEngine.exportToLinkedFileAsync(bookId)
         }

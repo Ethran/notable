@@ -201,7 +201,9 @@ class CanvasObserverRegistry(
     }
 
     private fun observePenChanges() {
-        observerScope.launch(Dispatchers.Default) {
+        // On Main, like every other caller of updatePenAndStroke: the pen style setters must not
+        // run from two threads at once.
+        observerScope.launch {
             viewModel.toolbarState
                 // Preset id, not just the base pen type: switching between two ballpen
                 // presets changes color/size without changing `pen`.
