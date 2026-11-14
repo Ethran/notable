@@ -11,6 +11,8 @@ import io.shipbook.shipbooksdk.ShipBook
 private val logger = ShipBook.getLogger("NeoFountainPenV2Wrapper")
 
 
+private data class FountainKey(val width: Float)
+
 object NeoFountainPenV2Wrapper {
 
     fun drawStroke(
@@ -36,30 +38,27 @@ object NeoFountainPenV2Wrapper {
         // config matches the firmware's live rendering. fastMode=false yields PenPathResult
         // (smooth vector path); true would give discrete dab stamps and look faceted on redraw.
         // See docs/onyx-sdk/onyx-neo-fountain-pen-v2.md.
-        val neoPen = FountainShapes.createNeoPenV2(
-            strokeWidth,                                  // width
-            NeoFountainPenWrapper.MIN_FOUNTAIN_PEN_WIDTH, // minWidth
-            1.0f,                                         // displayScaleX
-            1.0f,                                         // displayScaleY
-            1.0f,                                         // scalePrecision
-            1.0f,                                         // createScale
-            null,                                         // pressureSensitivity -> default 0.3
-            false,                                        // fastMode -> false = smooth PenPathResult
-            null,                                         // smoothLevel -> default 0.6
-        )
-        if (neoPen == null) {
-            logger.e("Drawing strokes failed: Pen creation failed")
-            return
-        }
-
-        val penRender = NeoPenRender(neoPen)
-        try {
+        val rendered = NeoPenPool.pool.use(
+            key = FountainKey(strokeWidth),
+            create = {
+                FountainShapes.createNeoPenV2(
+                    strokeWidth,                                  // width
+                    NeoFountainPenWrapper.MIN_FOUNTAIN_PEN_WIDTH, // minWidth
+                    1.0f,                                         // displayScaleX
+                    1.0f,                                         // displayScaleY
+                    1.0f,                                         // scalePrecision
+                    1.0f,                                         // createScale
+                    null,                                         // pressureSensitivity -> default 0.3
+                    false,                                        // fastMode -> false = smooth PenPathResult
+                    null,                                         // smoothLevel -> default 0.6
+                )
+            },
+        ) { neoPen ->
             // render() runs the full onTouchDown/onTouchMove/onTouchDone pipeline including
             // the trailing prediction segment; this is required for complete stroke coverage.
-            penRender.render(canvas, paint, renderPoints)
-        } finally {
-            penRender.destroyPen()
+            NeoPenRender(neoPen).render(canvas, paint, renderPoints)
         }
+        if (rendered == null) logger.e("Drawing strokes failed: Pen creation failed")
     }
 
 }
