@@ -5,14 +5,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The pen draws only when nothing on screen needs the finger/pen for itself. Every input
- * that blocks drawing is listed once here; adding a new one means adding it to this list.
+ * The pen draws only when nothing on screen needs the finger/pen for itself. A table test of
+ * [ToolbarUiState.isDrawing]: each listed input must block drawing on its own and in any
+ * combination. A blocker missing from this list is not caught.
  */
 class ToolbarUiStateDrawingTest {
 
     private val blockers: List<Pair<String, (ToolbarUiState) -> ToolbarUiState>> = listOf(
         "menu open" to { it.copy(isMenuOpen = true) },
-        "stroke menu open" to { it.copy(isStrokeSelectionOpen = true) },
+        "eraser menu open" to { it.copy(isEraserMenuOpen = true) },
+        "pen stroke menu open" to { it.copy(penMenuPresetId = "pen") },
         "background selector open" to { it.copy(isBackgroundSelectorModalOpen = true) },
         "QuickNav open" to { it.copy(isQuickNavOpen = true) },
         "selection active" to { it.copy(isSelectionActive = true) },

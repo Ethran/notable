@@ -150,7 +150,6 @@ private fun PenElementView(
     uiState: ToolbarUiState,
     onAction: (ToolbarAction) -> Unit,
 ) {
-    var isStrokeMenuOpen by remember { mutableStateOf(false) }
     val isSelected = element.isSelected(uiState)
     val penSetting =
         uiState.penSettings[element.presetId] ?: element.setting.copy()
@@ -158,21 +157,19 @@ private fun PenElementView(
     Box {
         ToolbarButton(
             isSelected = isSelected,
-            onSelect = {
-                if (isSelected) isStrokeMenuOpen = !isStrokeMenuOpen
-                else onAction(ToolbarAction.ChangePen(element.presetId))
-            },
+            // The ViewModel decides from its current state: select the pen, or toggle its menu.
+            onSelect = { onAction(ToolbarAction.ChangePen(element.presetId)) },
             penColor = Color(penSetting.color),
             iconId = (element.icon as? IconRef.Drawable)?.resId,
             vectorIcon = (element.icon as? IconRef.Vector)?.imageVector,
             contentDescription = element.contentDescription,
         )
 
-        if (isStrokeMenuOpen) {
+        if (uiState.penMenuPresetId == element.presetId) {
             StrokeMenu(
                 value = penSetting,
                 onChange = { onAction(ToolbarAction.ChangePenSetting(element.presetId, it)) },
-                onClose = { isStrokeMenuOpen = false },
+                onClose = { onAction(ToolbarAction.ClosePenMenu) },
                 sizeOptions = element.submenu.sizeOptions,
                 colorOptions = element.submenu.colorOptions,
             )
@@ -199,7 +196,7 @@ private fun ModeElementView(
             isSelected = isSelected,
             onSelect = {
                 if (isSelected && submenu is EraserSubmenuSpec)
-                    onAction(ToolbarAction.ToggleEraserManu(!uiState.isStrokeSelectionOpen))
+                    onAction(ToolbarAction.ToggleEraserMenu(!uiState.isEraserMenuOpen))
                 else if (!isSelected)
                     onAction(ToolbarAction.ChangeMode(element.mode))
             },
@@ -208,7 +205,7 @@ private fun ModeElementView(
             contentDescription = element.contentDescription,
         )
 
-        if (submenu is EraserSubmenuSpec && uiState.isStrokeSelectionOpen) {
+        if (submenu is EraserSubmenuSpec && uiState.isEraserMenuOpen) {
             EraserSubmenu(
                 spec = submenu,
                 uiState = uiState,
@@ -241,7 +238,7 @@ private fun EraserSubmenu(
             )
         },
         onDismissRequest = {
-            onAction(ToolbarAction.ToggleEraserManu(false))
+            onAction(ToolbarAction.ToggleEraserMenu(false))
         },
         properties = PopupProperties(focusable = true),
         alignment = Alignment.TopCenter

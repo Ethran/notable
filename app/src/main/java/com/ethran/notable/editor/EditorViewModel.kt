@@ -83,7 +83,9 @@ data class ToolbarUiState(
     // Toolbar visibility & menus
     val isToolbarOpen: Boolean = false,
     val isMenuOpen: Boolean = false,
-    val isStrokeSelectionOpen: Boolean = false,
+    val isEraserMenuOpen: Boolean = false,
+    /** The pen preset whose stroke menu (size and colour popup) is open, or null. */
+    val penMenuPresetId: String? = null,
     val isBackgroundSelectorModalOpen: Boolean = false,
     val showResetView: Boolean = false,
 
@@ -119,7 +121,8 @@ data class ToolbarUiState(
     val isDrawing: Boolean
         get() = hasWindowFocus &&
                 !isSelectionGestureActive && !isSelectionActive &&
-                !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen) &&
+                !(isMenuOpen || isEraserMenuOpen || isBackgroundSelectorModalOpen) &&
+                penMenuPresetId == null &&
                 !isQuickNavOpen
 }
 
@@ -131,11 +134,13 @@ data class ToolbarUiState(
 sealed class ToolbarAction {
     object ToggleToolbar : ToolbarAction()
     data class ChangeMode(val mode: Mode) : ToolbarAction()
+    /** A pen button was tapped: selects the pen, or toggles its stroke menu if already selected. */
     data class ChangePen(val presetId: String) : ToolbarAction()
+    object ClosePenMenu : ToolbarAction()
     data class ChangePenSetting(val presetId: String, val setting: PenSetting) : ToolbarAction()
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
     object ToggleMenu : ToolbarAction()
-    data class ToggleEraserManu(val isOpen: Boolean) : ToolbarAction()
+    data class ToggleEraserMenu(val isOpen: Boolean) : ToolbarAction()
     data class ToggleBackgroundSelector(val isOpen: Boolean) : ToolbarAction()
     data class ToggleScribbleToErase(val enabled: Boolean) : ToolbarAction()
 
@@ -334,7 +339,15 @@ class EditorViewModel @Inject constructor(
         log.v("onToolbarAction: $action")
         when (action) {
             is ToolbarAction.ToggleToolbar -> {
-                _toolbarState.update { it.copy(isToolbarOpen = !it.isToolbarOpen) }
+                // A closed toolbar shows no popups, so none may keep the pen off.
+                _toolbarState.update {
+                    it.copy(
+                        isToolbarOpen = !it.isToolbarOpen,
+                        isMenuOpen = false,
+                        isEraserMenuOpen = false,
+                        penMenuPresetId = null,
+                    )
+                }
                 saveToolbarState()
             }
 
@@ -344,6 +357,7 @@ class EditorViewModel @Inject constructor(
             }
 
             is ToolbarAction.ChangePen -> handlePenChange(action.presetId)
+            ToolbarAction.ClosePenMenu -> _toolbarState.update { it.copy(penMenuPresetId = null) }
             is ToolbarAction.ChangePenSetting ->
                 handlePenSettingChange(action.presetId, action.setting)
             is ToolbarAction.ChangeEraser -> handleEraserChange(action.eraser)
@@ -351,8 +365,8 @@ class EditorViewModel @Inject constructor(
                 _toolbarState.update { it.copy(isMenuOpen = !it.isMenuOpen) }
             }
 
-            is ToolbarAction.ToggleEraserManu -> {
-                _toolbarState.update { it.copy(isStrokeSelectionOpen = action.isOpen) }
+            is ToolbarAction.ToggleEraserMenu -> {
+                _toolbarState.update { it.copy(isEraserMenuOpen = action.isOpen) }
             }
 
             is ToolbarAction.ToggleBackgroundSelector -> {
@@ -411,11 +425,19 @@ class EditorViewModel @Inject constructor(
     private fun handlePenChange(presetId: String) {
         val preset = GlobalAppSettings.current.toolbarPens.find { it.id == presetId } ?: return
         val state = _toolbarState.value
-        if (state.mode == Mode.Draw && state.penPresetId == presetId) {
-            _toolbarState.update { it.copy(isStrokeSelectionOpen = true) }
+        // Same condition as PenElement.isSelected: the pen stays selected in Line mode too.
+        val alreadySelected = (state.mode == Mode.Draw || state.mode == Mode.Line) &&
+                state.penPresetId == presetId
+        if (alreadySelected) {
+            _toolbarState.update {
+                it.copy(penMenuPresetId = if (it.penMenuPresetId == presetId) null else presetId)
+            }
         } else {
             _toolbarState.update {
-                it.copy(pen = preset.pen, penPresetId = presetId, mode = Mode.Draw)
+                it.copy(
+                    pen = preset.pen, penPresetId = presetId, mode = Mode.Draw,
+                    penMenuPresetId = null,
+                )
             }
             saveToolbarState()
         }
