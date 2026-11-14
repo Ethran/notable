@@ -75,7 +75,7 @@ class CanvasObserverRegistry(
         observeRefreshUiImmediately()
         observeForceUpdate()
         observeRefreshUi()
-        observeFocusChange()
+        observeResume()
         observeZoom()
         observeSelectionGesture()
         observeClearPage()
@@ -148,11 +148,15 @@ class CanvasObserverRegistry(
 
     // Raw drawing itself follows focus through ToolbarUiState.isDrawing; this only refreshes
     // what another app might have changed while we were in the background.
-    private fun observeFocusChange() {
+    /**
+     * Redraws after a resume (wake-up, return from another app): the panel may show something else
+     * by then, and with a popup still open the pen stays off, so no enable path draws the page.
+     */
+    private fun observeResume() {
         observerScope.launch {
-            CanvasEventBus.windowFocus.drop(1).collect { hasFocus ->
-                log.v("App has focus: $hasFocus")
-                if (hasFocus) {
+            CanvasEventBus.isResumed.drop(1).collect { resumed ->
+                log.v("App resumed: $resumed")
+                if (resumed) {
                     inputHandler.updatePenAndStroke()
                     drawCanvas.refreshManager.drawCanvasToView(null)
                 }

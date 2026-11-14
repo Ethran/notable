@@ -7,6 +7,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.measureTimeMillis
@@ -21,8 +23,26 @@ object CanvasEventBus {
     val reloadFromDb = MutableSharedFlow<Unit>()
 
 
-    /** Whether the activity is resumed and its window has focus. Written only by MainActivity. */
-    val windowFocus = MutableStateFlow(true)
+    private val _isResumed = MutableStateFlow(true)
+
+    /** The activity is resumed. Written only by [setResumed], from MainActivity's onResume/onPause. */
+    val isResumed: StateFlow<Boolean> = _isResumed.asStateFlow()
+
+    private val _hasWindowFocus = MutableStateFlow(true)
+
+    /**
+     * The activity's window has input focus; false while a focusable popup or dialog, or another
+     * window, holds it. Written only by [setWindowFocus], from MainActivity.onWindowFocusChanged.
+     */
+    val hasWindowFocus: StateFlow<Boolean> = _hasWindowFocus.asStateFlow()
+
+    fun setResumed(resumed: Boolean) {
+        _isResumed.value = resumed
+    }
+
+    fun setWindowFocus(hasFocus: Boolean) {
+        _hasWindowFocus.value = hasFocus
+    }
 
     // It might be bad idea, but plan is to insert graphic in this, and then take it from it
     // There is probably better way

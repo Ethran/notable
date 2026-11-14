@@ -105,6 +105,9 @@ data class ToolbarUiState(
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
     val isQuickNavOpen: Boolean = false,
+    /** Mirror of [CanvasEventBus.isResumed]. */
+    val isResumed: Boolean = true,
+    /** Mirror of [CanvasEventBus.hasWindowFocus]. */
     val hasWindowFocus: Boolean = true,
     /** A finger is holding/dragging a selection rectangle on the canvas. */
     val isSelectionGestureActive: Boolean = false,
@@ -119,7 +122,7 @@ data class ToolbarUiState(
      * change one of its inputs, and the canvas follows the latest state.
      */
     val isDrawing: Boolean
-        get() = hasWindowFocus &&
+        get() = isResumed && hasWindowFocus &&
                 !isSelectionGestureActive && !isSelectionActive &&
                 !(isMenuOpen || isEraserMenuOpen || isBackgroundSelectorModalOpen) &&
                 penMenuPresetId == null &&
@@ -222,7 +225,12 @@ class EditorViewModel @Inject constructor(
             ClipboardStore.content.collect { setHasClipboard(it != null) }
         }
         viewModelScope.launch {
-            CanvasEventBus.windowFocus.collect { hasFocus ->
+            CanvasEventBus.isResumed.collect { resumed ->
+                _toolbarState.update { it.copy(isResumed = resumed) }
+            }
+        }
+        viewModelScope.launch {
+            CanvasEventBus.hasWindowFocus.collect { hasFocus ->
                 _toolbarState.update { it.copy(hasWindowFocus = hasFocus) }
             }
         }

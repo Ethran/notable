@@ -20,6 +20,7 @@ class ToolbarUiStateDrawingTest {
         "selection active" to { it.copy(isSelectionActive = true) },
         "selection gesture in progress" to { it.copy(isSelectionGestureActive = true) },
         "window not focused" to { it.copy(hasWindowFocus = false) },
+        "activity paused" to { it.copy(isResumed = false) },
     )
 
     @Test
