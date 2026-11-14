@@ -158,7 +158,7 @@ private fun PenElementView(
         ToolbarButton(
             isSelected = isSelected,
             // The ViewModel decides from its current state: select the pen, or toggle its menu.
-            onSelect = { onAction(ToolbarAction.ChangePen(element.presetId)) },
+            onSelect = { onAction(ToolbarAction.PenButtonTapped(element.presetId)) },
             penColor = Color(penSetting.color),
             iconId = (element.icon as? IconRef.Drawable)?.resId,
             vectorIcon = (element.icon as? IconRef.Vector)?.imageVector,
