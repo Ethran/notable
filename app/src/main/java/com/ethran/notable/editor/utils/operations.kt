@@ -204,16 +204,20 @@ fun getModifiedStrokeEndpoints(
     val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel)
     val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel)
 
+    // Pressure and tilt come from the normalized sample points.
+    val start = points[startIdx].toStrokePoint(scroll, zoomLevel)
+    val end = points[endIdx].toStrokePoint(scroll, zoomLevel)
+
     val startPoint = baseStartPoint.copy(
-        tiltX = points[startIdx].tiltX,
-        tiltY = points[startIdx].tiltY,
-        pressure = points[startIdx].pressure
+        tiltX = start.tiltX,
+        tiltY = start.tiltY,
+        pressure = start.pressure
     )
 
     val endPoint = baseEndPoint.copy(
-        tiltX = points[endIdx].tiltX,
-        tiltY = points[endIdx].tiltY,
-        pressure = points[endIdx].pressure
+        tiltX = end.tiltX,
+        tiltY = end.tiltY,
+        pressure = end.pressure
     )
 
     return Pair(startPoint, endPoint)
