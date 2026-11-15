@@ -5,10 +5,18 @@ import com.ethran.notable.data.db.MAX_PRESSURE_NORMALIZED
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.StrokePoint
+import com.ethran.notable.data.model.SheetSize
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -54,13 +62,17 @@ class NotebookSerializerPageTest {
     private fun samplePage(
         id: String = "page-1",
         notebookId: String? = "nb-1",
-        scroll: Int = 0,
+        positionY: Int = 0,
+        positionX: Int = 0,
+        sheet: SheetSize? = null,
         parentFolderId: String? = null,
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
     ) = Page(
         id = id,
-        scroll = scroll,
+        positionY = positionY,
+        positionX = positionX,
+        sheet = sheet,
         notebookId = notebookId,
         background = "blank",
         backgroundType = "native",
@@ -131,6 +143,45 @@ class NotebookSerializerPageTest {
     }
 
     @Test
+    fun page_round_trip_preserves_the_position_and_the_sheet() {
+        val page = samplePage(positionY = 300, positionX = 120, sheet = SheetSize(1860, 2632))
+        val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
+
+        val result = NotebookSerializer.deserializePage(json)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data.first
+        assertEquals(300, restored.positionY)
+        assertEquals(120, restored.positionX)
+        assertEquals(SheetSize(1860, 2632), restored.sheet)
+    }
+
+    // Older clients require the vertical position under its old key, "scroll".
+    @Test
+    fun page_file_keeps_the_vertical_position_under_the_scroll_key() {
+        val json = NotebookSerializer.serializePage(samplePage(positionY = 300), emptyList(), emptyList())
+        val fields = Json.parseToJsonElement(json).jsonObject
+
+        assertEquals(300, fields.getValue("scroll").jsonPrimitive.int)
+        assertFalse("positionY must not be written: $json", "positionY" in fields)
+    }
+
+    // A page file from an app without the horizontal position or sheets reads back as an
+    // infinite page at x = 0.
+    @Test
+    fun page_file_without_positionX_or_sheet_reads_as_an_infinite_page() {
+        val page = samplePage(positionY = 300, positionX = 120, sheet = SheetSize(1860, 2632))
+        val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
+        val legacy = JsonObject(Json.parseToJsonElement(json).jsonObject - "positionX" - "sheet").toString()
+
+        val result = NotebookSerializer.deserializePage(legacy)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data.first
+        assertEquals(300, restored.positionY)
+        assertEquals(0, restored.positionX)
+        assertNull(restored.sheet)
+    }
+
+    @Test
     fun page_round_trip_preserves_metadata_strokes_and_images() {
         val page = samplePage()
         val strokes = listOf(sampleStroke("s-1"), sampleStroke("s-2"))
@@ -146,7 +197,9 @@ class NotebookSerializerPageTest {
         assertEquals(page.notebookId, restoredPage.notebookId)
         assertEquals(page.background, restoredPage.background)
         assertEquals(page.backgroundType, restoredPage.backgroundType)
-        assertEquals(page.scroll, restoredPage.scroll)
+        assertEquals(page.positionY, restoredPage.positionY)
+        assertEquals(page.positionX, restoredPage.positionX)
+        assertEquals(page.sheet, restoredPage.sheet)
         assertEquals(page.createdAt, restoredPage.createdAt)
         assertEquals(page.updatedAt, restoredPage.updatedAt)
 

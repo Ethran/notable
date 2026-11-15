@@ -1,6 +1,8 @@
 package com.ethran.notable.data.db
 
+import com.ethran.notable.data.model.SheetSize
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.UUID
 
@@ -38,5 +40,12 @@ class NotebookTest {
 
         assertEquals(-1, notebook.getPageIndex(""))
     }
-}
 
+    @Test
+    fun newPage_takes_the_notebooks_default_sheet() {
+        val sheet = SheetSize(1860, 2632)
+
+        assertEquals(sheet, Notebook(defaultSheet = sheet).newPage().sheet)
+        assertNull("a notebook of infinite pages makes infinite pages", Notebook().newPage().sheet)
+    }
+}

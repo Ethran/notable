@@ -237,7 +237,7 @@ class PageSaverTest {
 
         pageDataManager.recordScroll(pageId, 750)
         assertEquals(AppResult.Success(Unit), pageSaver.saveAll())
-        assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
+        assertEquals(750, data.db.pageDao().getById(pageId)!!.positionY)
         assertEquals(longAgo, pageUpdatedAt(pageId))
         assertEquals(longAgo, notebookUpdatedAt(notebook.notebookId))
 
@@ -249,7 +249,7 @@ class PageSaverTest {
         // The page is stamped with the time of its edit, the notebook with the time of the save.
         assertTrue(pageUpdatedAt(pageId).time in beforeEdit..afterEdit)
         assertTrue(notebookUpdatedAt(notebook.notebookId).time > afterEdit)
-        assertEquals(750, data.db.pageDao().getById(pageId)!!.scroll)
+        assertEquals(750, data.db.pageDao().getById(pageId)!!.positionY)
         assertEquals(longAgo, pageUpdatedAt(otherNotebook.pageIds.single()))
         assertEquals(longAgo, notebookUpdatedAt(otherNotebook.notebookId))
     }
