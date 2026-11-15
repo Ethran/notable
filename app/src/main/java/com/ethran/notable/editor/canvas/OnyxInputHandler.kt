@@ -199,7 +199,8 @@ class OnyxInputHandler(
         log.d(
             "Update is drawing: ${state.isDrawing} (resumed=${state.isResumed}, " +
                 "focus=${state.hasWindowFocus}, menu=${state.isMenuOpen}, " +
-                "eraserMenu=${state.isEraserMenuOpen}, penMenu=${state.penMenuPresetId}, " +
+                "eraserMenu=${state.isEraserMenuOpen}, fitMenu=${state.isFitModeMenuOpen}, " +
+                "penMenu=${state.penMenuPresetId}, " +
                 "background=${state.isBackgroundSelectorModalOpen}, " +
                 "quickNav=${state.isQuickNavOpen}, selection=${state.isSelectionActive}, " +
                 "selectionGesture=${state.isSelectionGestureActive})"

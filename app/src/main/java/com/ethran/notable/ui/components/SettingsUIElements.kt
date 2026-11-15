@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,12 +39,13 @@ fun <T> SelectorRow(
     value: T,
     onValueChange: (T) -> Unit,
     modifier: Modifier = Modifier,
-    labelMaxLines: Int = 2
+    labelMaxLines: Int = 2,
+    contentPadding: PaddingValues = PaddingValues(vertical = 12.dp, horizontal = 4.dp)
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp, horizontal = 4.dp),
+            .padding(contentPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -53,12 +55,14 @@ fun <T> SelectorRow(
             color = MaterialTheme.colors.onSurface,
             maxLines = labelMaxLines
         )
+
         SelectMenu(
             options = options,
             value = value,
             onChange = onValueChange,
         )
     }
+
     SettingsDivider()
 }
 

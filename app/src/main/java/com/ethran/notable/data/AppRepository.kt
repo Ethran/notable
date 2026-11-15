@@ -170,8 +170,12 @@ class AppRepository @Inject constructor(
         val now = Date()
         pageRepository.create(
             source.page.copy(
-                id = id, notebookId = notebookId, positionY = 0, positionX = 0,
-                createdAt = now, updatedAt = now,
+                id = id,
+                notebookId = notebookId,
+                positionY = 0,
+                positionX = 0,
+                createdAt = now,
+                updatedAt = now
             )
         )
         strokeRepository.create(source.strokes.map {

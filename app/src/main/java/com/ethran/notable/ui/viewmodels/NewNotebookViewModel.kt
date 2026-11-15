@@ -3,8 +3,12 @@ package com.ethran.notable.ui.viewmodels
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ethran.notable.SCREEN_HEIGHT
+import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.model.PageMode
+import com.ethran.notable.data.model.SheetOrientation
 import com.ethran.notable.data.db.Folder
 import com.ethran.notable.data.db.Notebook
 import com.ethran.notable.data.model.BackgroundType
@@ -39,6 +43,8 @@ data class NewNotebookState(
     val folderId: String?,
     val backgroundType: String,
     val background: String,
+    val pageMode: PageMode,
+    val orientation: SheetOrientation,
 )
 
 data class CreatedNotebook(val bookId: String, val pageId: String)
@@ -59,6 +65,8 @@ class NewNotebookViewModel @Inject constructor(
             folderId = savedStateHandle[NewNotebookDestination.FOLDER_ID_ARG],
             backgroundType = BackgroundType.Native.key,
             background = GlobalAppSettings.current.defaultNativeTemplate,
+            pageMode = GlobalAppSettings.current.defaultPageMode,
+            orientation = SheetOrientation.PORTRAIT,
         )
     )
     val state: StateFlow<NewNotebookState> = _state.asStateFlow()
@@ -85,6 +93,11 @@ class NewNotebookViewModel @Inject constructor(
         it.copy(backgroundType = type, background = background ?: it.background)
     }
 
+    fun setPageMode(mode: PageMode) = _state.update { it.copy(pageMode = mode) }
+
+    fun setOrientation(orientation: SheetOrientation) =
+        _state.update { it.copy(orientation = orientation) }
+
     fun create() {
         if (isCreating) return
         isCreating = true
@@ -94,6 +107,8 @@ class NewNotebookViewModel @Inject constructor(
             parentFolderId = state.folderId,
             defaultBackground = state.background,
             defaultBackgroundType = state.backgroundType,
+            // Sized to this device's screen, then fixed: the sheet is the same on every device.
+            defaultSheet = state.pageMode.sheetSize(state.orientation, SCREEN_WIDTH, SCREEN_HEIGHT),
         )
         viewModelScope.launch {
             try {
