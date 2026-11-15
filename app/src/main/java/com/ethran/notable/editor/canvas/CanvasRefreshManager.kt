@@ -147,15 +147,15 @@ class CanvasRefreshManager(
         }
     }
 
-    fun drawCanvasToView(dirtyRect: Rect?, onPosted: (() -> Unit)? = null) {
-        drawCanvas.post { drawCanvasToViewSync(dirtyRect, onPosted) }
+    fun drawCanvasToView(dirtyRect: Rect?) {
+        drawCanvas.post { drawCanvasToViewSync(dirtyRect) }
     }
 
     /**
      * [drawCanvasToView] without the post: draws the page (and the page-cut line in Select mode)
      * to the surface now. Main thread only.
      */
-    fun drawCanvasToViewSync(dirtyRect: Rect?, onPosted: (() -> Unit)? = null) {
+    fun drawCanvasToViewSync(dirtyRect: Rect?) {
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
         var canvas: Canvas? = null
         try {
@@ -197,8 +197,6 @@ class CanvasRefreshManager(
                 log.v("Canvas refreshed")
             } catch (e: IllegalStateException) {
                 log.w("Surface released during unlock", e)
-            } finally {
-                onPosted?.invoke()
             }
         }
     }
