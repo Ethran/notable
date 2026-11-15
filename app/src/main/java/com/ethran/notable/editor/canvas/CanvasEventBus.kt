@@ -7,6 +7,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.measureTimeMillis
@@ -21,25 +23,35 @@ object CanvasEventBus {
     val reloadFromDb = MutableSharedFlow<Unit>()
 
 
-    val isDrawing = MutableSharedFlow<Boolean>()
+    private val _isResumed = MutableStateFlow(true)
 
-    // used for managing drawing state on regain focus
-    val onFocusChange = MutableSharedFlow<Boolean>()
+    /** The activity is resumed. Written only by [setResumed], from MainActivity's onResume/onPause. */
+    val isResumed: StateFlow<Boolean> = _isResumed.asStateFlow()
+
+    private val _hasWindowFocus = MutableStateFlow(true)
+
+    /**
+     * The activity's window has input focus; false while a focusable popup or dialog, or another
+     * window, holds it. Written only by [setWindowFocus], from MainActivity.onWindowFocusChanged.
+     */
+    val hasWindowFocus: StateFlow<Boolean> = _hasWindowFocus.asStateFlow()
+
+    fun setResumed(resumed: Boolean) {
+        _isResumed.value = resumed
+    }
+
+    fun setWindowFocus(hasFocus: Boolean) {
+        _hasWindowFocus.value = hasFocus
+    }
 
     // It might be bad idea, but plan is to insert graphic in this, and then take it from it
     // There is probably better way
     val addImageByUri = MutableStateFlow<Uri?>(null)
 
-    // Event, not state: each emission is one gesture-selection request.
-    val rectangleToSelectByGesture = MutableSharedFlow<Rect>()
     val drawingInProgress = Mutex()
 
     // For cleaning whole page, activated from toolbar menu
     val clearPageSignal = MutableSharedFlow<Unit>()
-
-    // Signal to UI to close any open menus/modals,
-    // observed in EditorView
-    val closeMenusSignal = MutableSharedFlow<Unit>()
 
 
     // For QuickNav scrolling with previews

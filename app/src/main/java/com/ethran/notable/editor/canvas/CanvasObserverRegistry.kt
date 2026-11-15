@@ -11,7 +11,6 @@ import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
 import com.ethran.notable.editor.utils.partialRefreshRegionOnce
-import com.ethran.notable.editor.utils.selectRectangle
 import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -75,10 +74,8 @@ class CanvasObserverRegistry(
         observeRefreshUiImmediately()
         observeForceUpdate()
         observeRefreshUi()
-        observeFocusChange()
+        observeResume()
         observeZoom()
-        observeDrawingState()
-        observeSelectionGesture()
         observeClearPage()
         observeRestartAfterConfChange()
         observeReloadFromDb()
@@ -147,19 +144,34 @@ class CanvasObserverRegistry(
         }
     }
 
-    private fun observeFocusChange() {
+    /**
+     * Redraws after a resume (wake-up, return from another app) or a focus regain (a popup, dialog
+     * or another window closed): the panel may show something else by then.
+     */
+    private fun observeResume() {
         observerScope.launch {
-            CanvasEventBus.onFocusChange.collect { hasFocus ->
-                log.v("App has focus: $hasFocus")
-                if (hasFocus) {
-                    inputHandler.updatePenAndStroke() // The setting might been changed by other app.
-                    drawCanvas.refreshManager.drawCanvasToView(null)
-                    viewModel.updateDrawingState()
-                } else {
-                    CanvasEventBus.isDrawing.emit(false)
-                }
+            CanvasEventBus.isResumed.drop(1).collect { resumed ->
+                log.v("App resumed: $resumed")
+                if (resumed) redrawIfPenStaysOff()
             }
         }
+        observerScope.launch {
+            CanvasEventBus.hasWindowFocus.drop(1).collect { hasFocus ->
+                log.v("Window focus: $hasFocus")
+                if (hasFocus) redrawIfPenStaysOff()
+            }
+        }
+    }
+
+    /**
+     * If the pen turns on, the enable path draws the page first, so drawing it here too would be a
+     * second full-page draw. If something still keeps the pen off (a popup open across a wake-up,
+     * a selection), nothing else draws it. The ViewModel mirrors resume and focus inline on Main,
+     * before this observer runs, so `isDrawing` is already current here.
+     */
+    private fun redrawIfPenStaysOff() {
+        if (viewModel.toolbarState.value.isDrawing) return
+        drawCanvas.refreshManager.drawCanvasToView(null)
     }
 
     private fun observeZoom() {
@@ -167,24 +179,6 @@ class CanvasObserverRegistry(
             page.viewport.map { it.zoom }.distinctUntilChanged().drop(1).collect { zoom ->
                 log.v("zoom level change: $zoom")
                 inputHandler.updatePenAndStroke()
-            }
-        }
-    }
-
-    private fun observeDrawingState() {
-        observerScope.launch {
-            CanvasEventBus.isDrawing.collect {
-                log.v("drawing state changed to $it!")
-                viewModel.setDrawingStateFromCanvas(it)
-            }
-        }
-    }
-
-    private fun observeSelectionGesture() {
-        observerScope.launch {
-            CanvasEventBus.rectangleToSelectByGesture.collect {
-                log.v("Area to Select (screen): $it")
-                selectRectangle(page, drawCanvas.coroutineScope, viewModel, it)
             }
         }
     }
@@ -219,7 +213,9 @@ class CanvasObserverRegistry(
     }
 
     private fun observePenChanges() {
-        observerScope.launch(Dispatchers.Default) {
+        // On Main, like every other caller of updatePenAndStroke: the pen style setters must not
+        // run from two threads at once.
+        observerScope.launch {
             viewModel.toolbarState
                 // Preset id, not just the base pen type: switching between two ballpen
                 // presets changes color/size without changing `pen`.
@@ -265,11 +261,6 @@ class CanvasObserverRegistry(
                 .drop(1)
                 .collect {
                     log.v("isDrawing change to $it")
-                    // We need to close all menus
-                    if (it) {
-                        CanvasEventBus.closeMenusSignal.emit(Unit)
-//                        waitForEpdRefresh()
-                    }
                     inputHandler.updateIsDrawing()
                 }
         }

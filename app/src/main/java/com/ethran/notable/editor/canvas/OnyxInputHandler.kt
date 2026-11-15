@@ -195,8 +195,19 @@ class OnyxInputHandler(
 
     suspend fun updateIsDrawing() {
         if(touchHelper == null) return
-        log.i("Update is drawing: $toolbarState.isDrawing")
-        if (toolbarState.isDrawing) {
+        val state = toolbarState
+        log.d(
+            "Update is drawing: ${state.isDrawing} (resumed=${state.isResumed}, " +
+                "focus=${state.hasWindowFocus}, menu=${state.isMenuOpen}, " +
+                "eraserMenu=${state.isEraserMenuOpen}, penMenu=${state.penMenuPresetId}, " +
+                "background=${state.isBackgroundSelectorModalOpen}, " +
+                "quickNav=${state.isQuickNavOpen}, selection=${state.isSelectionActive}, " +
+                "selectionGesture=${state.isSelectionGestureActive})"
+        )
+        if (state.isDrawing) {
+            // Show the page before the firmware takes the screen: once raw drawing is on, a plain
+            // post can be swallowed, and a closed popup's area would stay stale.
+            drawCanvas.refreshManager.drawCanvasToViewSync(null)
             enableRawDrawing()
         } else {
             // A pending resetScreenFreeze resume would re-freeze the screen after we disable

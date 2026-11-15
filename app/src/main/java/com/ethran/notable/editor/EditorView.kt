@@ -123,7 +123,6 @@ fun EditorView(
         // Initialize ViewModel with persisted settings on first composition
         LaunchedEffect(Unit) {
             viewModel.initFromPersistedSettings()
-            viewModel.updateDrawingState()
         }
 
 //         val editorControlTower = remember {
@@ -183,24 +182,6 @@ fun EditorView(
             }
         }
 
-        // Handle Canvas signals in UI
-        LaunchedEffect(Unit) {
-            CanvasEventBus.closeMenusSignal.collect {
-                log.d("Closing all menus")
-                viewModel.onToolbarAction(ToolbarAction.CloseAllMenus)
-            }
-        }
-
-        // Handle focus changes from Canvas
-//        LaunchedEffect(Unit) {
-//            CanvasEventBus.onFocusChange.collect { hasFocus ->
-//                log.d("Canvas has focus: $hasFocus")
-//                if (hasFocus)
-//                    viewModel.updateDrawingState()
-//
-//            }
-//        }
-
         val toolbarState by viewModel.toolbarState.collectAsStateWithLifecycle()
 
         // Observe pageId changes from ViewModel state for navigation
@@ -221,13 +202,8 @@ fun EditorView(
         // Only zoom matters here; collecting the whole viewport would recompose on every scroll.
         val zoomFlow = remember(page) { page.viewport.map { it.zoom }.distinctUntilChanged() }
         val zoomLevel by zoomFlow.collectAsStateWithLifecycle(page.zoom)
-        val selectionActive = viewModel.selectionState.isNonEmpty()
-        LaunchedEffect(
-            zoomLevel, selectionActive
-        ) {
-            log.v("EditorView: zoomLevel=$zoomLevel, selectionActive=$selectionActive")
+        LaunchedEffect(zoomLevel) {
             viewModel.setShowResetView(zoomLevel != 1.0f)
-            viewModel.setSelectionActive(selectionActive)
         }
 
         DisposableEffect(Unit) {
@@ -256,8 +232,7 @@ fun EditorView(
                 Spacer(modifier = Modifier.weight(1f))
                 ScrollIndicator(viewModel = viewModel, page = page)
             }
-            PositionedToolbar(
-                viewModel = viewModel, onDrawingStateCheck = { viewModel.updateDrawingState() })
+            PositionedToolbar(viewModel = viewModel)
             HorizontalScrollIndicator(viewModel = viewModel, page = page)
         }
     }

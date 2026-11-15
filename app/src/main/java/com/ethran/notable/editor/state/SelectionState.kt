@@ -43,13 +43,38 @@ private val log = ShipBook.getLogger("SelectionState")
  *
  * All coordinate-based properties within this class are intended to be in page coordinates
  * unless otherwise specified.
+ *
+ * @param onActiveChanged called synchronously, in the setter, whenever [isNonEmpty] changes. This
+ * is the only writer of the editor's "selection active" flag, so the flag is never behind the
+ * selection.
  */
-class SelectionState {
+class SelectionState(private val onActiveChanged: (Boolean) -> Unit = {}) {
     // all coordinates should be in page coordinates
     var firstPageCut by mutableStateOf<List<SimplePointF>?>(null)
     var secondPageCut by mutableStateOf<List<SimplePointF>?>(null)
-    var selectedStrokes by mutableStateOf<List<Stroke>?>(null)
-    var selectedImages by mutableStateOf<List<Image>?>(null)
+
+    private var strokes by mutableStateOf<List<Stroke>?>(null)
+    private var images by mutableStateOf<List<Image>?>(null)
+    var selectedStrokes: List<Stroke>?
+        get() = strokes
+        set(value) {
+            strokes = value
+            publishActive()
+        }
+    var selectedImages: List<Image>?
+        get() = images
+        set(value) {
+            images = value
+            publishActive()
+        }
+
+    private var lastPublishedActive = false
+    private fun publishActive() {
+        val active = isNonEmpty()
+        if (active == lastPublishedActive) return
+        lastPublishedActive = active
+        onActiveChanged(active)
+    }
 
     // Pre-edit snapshot of a Move selection (original size AND position), captured when the
     // selection is created. resizeImages/resizeStrokes mutate selectedStrokes/Images in place, so

@@ -66,7 +66,6 @@ fun SelectedBitmap(
             .noRippleClickable {
                 controlTower.applySelectionDisplace()
                 selectionState.reset()
-                controlTower.setIsDrawing(true)
             }) {
         Image(
             bitmap = selectionState.selectedBitmap!!.asImageBitmap(),

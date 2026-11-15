@@ -24,7 +24,6 @@ import com.ethran.notable.editor.state.History
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.state.SelectionState
 import com.ethran.notable.editor.ui.toolbar.model.ToolbarPen
-import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.PenSetting
@@ -84,7 +83,9 @@ data class ToolbarUiState(
     // Toolbar visibility & menus
     val isToolbarOpen: Boolean = false,
     val isMenuOpen: Boolean = false,
-    val isStrokeSelectionOpen: Boolean = false,
+    val isEraserMenuOpen: Boolean = false,
+    /** The pen preset whose stroke menu (size and colour popup) is open, or null. */
+    val penMenuPresetId: String? = null,
     val isBackgroundSelectorModalOpen: Boolean = false,
     val showResetView: Boolean = false,
 
@@ -100,20 +101,36 @@ data class ToolbarUiState(
      * AppSettings.toolbarPens kept in sync by the ViewModel (the preset is the source
      * of truth). */
     val penSettings: Map<String, PenSetting> = DEFAULT_PEN_SETTINGS,
+    /** Something is selected. Written only by [EditorViewModel.selectionState]. */
     val isSelectionActive: Boolean = false,
     val hasClipboard: Boolean = false,
-    val isDrawing: Boolean = true,
     val isQuickNavOpen: Boolean = false,
+    /** Mirror of [CanvasEventBus.isResumed]. */
+    val isResumed: Boolean = true,
+    /** Mirror of [CanvasEventBus.hasWindowFocus]. */
+    val hasWindowFocus: Boolean = true,
+    /** A finger is holding/dragging a selection rectangle on the canvas. */
+    val isSelectionGestureActive: Boolean = false,
 ) {
     /** The active preset's setting — what the drawing pipeline draws with. The fallback
      * only triggers if the active preset was deleted mid-session. */
     val activePenSetting: PenSetting
         get() = penSettings[penPresetId] ?: PenSetting(5f, android.graphics.Color.BLACK)
 
-    val isDrawingAllowed: Boolean
-        get() = !isSelectionActive &&
-                !(isMenuOpen || isStrokeSelectionOpen || isBackgroundSelectorModalOpen)
-                && !isQuickNavOpen
+    /** The pen of [presetId] is the one in use. It stays selected in Line mode, which draws with it. */
+    fun isPenSelected(presetId: String): Boolean =
+        (mode == Mode.Draw || mode == Mode.Line) && penPresetId == presetId
+
+    /**
+     * Whether the pen draws (raw drawing on). Derived only, never stored: to change it,
+     * change one of its inputs, and the canvas follows the latest state.
+     */
+    val isDrawing: Boolean
+        get() = isResumed && hasWindowFocus &&
+                !isSelectionGestureActive && !isSelectionActive &&
+                !(isMenuOpen || isEraserMenuOpen || isBackgroundSelectorModalOpen) &&
+                penMenuPresetId == null &&
+                !isQuickNavOpen
 }
 
 
@@ -124,11 +141,13 @@ data class ToolbarUiState(
 sealed class ToolbarAction {
     object ToggleToolbar : ToolbarAction()
     data class ChangeMode(val mode: Mode) : ToolbarAction()
-    data class ChangePen(val presetId: String) : ToolbarAction()
+    /** A pen button was tapped: selects the pen, or toggles its stroke menu if already selected. */
+    data class PenButtonTapped(val presetId: String) : ToolbarAction()
+    object ClosePenMenu : ToolbarAction()
     data class ChangePenSetting(val presetId: String, val setting: PenSetting) : ToolbarAction()
     data class ChangeEraser(val eraser: Eraser) : ToolbarAction()
     object ToggleMenu : ToolbarAction()
-    data class ToggleEraserManu(val isOpen: Boolean) : ToolbarAction()
+    data class ToggleEraserMenu(val isOpen: Boolean) : ToolbarAction()
     data class ToggleBackgroundSelector(val isOpen: Boolean) : ToolbarAction()
     data class ToggleScribbleToErase(val enabled: Boolean) : ToolbarAction()
 
@@ -150,7 +169,6 @@ sealed class ToolbarAction {
     object NavigateToPages : ToolbarAction()
     object NavigateToHome : ToolbarAction()
 
-    object CloseAllMenus : ToolbarAction()
     data class UpdateQuickNavOpen(val isOpen: Boolean) : ToolbarAction()
 }
 
@@ -210,6 +228,16 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch {
             ClipboardStore.content.collect { setHasClipboard(it != null) }
         }
+        viewModelScope.launch {
+            CanvasEventBus.isResumed.collect { resumed ->
+                _toolbarState.update { it.copy(isResumed = resumed) }
+            }
+        }
+        viewModelScope.launch {
+            CanvasEventBus.hasWindowFocus.collect { hasFocus ->
+                _toolbarState.update { it.copy(hasWindowFocus = hasFocus) }
+            }
+        }
         // The pen presets in AppSettings are the source of truth for per-pen color/size;
         // mirror them into ToolbarUiState.penSettings so the (non-Compose) drawing
         // pipeline sees changes from any writer — StrokeMenu here, or the settings
@@ -251,7 +279,11 @@ class EditorViewModel @Inject constructor(
     private val didInitSettings = AtomicBoolean(false)
 
     // ---- Selection state (kept for drawing logic compatibility) ----
-    val selectionState = SelectionState()
+    /** The only writer of [ToolbarUiState.isSelectionActive]. */
+    val selectionState = SelectionState { active ->
+        log.v("selection active: $active")
+        _toolbarState.update { it.copy(isSelectionActive = active) }
+    }
 
     // --------------------------------------------------------
     // Initialization from persisted settings
@@ -286,8 +318,10 @@ class EditorViewModel @Inject constructor(
      * Performs cleanup, exports linked files, and triggers auto-sync.
      */
     fun onDispose(page: PageView) {
-        // 1. Finish selection operation
+        // 1. Finish selection operation, and release its EPD refresh handle: nothing else would,
+        // and a held handle keeps the next screen on fast refresh.
         selectionState.applySelectionDisplace(page)
+        selectionState.reset()
         bookId?.let { bookId ->
             exportEngine.exportToLinkedFileAsync(bookId)
         }
@@ -319,34 +353,38 @@ class EditorViewModel @Inject constructor(
         log.v("onToolbarAction: $action")
         when (action) {
             is ToolbarAction.ToggleToolbar -> {
-                _toolbarState.update { it.copy(isToolbarOpen = !it.isToolbarOpen) }
-                updateDrawingState()
+                // A closed toolbar shows no popups, so none may keep the pen off.
+                _toolbarState.update {
+                    it.copy(
+                        isToolbarOpen = !it.isToolbarOpen,
+                        isMenuOpen = false,
+                        isEraserMenuOpen = false,
+                        penMenuPresetId = null,
+                    )
+                }
                 saveToolbarState()
             }
 
             is ToolbarAction.ChangeMode -> {
                 _toolbarState.update { it.copy(mode = action.mode) }
-                updateDrawingState()
                 saveToolbarState()
             }
 
-            is ToolbarAction.ChangePen -> handlePenChange(action.presetId)
+            is ToolbarAction.PenButtonTapped -> handlePenButtonTap(action.presetId)
+            ToolbarAction.ClosePenMenu -> _toolbarState.update { it.copy(penMenuPresetId = null) }
             is ToolbarAction.ChangePenSetting ->
                 handlePenSettingChange(action.presetId, action.setting)
             is ToolbarAction.ChangeEraser -> handleEraserChange(action.eraser)
             is ToolbarAction.ToggleMenu -> {
                 _toolbarState.update { it.copy(isMenuOpen = !it.isMenuOpen) }
-//                updateDrawingState() // on focus change is doing this
             }
 
-            is ToolbarAction.ToggleEraserManu -> {
-                _toolbarState.update { it.copy(isStrokeSelectionOpen = action.isOpen) }
-//                updateDrawingState() // on focus change is doing this
+            is ToolbarAction.ToggleEraserMenu -> {
+                _toolbarState.update { it.copy(isEraserMenuOpen = action.isOpen) }
             }
 
             is ToolbarAction.ToggleBackgroundSelector -> {
                 _toolbarState.update { it.copy(isBackgroundSelectorModalOpen = action.isOpen) }
-//                updateDrawingState() // on focus change is doing this
             }
 
             is ToolbarAction.ToggleScribbleToErase -> updateScribbleToErase(action.enabled)
@@ -388,10 +426,8 @@ class EditorViewModel @Inject constructor(
             ToolbarAction.NavigateToPages -> handleNavigateToPages()
             ToolbarAction.NavigateToHome -> sendUiEvent(EditorUiEvent.NavigateToLibrary(null))
 
-            ToolbarAction.CloseAllMenus -> handleCloseAllMenus()
             is ToolbarAction.UpdateQuickNavOpen -> {
                 _toolbarState.update { it.copy(isQuickNavOpen = action.isOpen) }
-                updateDrawingState()
             }
         }
     }
@@ -400,26 +436,28 @@ class EditorViewModel @Inject constructor(
     // Toolbar Action Handlers (private)
     // --------------------------------------------------------
 
-    private fun handlePenChange(presetId: String) {
+    private fun handlePenButtonTap(presetId: String) {
         val preset = GlobalAppSettings.current.toolbarPens.find { it.id == presetId } ?: return
-        val state = _toolbarState.value
-        if (state.mode == Mode.Draw && state.penPresetId == presetId) {
-            _toolbarState.update { it.copy(isStrokeSelectionOpen = true) }
+        if (_toolbarState.value.isPenSelected(presetId)) {
+            _toolbarState.update {
+                it.copy(penMenuPresetId = if (it.penMenuPresetId == presetId) null else presetId)
+            }
         } else {
             _toolbarState.update {
-                it.copy(pen = preset.pen, penPresetId = presetId, mode = Mode.Draw)
+                it.copy(
+                    pen = preset.pen, penPresetId = presetId, mode = Mode.Draw,
+                    penMenuPresetId = null,
+                )
             }
             saveToolbarState()
-        }
-        updateDrawingState()
-        viewModelScope.launch {
-            CanvasEventBus.refreshUi.emit(Unit)
+            viewModelScope.launch {
+                CanvasEventBus.refreshUi.emit(Unit)
+            }
         }
     }
 
     private fun handleEraserChange(eraser: Eraser) {
         _toolbarState.update { it.copy(eraser = eraser) }
-        updateDrawingState()
         saveToolbarState()
     }
 
@@ -445,18 +483,6 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             appRepository.kvProxy.setAppSettings(updated)
         }
-    }
-
-    private fun handleCloseAllMenus() {
-        log.d("Closing all menus in EditorViewModel")
-        _toolbarState.update {
-            it.copy(
-                isMenuOpen = false,
-                isStrokeSelectionOpen = false,
-                isBackgroundSelectorModalOpen = false
-            )
-        }
-        updateDrawingState()
     }
 
     private fun updateScribbleToErase(enabled: Boolean) {
@@ -555,19 +581,8 @@ class EditorViewModel @Inject constructor(
     // Drawing State
     // --------------------------------------------------------
 
-    /**
-     * Re-evaluates whether drawing should be enabled based on menu and selection states.
-     */
-    fun updateDrawingState() {
-        // It get called three times on canvas creation.
-        val shouldBeDrawing = _toolbarState.value.isDrawingAllowed
-        _toolbarState.update { it.copy(isDrawing = shouldBeDrawing) }
-        log.d("updateDrawingState: Drawing state: $shouldBeDrawing")
-        viewModelScope.launch {
-            if (shouldBeDrawing)
-                DeviceCompat.delayBeforeResumingDrawing()
-            CanvasEventBus.isDrawing.emit(shouldBeDrawing)
-        }
+    fun setSelectionGestureActive(active: Boolean) {
+        _toolbarState.update { it.copy(isSelectionGestureActive = active) }
     }
 
     // --------------------------------------------------------
@@ -839,23 +854,6 @@ class EditorViewModel @Inject constructor(
 
     fun setShowResetView(showResetView: Boolean) {
         _toolbarState.update { it.copy(showResetView = showResetView) }
-    }
-
-    fun setSelectionActive(active: Boolean) {
-        log.v("setSelectionActive: $active")
-        if (_toolbarState.value.isSelectionActive != active) {
-            if (active) //selection is active, we can directly update it, and skip other checks
-                viewModelScope.launch {
-                    CanvasEventBus.isDrawing.emit(false)
-                }
-            _toolbarState.update { it.copy(isSelectionActive = active) }
-            if (!active)
-                updateDrawingState()
-        }
-    }
-
-    fun setDrawingStateFromCanvas(isDrawing: Boolean) {
-        _toolbarState.update { it.copy(isDrawing = isDrawing) }
     }
 
     // --------------------------------------------------------

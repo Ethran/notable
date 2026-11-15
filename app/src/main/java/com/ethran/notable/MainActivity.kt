@@ -289,6 +289,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        CanvasEventBus.setResumed(false)
         this.lifecycleScope.launch {
             Log.d("QuickSettings", "App is paused - maybe quick settings opened?")
             CanvasEventBus.refreshUi.emit(Unit)
@@ -307,17 +308,13 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) {
             enableFullScreen()
         }
-        lifecycleScope.launch {
-            CanvasEventBus.onFocusChange.emit(hasFocus)
-        }
+        CanvasEventBus.setWindowFocus(hasFocus)
     }
 
     override fun onResume() {
         super.onResume()
         enableFullScreen()
-        lifecycleScope.launch {
-            CanvasEventBus.onFocusChange.emit(true)
-        }
+        CanvasEventBus.setResumed(true)
     }
 
     // Onyx SystemUI's TouchInteractionService swallows multi-finger touches for its

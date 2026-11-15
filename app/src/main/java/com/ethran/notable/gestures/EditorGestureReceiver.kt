@@ -225,7 +225,7 @@ private fun applyModeTransitions(recognizer: Recognizer, ctx: GestureContext) {
     }
     if (isHoldingOneFinger(tracker, ctx.thresholds)) {
         applyGestureMode(recognizer, GestureMode.Selection, ctx)
-        ctx.actions.setIsDrawing(false) // unfreeze the screen
+        ctx.actions.setSelectionGestureActive(true) // pen off, so the screen shows the cues
         ctx.updateSelectionCues(
             tracker.lastPosition()?.toIntOffset(),
             tracker.dragRect()?.toAndroidRect()
@@ -283,7 +283,7 @@ private fun finishModalGesture(recognizer: Recognizer, ctx: GestureContext): Boo
             )
             ctx.updateSelectionCues(null, null)
             applyGestureMode(recognizer, GestureMode.Normal, ctx)
-            ctx.actions.setIsDrawing(true)
+            ctx.actions.setSelectionGestureActive(false)
         }
 
         GestureMode.Scroll -> {
@@ -426,7 +426,7 @@ private suspend fun AwaitPointerEventScope.awaitDoubleTap(
 private fun cleanupGesture(recognizer: Recognizer, ctx: GestureContext) {
     if (recognizer.mode == GestureMode.Selection) {
         ctx.updateSelectionCues(null, null)
-        ctx.actions.setIsDrawing(true)
+        ctx.actions.setSelectionGestureActive(false)
     }
     applyGestureMode(recognizer, GestureMode.Normal, ctx)
 }
@@ -451,9 +451,9 @@ private fun applyGestureMode(
         }
 
         GestureMode.Normal -> {
-            // If the gesture produced a selection, the selection flow has
-            // already acquired its own handle (EditorControlTower
-            // .selectRectangle), so releasing ours keeps the mode on until
+            // If the gesture produced a selection, the selection has
+            // already acquired its own handle (selectImagesAndStrokes in
+            // Select.kt), so releasing ours keeps the mode on until
             // the selection is dismissed. The settle window lets a follow-up
             // flick re-acquire before quality refresh returns.
             ctx.refreshHandle?.releaseAfterMillis(GESTURE_REFRESH_SETTLE_MS)
