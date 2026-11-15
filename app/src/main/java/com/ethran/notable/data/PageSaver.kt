@@ -178,7 +178,7 @@ class PageSaver @Inject constructor(
             appRepository.pageRepository.touchUpdatedAt(pageId, changes.editedAtMs)
             appRepository.bookRepository.touchUpdatedAtForPage(pageId, Date())
         }
-        changes.scrollY?.let { appRepository.pageRepository.updatePositionY(pageId, it) }
+        changes.scroll?.let { appRepository.pageRepository.updatePosition(pageId, it.x, it.y) }
     }
 
     // On a read error assume the page exists, so its changes are kept and retried.

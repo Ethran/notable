@@ -12,6 +12,7 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.testing.PageDataTestHarness
 import com.ethran.notable.testing.TestNotebookSeeder
+import org.junit.Rule
 import com.ethran.notable.testing.movedDown
 import com.ethran.notable.testing.testImage
 import com.ethran.notable.testing.testStroke
@@ -41,10 +42,12 @@ import kotlin.math.roundToInt
 
 /**
  * How a [PageView] views its pages: each page keeps its own scroll and zoom while the view is
- * open, its vertical scroll is saved, and the content height covers everything on the page.
+ * open, its scroll is saved on both axes once the view is gone, and the content height covers
+ * everything on the page.
  */
 @RunWith(AndroidJUnit4::class)
 class PageViewportTest {
+
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private lateinit var data: PageDataTestHarness
@@ -139,7 +142,7 @@ class PageViewportTest {
     }
 
     @Test(timeout = 60000)
-    fun eachPageKeepsItsOwnViewport_andOnlyItsVerticalScrollOutlivesTheView() = runBlocking {
+    fun eachPageKeepsItsOwnViewport_andItsScrollOutlivesTheView() = runBlocking {
         val pages = seedPages(4)
         for (pageId in pages) drawDownThePage(pageId)
         val view = createPageView(pages[0])
@@ -170,18 +173,32 @@ class PageViewportTest {
         view.disposeAndKeep()
         assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
         for (pageId in pages) {
+            val stored = data.db.pageDao().getById(pageId)!!
             assertEquals(
-                "saved scroll of $pageId",
+                "saved scroll y of $pageId",
                 left.getValue(pageId).scroll.y.roundToInt(),
-                data.db.pageDao().getById(pageId)!!.positionY,
+                stored.positionY,
+            )
+            assertEquals(
+                "saved scroll x of $pageId",
+                left.getValue(pageId).scroll.x.roundToInt(),
+                stored.positionX,
             )
         }
 
+        // The scroll outlives the view on both axes; the zoom does not, so a reopened page comes
+        // back unzoomed at the scroll its pages were left at.
         val reopened = createPageView(pages[0])
         for (pageId in pages) {
             reopened.showAndWait(pageId)
-            val savedY = left.getValue(pageId).scroll.y.roundToInt().toFloat()
-            assertEquals("reopened $pageId", PageViewport(scroll = Offset(0f, savedY)), reopened.viewport.value)
+            val saved = left.getValue(pageId).scroll
+            val savedX = saved.x.roundToInt().toFloat()
+            val savedY = saved.y.roundToInt().toFloat()
+            assertEquals(
+                "reopened $pageId",
+                PageViewport(scroll = Offset(savedX, savedY)),
+                reopened.viewport.value,
+            )
         }
         reopened.disposeOldPage()
     }
@@ -251,7 +268,7 @@ class PageViewportTest {
     @Test(timeout = 30000)
     fun gestureBeforeThePageIsShown_changesNothing() = runBlocking {
         val (pageId) = seedPages(1)
-        data.db.pageDao().updatePositionY(pageId, 300)
+        data.db.pageDao().updatePosition(pageId, positionX = 0, positionY = 300)
         val mayRead = CompletableDeferred<Unit>()
         data.beforePageRecordRead = { mayRead.await() }
         val view = createPageView(pageId)

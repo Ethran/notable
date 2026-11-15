@@ -14,6 +14,7 @@ class ToolbarUiStateDrawingTest {
     private val blockers: List<Pair<String, (ToolbarUiState) -> ToolbarUiState>> = listOf(
         "menu open" to { it.copy(isMenuOpen = true) },
         "eraser menu open" to { it.copy(isEraserMenuOpen = true) },
+        "fit mode menu open" to { it.copy(isFitModeMenuOpen = true) },
         "pen stroke menu open" to { it.copy(penMenuPresetId = "pen") },
         "background selector open" to { it.copy(isBackgroundSelectorModalOpen = true) },
         "QuickNav open" to { it.copy(isQuickNavOpen = true) },

@@ -1,5 +1,6 @@
 package com.ethran.notable.editor
 
+import android.graphics.Matrix
 import android.graphics.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.round
@@ -25,4 +26,14 @@ data class PageViewport(val scroll: Offset = Offset.Zero, val zoom: Float = 1f) 
 
     /** Where [rect], on screen, is on the page. */
     fun toPage(rect: Rect): Rect = rect / zoom + scroll
+
+    /**
+     * Moves a screen drawn at this viewport to where [to] shows the same page points: a page point
+     * this viewport draws at `(point - scroll) * zoom`, [to] draws at `(point - to.scroll) * to.zoom`.
+     */
+    fun screenTransformTo(to: PageViewport): Matrix = Matrix().apply {
+        val scale = to.zoom / zoom
+        setScale(scale, scale)
+        postTranslate((scroll.x - to.scroll.x) * to.zoom, (scroll.y - to.scroll.y) * to.zoom)
+    }
 }

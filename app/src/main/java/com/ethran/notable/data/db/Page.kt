@@ -75,8 +75,8 @@ interface PageDao {
     @Query("SELECT * FROM page WHERE id =:pageId")
     suspend fun getPageWithDataById(pageId: String): PageWithData?
 
-    @Query("UPDATE page SET positionY=:positionY WHERE id =:pageId")
-    suspend fun updatePositionY(pageId: String, positionY: Int)
+    @Query("UPDATE page SET positionX=:positionX, positionY=:positionY WHERE id =:pageId")
+    suspend fun updatePosition(pageId: String, positionX: Int, positionY: Int)
 
     // Bump only the edit timestamp, without a read-modify-write of the whole row. updatedAt is
     // stored as epoch millis (Date <-> Long converter), so a Long here matches the column format.
@@ -108,8 +108,8 @@ class PageRepository @Inject constructor(
         return db.create(page)
     }
 
-    suspend fun updatePositionY(id: String, positionY: Int) {
-        return db.updatePositionY(id, positionY)
+    suspend fun updatePosition(id: String, positionX: Int, positionY: Int) {
+        return db.updatePosition(id, positionX, positionY)
     }
 
     /** Advance a page's edit timestamp — the per-page dirty signal for incremental sync. */

@@ -4,6 +4,7 @@ import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Page
 import com.ethran.notable.data.db.getBackgroundType
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.SheetSize
 import io.shipbook.shipbooksdk.ShipBook
 
 /**
@@ -27,6 +28,10 @@ data class OpenPage(
 
     val backgroundType: BackgroundType?
         get() = record?.getBackgroundType()
+
+    /** The sheet this page is laid out on, or null for an infinite canvas. */
+    val sheet: SheetSize?
+        get() = record?.sheet
 
     /**
      * Whether scroll and zoom are allowed: only once [load] has read the page's record, so its

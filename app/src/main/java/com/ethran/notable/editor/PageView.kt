@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -16,7 +15,6 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
-import androidx.core.graphics.toRect
 import com.ethran.notable.BuildConfig
 import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
@@ -24,22 +22,21 @@ import com.ethran.notable.SCREEN_WIDTH
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.data.model.SheetSize
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.FitMode
 import com.ethran.notable.data.model.SimplePointF
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.canvas.CanvasEventBus.drawingInProgress
 import com.ethran.notable.editor.canvas.CanvasEventBus.waitForDrawing
 import com.ethran.notable.editor.drawing.drawBg
 import com.ethran.notable.editor.drawing.drawOnCanvasFromPage
-import com.ethran.notable.editor.utils.div
 import com.ethran.notable.editor.utils.divideStrokesFromCut
 import com.ethran.notable.editor.utils.loadHQPagePreview
 import com.ethran.notable.editor.utils.minus
-import com.ethran.notable.editor.utils.plus
 import com.ethran.notable.editor.utils.strokeBounds
-import com.ethran.notable.editor.utils.times
 import com.ethran.notable.editor.utils.toIntOffset
 import com.ethran.notable.gestures.MAX_ZOOM
 import com.ethran.notable.gestures.MIN_ZOOM
@@ -52,9 +49,12 @@ import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,6 +62,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -72,6 +73,9 @@ const val OVERLAP = 2
 // Backgrounds are rendered this much larger than the current zoom so a small zoom-in reuses the
 // cached bitmap instead of re-rendering (trades a little memory/render cost for fewer reloads).
 private const val BACKGROUND_ZOOM_HEADROOM = 1.2f
+
+// Two zooms within this of each other are the same zoom: a fitted zoom is a division.
+private const val ZOOM_APPROX_EPSILON = 0.01f
 
 data class PageCutMoveResult(
     val previousStrokes: List<Stroke>,
@@ -113,6 +117,15 @@ class PageView(
     private val logCache = ShipBook.getLogger("PageViewCache")
 
     private var loadingJob: Job? = null
+
+    /**
+     * Loads the initial page, and completes when that is done; [awaitPageReady] waits on it. This,
+     * and not [pageChangeJob], is what a wait can join: the collector runs for the view's whole life.
+     */
+    private val initialPageLoadJob: Job
+
+    /** Shows each page the editor asks for, once [initialPageLoadJob] has shown the first. */
+    private val pageChangeJob: Job
 
     @Volatile
     var windowedBitmap = createBitmap(viewWidth, viewHeight)
@@ -158,6 +171,15 @@ class PageView(
     private val viewportFlow = MutableStateFlow(PageViewport())
     val viewport: StateFlow<PageViewport> = viewportFlow.asStateFlow()
 
+    /** The fit this view applies to the shown page: the notebook's preference for its orientation. */
+    private val appliedFitModeFlow = MutableStateFlow(FitMode.REAL)
+    val appliedFitMode: StateFlow<FitMode> = appliedFitModeFlow.asStateFlow()
+
+    /** Whether the shown zoom differs from the zoom the active fit prescribes. */
+    val needsResetView: Flow<Boolean> = viewportFlow
+        .map { !isApprox(it.zoom, prescribedZoom()) }
+        .distinctUntilChanged()
+
     // Top left corner of the view, in page coordinates.
     val scroll: Offset
         get() = viewportFlow.value.scroll
@@ -201,14 +223,28 @@ class PageView(
 
 
     init {
-        coroutineScope.launch(Dispatchers.IO) {
-            log.i("PageView init with initial pageId: $initialPageId")
-            if (!switchToPage(initialPageId)) return@launch
-
+        log.i("PageView init with initial pageId: $initialPageId")
+        initialPageLoadJob = coroutineScope.launch(Dispatchers.IO) {
+            switchToPage(initialPageId)
+        }
+        // Page changes wait for the first page to be shown, so the two never switch at once, as they
+        // didn't when one coroutine did both. The collector is separate because it never finishes:
+        // joining it, as a wait for the initial load used to, would wait forever.
+        pageChangeJob = coroutineScope.launch(Dispatchers.IO) {
+            initialPageLoadJob.join()
             requestedPageId.collect { pageId ->
                 if (pageId != currentPageId) switchToPage(pageId)
             }
         }
+    }
+
+    /**
+     * Suspends until the initial page load, and the stroke/image load it starts, have finished.
+     * [loadingJob] is only joined if [loadPage] already started it.
+     */
+    internal suspend fun awaitPageReady() {
+        initialPageLoadJob.join()
+        loadingJob?.join()
     }
 
     /**
@@ -289,9 +325,17 @@ class PageView(
         return PreparedPage(page, viewport, shelved ?: newBitmap(page, viewport), fromShelf = shelved != null)
     }
 
-    /** The viewport [page] had when this view left it, or else unzoomed at its saved scroll. */
-    private fun viewportToShow(page: OpenPage): PageViewport = synchronized(pageLock) {
-        leftPages[page.pageId] ?: PageViewport(scroll = Offset(0f, (page.record?.positionY ?: 0).toFloat()))
+    private fun viewportToShow(page: OpenPage): PageViewport {
+        val kept = synchronized(pageLock) { leftPages[page.pageId] }
+        if (kept != null) return fitted(kept, page.sheet)
+        val saved = Offset(
+            (page.record?.positionX ?: 0).toFloat(),
+            (page.record?.positionY ?: 0).toFloat(),
+        )
+        return fitted(
+            PageViewport(saved, prescribedZoom(fitModeFor(isLandscape), page.sheet)),
+            page.sheet,
+        )
     }
 
     /**
@@ -317,6 +361,8 @@ class PageView(
             lease = pageLeases.acquire(page.pageId)
             previous?.close()
 
+            // Which fit is in force follows this view's orientation, so it is settled with the page.
+            appliedFitModeFlow.value = fitModeFor(isLandscape)
             val shown = viewportToShow(page)
             leftPages.remove(page.pageId)
             // A resize since the bitmap was drawn changed the view's size or the page's zoom. Left
@@ -594,12 +640,7 @@ class PageView(
         waitForDrawingWithSnack()
 
         val start = viewportStart(pageId) ?: return
-        val delta = (dragDelta / start.zoom)
-        val newScroll = Offset(
-            (start.scroll.x + delta.x).coerceAtLeast(0f),
-            (start.scroll.y + delta.y).coerceAtLeast(0f)
-        )
-        if (!commitViewport(pageId, start.copy(scroll = newScroll))) return
+        commitViewport(pageId, start.copy(scroll = start.scroll + dragDelta / start.zoom)) ?: return
 
         CanvasEventBus.forceUpdate.emit(null)
     }
@@ -619,6 +660,68 @@ class PageView(
         return Rect(left, top, right, bottom)
     }
 
+    /** The sheet of the shown page, or null for an infinite canvas. */
+    private val sheet: SheetSize?
+        get() = openPage.sheet
+
+    /** Whether this view is wider than tall, read from its own size rather than the device's. */
+    val isLandscape: Boolean
+        get() = viewWidth > viewHeight
+
+    /** The fit this device applies to sheets held as this view is: a per-device setting. */
+    private fun fitModeFor(landscape: Boolean): FitMode =
+        GlobalAppSettings.current.let { if (landscape) it.fitLandscape else it.fitPortrait }
+
+    /**
+     * Zoom required to fix the sheet width to screen width
+     */
+    private fun fitZoom(sheet: SheetSize?): Float {
+        if (sheet == null || sheet.width <= 0) return 1f
+        return (viewWidth / sheet.width.toFloat()).coerceIn(MIN_ZOOM, MAX_ZOOM)
+    }
+
+    /** The zoom [mode] prescribes for [sheet] in this view. */
+    private fun prescribedZoom(mode: FitMode, sheet: SheetSize?): Float =
+        if (mode == FitMode.FIT_TO_WIDTH) fitZoom(sheet) else 1f
+
+    /** The zoom the fit currently applied to the shown page prescribes here. */
+    private fun prescribedZoom(): Float = prescribedZoom(appliedFitModeFlow.value, sheet)
+
+    /** Two zooms equal enough to be the same one; see [ZOOM_APPROX_EPSILON]. */
+    private fun isApprox(a: Float, b: Float): Boolean = abs(a - b) <= ZOOM_APPROX_EPSILON
+
+    /**
+     * Scroll on x to center the sheet
+     */
+    private fun scrollToCenterSheet(sheet: SheetSize?, zoom: Float): Float {
+        if (sheet == null) return 0f
+        val scrollAvailable = sheet.width - viewWidth / zoom
+        return if (scrollAvailable >= 0) scrollAvailable else scrollAvailable / 2f
+    }
+
+    /**
+     * Clamps [scrollX] into the view: centres the sheet when it is narrower than the view, clamps to
+     * its edges when wider. Pages without a sheet keep [scrollX] but never go left of 0.
+     */
+    private fun fitScrollX(sheet: SheetSize?, scrollX: Float, zoom: Float): Float {
+        if (sheet == null) return scrollX.coerceAtLeast(0f)
+        val edge = scrollToCenterSheet(sheet, zoom)
+        return if (edge < 0f) edge else scrollX.coerceIn(0f, edge)
+    }
+
+    /**
+     * [viewport] moved to where this view may show a page with [sheet]: x by [fitScrollX],
+     * and never above the page's top. [commitViewport] applies it, so every viewport the view shows
+     * is one this returns; a step that reuses the screen bitmap moves it to the fitted viewport.
+     */
+    private fun fitted(viewport: PageViewport, sheet: SheetSize?): PageViewport =
+        viewport.copy(
+            scroll = Offset(
+                fitScrollX(sheet, viewport.scroll.x, viewport.zoom),
+                viewport.scroll.y.coerceAtLeast(0f),
+            ),
+        )
+
     suspend fun updateScroll(pageId: String, dragDelta: Offset) {
         // before scrolling, make sure that strokes are drawn.
         waitForDrawingWithSnack()
@@ -626,23 +729,20 @@ class PageView(
         val start = viewportStart(pageId) ?: return
         // drag delta is in screen coordinates,
         // so we have to scale it back to page coordinates.
-        var deltaInPage = Offset(dragDelta.x / start.zoom, dragDelta.y / start.zoom)
+        val deltaInPage = Offset(dragDelta.x / start.zoom, dragDelta.y / start.zoom)
 
-        // Cut, so we won't shift outside the screen.
-        if (start.scroll.x + deltaInPage.x < 0) {
-            deltaInPage = deltaInPage.copy(x = -start.scroll.x)
-        }
-        if (start.scroll.y + deltaInPage.y < 0) {
-            deltaInPage = deltaInPage.copy(y = -start.scroll.y)
-        }
+        log.d("Delta in page coordinates: $deltaInPage")
+
+        // The drag is cut to what the fit allows: zero on a centred sheet, which cannot move sideways.
+        val next = fitted(start.copy(scroll = start.scroll + deltaInPage), sheet)
+        val allowed = next.scroll - start.scroll
 
         // There is nothing to do, return.
-        if (deltaInPage == Offset.Zero) return
+        if (allowed == Offset.Zero) return
 
-        val next = start.copy(scroll = start.scroll + deltaInPage)
-        if (!commitViewport(pageId, next)) return
+        commitViewport(pageId, next) ?: return
         // To avoid rounding errors, we just calculate it again.
-        val movement = (deltaInPage * start.zoom)
+        val movement = (allowed * start.zoom)
         if (movement.toIntOffset() == IntOffset.Zero) return
 
         val width = windowedBitmap.width
@@ -653,7 +753,7 @@ class PageView(
             it.width == width && it.height == height && it.config == windowedBitmap.config
         } ?: createBitmap(width, height, windowedBitmap.config!!)
         val shiftedCanvas = Canvas(shiftedBitmap)
-        shiftedCanvas.drawColor(Color.RED) //for debugging.
+//        shiftedCanvas.drawColor(Color.RED) // used for debug
         shiftedCanvas.drawBitmap(windowedBitmap, -movement.x, -movement.y, null)
 
         // Swap in the shifted bitmap; the old live buffer becomes the next spare.
@@ -731,16 +831,28 @@ class PageView(
         redrawAt(pageId, start.copy(zoom = newZoomLevel))
     }
 
-    /** Unzooms the page and scrolls it back to its left edge, keeping its vertical scroll. */
+    /** Takes the page to the viewport its active fit prescribes, keeping its vertical scroll. */
     suspend fun resetView(pageId: String) {
         waitForDrawingWithSnack()
         val start = viewportStart(pageId) ?: return
-        redrawAt(pageId, PageViewport(scroll = Offset(0f, start.scroll.y)))
+        redrawAt(pageId, PageViewport(Offset(0f, start.scroll.y), prescribedZoom()))
     }
 
-    /** Moves [pageId]'s view to [next] and redraws it whole. */
-    private fun redrawAt(pageId: String, next: PageViewport) {
-        if (!commitViewport(pageId, next)) return
+    /**
+     * Applies [mode] to [pageId], if it is shown and has a sheet. Saving it as this device's fit
+     * for the orientation is the caller's job.
+     */
+    suspend fun setFitMode(pageId: String, mode: FitMode) {
+        waitForDrawingWithSnack()
+        val start = viewportStart(pageId) ?: return
+        val pageSheet = openPage.takeIf { it.pageId == pageId }?.sheet ?: return
+        appliedFitModeFlow.value = mode
+        redrawAt(pageId, PageViewport(Offset(0f, start.scroll.y), prescribedZoom(mode, pageSheet)))
+    }
+
+    /** Moves [pageId]'s view to [target], as fitted by [commitViewport], and redraws it whole. */
+    private fun redrawAt(pageId: String, target: PageViewport) {
+        val next = commitViewport(pageId, target) ?: return
         // Create a scaled bitmap to represent zoomed view
         val scaledWidth = windowedCanvas.width
         val scaledHeight = windowedCanvas.height
@@ -770,12 +882,12 @@ class PageView(
 
 
     /**
-     * Update zoom of [pageId], if it is still shown, by reusing the existing screen bitmap.
-     * - Scales the snapshot around the given center (screen coords).
-     * - Redraws only the uncovered bands when zooming out.
-     * - When zooming in, keeps the upscaled snapshot (even if low-res) for now.
-     * - Updates scroll (IntOffset) so that the top-left of the view is correct after zoom,
-     *   keeping the content under the pinch center stationary on screen.
+     * Zooms [pageId], if it is still shown, by reusing the existing screen bitmap.
+     *
+     * The page point under [center] (screen coordinates; the screen centre if null) stays under it,
+     * then the fit moves the view to where the page allows. The old screen is drawn where that
+     * viewport shows it, so the two always agree, and whatever it does not cover is drawn fresh.
+     * Zooming in keeps the upscaled, softer pixels until the next full redraw.
      */
     suspend fun updateZoom(pageId: String, scaleDelta: Float, center: Offset?) {
         log.d("Zoom(delta): $scaleDelta. Center: $center")
@@ -783,69 +895,40 @@ class PageView(
         waitForDrawingWithSnack()
 
         val start = viewportStart(pageId) ?: return
-        val oldZoom = start.zoom
-        val newZoom = calculateZoomLevel(scaleDelta, oldZoom)
-        if (newZoom == oldZoom) {
-            log.d("Zoom unchanged. Current level: $oldZoom")
+        val newZoom = calculateZoomLevel(scaleDelta, start.zoom)
+        if (newZoom == start.zoom) {
+            log.d("Zoom unchanged. Current level: ${start.zoom}")
             return
         }
 
-        val scaleFactor = newZoom / oldZoom
         val screenW = windowedCanvas.width
         val screenH = windowedCanvas.height
+        val pivot = center ?: Offset(screenW / 2f, screenH / 2f)
+        val pivotInPage = start.scroll + pivot / start.zoom
+        val next = commitViewport(pageId, PageViewport(pivotInPage - pivot / newZoom, newZoom))
+            ?: return
 
-        // Default pivot to screen center if none passed
-        val pivotX = center?.x ?: (screenW / 2f)
-        val pivotY = center?.y ?: (screenH / 2f)
-
-        // Draw scaled snapshot into a fresh screen-sized bitmap
+        val matrix = start.screenTransformTo(next)
+        val covered = RectF(0f, 0f, screenW.toFloat(), screenH.toFloat()).also { matrix.mapRect(it) }
         val scaledBitmap = createBitmap(screenW, screenH, windowedBitmap.config!!)
-        val scaledCanvas = Canvas(scaledBitmap)
-        scaledCanvas.drawColor(Color.RED) // clear
+        Canvas(scaledBitmap).drawBitmap(windowedBitmap, matrix, null)
 
-        val matrix = Matrix().apply {
-            postScale(scaleFactor, scaleFactor, pivotX, pivotY)
-        }
-
-        // Calculate where the scaled snapshot ended up on screen.
-        // Map the original screen rect through the same matrix to get content bounds.
-        val srcRect = RectF(0f, 0f, screenW.toFloat(), screenH.toFloat())
-        val dstRect = RectF()
-        matrix.mapRect(dstRect, srcRect)
-
-
-        //make sure that we won't go outside canvas.
-        val dx = (start.scroll.x - dstRect.left).coerceAtMost(0f)
-        val dy = (start.scroll.y - dstRect.top).coerceAtMost(0f)
-        if (dx != 0f || dy != 0f) {
-            matrix.postTranslate(dx, dy)
-            matrix.mapRect(dstRect, srcRect)
-        }
-        scaledCanvas.drawBitmap(windowedBitmap, matrix, null)
-
-
-        val deltaScrollPage = Offset(-dstRect.left / newZoom, -dstRect.top / newZoom)
-
-
-        val newScrollX = (start.scroll.x + deltaScrollPage.x).coerceAtLeast(0f)
-        val newScrollY = (start.scroll.y + deltaScrollPage.y).coerceAtLeast(0f)
-        val next = PageViewport(Offset(newScrollX, newScrollY), newZoom)
-        if (!commitViewport(pageId, next)) return
-
-        // Swap in the new bitmap and update zoom on the windowed canvas
         windowedBitmap = scaledBitmap
         windowedCanvas.setBitmap(windowedBitmap)
         windowedCanvas.scale(newZoom, newZoom)
 
-        if (scaleFactor < 1f) redrawOutsideRect(dstRect.toRect(), screenW, screenH)
+        // Only whole pixels count as covered: a partly covered edge pixel is drawn fresh too.
+        val coveredPixels = Rect(
+            ceil(covered.left).toInt(),
+            ceil(covered.top).toInt(),
+            floor(covered.right).toInt(),
+            floor(covered.bottom).toInt(),
+        )
+        redrawOutsideRect(coveredPixels, screenW, screenH)
 
-//        persistBitmapDebounced()
         log.i(
-            "Zoom updated using snapshot scaling. " +
-                    "oldZoom=$oldZoom newZoom=$newZoom " +
-                    "scaleFactor=$scaleFactor pivot=($pivotX,$pivotY) " +
-                    "bounds=$dstRect" +
-                    "scrollDelta=$deltaScrollPage newScroll=${next.scroll}"
+            "Zoom updated using snapshot scaling. zoom ${start.zoom} -> $newZoom, " +
+                "pivot=$pivot, covered=$covered, scroll ${start.scroll} -> ${next.scroll}"
         )
     }
 
@@ -939,14 +1022,15 @@ class PageView(
             scroll = shownViewport.scroll,
             resourceBitmap = bgImage,
             scale = scale,
+            sheet = shown.sheet,
             repeat = false,
         )
     }
 
-
     fun updateDimensions(newWidth: Int, newHeight: Int) {
         if (newWidth != viewWidth || newHeight != viewHeight) {
-            log.d("Updating dimensions: $newWidth x $newHeight")
+            log.d("Updating dimensions from: $viewWidth x $viewHeight, to: $newWidth x $newHeight")
+
             viewWidth = newWidth
             viewHeight = newHeight
             updateCanvasDimensions()
@@ -957,13 +1041,26 @@ class PageView(
         checkMainThread("updateDimensions")
         // A zoom fitted to the old size does not fit the new one, on any page.
         synchronized(pageLock) {
-            viewportFlow.update { it.copy(zoom = 1f) }
-            leftPages.replaceAll { _, left -> left.copy(zoom = 1f) }
+            val shownSheet = openPage.sheet
+            // The new size can be the other way round, and the fit follows the view, not the page.
+            appliedFitModeFlow.value = fitModeFor(isLandscape)
+            val zoom = prescribedZoom(appliedFitModeFlow.value, shownSheet)
+            viewportFlow.update { shown -> fitted(shown.copy(zoom = zoom), shownSheet) }
+            leftPages.replaceAll { _, left -> left.copy(zoom = zoom) }
+        }
+        val shown = openPage
+        if (shown.record != null) {
+            val scroll = viewportFlow.value.scroll
+            pageDataManager.recordScroll(
+                shown.pageId,
+                IntOffset(scroll.x.roundToInt(), scroll.y.roundToInt()),
+            )
         }
         // Blank at the new size, rather than read from disk on the main thread; the redraw below
         // fills it.
+        val zoom = viewportFlow.value.zoom
         windowedBitmap = createBitmap(viewWidth, viewHeight).apply { eraseColor(Color.WHITE) }
-        windowedCanvas = Canvas(windowedBitmap)
+        windowedCanvas = Canvas(windowedBitmap).apply { scale(zoom, zoom) }
         scrollBackBuffer = null
         // TODO: it might be worth to do it
         //  by redrawing only part of the screen, like in scroll and zoom.
@@ -986,19 +1083,23 @@ class PageView(
         synchronized(pageLock) { viewportFlow.value.takeIf { !disposed && currentPageId == pageId } }
 
     /**
-     * Sets [pageId]'s viewport to [next] and records its vertical scroll for saving, if [pageId] is
-     * shown and has a record. Returns false, changing nothing, otherwise: another page is shown, no
-     * page is shown yet, the page is missing, or the view is disposed.
+     * Sets [pageId]'s viewport to [target], [fitted] to its sheet, and records its scroll, both axes,
+     * for saving, if [pageId] is shown and has a record. Returns the viewport set, which a step that
+     * reuses the screen bitmap has to move it to. Returns null, changing nothing, otherwise: another
+     * page is shown, no page is shown yet, the page is missing, or the view is disposed.
      */
-    private fun commitViewport(pageId: String, next: PageViewport): Boolean {
+    private fun commitViewport(pageId: String, target: PageViewport): PageViewport? {
         checkMainThread("commitViewport")
-        synchronized(pageLock) {
+        val next = synchronized(pageLock) {
             val shown = openPage
-            if (disposed || shown.pageId != pageId || shown.record == null) return false
-            viewportFlow.value = next
+            if (disposed || shown.pageId != pageId || shown.record == null) return null
+            fitted(target, shown.sheet).also { viewportFlow.value = it }
         }
-        pageDataManager.recordScroll(pageId, next.scroll.y.roundToInt())
-        return true
+        pageDataManager.recordScroll(
+            pageId,
+            IntOffset(next.scroll.x.roundToInt(), next.scroll.y.roundToInt()),
+        )
+        return next
     }
 
     fun applyZoom(point: IntOffset): IntOffset {

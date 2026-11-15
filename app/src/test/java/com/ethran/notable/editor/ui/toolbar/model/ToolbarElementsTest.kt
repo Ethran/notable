@@ -1,5 +1,8 @@
 package com.ethran.notable.editor.ui.toolbar.model
 
+import com.ethran.notable.data.datastore.AppSettings
+import com.ethran.notable.data.model.FitMode
+import com.ethran.notable.data.model.SheetSize
 import com.ethran.notable.editor.EditorViewModel
 import com.ethran.notable.editor.ToolbarUiState
 import com.ethran.notable.editor.state.Mode
@@ -57,6 +60,31 @@ class ToolbarElementsTest {
         assertNull("Deleted preset must not resolve", ToolbarElements.resolve("PEN:gone", pens))
         assertNull("Bare PEN sentinel must not resolve", ToolbarElements.resolve("PEN", pens))
         assertNull(ToolbarElements.resolve("FROM_THE_FUTURE", pens))
+    }
+
+    @Test
+    fun `fit mode is offered only for a page with a sheet`() {
+        // The predicate mirrors the precondition `PageView.setFitMode` checks, so the button never
+        // appears where clicking it would do nothing. The fit is the device's, so a page of no
+        // notebook gets it too.
+        val fit = ToolbarElements.of(ToolbarElementId.FIT_MODE)
+        val settings = AppSettings(version = 1)
+
+        fun offered(notebookId: String?, sheet: SheetSize?) =
+            fit.visibleWhen(ToolbarUiState(notebookId = notebookId, sheet = sheet), settings)
+
+        assertTrue("a sheet page of a notebook", offered("nb", SheetSize(1860, 2631)))
+        assertTrue("a sheet page of no notebook", offered(null, SheetSize(1860, 2631)))
+        assertFalse("an infinite canvas has no sheet to fit", offered("nb", null))
+    }
+
+    @Test
+    fun `fit mode button reads as selected only when a fit is in force`() {
+        // The collapsed toolbar has to show the fit without opening the popup, the way the eraser
+        // button shows the eraser type. REAL is "no fit", so it leaves the button unselected.
+        val fit = ToolbarElements.of(ToolbarElementId.FIT_MODE) as FitModeElement
+        assertFalse(fit.isSelected(ToolbarUiState(fitMode = FitMode.REAL)))
+        assertTrue(fit.isSelected(ToolbarUiState(fitMode = FitMode.FIT_TO_WIDTH)))
     }
 
     @Test
