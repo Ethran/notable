@@ -1,6 +1,7 @@
 package com.ethran.notable.editor
 
 import android.content.Context
+import android.graphics.Color
 import android.graphics.Matrix
 import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
@@ -284,6 +285,64 @@ class EditorSimpleStateTests {
             0f, fixture.page.scroll.x, 0.01f,
         )
         assertEquals(0f, fixture.page.scroll.y, 0.01f)
+    }
+
+    /**
+     * A pinch reuses the screen bitmap, so the reused pixels must land where the new viewport shows
+     * them, and everything they leave uncovered must be drawn. On a sheet narrower than the view the
+     * scroll x is negative and the fit re-centres it at every zoom; zooming out and back in must
+     * keep the sheet centred and leave no screen pixel undrawn (an undrawn pixel shows as black).
+     */
+    @Test(timeout = 60_000)
+    fun updateZoom_keepsTheScreenWholeAndTheSheetCentred_onANarrowSheet() = runBlocking {
+        val previousSettings = GlobalAppSettings.current
+        // Discrete zoom, so the pinch steps land on known zooms: SCREEN_WIDTH / SCREEN_HEIGHT and 1.
+        GlobalAppSettings.update(previousSettings.copy(continuousZoom = false))
+        try {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val sheetWidth = A6_SHEET.width.toFloat()
+            val viewWidth = (sheetWidth * 2f).toInt()
+            val viewHeight = (viewWidth * 0.6f).toInt()
+            val fixture = createPageView(
+                context = context,
+                sheet = A6_SHEET,
+                viewWidth = viewWidth,
+                viewHeight = viewHeight,
+            )
+            fixture.awaitInitialization()
+            // Off-centre, as fingers rarely pinch around the middle of the screen.
+            val pivot = Offset(viewWidth * 0.7f, viewHeight * 0.4f)
+
+            fixture.onMain { fixture.page.updateZoom(fixture.pageId, -0.5f, pivot) }
+            val zoomedOut = SCREEN_WIDTH.toFloat() / SCREEN_HEIGHT
+            assertEquals(zoomedOut, fixture.page.zoom, 0.001f)
+            assertEquals(
+                "centred after zooming out",
+                -((viewWidth / zoomedOut) - sheetWidth) / 2f, fixture.page.scroll.x, 0.01f,
+            )
+            assertEveryScreenPixelDrawn(fixture.page, "after zooming out")
+
+            fixture.onMain { fixture.page.updateZoom(fixture.pageId, 0.5f, pivot) }
+            assertEquals(1f, fixture.page.zoom, 0.001f)
+            assertEquals(
+                "centred after zooming back in",
+                -(viewWidth - sheetWidth) / 2f, fixture.page.scroll.x, 0.01f,
+            )
+            assertEveryScreenPixelDrawn(fixture.page, "after zooming back in")
+        } finally {
+            GlobalAppSettings.update(previousSettings)
+        }
+    }
+
+    /** Every redraw paints its area opaque, so a pixel that is not opaque was never drawn. */
+    private fun assertEveryScreenPixelDrawn(page: PageView, situation: String) {
+        val bitmap = page.windowedBitmap
+        val row = IntArray(bitmap.width)
+        for (y in 0 until bitmap.height) {
+            bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+            val x = row.indexOfFirst { Color.alpha(it) != 255 }
+            assertTrue("screen pixel ($x, $y) was never drawn $situation", x < 0)
+        }
     }
 
     /**
