@@ -8,8 +8,11 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.ethran.notable.data.db.AppDatabase
+import com.ethran.notable.data.model.SheetSize
 import junit.framework.TestCase.assertEquals
+import junit.framework.TestCase.assertNull
 import junit.framework.TestCase.assertTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -219,6 +222,68 @@ class MigrationTest {
             assertTrue(it.moveToFirst())
             assertEquals("\"dir-etag\"", it.getString(it.getColumnIndexOrThrow("remoteDirEtag")))
             assertEquals("srv", it.getString(it.getColumnIndexOrThrow("remoteDirServerKey")))
+        }
+
+        roomDb.close()
+    }
+
+    /**
+     * 37 -> 38 renames `Page.scroll` to `positionY` and adds the horizontal position and the sheet
+     * size. A page keeps how far down it was scrolled, starts at x = 0, and every existing page and
+     * notebook stays an infinite canvas: no sheet, so the app shows it as before.
+     */
+    @Test(timeout = 60000)
+    @Throws(IOException::class)
+    fun migrate37To38_renamesScrollToPositionY_andAddsNoSheets() {
+        val dbName = "migration-test-38"
+
+        // 1. Create the v37 schema and seed a notebook and a page scrolled down it.
+        val oldDb = helper.createDatabase(dbName, 37)
+        oldDb.execSQL(
+            """
+            INSERT INTO Notebook (id, title, pageIds, defaultBackground, defaultBackgroundType,
+                                  createdAt, updatedAt)
+            VALUES ('nb1', 'nb', '["page1"]', 'blank', 'native', 1620000000000, 1620000000000)
+            """.trimIndent()
+        )
+        oldDb.execSQL(
+            """
+            INSERT INTO Page (id, scroll, notebookId, background, backgroundType, createdAt, updatedAt)
+            VALUES ('page1', 750, 'nb1', 'blank', 'native', 1620000000000, 1620000000000)
+            """.trimIndent()
+        )
+        oldDb.close()
+
+        // 2. Reopen at the latest version to trigger the 37 -> 38 auto-migration.
+        val roomDb = Room.databaseBuilder(context, AppDatabase::class.java, dbName).build()
+        val migratedDb = roomDb.openHelper.writableDatabase
+
+        // 3. The scroll survives under its new name, x is 0, and there is no sheet.
+        migratedDb.query(
+            "SELECT positionY, positionX, sheetWidth, sheetHeight FROM Page WHERE id = 'page1'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(750, it.getInt(it.getColumnIndexOrThrow("positionY")))
+            assertEquals(0, it.getInt(it.getColumnIndexOrThrow("positionX")))
+            assertTrue(it.isNull(it.getColumnIndexOrThrow("sheetWidth")))
+            assertTrue(it.isNull(it.getColumnIndexOrThrow("sheetHeight")))
+        }
+        migratedDb.query(
+            "SELECT defaultSheetWidth, defaultSheetHeight FROM Notebook WHERE id = 'nb1'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertTrue(it.isNull(it.getColumnIndexOrThrow("defaultSheetWidth")))
+            assertTrue(it.isNull(it.getColumnIndexOrThrow("defaultSheetHeight")))
+        }
+
+        // 4. Room reads the migrated rows as infinite pages, and stores a sheet it is given.
+        runBlocking {
+            val page = roomDb.pageDao().getById("page1")!!
+            assertNull(page.sheet)
+            assertNull(roomDb.notebookDao().getById("nb1")!!.defaultSheet)
+
+            roomDb.pageDao().update(page.copy(sheet = SheetSize(1860, 2632)))
+            assertEquals(SheetSize(1860, 2632), roomDb.pageDao().getById("page1")!!.sheet)
         }
 
         roomDb.close()

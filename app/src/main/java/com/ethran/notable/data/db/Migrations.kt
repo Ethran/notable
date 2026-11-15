@@ -65,6 +65,17 @@ class AutoMigration31to32 : AutoMigrationSpec
 )
 class AutoMigration35to36 : AutoMigrationSpec
 
+// Migration 37 -> 38: `Page.scroll` becomes `positionY`, keeping its value. Room adds the
+// `positionX`, sheet and notebook default-sheet columns.
+@RenameColumn.Entries(
+    RenameColumn(
+        tableName = "Page",
+        fromColumnName = "scroll",
+        toColumnName = "positionY"
+    )
+)
+class AutoMigration37to38 : AutoMigrationSpec
+
 
 
 // Migration 32 -> 33:
