@@ -419,14 +419,25 @@ private suspend fun AwaitPointerEventScope.awaitDoubleTap(
 
 /**
  * Last-resort cleanup, run in the gesture's `finally`. Returning the mode to
- * Normal releases the refresh handle (with the settle delay); a gesture
+ * Normal releases the refresh handle (with the settle delay). A gesture
  * abandoned in Selection mode additionally needs its visual cues removed and
- * drawing re-enabled.
+ * drawing re-enabled; one abandoned in Transform mode (cancelled mid-pinch,
+ * e.g. by losing window focus) needs the redraw [finishModalGesture] would
+ * have done, or the upscaled snapshot of the last zoom step stays on screen.
  */
 private fun cleanupGesture(recognizer: Recognizer, ctx: GestureContext) {
-    if (recognizer.mode == GestureMode.Selection) {
-        ctx.updateSelectionCues(null, null)
-        ctx.actions.setSelectionGestureActive(false)
+    when (recognizer.mode) {
+        GestureMode.Selection -> {
+            ctx.updateSelectionCues(null, null)
+            ctx.actions.setSelectionGestureActive(false)
+        }
+
+        GestureMode.Transform -> {
+            log.d("Transform (pan/zoom) abandoned -- final redraw")
+            ctx.actions.redrawCanvas()
+        }
+
+        GestureMode.Scroll, GestureMode.Normal -> {}
     }
     applyGestureMode(recognizer, GestureMode.Normal, ctx)
 }
