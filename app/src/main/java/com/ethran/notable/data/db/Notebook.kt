@@ -3,6 +3,7 @@ package com.ethran.notable.data.db
 import androidx.lifecycle.LiveData
 import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Insert
@@ -10,6 +11,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Update
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.data.model.SheetSize
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.flow.Flow
 import java.io.File
@@ -39,6 +41,10 @@ data class Notebook(
     val defaultBackground: String = "blank",
     @ColumnInfo(defaultValue = "native")
     val defaultBackgroundType: String = "native",
+
+    /** The sheet new pages get; null for infinite pages. */
+    @Embedded(prefix = "defaultSheet")
+    val defaultSheet: SheetSize? = null,
 
     // File that its linked to:
     val linkedExternalUri: String? = null,
@@ -123,11 +129,7 @@ class BookRepository @Inject constructor(
     /** Creates [notebook] with one page; returns that page's id. */
     suspend fun create(notebook: Notebook): String {
         notebookDao.create(notebook)
-        val page = Page(
-            notebookId = notebook.id,
-            background = notebook.defaultBackground,
-            backgroundType = notebook.defaultBackgroundType
-        )
+        val page = notebook.newPage()
         pageDao.create(page)
 
         notebookDao.setPageIds(notebook.id, listOf(page.id), Date())
@@ -274,7 +276,8 @@ fun Notebook.newPage(): Page {
     return Page(
         notebookId = id,
         background = defaultBackground,
-        backgroundType = defaultBackgroundType
+        backgroundType = defaultBackgroundType,
+        sheet = defaultSheet,
     )
 }
 

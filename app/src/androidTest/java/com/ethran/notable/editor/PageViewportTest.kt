@@ -173,7 +173,7 @@ class PageViewportTest {
             assertEquals(
                 "saved scroll of $pageId",
                 left.getValue(pageId).scroll.y.roundToInt(),
-                data.db.pageDao().getById(pageId)!!.scroll,
+                data.db.pageDao().getById(pageId)!!.positionY,
             )
         }
 
@@ -245,13 +245,13 @@ class PageViewportTest {
         assertEquals(PageViewport(), view.viewport.value)
         assertSame(bitmap, view.windowedBitmap)
         assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
-        assertEquals(0, data.db.pageDao().getById(pageId)!!.scroll)
+        assertEquals(0, data.db.pageDao().getById(pageId)!!.positionY)
     }
 
     @Test(timeout = 30000)
     fun gestureBeforeThePageIsShown_changesNothing() = runBlocking {
         val (pageId) = seedPages(1)
-        data.db.pageDao().updateScroll(pageId, 300)
+        data.db.pageDao().updatePositionY(pageId, 300)
         val mayRead = CompletableDeferred<Unit>()
         data.beforePageRecordRead = { mayRead.await() }
         val view = createPageView(pageId)
@@ -265,7 +265,7 @@ class PageViewportTest {
         assertEquals(PageViewport(scroll = Offset(0f, 300f)), view.viewport.value)
         view.disposeOldPage()
         assertEquals(AppResult.Success(Unit), data.pageSaver.saveAll())
-        assertEquals(300, data.db.pageDao().getById(pageId)!!.scroll)
+        assertEquals(300, data.db.pageDao().getById(pageId)!!.positionY)
     }
 
     @Test(timeout = 30000)

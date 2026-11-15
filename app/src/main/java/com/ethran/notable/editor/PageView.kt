@@ -291,7 +291,7 @@ class PageView(
 
     /** The viewport [page] had when this view left it, or else unzoomed at its saved scroll. */
     private fun viewportToShow(page: OpenPage): PageViewport = synchronized(pageLock) {
-        leftPages[page.pageId] ?: PageViewport(scroll = Offset(0f, (page.record?.scroll ?: 0).toFloat()))
+        leftPages[page.pageId] ?: PageViewport(scroll = Offset(0f, (page.record?.positionY ?: 0).toFloat()))
     }
 
     /**
