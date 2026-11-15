@@ -69,8 +69,7 @@ data class PenElement(
 ) : ToolbarElement {
     override val id: ToolbarElementId get() = ToolbarElementId.PEN
 
-    override fun isSelected(state: ToolbarUiState): Boolean =
-        (state.mode == Mode.Draw || state.mode == Mode.Line) && state.penPresetId == presetId
+    override fun isSelected(state: ToolbarUiState): Boolean = state.isPenSelected(presetId)
 }
 
 /** The single SHAPE button; its picker submenu selects among [shapes]. */

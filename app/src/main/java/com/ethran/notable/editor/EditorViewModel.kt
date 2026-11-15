@@ -117,6 +117,10 @@ data class ToolbarUiState(
     val activePenSetting: PenSetting
         get() = penSettings[penPresetId] ?: PenSetting(5f, android.graphics.Color.BLACK)
 
+    /** The pen of [presetId] is the one in use. It stays selected in Line mode, which draws with it. */
+    fun isPenSelected(presetId: String): Boolean =
+        (mode == Mode.Draw || mode == Mode.Line) && penPresetId == presetId
+
     /**
      * Whether the pen draws (raw drawing on). Derived only, never stored: to change it,
      * change one of its inputs, and the canvas follows the latest state.
@@ -434,11 +438,7 @@ class EditorViewModel @Inject constructor(
 
     private fun handlePenButtonTap(presetId: String) {
         val preset = GlobalAppSettings.current.toolbarPens.find { it.id == presetId } ?: return
-        val state = _toolbarState.value
-        // Same condition as PenElement.isSelected: the pen stays selected in Line mode too.
-        val alreadySelected = (state.mode == Mode.Draw || state.mode == Mode.Line) &&
-                state.penPresetId == presetId
-        if (alreadySelected) {
+        if (_toolbarState.value.isPenSelected(presetId)) {
             _toolbarState.update {
                 it.copy(penMenuPresetId = if (it.penMenuPresetId == presetId) null else presetId)
             }
