@@ -123,7 +123,7 @@ class BackgroundFileChangeTest {
         pageDataManager.hold(alsoUsing)
         val repainted = AtomicBoolean(false)
         val repaints = viewScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            CanvasEventBus.forceUpdate.collect { if (it == null) repainted.set(true) }
+            CanvasEventBus.forceUpdate.collect { repainted.set(true) }
         }
 
         // Rewritten until the watcher, armed in the background, reports the change.

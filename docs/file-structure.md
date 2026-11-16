@@ -17,7 +17,7 @@ com.ethran.notable/
     - PagePreviewStore.kt — Writes the previews and thumbnails of the pages the editor leaves.
 
 - editor/ — The core note-taking engine
-    - canvas/ — Hardware-specific drawing and refresh logic (DrawCanvas, OnyxInputHandler, RefreshManager).
+    - canvas/ — Hardware-specific drawing and refresh logic (DrawCanvas, OnyxInputHandler, RefreshManager). RawDrawingController is the only owner of the Onyx pen's on/off state; PenDevice is its adapter over the SDK.
     - drawing/ — Low-level rendering logic (OpenGLRenderer, Stroke/Line rendering, Page drawing).
     - state/ — Editor-specific state management:
         - History.kt — Undo/Redo logic.

@@ -323,7 +323,7 @@ class EditorControlTower(
 
     override fun redrawCanvas() {
         scope.launch {
-            CanvasEventBus.forceUpdate.emit(null)
+            CanvasEventBus.forceUpdate.emit(Unit)
         }
     }
 }
