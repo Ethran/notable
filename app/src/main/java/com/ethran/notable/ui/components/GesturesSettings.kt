@@ -24,53 +24,41 @@ fun GesturesSettings(
             .fillMaxWidth()
             .padding(vertical = 8.dp)
     ) {
-        listOfGestures.forEach { config ->
-            GestureSelectorRow(
-                title = stringResource(config.titleRes),
-                currentAction = config.currentValue,
-                onActionSelected = { action -> config.onUpdate(action) },
-                availableGestures = availableGestures
-            )
-        }
-
-        SettingToggleRow(
-            label = stringResource(R.string.enable_quick_nav), value = settings.enableQuickNav,
-            onToggle = { isChecked ->
-                onSettingsChange(settings.copy(enableQuickNav = isChecked))
-            })
-
         if (DeviceCompat.isOnyxDevice) {
             SettingToggleRow(
                 label = stringResource(R.string.block_system_gestures),
                 value = settings.blockSystemGestures,
                 onToggle = { isChecked ->
                     onSettingsChange(settings.copy(blockSystemGestures = isChecked))
-                })
+                },
+                description = stringResource(R.string.block_system_gestures_description),
+            )
         }
-    }
-}
 
-@Composable
-fun GestureSelectorRow(
-    title: String,
-    currentAction: AppSettings.GestureAction,
-    onActionSelected: (AppSettings.GestureAction) -> Unit,
-    availableGestures: List<Pair<AppSettings.GestureAction, Any>>
-) {
-    // Map the Pair list to the format expected by SelectorRow
-    val options = availableGestures.map { (action, resource) ->
-        val label = when (resource) {
-            is Int -> stringResource(resource)
-            is String -> resource
-            else -> resource.toString()
+        val threeFingerGesturesAvailable =
+            !DeviceCompat.isOnyxDevice || settings.blockSystemGestures
+
+        listOfGestures.forEach { config ->
+
+            GestureSelectorRow(
+                title = stringResource(config.titleRes),
+                currentAction = config.currentValue,
+                onActionSelected = { action -> config.onUpdate(action) },
+                availableGestures = availableGestures,
+                enabled = (
+                        if (config.blockedByOnyxGestures) threeFingerGesturesAvailable else true
+                        ),
+            )
         }
-        action to label
-    }
 
-    SelectorRow(
-        label = title,
-        options = options,
-        value = currentAction,
-        onValueChange = onActionSelected
-    )
+        SettingToggleRow(
+            label = stringResource(R.string.enable_quick_nav),
+            value = settings.enableQuickNav && threeFingerGesturesAvailable,
+            onToggle = { isChecked ->
+                onSettingsChange(settings.copy(enableQuickNav = isChecked))
+            },
+            enabled = threeFingerGesturesAvailable
+        )
+
+    }
 }

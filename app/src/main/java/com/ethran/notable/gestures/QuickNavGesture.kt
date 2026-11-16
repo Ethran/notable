@@ -8,10 +8,18 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import com.ethran.notable.data.datastore.GlobalAppSettings
+import com.ethran.notable.editor.utils.DeviceCompat
 import io.shipbook.shipbooksdk.ShipBook
 import kotlin.coroutines.cancellation.CancellationException
 
 private val log = ShipBook.getLogger("QuickNavGesture")
+
+/** The QuickNav switch in GesturesSettings displays this same condition. */
+private fun quickNavActive(): Boolean {
+    val settings = GlobalAppSettings.current
+    return settings.enableQuickNav &&
+            (!DeviceCompat.isOnyxDevice || settings.blockSystemGestures)
+}
 
 /**
  * App-level recognizer for the three-finger swipe-up that opens QuickNav.
@@ -25,8 +33,8 @@ private val log = ShipBook.getLogger("QuickNavGesture")
  */
 fun Modifier.quickNavGesture(
     onOpen: () -> Unit
-): Modifier = this.pointerInput(GlobalAppSettings.current.enableQuickNav) {
-    if (!GlobalAppSettings.current.enableQuickNav) return@pointerInput
+): Modifier = this.pointerInput(quickNavActive()) {
+    if (!quickNavActive()) return@pointerInput
     val thresholds = GestureThresholds(density = this)
     awaitEachGesture {
         try {
