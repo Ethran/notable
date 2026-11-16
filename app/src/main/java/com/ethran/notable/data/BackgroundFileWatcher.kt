@@ -3,7 +3,6 @@ package com.ethran.notable.data
 import android.os.FileObserver
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.events.AppEventBus
-import com.ethran.notable.io.IN_IGNORED
 import com.ethran.notable.io.fileObserverEventNames
 import com.ethran.notable.io.waitForFileAvailable
 import com.ethran.notable.utils.chunked
@@ -20,8 +19,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Watches the image/PDF files that pages use as backgrounds and reports which pages need their
- * cached background dropped when one changes on disk.
+ * Watches the image/PDF files that pages use as backgrounds and reports which of them changed on
+ * disk. Which pages show a file, and what a change means for them, is [PageDataManager]'s business;
+ * the pages here only decide how long a file is watched.
  *
  * Registering a file is blocking disk I/O and an inotify registration, so it is kept out of the
  * page cache's lock:
@@ -29,8 +29,6 @@ import javax.inject.Singleton
  *   other lock held, and none of them calls back into [PageDataManager].
  * - **Callers must not hold the page-cache lock** when calling [watch] / [unwatch]: both touch the
  *   filesystem.
- * - The class reports *page ids*, never file paths, so the mapping from file to pages — the part
- *   that needs the lock — never escapes.
  */
 @Singleton
 class BackgroundFileWatcher @Inject constructor(
@@ -45,27 +43,20 @@ class BackgroundFileWatcher @Inject constructor(
     /** Absolute file path -> the running observer for it. */
     private val observers = mutableMapOf<String, FileObserver>()
 
-    /** Absolute file path -> the pages whose background is that file. */
+    /** Absolute file path -> the pages it is watched for; the file is watched while there are any. */
     private val pagesByFile = mutableMapOf<String, MutableSet<String>>()
 
     private val fileChanges = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
     /**
-     * Batches of page ids whose background file just changed, de-duplicated within a 10 ms window
-     * (a single save often produces several inotify events). Collect this to drop the cached
-     * bitmaps; the watcher itself holds no cache state and does not know what invalidation means.
+     * Absolute paths of files that just changed. One save can report a file more than once; reports
+     * that queue up while the collector is busy come as one batch.
      */
-    val invalidatedPages: Flow<List<String>> =
-        fileChanges.chunked(10).map { batch ->
-            val paths = batch.distinct()
-            synchronized(registryLock) {
-                paths.flatMap { pagesByFile[it].orEmpty() }.distinct()
-            }
-        }
+    val changedFiles: Flow<Set<String>> = fileChanges.chunked(10).map { it.toSet() }
 
     /**
-     * Start reporting changes to [filePath] against [pageId]. Registering the same file for a second
-     * page only adds the id — one observer per file.
+     * Watch [filePath] for [pageId]. Registering the same file for a second page only adds the id —
+     * one observer per file.
      *
      * Touches the filesystem: **must not** be called while holding the page-cache lock.
      */
@@ -86,8 +77,8 @@ class BackgroundFileWatcher @Inject constructor(
     }
 
     /**
-     * After the file was replaced, installs an observer for the new file at [filePath] — but **only
-     * if pages still use it**, and without touching the page set.
+     * After an event that may mean the file was replaced, installs an observer for the file now at
+     * [filePath] — but **only if pages still use it**, and without touching the page set.
      *
      * Goes by [pagesByFile], not by the page that first registered the file: that page may have
      * been evicted meanwhile while another page still shows the file, and every page may have been
@@ -121,7 +112,7 @@ class BackgroundFileWatcher @Inject constructor(
     }
 
     /**
-     * Stop reporting for [pageId], shutting down any observer left with no pages. Touches the
+     * Stop watching files for [pageId], shutting down any observer left with no pages. Touches the
      * filesystem — see [unwatchAsync] if a lock is held.
      */
     fun unwatch(pageId: String) {
@@ -137,33 +128,48 @@ class BackgroundFileWatcher @Inject constructor(
         }
     }
 
+    /** Stops [observer] if it still watches [filePath]; false if it was stopped already. */
+    private fun retire(filePath: String, observer: FileObserver): Boolean {
+        synchronized(registryLock) {
+            if (observers[filePath] !== observer) return false
+            observers.remove(filePath)
+            observer.stopWatching()
+            return true
+        }
+    }
+
     private fun newObserver(file: File, filePath: String): FileObserver =
         object : FileObserver(file, WATCH_MASK) {
             override fun onEvent(event: Int, path: String?) {
+                val observer = this
                 // FileObserver calls this on its own thread; do the work on our scope so nothing
                 // blocks the inotify callback.
                 scope.launch {
-                    if (event == IN_IGNORED) return@launch
                     log.d("Background file changed: $filePath [event=${fileObserverEventNames(event)}]")
-
-                    if (event == DELETE_SELF || event == MOVE_SELF) {
-                        // The watch follows the inode, not the path. Editors that save by replacing
-                        // the file (deleting or moving it away, then writing a new one) therefore
-                        // need a fresh observer once the new file appears.
-                        log.d("Background file deleted or moved away.")
-                        synchronized(registryLock) { observers.remove(filePath)?.stopWatching() }
-                        if (!waitForFileAvailable(filePath)) {
-                            log.w("File changed, but does not exist: $filePath")
-                            appEventBus.tryEmit(
-                                AppEvent.ActionHint("Background does not exist", 3000)
-                            )
-                            return@launch
-                        }
-                        // Re-arm by file path, re-checking who still uses it -- never by a captured
-                        // page id, which may have been evicted while this observer waited.
-                        rearm(filePath)
+                    if (event == CLOSE_WRITE) {
+                        fileChanges.emit(filePath)
+                        return@launch
                     }
 
+                    // The watch follows the inode, not the path, so a file replaced by a new one
+                    // needs a fresh observer once the new file appears. How a replacement shows up
+                    // depends on the filesystem: ATTRIB (the old file's link count drops) then
+                    // DELETE_SELF on app storage, MOVE_SELF for a file moved away, and only ATTRIB,
+                    // or ATTRIB then IGNORED, on /sdcard (FUSE). The first of these events retires
+                    // the observer; the ones after it, and the IGNORED that stopping an observer
+                    // delivers, find it retired. ATTRIB also comes when only permissions or times
+                    // change: the same file is watched again and reported as changed.
+                    if (!retire(filePath, observer)) return@launch
+                    if (!waitForFileAvailable(filePath)) {
+                        log.w("File changed, but does not exist: $filePath")
+                        appEventBus.tryEmit(
+                            AppEvent.ActionHint("Background does not exist", 3000)
+                        )
+                        return@launch
+                    }
+                    // Re-arm by file path, re-checking who still uses it -- never by a captured
+                    // page id, which may have been evicted while this observer waited.
+                    rearm(filePath)
                     fileChanges.emit(filePath)
                 }
             }
@@ -171,8 +177,10 @@ class BackgroundFileWatcher @Inject constructor(
 
     private companion object {
         // Events on the watched file itself; CREATE, DELETE and MOVED_TO only come from directories.
+        // IGNORED is always delivered.
         private const val WATCH_MASK = FileObserver.DELETE_SELF or
             FileObserver.CLOSE_WRITE or
-            FileObserver.MOVE_SELF
+            FileObserver.MOVE_SELF or
+            FileObserver.ATTRIB
     }
 }
