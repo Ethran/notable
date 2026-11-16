@@ -28,9 +28,9 @@ class CanvasRefreshManager(
      */
     private val firmwareInk = Rect()
 
-    /** Notes [area] as drawn on the panel by the firmware only, see [firmwareInk]. */
+    /** Notes [area] as drawn on the panel by the firmware only ([firmwareInk]). Main thread. */
     fun addFirmwareInk(area: Rect) {
-        synchronized(firmwareInk) { firmwareInk.union(area) }
+        firmwareInk.union(area)
     }
 
     /**
@@ -40,17 +40,6 @@ class CanvasRefreshManager(
     fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoom}")
         drawCanvas.post { postPage(dirtyRect) }
-    }
-
-    /**
-     * [refreshUi] followed by a regional EPD refresh of [dirtyRect] (`refreshScreenRegion`), from
-     * any thread.
-     */
-    fun refreshRegion(dirtyRect: Rect) {
-        drawCanvas.post {
-            postPage(dirtyRect)
-            refreshScreenRegion(drawCanvas, dirtyRect)
-        }
     }
 
     /** [refreshUi] of the whole page, after the stroke being drawn (if any) is in the bitmap. */
@@ -76,10 +65,8 @@ class CanvasRefreshManager(
      */
     fun commitErase(dirtyRect: Rect?, areaErase: Boolean = false) {
         val dirty = Rect(dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight))
-        synchronized(firmwareInk) {
-            dirty.union(firmwareInk)
-            firmwareInk.setEmpty()
-        }
+        dirty.union(firmwareInk)
+        firmwareInk.setEmpty()
         val rawDrawing = drawCanvas.inputHandler.rawDrawing
         if (rawDrawing != null) rawDrawing.commitErase(dirty, areaErase)
         else drawCanvasToViewSync(dirty)
@@ -117,15 +104,12 @@ class CanvasRefreshManager(
         }
     }
 
-    fun drawCanvasToView(dirtyRect: Rect?, onPosted: (() -> Unit)? = null) {
-        drawCanvas.post { drawCanvasToViewSync(dirtyRect, onPosted) }
-    }
-
     /**
-     * [drawCanvasToView] without the post: draws the page (and the page-cut line in Select mode)
-     * to the surface now. Main thread only.
+     * Draws the page (and the page-cut line in Select mode) to the surface now. A plain post: it
+     * can be swallowed while the firmware render is on, so callers go through [refreshUi].
+     * Main thread only.
      */
-    fun drawCanvasToViewSync(dirtyRect: Rect?, onPosted: (() -> Unit)? = null) {
+    fun drawCanvasToViewSync(dirtyRect: Rect?) {
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
         var canvas: Canvas? = null
         try {
@@ -161,14 +145,12 @@ class CanvasRefreshManager(
         } finally {
             try {
                 if (canvas != null) {
-                    log.d("drawCanvasToView: page=${page.currentPageId} bitmap=${page.windowedBitmap.hashCode()}")
+                    log.d("drawCanvasToViewSync: page=${page.currentPageId} bitmap=${page.windowedBitmap.hashCode()}")
                     drawCanvas.holder.unlockCanvasAndPost(canvas)
                 }
                 log.v("Canvas refreshed")
             } catch (e: IllegalStateException) {
                 log.w("Surface released during unlock", e)
-            } finally {
-                onPosted?.invoke()
             }
         }
     }

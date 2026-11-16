@@ -112,7 +112,7 @@ class DrawCanvas(
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 log.i("surface destroyed ${this@DrawCanvas.hashCode()}")
                 holder.removeCallback(this)
-                // Each DrawCanvas has its own TouchHelper, so its session is closed unconditionally.
+                // Closes the session of this canvas's own TouchHelper.
                 inputHandler.rawDrawing?.closeSession()
             }
         }

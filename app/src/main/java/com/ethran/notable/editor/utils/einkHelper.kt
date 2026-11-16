@@ -363,19 +363,16 @@ object DeviceCompat {
     }
 
     /**
-     * How long the panel needs to show a post before raw drawing takes the screen back.
-     * Delays mirror kreader's WaitForUpdateFinishedAction:
-     *  - erase: 150ms stroke, 500ms area (lasso). Safe at 150ms because the erase commit uses the
-     *    heavy setRawDrawingEnabled toggle which hands the screen back atomically.
-     *  - normal pen: 500ms color, 300ms monochrome.
+     * How long the panel needs to show a post before the firmware render takes the screen back:
+     * 500ms color, 300ms monochrome, as kreader's WaitForUpdateFinishedAction.
      * See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
      */
-    fun resumeDelayMillis(isErasing: Boolean = false, areaErase: Boolean = false): Long {
-        if (!isOnyxDevice) return 0
-        return when {
-            isErasing -> if (areaErase) 500 else 150
-            isColorDevice() -> 500
-            else -> 300
-        }
-    }
+    fun postSettleMillis(): Long = if (isColorDevice()) 500 else 300
+
+    /**
+     * How long the panel settles after an erase commit, as kreader's WaitForUpdateFinishedAction:
+     * 150ms for a stroke erase, 500ms for an area (lasso) erase. Safe at 150ms because the commit
+     * uses the heavy setRawDrawingEnabled toggle, which hands the screen back atomically.
+     */
+    fun eraseSettleMillis(areaErase: Boolean): Long = if (areaErase) 500 else 150
 }

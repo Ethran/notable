@@ -400,7 +400,7 @@ class PageView(
             // TODO: If we put it in loadPage(…) sometimes it will try to refresh
             //  without seeing strokes, I have no idea why.
             coroutineScope.launch(Dispatchers.Main) {
-                CanvasEventBus.forceUpdate.emit(null)
+                CanvasEventBus.forceUpdate.emit(Unit)
             }
 
             logCache.d("Loaded page from persistent layer $pageId")
@@ -601,7 +601,7 @@ class PageView(
         )
         if (!commitViewport(pageId, start.copy(scroll = newScroll))) return
 
-        CanvasEventBus.forceUpdate.emit(null)
+        CanvasEventBus.forceUpdate.emit(Unit)
     }
 
 
@@ -968,7 +968,7 @@ class PageView(
         // TODO: it might be worth to do it
         //  by redrawing only part of the screen, like in scroll and zoom.
         coroutineScope.launch {
-            CanvasEventBus.forceUpdate.emit(null)
+            CanvasEventBus.forceUpdate.emit(Unit)
         }
 //        persistBitmapDebounced()
     }

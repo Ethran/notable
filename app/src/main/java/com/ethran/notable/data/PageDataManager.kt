@@ -1189,7 +1189,7 @@ class PageDataManager @Inject constructor(
                 // Not short-circuited: every page is invalidated.
                 val heldChanged = pageIds.map { invalidateBackground(it) }.any { it }
                 if (heldChanged) {
-                    CanvasEventBus.forceUpdate.emit(null)
+                    CanvasEventBus.forceUpdate.emit(Unit)
                     val now = SystemClock.elapsedRealtime()
                     if (now - hintShownAtMs >= FILE_CHANGED_HINT_MS) {
                         hintShownAtMs = now

@@ -64,9 +64,7 @@ class OnyxInputHandler(
     private val log = ShipBook.getLogger("DrawCanvas")
     private val toolbarState get() = viewModel.toolbarState.value
 
-    // TODO: As OnyxInput is not done by lazy, which forces evaluation of the touchHelper
-    //       lazy during DrawCanvas construction.
-    val touchHelper by lazy {
+    private val touchHelper by lazy {
         val helper = if (DeviceCompat.isOnyxDevice) {
             try {
                 TouchHelper.create(drawCanvas, inputCallback)
@@ -92,10 +90,8 @@ class OnyxInputHandler(
             drawPage = { drawCanvas.refreshManager.drawCanvasToViewSync(it) },
             forcePage = { drawCanvas.refreshManager.forceCanvasToViewSync(it) },
             timer = ScopeMainTimer(coroutineScope),
-            renderResumeMillis = { DeviceCompat.resumeDelayMillis() },
-            eraseSettleMillis = { area ->
-                DeviceCompat.resumeDelayMillis(isErasing = true, areaErase = area)
-            },
+            renderResumeMillis = DeviceCompat::postSettleMillis,
+            eraseSettleMillis = DeviceCompat::eraseSettleMillis,
             checkThread = ::checkRawDrawingMainThread,
         )
     }
@@ -212,7 +208,7 @@ class OnyxInputHandler(
     }
 
     /** Brings raw drawing in line with [ToolbarUiState.isDrawing]. Main thread. */
-    fun updateIsDrawing() {
+    fun reconcileRawDrawing() {
         val controller = rawDrawing ?: return
         val state = toolbarState
         log.d(
@@ -339,9 +335,7 @@ class OnyxInputHandler(
                                 )
                             )
                         }
-                        coroutineScope.launch(Dispatchers.Default) {
-                            drawCanvas.refreshManager.refreshUi(dirtyRect)
-                        }
+                        drawCanvas.refreshManager.refreshUi(dirtyRect)
                     }
 
                 }

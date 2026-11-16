@@ -1,6 +1,5 @@
 package com.ethran.notable.editor.canvas
 
-import android.graphics.Rect
 import android.net.Uri
 import io.shipbook.shipbooksdk.Log
 import kotlinx.coroutines.channels.BufferOverflow
@@ -14,7 +13,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.measureTimeMillis
 
 object CanvasEventBus {
-    val forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
+    /** Redraw the whole page into its bitmap and show it. */
+    val forceUpdate = MutableSharedFlow<Unit>()
     val refreshUi = MutableSharedFlow<Unit>()
     val refreshUiImmediately = MutableSharedFlow<Unit>(
         replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST

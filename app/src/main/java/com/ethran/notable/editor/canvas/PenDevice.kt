@@ -28,6 +28,8 @@ interface PenDevice {
 
     /** Opens a session over the current drawing area; render and input start off. */
     fun openSession()
+
+    /** `closeRawDrawing`: every setter is a no-op until the next [openSession]. */
     fun closeSession()
 }
 

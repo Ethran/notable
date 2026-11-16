@@ -10,7 +10,6 @@ import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
-import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -79,7 +78,7 @@ class CanvasObserverRegistry(
         observeRestartAfterConfChange()
         observeReloadFromDb()
         observePenChanges()
-        observeIsDrawingSnapshot()
+        observeIsDrawing()
         observeToolbar()
         observeMode()
         observeQuickNav()
@@ -115,19 +114,12 @@ class CanvasObserverRegistry(
     }
 
     private fun observeForceUpdate() {
-        // observe forceUpdate, takes rect in screen coordinates
-        // given null it will redraw whole page
-        // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
         observerScope.launch(Dispatchers.Main) {
-            CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
+            CanvasEventBus.forceUpdate.collect {
                 // On loading, make sure that the loaded strokes are visible to it.
-                log.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
-                val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
-                page.drawAreaScreenCoordinates(zoneToRedraw)
-                launch(Dispatchers.Default) {
-                    if (dirtyRectangle.isNull()) refreshManager.refreshUiSuspend()
-                    else refreshManager.refreshRegion(zoneToRedraw)
-                }
+                log.v("Force update, strokes to draw: ${page.strokes.size}")
+                page.drawAreaScreenCoordinates(Rect(0, 0, page.viewWidth, page.viewHeight))
+                launch(Dispatchers.Default) { refreshManager.refreshUiSuspend() }
             }
         }
     }
@@ -195,7 +187,7 @@ class CanvasObserverRegistry(
             CanvasEventBus.reinitSignal.collect {
                 log.v("Configuration changed!")
                 drawCanvas.init()
-                drawCanvas.refreshManager.drawCanvasToView(null)
+                refreshManager.refreshUi(null)
             }
         }
     }
@@ -250,13 +242,13 @@ class CanvasObserverRegistry(
         }
     }
 
-    private fun observeIsDrawingSnapshot() {
+    private fun observeIsDrawing() {
         observerScope.launch {
             viewModel.toolbarState
                 .map { it.isDrawing }
                 .distinctUntilChanged()
                 // Reconciling is idempotent, so the initial value is applied too.
-                .collect { inputHandler.updateIsDrawing() }
+                .collect { inputHandler.reconcileRawDrawing() }
         }
     }
 

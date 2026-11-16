@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
  *   every delayed action re-checks before it applies.
  * - Off is immediate; on waits for the holds (an erase settling, no session).
  * - Main thread only ([checkThread]).
- * - Its timers belong to the surface's scope ([timer]) and die with it.
+ * - Its timers run on the editor's scope ([timer]) and die with it.
  *
  * [enabled] lags [wanted] by one dispatch: the caller reconciles from a collector of the state.
  * Code that needs what the panel is doing reads [enabled].
@@ -45,12 +45,18 @@ class RawDrawingController(
 ) {
     private var sessionOpen = false
 
-    /** What the SDK was last told: render and input on. */
+    /**
+     * What the SDK was last told: raw drawing on. The render is also on, except while a post
+     * settles ([postPage]).
+     */
     var enabled = false
         private set
 
-    /** Erase commits still settling; the pen stays off until they end. */
-    private var erasing = 0
+    /**
+     * An erase commit is settling; the pen stays off until it ends. One at a time: a commit needs
+     * the pen on, and the pen stays off for the whole settle.
+     */
+    private var eraseSettling = false
     private var cancelRenderResume: (() -> Unit)? = null
 
     /**
@@ -94,7 +100,7 @@ class RawDrawingController(
     }
 
     private fun apply() {
-        val want = sessionOpen && erasing == 0 && wanted()
+        val want = sessionOpen && !eraseSettling && wanted()
         if (want == enabled) return
         stopRenderResume()
         if (want) {
@@ -147,10 +153,10 @@ class RawDrawingController(
         forcePage(dirty)
         device.setDrawingEnabled(false)
         enabled = false
-        erasing++
+        eraseSettling = true
         panelCurrent = true
         timer.schedule(eraseSettleMillis(areaErase)) {
-            erasing--
+            eraseSettling = false
             apply()
         }
     }

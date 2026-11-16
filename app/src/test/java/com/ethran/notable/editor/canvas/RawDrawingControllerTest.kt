@@ -85,17 +85,42 @@ class RawDrawingControllerTest {
         val timer = FakeTimer()
         var wanted = true
         var fullPageDraws = 0
+
+        /** Whether the firmware still read the pen when the page was last drawn. */
+        var inputOnAtLastDraw = false
+
+        /** When the settle of the last erase commit ends. */
+        private var eraseSettledAt = 0L
         val controller = RawDrawingController(
             device = device,
             wanted = { wanted },
             armPen = { device.armed = true },
-            drawPage = { fullPageDraws += if (it == null) 1 else 0 },
-            forcePage = {},
+            drawPage = {
+                // A plain post is swallowed while the firmware render is on.
+                assertFalse("page posted while the firmware render is on", device.render)
+                inputOnAtLastDraw = device.input
+                fullPageDraws += if (it == null) 1 else 0
+            },
+            forcePage = { assertFalse("erase pushed with input still on", device.input) },
             timer = timer,
             renderResumeMillis = { 300 },
-            eraseSettleMillis = { area -> if (area) 500 else 150 },
+            eraseSettleMillis = ::eraseSettleMillis,
             checkThread = {},
         )
+
+        private fun eraseSettleMillis(areaErase: Boolean) = if (areaErase) 500L else 150L
+
+        fun commitErase(areaErase: Boolean) {
+            if (controller.enabled) eraseSettledAt = timer.now + eraseSettleMillis(areaErase)
+            controller.commitErase(null, areaErase)
+        }
+
+        /** Holds once the latest change of [wanted] was reconciled: only the holds delay the pen. */
+        fun assertOnUnlessHeld(step: String) {
+            if (wanted && device.created && timer.now >= eraseSettledAt) {
+                assertTrue("$step: off although wanted and nothing holds it", device.input)
+            }
+        }
 
         /** Holds whenever the state was reconciled or not. */
         fun assertNeverFrozen(step: String) {
@@ -129,24 +154,20 @@ class RawDrawingControllerTest {
             var reconcilePending = false
             val trace = mutableListOf<String>()
             repeat(60) {
-                val op = when (random.nextInt(9)) {
-                    0, 1 -> {
+                val op = when (random.nextInt(32)) {
+                    in 0..7 -> {
                         h.wanted = !h.wanted
                         reconcilePending = true
                         "wanted=${h.wanted}"
                     }
-                    2 -> { h.controller.postPage(null); "postPage" }
-                    3 -> {
+                    in 8..11 -> { h.controller.postPage(null); "postPage" }
+                    in 12..15 -> {
                         val area = random.nextBoolean()
-                        h.controller.commitErase(null, area)
+                        h.commitErase(area)
                         "commitErase(area=$area)"
                     }
-                    4 -> { h.controller.rebuildSession(); "rebuildSession" }
-                    5 -> {
-                        if (random.nextInt(4) == 0) {
-                            h.controller.closeSession(); "closeSession"
-                        } else "noop"
-                    }
+                    in 16..19 -> { h.controller.rebuildSession(); "rebuildSession" }
+                    20 -> { h.controller.closeSession(); "closeSession" }
                     else -> {
                         val ms = random.nextLong(0, 800)
                         h.timer.advanceBy(ms)
@@ -160,7 +181,10 @@ class RawDrawingControllerTest {
                 trace += op
                 val step = "seed $seed, after ${trace.joinToString()}"
                 h.assertNeverFrozen(step)
-                if (!reconcilePending) h.assertOffIsImmediate(step)
+                if (!reconcilePending) {
+                    h.assertOffIsImmediate(step)
+                    h.assertOnUnlessHeld(step)
+                }
             }
             h.controller.reconcile()
             h.timer.advanceUntilIdle()
@@ -188,6 +212,32 @@ class RawDrawingControllerTest {
         h.controller.reconcile()
         h.timer.advanceUntilIdle()
         assertFalse(h.device.render)
+        assertFalse(h.device.input)
+    }
+
+    @Test
+    fun aSecondRefreshRestartsTheSettleOfTheFirst() {
+        val h = Harness()
+        h.controller.rebuildSession()
+        h.controller.postPage(null)
+        h.timer.advanceBy(200)
+        h.controller.postPage(null)
+        h.timer.advanceBy(299) // 499 after the first, 299 after the second
+        assertFalse(h.device.render)
+        assertTrue(h.device.input)
+        h.timer.advanceBy(1)
+        assertTrue(h.device.render)
+    }
+
+    @Test
+    fun turningThePenOffShowsThePageBeforeTheFirmwareLayerIsDropped() {
+        val h = Harness()
+        h.controller.rebuildSession()
+        val draws = h.fullPageDraws
+        h.wanted = false
+        h.controller.reconcile()
+        assertEquals(draws + 1, h.fullPageDraws)
+        assertTrue("drawn after the layer was dropped", h.inputOnAtLastDraw)
         assertFalse(h.device.input)
     }
 
