@@ -40,6 +40,19 @@ class AppRepository @Inject constructor(
     val kvProxy: KvProxy,
     private val db: AppDatabase
 ) {
+    suspend fun restoreLastOpened(): LastOpenedPageTarget? = restoreLastOpenedPage(
+        GlobalAppSettings.current,
+        getPage = { pageRepository.getById(it) },
+        clearSavedId = { kvProxy.updateAppSettings { it.copy(lastOpenedPageId = null) } },
+    )
+
+    /** Not tied to the caller's lifetime, so closing the editor can't drop the save. */
+    fun recordLastOpenedPage(pageId: String) {
+        if (pageId.isBlank()) return
+        GlobalAppSettings.update { it.withLastOpenedPage(pageId) }
+        kvProxy.saveAppSettingsInBackground()
+    }
+
     /**
      * The atomic sync commit point, at page granularity. In one Room
      * transaction: mark the notebook synced, upsert the freshly transferred pages' [PageSyncState]

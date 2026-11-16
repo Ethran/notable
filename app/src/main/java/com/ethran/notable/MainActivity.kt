@@ -32,13 +32,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ethran.notable.data.AppRepository
+import com.ethran.notable.data.LastOpenedPageTarget
 import com.ethran.notable.data.PageDataManager
 import com.ethran.notable.data.PageSaver
+import com.ethran.notable.data.carriesLinkToOpen
 import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.EditorSettingCacheManager
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import com.ethran.notable.data.db.StrokeMigrationHelper
+import com.ethran.notable.data.shouldReopenOnLaunch
 import com.ethran.notable.editor.canvas.CanvasEventBus
 import com.ethran.notable.editor.utils.DeviceCompat
 import com.ethran.notable.io.ExportEngine
@@ -160,25 +163,24 @@ class MainActivity : ComponentActivity() {
 
         val snackState = SnackState()
 
+        val reopenOnLaunch = shouldReopenOnLaunch(
+            savedInstanceState != null, carriesLinkToOpen(intent.action, intent.dataString, intent.flags)
+        )
+
         setContent {
             var isInitialized by remember { mutableStateOf(false) }
+            var lastOpenedPageTarget by remember { mutableStateOf<LastOpenedPageTarget?>(null) }
 
             LaunchedEffect(Unit) {
                 if (hasUsableStorage(this@MainActivity)) {
-                    withContext(Dispatchers.IO) {
+                    lastOpenedPageTarget = withContext(Dispatchers.IO) {
                         // Init app settings, also do migration
-                        val savedSettings =
-                            kvProxy.get().getOrDefault(
-                                APP_SETTINGS_KEY,
-                                AppSettings.serializer(),
-                                AppSettings(version = 1)
-                            )
-
-                        GlobalAppSettings.update(savedSettings)
+                        kvProxy.get().loadAppSettings(AppSettings(version = 1))
                         strokeMigrationHelper.get().reencodeStrokePointsToBinary()
                         pageDataManager.get()
                             .registerComponentCallbacks(this@MainActivity.applicationContext)
                         editorSettingCacheManager.get().init()
+                        if (reopenOnLaunch) appRepositoryLazy.get().restoreLastOpened() else null
                     }
                     restorePeriodicSyncSchedule()
                     // Trigger initial sync on app startup (fails silently if offline)
@@ -197,6 +199,8 @@ class MainActivity : ComponentActivity() {
                             appRepository = appRepositoryLazy.get(),
                             deepLinks = deepLinkFlow,
                             deepLinkResolver = deepLinkResolver.get(),
+                            initialPageId = lastOpenedPageTarget?.pageId,
+                            initialNotebookId = lastOpenedPageTarget?.notebookId,
                         )
                     } else {
                         ShowInitMessage()
@@ -238,9 +242,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun receiveDeepLink(intent: Intent) {
-        if (intent.action != Intent.ACTION_VIEW) return
-        // Reopened from recents: the link that started the task was already opened.
-        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        // A link replayed from recents was already opened.
+        if (!carriesLinkToOpen(intent.action, intent.dataString, intent.flags)) return
         val uri = intent.dataString ?: return
         val link = parseDeepLink(uri)
         if (link == null) {

@@ -19,7 +19,12 @@ import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.hasFilePermission
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.shipbook.shipbooksdk.ShipBook
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -28,6 +33,11 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
+
+internal val kvJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+}
 
 @Entity
 data class Kv(
@@ -97,10 +107,7 @@ class KvProxy @Inject constructor(
 ) {
     private val log = ShipBook.getLogger("KvProxy")
     private val syncSettingsMutex = Mutex()
-    private val json = Json {
-        ignoreUnknownKeys = true
-        coerceInputValues = true
-    }
+    private val json = kvJson
 
 
     suspend fun <T> get(key: String, serializer: KSerializer<T>): T? = withContext(Dispatchers.IO) {
@@ -136,14 +143,60 @@ class KvProxy @Inject constructor(
 
     suspend fun <T> setKv(key: String, value: T, serializer: KSerializer<T>) {
         val jsonValue = json.encodeToString(serializer, value)
-        log.i("Setting $key to $value")
+        log.i("Setting $key")
         kvRepository.set(Kv(key, jsonValue))
     }
 
-    suspend fun setAppSettings(value: AppSettings) {
-        setKv(APP_SETTINGS_KEY, value, AppSettings.serializer())
-        GlobalAppSettings.update(value)
+    private val appSettingsWriter = LatestValueWriter(
+        read = { GlobalAppSettings.current },
+        write = { setKv(APP_SETTINGS_KEY, it, AppSettings.serializer()) },
+        onError = { log.e("Failed to save app settings; will retry on the next change", it) },
+    )
+
+    /** Publishes the stored settings, keeping updates made meanwhile; saving waits for this. */
+    suspend fun loadAppSettings(default: AppSettings) {
+        try {
+            appSettingsWriter.load(
+                load = { getOrDefault(APP_SETTINGS_KEY, AppSettings.serializer(), default) },
+                publish = GlobalAppSettings::publishLoaded,
+            )
+        } catch (e: Exception) {
+            log.e("Failed to load app settings; saving is disabled", e)
+            throw e
+        }
+        persistAppSettings()
     }
+
+    private val saveScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> log.e("Background settings save failed", e) }
+    )
+
+    /** Applies [transform] now, then loads if startup could not and saves, off the caller's lifetime. */
+    fun updateAppSettingsInBackground(transform: (AppSettings) -> AppSettings) {
+        GlobalAppSettings.update(transform)
+        saveScope.launch {
+            try {
+                loadAppSettings(AppSettings(version = 1))
+            } catch (e: Exception) {
+                log.w("App settings not loaded; the update is kept in memory for the next load", e)
+            }
+        }
+    }
+
+    /** Updates the in-memory settings immediately, then persists the latest value. */
+    suspend fun updateAppSettings(transform: (AppSettings) -> AppSettings) {
+        GlobalAppSettings.update(transform)
+        persistAppSettings()
+    }
+
+    /** Saves the in-memory settings on an application-lifetime scope. */
+    fun saveAppSettingsInBackground() {
+        appSettingsWriter.persistIn(saveScope)
+    }
+
+    /** Saves the current in-memory settings; a stale value is never written over a newer one. */
+    suspend fun persistAppSettings() = appSettingsWriter.persist()
 
 
     // Helper functions that handle sync settings, as it needs to be decrypted and encrypted
@@ -222,3 +275,45 @@ internal fun applySyncSettingsUpdate(
     transform: (SyncSettings) -> SyncSettings
 ): SyncSettings = transform(stored.copy(password = ""))
     .copy(password = encryptedNewPassword ?: stored.password)
+
+/** Persists the latest value of [read] one write at a time; does nothing until [load] has run. */
+internal class LatestValueWriter<T>(
+    private val read: () -> T,
+    private val onError: (Exception) -> Unit = {},
+    private val write: suspend (T) -> Unit,
+) {
+    private val mutex = Mutex()
+    var isLoaded = false
+        private set
+    private var saved: T? = null
+
+    // NonCancellable: a cancelled caller must not leave the load half done. Loads once.
+    suspend fun <L : T> load(load: suspend () -> L, publish: (L) -> Unit) =
+        withContext(NonCancellable) {
+            mutex.withLock {
+                if (isLoaded) return@withLock
+                val value = load()
+                publish(value)
+                saved = value
+                isLoaded = true
+            }
+        }
+
+    /** Persists on [scope], which must outlive the caller. */
+    fun persistIn(scope: CoroutineScope) = scope.launch { persist() }
+
+    // NonCancellable: a cancelled caller must not leave memory ahead of storage.
+    suspend fun persist() = withContext(NonCancellable) {
+        mutex.withLock {
+            val latest = read()
+            if (isLoaded && latest != saved) {
+                try {
+                    write(latest)
+                    saved = latest
+                } catch (e: Exception) {
+                    onError(e)
+                }
+            }
+        }
+    }
+}
