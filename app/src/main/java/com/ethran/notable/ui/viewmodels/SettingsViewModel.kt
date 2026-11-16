@@ -126,10 +126,10 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateSettings(newSettings: AppSettings) {
-        GlobalAppSettings.update(newSettings)
+    fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        GlobalAppSettings.update(transform)
         viewModelScope.launch(Dispatchers.IO) {
-            kvProxy.setAppSettings(newSettings)
+            kvProxy.persistAppSettings()
         }
     }
 
@@ -283,27 +283,27 @@ class SettingsViewModel @Inject constructor(
         GestureRowModel(
             R.string.gestures_double_tap_action,
             settings.doubleTapAction,
-        ) { a -> updateSettings(settings.copy(doubleTapAction = a)) },
+        ) { a -> updateSettings { it.copy(doubleTapAction = a) } },
         GestureRowModel(
             (R.string.gestures_two_finger_tap_action),
             settings.twoFingerTapAction,
-        ) { a -> updateSettings(settings.copy(twoFingerTapAction = a)) },
+        ) { a -> updateSettings { it.copy(twoFingerTapAction = a) } },
         GestureRowModel(
             (R.string.gestures_swipe_left_action),
             settings.swipeLeftAction,
-        ) { a -> updateSettings(settings.copy(swipeLeftAction = a)) },
+        ) { a -> updateSettings { it.copy(swipeLeftAction = a) } },
         GestureRowModel(
             (R.string.gestures_swipe_right_action),
             settings.swipeRightAction,
-        ) { a -> updateSettings(settings.copy(swipeRightAction = a)) },
+        ) { a -> updateSettings { it.copy(swipeRightAction = a) } },
         GestureRowModel(
             (R.string.gestures_three_finger_swipe_left_action),
             settings.twoFingerSwipeLeftAction,
-        ) { a -> updateSettings(settings.copy(twoFingerSwipeLeftAction = a)) },
+        ) { a -> updateSettings { it.copy(twoFingerSwipeLeftAction = a) } },
         GestureRowModel(
             R.string.gestures_three_finger_swipe_right_action,
             settings.twoFingerSwipeRightAction,
-        ) { a -> updateSettings(settings.copy(twoFingerSwipeRightAction = a)) },
+        ) { a -> updateSettings { it.copy(twoFingerSwipeRightAction = a) } },
     )
 
 

@@ -1,7 +1,6 @@
 package com.ethran.notable.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
-import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.data.db.KvProxy
 import dagger.Lazy
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,10 +16,8 @@ class WelcomeViewModel @Inject constructor(
     private val kvProxy: Lazy<KvProxy>,
 ) : ViewModel() {
 
-    suspend fun removeWelcome() {
-        kvProxy.get().setAppSettings(
-            GlobalAppSettings.current.copy(showWelcome = false)
-        )
+    fun removeWelcome() {
+        kvProxy.get().updateAppSettingsInBackground { it.copy(showWelcome = false) }
     }
 
 

@@ -15,7 +15,7 @@ import com.ethran.notable.ui.viewmodels.GestureRowModel
 @Composable
 fun GesturesSettings(
     settings: AppSettings,
-    onSettingsChange: (AppSettings) -> Unit,
+    onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
     listOfGestures: List<GestureRowModel>,
     availableGestures: List<Pair<AppSettings.GestureAction, Any>>
 ) {
@@ -36,7 +36,7 @@ fun GesturesSettings(
         SettingToggleRow(
             label = stringResource(R.string.enable_quick_nav), value = settings.enableQuickNav,
             onToggle = { isChecked ->
-                onSettingsChange(settings.copy(enableQuickNav = isChecked))
+                onSettingsChange { s -> s.copy(enableQuickNav = isChecked) }
             })
 
         if (DeviceCompat.isOnyxDevice) {
@@ -44,7 +44,7 @@ fun GesturesSettings(
                 label = stringResource(R.string.block_system_gestures),
                 value = settings.blockSystemGestures,
                 onToggle = { isChecked ->
-                    onSettingsChange(settings.copy(blockSystemGestures = isChecked))
+                    onSettingsChange { s -> s.copy(blockSystemGestures = isChecked) }
                 })
         }
     }

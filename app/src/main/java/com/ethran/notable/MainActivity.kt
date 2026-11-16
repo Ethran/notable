@@ -167,14 +167,7 @@ class MainActivity : ComponentActivity() {
                 if (hasUsableStorage(this@MainActivity)) {
                     withContext(Dispatchers.IO) {
                         // Init app settings, also do migration
-                        val savedSettings =
-                            kvProxy.get().getOrDefault(
-                                APP_SETTINGS_KEY,
-                                AppSettings.serializer(),
-                                AppSettings(version = 1)
-                            )
-
-                        GlobalAppSettings.update(savedSettings)
+                        kvProxy.get().loadAppSettings(AppSettings(version = 1))
                         strokeMigrationHelper.get().reencodeStrokePointsToBinary()
                         pageDataManager.get()
                             .registerComponentCallbacks(this@MainActivity.applicationContext)

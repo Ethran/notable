@@ -22,8 +22,8 @@ class GlobalAppSettingsConcurrencyTest {
 
     @Test
     fun update_isVisibleAfterCommit() {
-        GlobalAppSettings.update(AppSettings(version = 1, debugMode = false))
-        GlobalAppSettings.update(AppSettings(version = 1, debugMode = true))
+        GlobalAppSettings.update { AppSettings(version = 1, debugMode = false) }
+        GlobalAppSettings.update { AppSettings(version = 1, debugMode = true) }
 
         assertEquals(true, GlobalAppSettings.current.debugMode)
     }
@@ -69,9 +69,9 @@ class GlobalAppSettingsConcurrencyTest {
                     start.await()
                     repeat(updatesPerWriter) { i ->
                         synchronized(writeLock) {
-                            GlobalAppSettings.update(
+                            GlobalAppSettings.update {
                                 AppSettings(version = writerIndex * updatesPerWriter + i)
-                            )
+                            }
                         }
                     }
                 } catch (t: Throwable) {
