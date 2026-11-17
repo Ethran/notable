@@ -65,7 +65,8 @@ class PagePreviewStore @Inject constructor(
     }
 
     private suspend fun write(pageId: String) {
-        val (bitmap, viewport) = pageDataManager.takeBitmapToSave(pageId) ?: return
+        val borrowed = pageDataManager.takeBitmapToSave(pageId) ?: return
+        val (bitmap, viewport) = borrowed
         // Off the shelf, the bitmap is drawn into no more: it shows the page as it is now.
         val capturedAtMs = System.currentTimeMillis()
         try {
@@ -76,7 +77,7 @@ class PagePreviewStore @Inject constructor(
         } catch (e: Exception) {
             log.e("Writing the preview of page $pageId failed: ${e.message}", e)
         } finally {
-            pageDataManager.putBackBitmap(pageId, bitmap, viewport)
+            pageDataManager.putBack(pageId, borrowed)
         }
         // Deleting a page removes its files after removing its record, so whichever runs second
         // removes them.

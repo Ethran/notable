@@ -161,6 +161,15 @@ class BackgroundFileWatcher @Inject constructor(
                     // change: the same file is watched again and reported as changed.
                     if (!retire(filePath, observer)) return@launch
                     if (!waitForFileAvailable(filePath)) {
+                        // Still empty: its writer hasn't written yet, and the CLOSE_WRITE that
+                        // comes when it has is reported by the observer watching it again. A write
+                        // done before that observer started is reported here.
+                        val file = File(filePath)
+                        if (file.exists()) {
+                            rearm(filePath)
+                            if (file.length() > 0) fileChanges.emit(filePath)
+                            return@launch
+                        }
                         log.w("File changed, but does not exist: $filePath")
                         appEventBus.tryEmit(
                             AppEvent.ActionHint("Background does not exist", 3000)

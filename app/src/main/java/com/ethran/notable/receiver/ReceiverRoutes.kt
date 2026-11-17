@@ -97,8 +97,14 @@ fun Application.pdfReceiver(host: ReceiverHost) {
             val written = withContext(Dispatchers.IO) {
                 call.receiveStream().use { body ->
                     // Reported here, so that a server stopped right after the write still redraws.
-                    writeReceivedPdf(body, length, target, host::countPages)
-                        .also { if (it == WriteResult.Written) host.written(target) else body.skipRest() }
+                    // A body longer than it said may not end, so it is not read to its end.
+                    writeReceivedPdf(body, length, target, host::countPages).also {
+                        when (it) {
+                            WriteResult.Written -> host.written(target)
+                            WriteResult.TooLarge -> Unit
+                            else -> body.skipRest()
+                        }
+                    }
                 }
             }
             when (written) {
@@ -157,8 +163,16 @@ internal fun responseFor(pushed: Pushed, page: Int?): Pair<HttpStatusCode, Strin
         is Target.Failed -> HttpStatusCode.Accepted to "Written; no notebook follows it: ${target.message}"
     }
 
-/** Reads what is left of a body that is refused, so the client sees the answer, not a reset. */
+/**
+ * Reads what is left of a body that is refused, so the client sees the answer, not a reset; at most
+ * [MAX_PDF_BYTES], as a chunked body need not end where its length said.
+ */
 private fun InputStream.skipRest() {
     val buffer = ByteArray(64 * 1024)
-    while (read(buffer) >= 0) Unit
+    var total = 0L
+    while (total <= MAX_PDF_BYTES) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+    }
 }
