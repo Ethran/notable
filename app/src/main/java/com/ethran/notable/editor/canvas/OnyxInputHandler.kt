@@ -188,11 +188,29 @@ class OnyxInputHandler(
         // - erase :  `onBeginRawErasing()` -> `onRawErasingTouchPointMoveReceived()` -> `onRawErasingTouchPointListReceived()` -> `onEndRawErasing()`
 
         private var pointA: TouchPoint? = null   // A, start screen coordinates
-        private lateinit var pointB: TouchPoint   // B, stop screen coordinates
+
+        /**
+         * The pen's previous move, to measure the next one against. Null between gestures: the
+         * dwell must be measured within one gesture, never from the previous gesture's last point.
+         */
+        private var pointB: TouchPoint? = null   // B, stop screen coordinates
         private var distanceThreshold = 20.0f
 
         private val triggerTime: Long = 200 // ms
         private var startTime: Long? = null
+
+        /**
+         * Disarms the dwell detector. A dwell is only counted while the pen stays in one spot, so
+         * it must not survive the gesture that measured it: [pointB] holds the previous stroke's
+         * last point, so a next stroke starting at that point — or jittering around it — would sit
+         * within the distance threshold from its very first move, and 200 ms later be taken for a
+         * dwell and turn into a rectify. The SDK also recycles its points, so none of them may be
+         * kept across a gesture.
+         */
+        private fun clearDwellDetection() {
+            pointB = null
+            startTime = null
+        }
 
         // Called on pen down event
         override fun onBeginRawDrawing(p0: Boolean, p1: TouchPoint?) {
@@ -204,6 +222,7 @@ class OnyxInputHandler(
             bandRect = null
             lastBandB = null
             lastBandDrawTime = 0L
+            clearDwellDetection()
             log.d("PEN DOWN EVENT: A = (${p1?.x}, ${p1?.y}), bool $p0")
         }
 
@@ -211,6 +230,11 @@ class OnyxInputHandler(
         override fun onEndRawDrawing(p0: Boolean, p1: TouchPoint?) {
             log.d("PEN UP EVENT: B = (${p1?.x}, ${p1?.y}), bool $p0")
             handleRectifyGestureEnd(p1)
+            // A dwell is only counted while the pen stays in one spot, so it must not survive the
+            // gesture: pointB is the stroke's last point, so a next stroke starting at its end (or
+            // jittering there) would sit within the distance threshold on its very first moves, and
+            // after 200 ms be taken for a dwell and turn into a rectify.
+            clearDwellDetection()
         }
 
         // Called as long as pen is down
@@ -237,8 +261,8 @@ class OnyxInputHandler(
             }
 
             // Calculate distance between the 2 points
-            if (this::pointB.isInitialized) {
-                val distance = hypot(p0.x - pointB.x, p0.y - pointB.y)
+            pointB?.let { previous ->
+                val distance = hypot(p0.x - previous.x, p0.y - previous.y)
 //                log.d("PEN DOWN MOVE: distance = $distance")
 
                 if (distance < distanceThreshold) {
