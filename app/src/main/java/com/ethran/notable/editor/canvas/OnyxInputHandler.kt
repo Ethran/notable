@@ -104,6 +104,12 @@ class OnyxInputHandler(
         log.d("PEN DOWN MOVE: rectify condition")
         rectifyMode = true
         lastBandB = b
+
+        drawCanvas.refreshManager.drawOverFirmware(
+            Rect(0, 0, page.viewWidth, page.viewHeight),
+            inset = 0,
+        ) { /* blit only */ }
+
         // Render off, input on: setRawDrawingEnabled(false) would drop the rest of the gesture.
         touchHelper?.isRawDrawingRenderEnabled = false
         drawLiveBand(a, b)
