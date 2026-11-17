@@ -40,6 +40,9 @@ class CanvasRefreshManager(
         synchronized(firmwareInk) { firmwareInk.union(area) }
     }
 
+    /** Last region [drawOverFirmware] pushed to the panel, in screen coordinates. */
+    private val pushedZone = Rect()
+
     fun refreshUi(dirtyRect: Rect?) {
         log.d("refreshUi: scroll: ${page.scroll}, zoom: ${page.zoom}")
 
@@ -56,6 +59,60 @@ class CanvasRefreshManager(
         // reset screen freeze
         resetScreenFreeze(touchHelper)
         log.d("refreshUi: done")
+    }
+
+    /**
+     * Draws [onCanvas] onto the surface during a pen gesture and returns the pushed area, inflated
+     * by [inset] so the caller can wipe it next time; null when nothing was pushed. [dirty] is
+     * cleared by blitting the page bitmap into it first.
+     *
+     * Each call is one EPD transaction, so callers must throttle it: never per pen-move point.
+     */
+    fun drawOverFirmware(
+        dirty: Rect,
+        inset: Int = 24,
+        onCanvas: (Canvas) -> Unit
+    ): Rect? {
+        if (dirty.isEmpty) return null
+        val zone = Rect(dirty).apply { inset(-inset, -inset) }
+        zone.sort()
+        if (!zone.intersect(0, 0, page.viewWidth, page.viewHeight) || zone.isEmpty) return null
+        var canvas: Canvas? = null
+        try {
+            canvas = drawCanvas.holder.lockCanvas(zone)
+            if (canvas == null) {
+                log.w("drawOverFirmware: failed to lock canvas, zone=$zone")
+                return null
+            }
+            EpdController.enablePost(0)
+            EpdController.enablePost(1)
+            // The blit is the erase: it hides whatever was pushed here last.
+            canvas.drawBitmap(page.windowedBitmap, zone, zone, Paint())
+            onCanvas(canvas)
+            pushedZone.set(zone)
+            return zone
+        } catch (e: IllegalStateException) {
+            log.w("drawOverFirmware: surface released while drawing", e)
+            return null
+        } catch (e: Exception) {
+            log.e("drawOverFirmware: drawing failed, ${e.message}")
+            return null
+        } finally {
+            try {
+                if (canvas != null) drawCanvas.holder.unlockCanvasAndPost(canvas)
+                EpdController.resetViewUpdateMode(drawCanvas)
+            } catch (e: IllegalStateException) {
+                log.w("drawOverFirmware: surface released while unlocking", e)
+            }
+        }
+    }
+
+    /** Wipes what [drawOverFirmware] left on the panel. */
+    fun clearOverFirmware() {
+        val zone = Rect(pushedZone)
+        pushedZone.setEmpty()
+        if (zone.isEmpty) return
+        drawOverFirmware(zone, inset = 0) { /* blit only */ }
     }
 
     suspend fun refreshUiSuspend() {

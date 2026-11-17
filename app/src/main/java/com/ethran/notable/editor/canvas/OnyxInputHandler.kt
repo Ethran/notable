@@ -1,6 +1,7 @@
 package com.ethran.notable.editor.canvas
 
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
@@ -28,6 +29,7 @@ import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
 import com.ethran.notable.editor.utils.penToStroke
 import com.ethran.notable.editor.utils.setupSurface
+import com.ethran.notable.editor.utils.toStrokePoint
 import com.ethran.notable.editor.utils.transformToLine
 import com.ethran.notable.ui.convertDpToPixel
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -42,8 +44,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.time.delay
+import java.time.Duration
+import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
+import kotlin.time.Duration.Companion.milliseconds
 
 class OnyxInputHandler(
     private val drawCanvas: DrawCanvas,
@@ -63,6 +71,7 @@ class OnyxInputHandler(
     // Taken once per gesture, when its points arrive; without a recorded pen-down, the page shown.
     private fun takeGesturePageId(): String =
         (penDownPageId ?: page.currentPageId).also { penDownPageId = null }
+
     private val log = ShipBook.getLogger("DrawCanvas")
     private val toolbarState get() = viewModel.toolbarState.value
 
@@ -80,6 +89,91 @@ class OnyxInputHandler(
         } else null
         helper
     }
+    private var rectifyMode = false
+    private var bandRect: Rect? = null
+    private var lastBandB: TouchPoint? = null
+    private var lastBandBDrawn: TouchPoint? = null
+    private var lastBandDrawTime = 0L
+    private var pointACopy: TouchPoint? = null
+
+    private val bandMinIntervalMs = 120L
+    private val bandMinMovePx = 18f
+    private val bandPaddingPx = 4
+
+    private fun enterRectifyMode(a: TouchPoint, b: TouchPoint) {
+        log.d("PEN DOWN MOVE: rectify condition")
+        rectifyMode = true
+        lastBandB = b
+        // Render off, input on: setRawDrawingEnabled(false) would drop the rest of the gesture.
+        touchHelper?.isRawDrawingRenderEnabled = false
+        drawLiveBand(a, b)
+        if (bandRect == null) abandonRectify()
+    }
+
+    private fun drawLiveBand(a: TouchPoint, b: TouchPoint) {
+        val width = toolbarState.activePenSetting.strokeSize * page.zoom
+        val dirty = bandBounds(bandRect, a, b, width)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            strokeWidth = width
+            color = toolbarState.activePenSetting.color
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+        }
+        val pushed = drawCanvas.refreshManager.drawOverFirmware(dirty) { canvas ->
+            canvas.drawLine(a.x, a.y, b.x, b.y, paint)
+        }
+        if (pushed != null) {
+            bandRect = pushed
+            lastBandBDrawn = b
+        }
+    }
+
+    private fun handleRectifyGestureEnd(upPoint: TouchPoint?) {
+        if (!rectifyMode) return
+        rectifyMode = false
+        touchHelper?.isRawDrawingRenderEnabled = true
+        val a = pointACopy ?: return
+        val b = lastBandB ?: upPoint ?: a
+        val gesturePageId = takeGesturePageId()
+        lastBandB = null
+        val dirty = bandRect
+        bandRect = null
+        coroutineScope.launch(Dispatchers.Main.immediate) {
+            CanvasEventBus.drawingInProgress.withLock {
+                if (gesturePageId != page.currentPageId) {
+                    log.i("Rectified line made on page $gesturePageId dropped, another page is shown")
+                    return@withLock
+                }
+                val viewport = page.viewport.value
+                val line = transformToLine(
+                    a.toStrokePoint(viewport.scroll, viewport.zoom),
+                    b.toStrokePoint(viewport.scroll, viewport.zoom)
+                )
+                handleDraw(
+                    drawCanvas.page,
+                    gesturePageId,
+                    history,
+                    toolbarState.activePenSetting.strokeSize,
+                    toolbarState.activePenSetting.color,
+                    toolbarState.pen,
+                    line
+                )
+            }
+            drawCanvas.refreshManager.refreshUi(dirty)
+        }
+    }
+
+    private fun abandonRectify() {
+        if (!rectifyMode) return
+        rectifyMode = false
+        lastBandB = null
+        lastBandBDrawn = null
+        pointACopy = null
+        touchHelper?.isRawDrawingRenderEnabled = true
+        drawCanvas.refreshManager.clearOverFirmware()
+        bandRect = null
+        takeGesturePageId()
+    }
 
     @Suppress("RedundantOverride")
     private val inputCallback: RawInputCallback = object : RawInputCallback() {
@@ -87,14 +181,79 @@ class OnyxInputHandler(
         // - pen : `onBeginRawDrawing()` -> `onRawDrawingTouchPointMoveReceived()` -> `onRawDrawingTouchPointListReceived()` -> `onEndRawDrawing()`
         // - erase :  `onBeginRawErasing()` -> `onRawErasingTouchPointMoveReceived()` -> `onRawErasingTouchPointListReceived()` -> `onEndRawErasing()`
 
+        private var pointA: TouchPoint? = null   // A, start screen coordinates
+        private lateinit var pointB: TouchPoint   // B, stop screen coordinates
+        private var distanceThreshold = 20.0f
+
+        private val triggerTime: Long = 200 // ms
+        private var startTime: Long? = null
+
+        // Called on pen down event
         override fun onBeginRawDrawing(p0: Boolean, p1: TouchPoint?) {
             penDownPageId = page.currentPageId
+            pointA = p1?.let {
+                // Copy: pen-up reads A from another thread, by which time the SDK has recycled it.
+                TouchPoint(it).also { copy -> pointACopy = copy }
+            }
+            bandRect = null
+            lastBandB = null
+            lastBandDrawTime = 0L
+            log.d("PEN DOWN EVENT: A = (${p1?.x}, ${p1?.y}), bool $p0")
         }
 
+        // Called on pen up event
         override fun onEndRawDrawing(p0: Boolean, p1: TouchPoint?) {
+            log.d("PEN UP EVENT: B = (${p1?.x}, ${p1?.y}), bool $p0")
+            handleRectifyGestureEnd(p1)
         }
 
+        // Called as long as pen is down
         override fun onRawDrawingTouchPointMoveReceived(p0: TouchPoint?) {
+//            log.d("PEN DOWN MOVE: = (${p0?.x}, ${p0?.y}), ${toolbarState.mode}")
+
+            if (p0 == null) return;
+
+            if (rectifyMode) {
+                val a = pointACopy ?: run {
+                    abandonRectify()
+                    return
+                }
+                lastBandB = p0
+                val now = System.currentTimeMillis()
+                val moved = bandRect == null ||
+                    hypot(p0.x - (lastBandBDrawn?.x ?: a.x), p0.y - (lastBandBDrawn?.y ?: a.y)) >
+                        bandMinMovePx
+                if (moved && now - lastBandDrawTime > bandMinIntervalMs) {
+                    lastBandDrawTime = now
+                    drawLiveBand(a, p0)
+                }
+                return
+            }
+
+            // Calculate distance between the 2 points
+            if (this::pointB.isInitialized) {
+                val distance = hypot(p0.x - pointB.x, p0.y - pointB.y)
+//                log.d("PEN DOWN MOVE: distance = $distance")
+
+                if (distance < distanceThreshold) {
+
+                    if (startTime == null) {
+                        startTime = System.currentTimeMillis()
+                        return
+                    }
+
+                    if (System.currentTimeMillis() - startTime!! > triggerTime
+                        && toolbarState.mode == Mode.Draw
+                    ) {
+                        enterRectifyMode(pointA ?: p0, p0)
+                    }
+                    return
+                }
+            }
+            // Update pointB
+            pointB = p0
+            startTime = null
+
         }
 
         override fun onRawDrawingTouchPointListReceived(plist: TouchPointList) =
@@ -137,7 +296,7 @@ class OnyxInputHandler(
     }
 
     fun updatePenAndStroke() {
-        if(touchHelper == null) return
+        if (touchHelper == null) return
         // it takes around 11 ms to run on Note 4c.
         log.i("Update pen and stroke")
         when (toolbarState.mode) {
@@ -194,7 +353,7 @@ class OnyxInputHandler(
     }
 
     suspend fun updateIsDrawing() {
-        if(touchHelper == null) return
+        if (touchHelper == null) return
         log.i("Update is drawing: $toolbarState.isDrawing")
         if (toolbarState.isDrawing) {
             enableRawDrawing()
@@ -251,7 +410,10 @@ class OnyxInputHandler(
             }
             onSurfaceInit(drawCanvas)
             val toolbarHeight =
-                if (toolbarState.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
+                if (toolbarState.isToolbarOpen) convertDpToPixel(
+                    40.dp,
+                    drawCanvas.context
+                ).toInt() else 0
             setupSurface(drawCanvas, touchHelper, toolbarHeight)
             // Armed inside the same coroutine, after the session is recreated: a caller that sets
             // the pen style right after updateActiveSurface() would otherwise race this launch.
@@ -260,8 +422,16 @@ class OnyxInputHandler(
             if (toolbarState.isDrawing) enableRawDrawing()
         }
     }
+
     private fun onRawDrawingList(plist: TouchPointList) {
         if (touchHelper == null) return
+        if (rectifyMode) {
+            // onEndRawDrawing runs first, so this is unreachable in theory. Commit rather than let
+            // the raw wobble through.
+            log.w("Rectify gesture reached the drawing list, committing the band instead")
+            handleRectifyGestureEnd(plist.points.lastOrNull())
+            return
+        }
         val currentLastStrokeEndTime = lastStrokeEndTime
         lastStrokeEndTime = System.currentTimeMillis()
         val startTime = System.currentTimeMillis()
@@ -374,7 +544,8 @@ class OnyxInputHandler(
                                 toolbarState.pen,
                                 scaledPoints
                             )
-                            val width = (toolbarState.activePenSetting.strokeSize * viewport.zoom).toInt()
+                            val width =
+                                (toolbarState.activePenSetting.strokeSize * viewport.zoom).toInt()
                             drawCanvas.refreshManager.addFirmwareInk(
                                 trackArea(plist).apply { inset(-width, -width) }
                             )
@@ -410,6 +581,23 @@ class OnyxInputHandler(
         }
     }
 
+    private fun bandBounds(previous: Rect?, a: TouchPoint, b: TouchPoint, strokeWidth: Float): Rect {
+        val padding = (strokeWidth / 2f).toInt() + bandPaddingPx
+        val rect = previous?.let { Rect(it) } ?: Rect()
+        val left = min(a.x, b.x).toInt() - padding
+        val top = min(a.y, b.y).toInt() - padding
+        val right = max(a.x, b.x).toInt() + padding
+        val bottom = max(a.y, b.y).toInt() + padding
+        if (previous == null || previous.isEmpty) {
+            rect.set(left, top, right, bottom)
+        } else {
+            rect.union(left, top, right, bottom)
+        }
+        rect.sort()
+        if (!rect.intersect(0, 0, drawCanvas.width, drawCanvas.height)) return Rect()
+        return rect
+    }
+
     // The screen area the firmware drew [plist]'s track over.
     private fun trackArea(plist: TouchPointList): Rect {
         val padding = 10
@@ -430,7 +618,10 @@ class OnyxInputHandler(
         if (pageId != page.currentPageId) {
             // Made on a page no longer shown: only the eraser track is cleared.
             log.i("Erasing made on page $pageId dropped, another page is shown")
-            drawCanvas.refreshManager.commitErase(strokeArea, areaErase = toolbarState.eraser == Eraser.SELECT)
+            drawCanvas.refreshManager.commitErase(
+                strokeArea,
+                areaErase = toolbarState.eraser == Eraser.SELECT
+            )
             return
         }
         val viewport = page.viewport.value
@@ -453,7 +644,10 @@ class OnyxInputHandler(
         if (zoneEffected != null) dirty.union(zoneEffected)
         // Area (lasso/select) erase needs the longer 500ms settle the official app uses; the
         // pen/marker erase uses the 150ms stroke settle.
-        drawCanvas.refreshManager.commitErase(dirty, areaErase = toolbarState.eraser == Eraser.SELECT)
+        drawCanvas.refreshManager.commitErase(
+            dirty,
+            areaErase = toolbarState.eraser == Eraser.SELECT
+        )
     }
 
 }
