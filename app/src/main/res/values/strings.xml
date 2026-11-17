@@ -89,6 +89,11 @@
     <string name="copy_book_link">Copy link to book</string>
     <string name="copy_link">Copy link</string>
     <string name="link_format">Copied link format</string>
+    <string name="receive_pdfs">Receive PDFs from a computer</string>
+    <string name="receive_pdfs_token">Token: %1$s</string>
+    <string name="receive_pdfs_usb">Over USB, run on the computer: adb forward tcp:%1$d tcp:%1$d</string>
+    <string name="copy_token">Copy token</string>
+    <string name="new_token">New token</string>
     <string name="clean_all_strokes">Clean all strokes</string>
     <string name="change_background">Change Background</string>
     <string name="bug_report">Bug Report</string>

@@ -39,10 +39,10 @@ import java.io.File
 
 private val log = ShipBook.getLogger("DeepLinkHandler")
 
-/** Opens each link from [links], asking before a PDF is imported. */
+/** Opens each of [requests], asking before a linked PDF is imported. */
 @Composable
 fun DeepLinkHandler(
-    links: Flow<DeepLink>,
+    requests: Flow<LinkRequests.Request>,
     resolver: DeepLinkResolver,
     navigator: NotableNavigator,
     snackDispatcher: SnackDispatcher,
@@ -66,14 +66,17 @@ fun DeepLinkHandler(
         }
     }
 
-    LaunchedEffect(links) {
-        links.collect { link ->
+    LaunchedEffect(requests) {
+        requests.collect { request ->
             // A new link replaces a question about an earlier one.
             askToImport = null
             if (navigator.isOnWelcome) {
-                log.i("Ignoring $link until setup is finished")
+                log.i("Ignoring $request until setup is finished")
                 snack("Finish setting up Notable first")
-            } else go(resolver.resolve(link))
+            } else when (request) {
+                is LinkRequests.Request.Open -> go(resolver.resolve(request.link))
+                is LinkRequests.Request.Show -> go(request.target)
+            }
         }
     }
 

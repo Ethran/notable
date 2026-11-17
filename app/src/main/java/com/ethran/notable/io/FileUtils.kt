@@ -17,6 +17,7 @@ import android.provider.OpenableColumns
 import androidx.core.net.toUri
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
+import com.ethran.notable.data.dbDirPath
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.utils.UriUtils.getDataColumn
 import io.shipbook.shipbooksdk.ShipBook
@@ -42,6 +43,13 @@ fun getLinkedFilesDir(): File {
     }
     return dbDir
 }
+
+/** Where the PDF receiver writes the files pushed to it: `Received` in the database folder. */
+fun getReceivedFilesDir(): File = File(dbDirPath(), "Received")
+
+/** Whether [path] is a file the PDF receiver writes: it reports its changes itself, unwatched. */
+fun isReceivedFile(path: String): Boolean =
+    File(path).absoluteFile.parentFile == getReceivedFilesDir().absoluteFile
 
 
 fun saveImageFromContentUri(context: Context, fileUri: Uri, outputDir: File): File {

@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.io.ImportEngine
@@ -15,17 +17,25 @@ import com.ethran.notable.utils.fold
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Singleton
 
 /** Finds what a [DeepLink] points at in the database, and imports the PDF of a [DeepLink.Pdf]. */
+@Singleton
 class DeepLinkResolver @Inject constructor(
     private val appRepository: AppRepository,
     private val importEngine: ImportEngine,
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     @param:ApplicationScope private val applicationScope: CoroutineScope,
 ) {
+    // Held while a notebook following a PDF is looked up and then made or given pages, so that two
+    // imports of one file make one notebook, and no one adds pages to a notebook still importing.
+    private val importMutex = Mutex()
+
     sealed interface Target {
         /** Open [pageId]; [note] is shown when the link asked for something slightly different. */
         data class Editor(val pageId: String, val bookId: String?, val note: String? = null) : Target
@@ -63,22 +73,47 @@ class DeepLinkResolver @Inject constructor(
      * doesn't stop it halfway.
      */
     suspend fun import(link: DeepLink.Pdf): Target = applicationScope.async(Dispatchers.IO) {
-        val result = importEngine.import(
-            Uri.fromFile(File(link.path)),
-            ImportOptions(linkToExternalFile = true)
-        )
-        result.fold(
-            onSuccess = { pageIds ->
-                thumbnailBackfillQueue.enqueue(pageIds, PreviewSaveMode.STRICT_BW)
-                val book = pageIds.firstOrNull()
-                    ?.let { appRepository.pageRepository.getById(it)?.notebookId }
-                    ?.let { appRepository.bookRepository.getById(it) }
-                    ?: return@fold Target.Failed("Imported notebook not found")
-                openBook(book, link.page)
-            },
-            onError = { Target.Failed("Import failed: ${it.userMessage}") }
-        )
+        importMutex.withLock {
+            // Another import may have made a notebook following the file meanwhile, e.g. the PDF
+            // receiver's while the import dialog was open.
+            appRepository.bookRepository.getLinkedToPdf(link.path)
+                ?.let { return@withLock openBook(it, link.page) }
+            val result = importEngine.import(
+                Uri.fromFile(File(link.path)),
+                ImportOptions(linkToExternalFile = true)
+            )
+            result.fold(
+                onSuccess = { pageIds ->
+                    thumbnailBackfillQueue.enqueue(pageIds, PreviewSaveMode.STRICT_BW)
+                    val book = pageIds.firstOrNull()
+                        ?.let { appRepository.pageRepository.getById(it)?.notebookId }
+                        ?.let { appRepository.bookRepository.getById(it) }
+                        ?: return@fold Target.Failed("Imported notebook not found")
+                    openBook(book, link.page)
+                },
+                onError = { Target.Failed("Import failed: ${it.userMessage}") }
+            )
+        }
     }.await()
+
+    /**
+     * Gives the notebook that follows the PDF at [path] a page for each page the PDF has beyond the
+     * notebook's last one. A PDF that got shorter keeps its notebook's pages, and their strokes.
+     */
+    suspend fun addMissingPages(path: String): Unit = withContext(Dispatchers.IO) {
+        importMutex.withLock {
+            val book = appRepository.bookRepository.getLinkedToPdf(path) ?: return@withLock
+            repeat(getPdfPageCount(path) - book.pageIds.size) {
+                val page = Page(
+                    notebookId = book.id,
+                    background = book.defaultBackground,
+                    backgroundType = BackgroundType.AutoPdf.key
+                )
+                appRepository.pageRepository.create(page)
+                appRepository.bookRepository.addPage(book.id, page.id)
+            }
+        }
+    }
 
     /** What the import dialog shows of the PDF of [link]. */
     suspend fun preview(link: DeepLink.Pdf): PdfPreview = withContext(Dispatchers.IO) {
