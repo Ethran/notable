@@ -165,7 +165,7 @@ class OnyxInputHandler(
                     line
                 )
             }
-            drawCanvas.refreshManager.refreshUi(dirty)
+            dirty?.let { drawCanvas.refreshManager.addFirmwareInk(it) }
         }
     }
 
@@ -529,9 +529,13 @@ class OnyxInputHandler(
                                 )
                             )
                         }
-                        coroutineScope.launch(Dispatchers.Default) {
-                            drawCanvas.refreshManager.refreshUi(dirtyRect)
-                        }
+                        // Unlike Mode.Draw, this must reach the panel now: the panel shows the
+                        // firmware's freehand track, not the straight line just committed to the
+                        // page bitmap, so without a push the line stays invisible until something
+                        // else refreshes (a scroll). drawCanvasToView, not refreshUi: it blits the
+                        // dirty rect and skips resetScreenFreeze, whose raw-drawing toggle and
+                        // settle were the microfreeze.
+                        drawCanvas.refreshManager.drawCanvasToView(dirtyRect)
                     }
 
                 }
