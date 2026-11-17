@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.io.ImportEngine
@@ -83,6 +85,23 @@ class DeepLinkResolver @Inject constructor(
             onError = { Target.Failed("Import failed: ${it.userMessage}") }
         )
     }.await()
+
+    /**
+     * Gives the notebook that follows the PDF at [path] a page for each page the PDF has beyond the
+     * notebook's last one. A PDF that got shorter keeps its notebook's pages, and their strokes.
+     */
+    suspend fun addMissingPages(path: String) = withContext(Dispatchers.IO) {
+        val book = appRepository.bookRepository.getLinkedToPdf(path) ?: return@withContext
+        repeat(getPdfPageCount(path) - book.pageIds.size) {
+            val page = Page(
+                notebookId = book.id,
+                background = book.defaultBackground,
+                backgroundType = BackgroundType.AutoPdf.key
+            )
+            appRepository.pageRepository.create(page)
+            appRepository.bookRepository.addPage(book.id, page.id)
+        }
+    }
 
     /** What the import dialog shows of the PDF of [link]. */
     suspend fun preview(link: DeepLink.Pdf): PdfPreview = withContext(Dispatchers.IO) {

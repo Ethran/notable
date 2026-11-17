@@ -36,8 +36,9 @@ interface ReceiverHost {
     fun written(file: File)
 
     /**
-     * Finds the notebook observing [link]'s file, importing the file as a notebook that observes it
-     * if there is none, and shows it when [link] asks for a page or the notebook is new.
+     * Finds the notebook observing [link]'s file and gives it a page for each page the PDF has
+     * beyond it, or imports the file as a notebook that observes it if there is none. Shows the
+     * notebook when [link] asks for a page or the notebook is new.
      */
     suspend fun open(link: DeepLink.Pdf): Pushed
     fun log(message: String)
@@ -53,7 +54,8 @@ data class Pushed(val target: Target, val imported: Boolean = false)
  * - `GET /`: `Notable <version>`, without a token, to tell "receiver off" from "wrong token".
  * - `PUT /pdf?name=<file name>[&page=N]` with `Authorization: Bearer <token>` and the PDF as the
  *   body: writes it as `<receive folder>/<name>` and redraws the notebook that observes it. The
- *   first push of a name imports it as such a notebook. A push moves the user only to show a new
+ *   first push of a name imports it as such a notebook, and a later push of a longer PDF adds the
+ *   new pages at its end. A push moves the user only to show a new
  *   notebook, or to page N of the PDF when it gives `page`. Answers a status code, which scripts
  *   act on, and one line for a person.
  */
@@ -80,6 +82,10 @@ fun Application.pdfReceiver(host: ReceiverHost) {
             val name = call.request.queryParameters["name"]
             if (name == null || !isAllowedName(name))
                 return@put refuse(HttpStatusCode.BadRequest, "Give name=<file name>.pdf, without a path")
+            val pageGiven = call.request.queryParameters["page"]
+            val page = parsePage(pageGiven)
+            if (pageGiven != null && page == null)
+                return@put refuse(HttpStatusCode.BadRequest, "page must be a number from 1")
             val length = call.request.contentLength()
                 ?: return@put reply(HttpStatusCode.LengthRequired, "Content-Length is required")
             if (length > MAX_PDF_BYTES)
@@ -90,8 +96,9 @@ fun Application.pdfReceiver(host: ReceiverHost) {
             val target = File(host.receiveDir, name)
             val written = withContext(Dispatchers.IO) {
                 call.receiveStream().use { body ->
+                    // Reported here, so that a server stopped right after the write still redraws.
                     writeReceivedPdf(body, length, target, host::countPages)
-                        .also { if (it != WriteResult.Written) body.skipRest() }
+                        .also { if (it == WriteResult.Written) host.written(target) else body.skipRest() }
                 }
             }
             when (written) {
@@ -106,10 +113,9 @@ fun Application.pdfReceiver(host: ReceiverHost) {
                     HttpStatusCode.InternalServerError,
                     "Writing failed, the old file is kept: ${written.error.message}"
                 )
-                WriteResult.Written -> host.written(target)
+                WriteResult.Written -> Unit
             }
 
-            val page = parsePage(call.request.queryParameters["page"])
             val pushed = try {
                 host.open(DeepLink.Pdf(target.path, page))
             } catch (e: CancellationException) {
