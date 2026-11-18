@@ -44,14 +44,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.time.delay
-import java.time.Duration
-import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sqrt
-import kotlin.time.Duration.Companion.milliseconds
 
 class OnyxInputHandler(
     private val drawCanvas: DrawCanvas,
@@ -230,10 +225,6 @@ class OnyxInputHandler(
         override fun onEndRawDrawing(p0: Boolean, p1: TouchPoint?) {
             log.d("PEN UP EVENT: B = (${p1?.x}, ${p1?.y}), bool $p0")
             handleRectifyGestureEnd(p1)
-            // A dwell is only counted while the pen stays in one spot, so it must not survive the
-            // gesture: pointB is the stroke's last point, so a next stroke starting at its end (or
-            // jittering there) would sit within the distance threshold on its very first moves, and
-            // after 200 ms be taken for a dwell and turn into a rectify.
             clearDwellDetection()
         }
 
