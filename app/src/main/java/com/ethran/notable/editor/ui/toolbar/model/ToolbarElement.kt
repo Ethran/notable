@@ -70,10 +70,13 @@ data class PenElement(
     override val id: ToolbarElementId get() = ToolbarElementId.PEN
 
     override fun isSelected(state: ToolbarUiState): Boolean =
-        (state.mode == Mode.Draw || state.mode == Mode.Line) && state.penPresetId == presetId
+        state.mode == Mode.Draw && state.penPresetId == presetId
 }
 
-/** The single SHAPE button; its picker submenu selects among [shapes]. */
+/**
+ * The SHAPE button. Inert for now — it can draw nothing, so it never reads as selected and
+ * [shapes] is a placeholder for the picker the Shape tool will eventually grow.
+ */
 data class ShapeElement(
     override val id: ToolbarElementId,
     override val icon: IconRef,
@@ -81,7 +84,7 @@ data class ShapeElement(
     override val visibleWhen: VisibleWhen = ALWAYS,
     val shapes: List<Shape>,
 ) : ToolbarElement {
-    override fun isSelected(state: ToolbarUiState): Boolean = state.mode == Mode.Line
+    override fun isSelected(state: ToolbarUiState): Boolean = false
 }
 
 /** Mode tools without stroke styles: eraser (with its submenu), select. */

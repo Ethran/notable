@@ -24,7 +24,6 @@ import com.ethran.notable.editor.utils.configureCalligraphyLiveAngle
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
 import com.ethran.notable.editor.utils.ERASER_INDICATOR_COLOR
 import com.ethran.notable.editor.utils.enableNativeEraser
-import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
 import com.ethran.notable.editor.utils.handleScribbleToErase
@@ -319,7 +318,7 @@ class OnyxInputHandler(
         log.i("Update pen and stroke")
         when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
-            Mode.Draw, Mode.Line -> {
+            Mode.Draw, Mode.Shape -> {
                 val scaledWidth = toolbarState.activePenSetting.strokeSize * page.zoom
                 touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
                     ?.setStrokeWidth(scaledWidth)
@@ -482,57 +481,7 @@ class OnyxInputHandler(
                 }
             }
 
-            Mode.Line -> {
-                coroutineScope.launch(Dispatchers.Main.immediate) {
-                    CanvasEventBus.drawingInProgress.withLock {
-                        val lock = System.currentTimeMillis()
-                        log.d("lock obtained in ${lock - startTime} ms")
-
-
-                        val viewport = page.viewport.value
-                        val (startPoint, endPoint) = getModifiedStrokeEndpoints(
-                            plist.points,
-                            viewport.scroll,
-                            viewport.zoom
-                        )
-                        val linePoints = transformToLine(startPoint, endPoint)
-
-                        handleDraw(
-                            drawCanvas.page,
-                            pageId,
-                            history,
-                            toolbarState.activePenSetting.strokeSize,
-                            toolbarState.activePenSetting.color,
-                            toolbarState.pen,
-                            linePoints
-                        )
-
-                        // On screen: the firmware's freehand track and the straight line drawn.
-                        val dirtyRect = trackArea(plist).apply {
-                            union(
-                                viewport.toScreen(
-                                    Rect(
-                                        min(startPoint.x, endPoint.x).toInt(),
-                                        min(startPoint.y, endPoint.y).toInt(),
-                                        max(startPoint.x, endPoint.x).toInt(),
-                                        max(startPoint.y, endPoint.y).toInt()
-                                    )
-                                )
-                            )
-                        }
-                        // Unlike Mode.Draw, this must reach the panel now: the panel shows the
-                        // firmware's freehand track, not the straight line just committed to the
-                        // page bitmap, so without a push the line stays invisible until something
-                        // else refreshes (a scroll). drawCanvasToView, not refreshUi: it blits the
-                        // dirty rect and skips resetScreenFreeze, whose raw-drawing toggle and
-                        // settle were the microfreeze.
-                        drawCanvas.refreshManager.drawCanvasToView(dirtyRect)
-                    }
-
-                }
-            }
-
-            Mode.Draw -> {
+            Mode.Draw, Mode.Shape -> {
                 coroutineScope.launch(Dispatchers.Main.immediate) {
                     var dropped = false
                     CanvasEventBus.drawingInProgress.withLock {

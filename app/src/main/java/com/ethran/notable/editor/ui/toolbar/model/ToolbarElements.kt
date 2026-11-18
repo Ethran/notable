@@ -34,7 +34,7 @@ object ToolbarElements {
             id = ToolbarElementId.SHAPE,
             icon = IconRef.Drawable(R.drawable.line),
             contentDescription = "shape",
-            shapes = listOf(Shape.LINE),
+            shapes = listOf(Shape.SQUARE),
         ),
         ModeElement(
             id = ToolbarElementId.ERASER,
@@ -155,9 +155,8 @@ object ToolbarElements {
     }
 
     /**
-     * Collapsed-toolbar icon: the mode tool if one is selected (shape/eraser/select —
-     * in Line mode the shape button wins over the pen, matching old behavior), otherwise
-     * the active pen preset's icon.
+     * Collapsed-toolbar icon: the mode tool if one is selected (eraser or select), otherwise
+     * the active pen preset's icon. The shape button is inert, so it never wins here.
      */
     fun presentlyUsedToolIcon(state: ToolbarUiState, pens: List<ToolbarPen>): IconRef {
         all.values.firstOrNull { it.isSelected(state) }?.icon?.let { return it }

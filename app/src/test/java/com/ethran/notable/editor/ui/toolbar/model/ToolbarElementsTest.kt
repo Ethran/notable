@@ -60,13 +60,20 @@ class ToolbarElementsTest {
     }
 
     @Test
-    fun `pen element selected in draw and line mode with matching preset only`() {
+    fun `pen element selected in draw mode with matching preset only`() {
         val ball = ToolbarElements.penElement(pens.first { it.id == "ball" })
         assertTrue(ball.isSelected(ToolbarUiState(mode = Mode.Draw, penPresetId = "ball")))
-        assertTrue(ball.isSelected(ToolbarUiState(mode = Mode.Line, penPresetId = "ball")))
         // Same base pen type, different preset: not selected.
         assertFalse(ball.isSelected(ToolbarUiState(mode = Mode.Draw, penPresetId = "red")))
         assertFalse(ball.isSelected(ToolbarUiState(mode = Mode.Erase, penPresetId = "ball")))
+    }
+
+    @Test
+    fun `shape button is inert and never selected in any mode`() {
+        val shape = ToolbarElements.of(ToolbarElementId.SHAPE)
+        Mode.entries.forEach { mode ->
+            assertFalse("$mode must not select the shape button", shape.isSelected(ToolbarUiState(mode = mode)))
+        }
     }
 
     @Test
@@ -128,11 +135,11 @@ class ToolbarElementsTest {
     }
 
     @Test
-    fun `presently used tool icon prefers the mode tool over the pen in line mode`() {
-        val lineState = ToolbarUiState(mode = Mode.Line, penPresetId = "ball")
+    fun `presently used tool icon prefers the mode tool over the pen`() {
+        val eraseState = ToolbarUiState(mode = Mode.Erase, penPresetId = "marker")
         assertEquals(
-            ToolbarElements.of(ToolbarElementId.SHAPE).icon,
-            ToolbarElements.presentlyUsedToolIcon(lineState, pens),
+            ToolbarElements.of(ToolbarElementId.ERASER).icon,
+            ToolbarElements.presentlyUsedToolIcon(eraseState, pens),
         )
         val drawState = ToolbarUiState(mode = Mode.Draw, penPresetId = "marker")
         assertEquals(

@@ -10,9 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.core.graphics.toRegion
 import com.ethran.notable.data.db.Image
 import com.ethran.notable.data.db.Stroke
-import com.ethran.notable.data.db.StrokePoint
 import com.ethran.notable.data.model.SimplePointF
-import com.onyx.android.sdk.data.note.TouchPoint
 
 
 fun pointsToPath(points: List<SimplePointF>): Path {
@@ -191,30 +189,3 @@ fun offsetImage(image: Image, offset: Offset): Image {
     )
 }
 
-fun getModifiedStrokeEndpoints(
-    points: List<TouchPoint>,
-    scroll: Offset,
-    zoomLevel: Float
-): Pair<StrokePoint, StrokePoint> {
-    if (points.isEmpty()) throw IllegalArgumentException("points list is empty")
-
-    val startIdx = points.size / 10
-    val endIdx = (9 * points.size) / 10
-
-    val baseStartPoint = points.first().toStrokePoint(scroll, zoomLevel)
-    val baseEndPoint = points.last().toStrokePoint(scroll, zoomLevel)
-
-    val startPoint = baseStartPoint.copy(
-        tiltX = points[startIdx].tiltX,
-        tiltY = points[startIdx].tiltY,
-        pressure = points[startIdx].pressure
-    )
-
-    val endPoint = baseEndPoint.copy(
-        tiltX = points[endIdx].tiltX,
-        tiltY = points[endIdx].tiltY,
-        pressure = points[endIdx].pressure
-    )
-
-    return Pair(startPoint, endPoint)
-}

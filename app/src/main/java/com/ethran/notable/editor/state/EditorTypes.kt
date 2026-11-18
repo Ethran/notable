@@ -4,15 +4,15 @@ package com.ethran.notable.editor.state
  * Drawing mode for the editor.
  */
 enum class Mode {
-    Draw, Erase, Select, Line
+    Draw, Erase, Select, Shape
 }
 
 /**
- * Shapes the SHAPE tool can draw. Only LINE exists today (backed by [Mode.Line]);
- * RECT/ELLIPSE/ARROW are future entries — the shape-picker submenu grows automatically.
+ * Placeholder for the Shape tool. Nothing draws yet; straight lines come from the pen-dwell
+ * rectify gesture in Draw mode, so LINE is not listed here.
  */
 enum class Shape {
-    LINE
+    SQUARE
 }
 
 /**

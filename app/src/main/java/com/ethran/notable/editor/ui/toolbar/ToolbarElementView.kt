@@ -37,7 +37,6 @@ import com.ethran.notable.data.datastore.BUTTON_SIZE
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.editor.ToolbarAction
 import com.ethran.notable.editor.ToolbarUiState
-import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.ui.toolbar.model.ActionElement
 import com.ethran.notable.editor.ui.toolbar.model.CustomElement
 import com.ethran.notable.editor.ui.toolbar.model.CustomKind
@@ -52,6 +51,9 @@ import com.ethran.notable.editor.utils.Eraser
 import com.ethran.notable.ui.components.OnOffSwitch
 import com.ethran.notable.ui.components.ScaledPopup
 import com.ethran.notable.ui.noRippleClickable
+import io.shipbook.shipbooksdk.ShipBook
+
+private val log = ShipBook.getLogger("Toolbar")
 
 /**
  * The single generic renderer for toolbar elements: draws the button (via [ToolbarButton]),
@@ -74,17 +76,10 @@ fun ToolbarElementView(
         is PenElement -> PenElementView(element, uiState, onAction)
 
         is ShapeElement ->
-            // One shape (LINE) for now: the picker submenu is stubbed to a plain toggle,
-            // matching the old LineToolbarButton (click again deselects back to Draw).
+            // Inert until the Shape tool can draw: the click logs and changes nothing.
             ToolbarButton(
                 isSelected = element.isSelected(uiState),
-                onSelect = {
-                    onAction(
-                        ToolbarAction.ChangeMode(
-                            if (element.isSelected(uiState)) Mode.Draw else Mode.Line
-                        )
-                    )
-                },
+                onSelect = { log.d("Shape button clicked") },
                 penColor = Color.LightGray,
                 iconId = (element.icon as? IconRef.Drawable)?.resId,
                 vectorIcon = (element.icon as? IconRef.Vector)?.imageVector,
