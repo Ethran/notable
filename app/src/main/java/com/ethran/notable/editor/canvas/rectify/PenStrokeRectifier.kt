@@ -159,7 +159,8 @@ class PenStrokeRectifier(
         renderer.rawDrawingRenderEnabled = true
 
         val a = pointA ?: return null
-        val b = lastMove ?: upPoint ?: a
+        val raw = lastMove ?: upPoint ?: a
+        val b = snapBand(a, raw, thresholds)
         val dirty = bandRect
         val pressure = pressureMean
         clearGestureState()
@@ -256,18 +257,23 @@ class PenStrokeRectifier(
     /** True once the pen has moved enough since the last push, and enough time has passed. */
     private fun shouldPushBand(a: Point2D, b: Point2D): Boolean {
         val reference = lastBandDrawnAt ?: a
-        val moved = bandRect == null || b.distanceTo(reference) > thresholds.bandMinMovePx
+        val moved = bandRect == null ||
+            snappedEnd(a, b).distanceTo(reference) > thresholds.bandMinMovePx
         return moved && now() - lastBandDrawTime > thresholds.bandMinIntervalMs
     }
+
+    /** The band's far end as the panel shows it: [b] rotated onto an axis guide when one is near. */
+    private fun snappedEnd(a: Point2D, b: Point2D): Point2D = snapBand(a, b, thresholds)
 
     /** Pushes the band at the gesture's current mean pressure, and remembers the pushed area. */
     private fun drawBand(a: Point2D, b: Point2D) {
         val spec = (bandPaint ?: return).copy(pressure = pressureMean)
-        val dirty = bandBounds(bandRect, a, b, spec.strokeWidthPx)
-        val pushed = renderer.drawBand(a, b, spec, dirty)
+        val end = snappedEnd(a, b)
+        val dirty = bandBounds(bandRect, a, end, spec.strokeWidthPx)
+        val pushed = renderer.drawBand(a, end, spec, dirty)
         if (pushed != null) {
             bandRect = pushed
-            lastBandDrawnAt = b
+            lastBandDrawnAt = end
         }
     }
 

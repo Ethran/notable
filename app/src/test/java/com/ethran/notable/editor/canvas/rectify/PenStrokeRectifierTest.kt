@@ -27,6 +27,9 @@ class PenStrokeRectifierTest {
         bandMinIntervalMs = 120,
         bandMinMovePx = 18f,
         bandPaddingPx = 4,
+        // Off, so the dwell, throttle and geometry tests see exactly the angle the pen drew. The
+        // snapping tests build their own engine with it on rather than moving this suite.
+        snapEnabled = false,
     )
 
     private val clock = FakeClock()
@@ -861,6 +864,239 @@ class PenStrokeRectifierTest {
         val spec = renderer.bands.last().spec
         assertEquals(12f, spec.strokeWidthPx, 0f)
         assertEquals(0xFF00FF00.toInt(), spec.color)
+    }
+
+    // --- Soft angle snapping ------------------------------------------------
+
+    /** The same engine with snapping on: 45-degree guides, 5 degrees of tolerance, full strength. */
+    private fun snappingRectifier(
+        panel: FakeRectifyRenderer = FakeRectifyRenderer(),
+    ): Pair<PenStrokeRectifier, FakeRectifyRenderer> {
+        val r = PenStrokeRectifier(
+            now = { clock.now },
+            renderer = panel,
+            thresholds = thresholds.copy(
+                snapEnabled = true,
+                snapStepDeg = 45,
+                snapToleranceDeg = 5,
+                snapStrength = 1f,
+            ),
+            surfaceSize = { SCREEN_W to SCREEN_H },
+        )
+        return r to panel
+    }
+
+    /** Angle of the line from [a] to [b], in degrees, screen-space so +y runs downward. */
+    private fun lineAngle(a: Point2D, b: Point2D): Double =
+        kotlin.math.atan2((b.y - a.y).toDouble(), (b.x - a.x).toDouble()) * 180.0 / Math.PI
+
+    /** Down at 100,100 travelling near 45 degrees, then held still until it rectifies. */
+    private fun PenStrokeRectifier.rectifyNearFortyFive() {
+        penDown(100f, 100f)
+        advance(10); move(250f, 227f)   // atan2(127, 150) = 40.2 degrees
+        holdAtRest(Point2D(252f, 229f))
+    }
+
+    @Test
+    fun `a band already travelling on 45 is held there`() {
+        // Enters rectify travelling at exactly 45.0 degrees.
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(250f, 250f)   // exactly 45 degrees
+        r.holdAtRest(Point2D(251f, 251f))
+        assertTrue("the gesture must have rectified to have a band", panel.bands.isNotEmpty())
+
+        val band = panel.bands.last()
+        assertEquals("the band sits on 45", 45.0, lineAngle(band.a, band.b), 0.5)
+    }
+
+    @Test
+    fun `a pen pushed off the guide is followed off it`() {
+        // The soft half, end to end: enter on 45, then drive the pen to a heading no guide is near.
+        val (r, _) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(250f, 250f)
+        r.holdAtRest(Point2D(251f, 251f))
+
+        advance(PUSHER_GAP)
+        // atan2(300,100) = 71.6 degrees: 26.6 from 45 and 18.4 from 90, so nothing is in range and
+        // the pen is obeyed exactly. Not a sticky detent to break out of.
+        r.move(200f, 400f)
+        val commit = r.penUp(200f, 400f)!!
+        assertEquals("the pen is followed, not held", Point2D(200f, 400f), commit.b)
+    }
+
+    @Test
+    fun `a pen a few degrees off 45 snaps to 45, whatever the dwell was`() {
+        // The case a hand actually produces, and the one confirmed on device. The dwell fired at 40.2,
+        // the pen then runs out to 44.3, which is 0.7 from the 45 axis and 4.1 from the dwell — so the
+        // nearer guide, the axis, takes it. A hand draws a long line, and the far end of a line is
+        // where it ended up, not where the pause happened; that is why axis snapping is what you feel.
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(250f, 227f)   // dwell fires at 40.2 degrees
+        r.holdAtRest(Point2D(252f, 229f))
+
+        advance(PUSHER_GAP)
+        r.move(300f, 295f)                // atan2(195, 200) = 44.3 degrees
+        val band = panel.bands.last()
+        assertEquals("the nearer axis wins", 45.0, lineAngle(band.a, band.b), 0.5)
+    }
+
+    @Test
+    fun `the dwell beats an axis only when the pen stays within a degree of it`() {
+        // The boundary, pinned so the trade-off is visible rather than accidental. The dwell fired at
+        // The dwell fired at 40.2 and the pen has barely moved — atan2(189, 220) = 40.7, which is 4.3
+        // from the 45 axis. Only the axes are guides now, so this is simply within tolerance of 45 and
+        // snaps there, where the removed dwell guide used to hold it near its own heading.
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(250f, 227f)
+        r.holdAtRest(Point2D(252f, 229f))
+
+        advance(PUSHER_GAP)
+        r.move(320f, 289f)                // atan2(189, 220) = 40.7 degrees
+        val band = panel.bands.last()
+        assertEquals("no dwell guide to hold it, so 45 takes it", 45.0, lineAngle(band.a, band.b), 0.5)
+    }
+
+    @Test
+    fun `an angle with no axis near it is left exactly as drawn`() {
+        // The consequence of dropping the dwell guide: a deliberate diagonal is no longer rescued.
+        // 30 degrees is 15 from 45 and 30 from 0, so nothing is in range and the pen is obeyed.
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(400f, 273f)   // atan2(173, 300) = 29.98 degrees
+        r.holdAtRest(Point2D(402f, 274f))
+
+        val band = panel.bands.last()
+        assertEquals("no guide near 30, so the pen keeps its heading", 30.0, lineAngle(band.a, band.b), 0.6)
+    }
+
+    @Test
+    fun `a wobbling pen near 45 snaps to 45 even though the dwell was off-axis`() {
+        // The realistic case, and the one that matters on the device: the dwell fires on a heading of
+        // 40.2, but the pen keeps travelling and the band end lands at 44.4, which is 0.6 from the 45
+        // axis and 4.2 from the dwell. The nearer guide wins, so 45 takes it — which is why 0/45/90
+        // snapping is what a real gesture actually gets.
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(250f, 227f)   // dwell fires at 40.2 degrees
+        r.holdAtRest(Point2D(252f, 229f))
+
+        advance(PUSHER_GAP)
+        r.move(300f, 300f - 5)            // atan2(195, 200) = 44.3 degrees
+        val band = panel.bands.last()
+        assertEquals("the axis wins when it is nearer", 45.0, lineAngle(band.a, band.b), 0.5)
+    }
+
+    @Test
+    fun `a wobbling pen near 0 snaps flat even though the dwell was tilted`() {
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(400f, 128f)   // dwell fires at 3.96 degrees
+        r.holdAtRest(Point2D(401f, 129f))
+
+        advance(PUSHER_GAP)
+        // Measured from A at 100,100: atan2(104-100, 600-100) = 0.46 degrees, which is 0.5 from
+        // horizontal, so the axis takes it and flattens it.
+        r.move(600f, 104f)
+        val band = panel.bands.last()
+        assertEquals("the horizontal axis takes it", 0.0, lineAngle(band.a, band.b), 0.5)
+    }
+
+    @Test
+    fun `a wobbling pen near 90 snaps vertical even though the dwell was tilted`() {
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(128f, 400f)   // dwell fires at 66 degrees
+        r.holdAtRest(Point2D(129f, 401f))
+
+        advance(PUSHER_GAP)
+        r.move(108f, 700f)                // atan2(600, 8) = 89.2 degrees
+        val band = panel.bands.last()
+        assertEquals("the vertical axis takes it", 90.0, lineAngle(band.a, band.b), 0.5)
+    }
+
+    @Test
+    fun `the committed line is snapped the same way the band was shown`() {
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(250f, 250f)   // 45 degrees
+        r.holdAtRest(Point2D(251f, 251f))
+        advance(PUSHER_GAP)
+        r.move(300f, 302f)                // 46 degrees, inside tolerance of the guide
+
+        val commit = r.penUp(301f, 303f)!!
+        val band = panel.bands.last()
+        assertEquals(
+            "the line must not change angle on refresh",
+            lineAngle(band.a, band.b),
+            lineAngle(commit.a, commit.b),
+            0.5,
+        )
+        assertEquals("and it is on the guide", 45.0, lineAngle(commit.a, commit.b), 0.5)
+    }
+
+    @Test
+    fun `a line past the tolerance commits exactly where the pen left it`() {
+        val (r, _) = snappingRectifier()
+        r.rectifyNearFortyFive()
+        advance(PUSHER_GAP)
+        // Past 50 degrees: outside tolerance of both 45 and 90, so the pen is obeyed exactly. This is
+        // the soft half of the snap — nothing is sticky and there is nothing to break out of.
+        r.move(200f, 400f)
+
+        val commit = r.penUp(200f, 400f)!!
+        assertEquals("A holds", Point2D(100f, 100f), commit.a)
+        assertEquals("B is the pen, unnudged", Point2D(200f, 400f), commit.b)
+    }
+
+    @Test
+    fun `snapping off leaves the band at the pen's angle`() {
+        val panel = FakeRectifyRenderer()
+        val r = PenStrokeRectifier(
+            now = { clock.now },
+            renderer = panel,
+            thresholds = thresholds.copy(snapEnabled = false),
+            surfaceSize = { SCREEN_W to SCREEN_H },
+        )
+        r.rectifyNearFortyFive()
+
+        assertEquals("the pen's own end", Point2D(252f, 229f), panel.bands.last().b)
+    }
+
+    @Test
+    fun `the dwell's own angle is a guide, so a straight diagonal holds it`() {
+        val (r, panel) = snappingRectifier()
+        // Deliberately straight at 30 degrees, which is 15 clear of the 45 guide.
+        r.penDown(100f, 100f)
+        advance(10); r.move(400f, 273f)   // atan2(173, 300) = 29.98 degrees
+        r.holdAtRest(Point2D(402f, 274f))
+
+        val band = panel.bands.last()
+        assertEquals(
+            "a straight diagonal snaps to itself, not to 45",
+            30.0,
+            lineAngle(band.a, band.b),
+            0.6,
+        )
+    }
+
+    @Test
+    fun `snapping needs no gesture state, so it holds across every push`() {
+        // With the guides reduced to the fixed screen axes there is nothing to carry between moves,
+        // so every push of one gesture is judged the same way: 30 degrees stays unsnapped however far
+        // the pen runs on, and a move into tolerance of 45 snaps there.
+        val (r, panel) = snappingRectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(400f, 273f)   // 30 degrees, no guide in range
+        r.holdAtRest(Point2D(402f, 274f))
+        assertEquals("left alone", 30.0, lineAngle(panel.bands.last().a, panel.bands.last().b), 0.6)
+
+        advance(PUSHER_GAP)
+        r.move(500f, 495f)  // atan2(395, 400) = 44.6, inside tolerance of 45
+        assertEquals("and the axis takes it once it is near", 45.0, lineAngle(panel.bands.last().a, panel.bands.last().b), 0.5)
     }
 
     // --- Band geometry ------------------------------------------------------
