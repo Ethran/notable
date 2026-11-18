@@ -1,6 +1,7 @@
 package com.ethran.notable.editor.canvas.rectify
 
 import com.ethran.notable.editor.utils.Pen
+import com.ethran.notable.editor.utils.rawInputMaxPressure
 
 /**
  * Turns a pen gesture that pauses into a straight line, without help from the SDK or a panel.
@@ -65,9 +66,13 @@ class PenStrokeRectifier(
     /** The band's paint rule, taken once per gesture so a toolbar change mid-stroke cannot split it. */
     private var bandPaint: BandPaintSpec? = null
 
+    /** The gesture's running mean pressure, raw as the SDK reported it, and how many readings it holds. */
+    private var pressureMean = 0f
+    private var pressureSamples = 0
+
     /**
-     * The pen went down at [a] on [pageId], with the active pen described by [pen], [strokeWidthPx]
-     * (already scaled for zoom) and [color].
+     * The pen went down at [a] on [pageId], with the active pen described by [pen] and [color], its
+     * nib [strokeWidth] and its on-screen extent [strokeWidthPx] (that width scaled by page zoom).
      *
      * A null [a] means the SDK reported no pen-down position. Nothing can then be rectified: there
      * is no A for the line to start from, so the gesture stays freehand rather than committing a
@@ -78,11 +83,15 @@ class PenStrokeRectifier(
         pageId: String,
         pen: Pen,
         strokeWidthPx: Float,
+        strokeWidth: Float,
         color: Int,
     ) {
         gesturePageId = pageId
         pointA = a
-        bandPaint = rectifyBandPaint(pen, color, strokeWidthPx)
+        pressureMean = 0f
+        pressureSamples = 0
+        bandPaint = rectifyBandPaint(pen, color, strokeWidthPx, strokeWidth)
+        a?.pressure?.let { foldPressure(it) }
         bandRect = null
         lastMove = null
         lastBandDrawnAt = null
@@ -98,6 +107,9 @@ class PenStrokeRectifier(
      * draws freehand, so the dedicated line tool keeps its own gesture.
      */
     fun onMove(b: Point2D, canRectify: Boolean) {
+        // Folded for every move, not just the rectifying ones, so the travel before the dwell counts.
+        foldPressure(b.pressure)
+
         if (isActive) {
             // No A means no line to draw: give the gesture back to the freehand path.
             val a = pointA ?: run {
@@ -149,8 +161,15 @@ class PenStrokeRectifier(
         val a = pointA ?: return null
         val b = lastMove ?: upPoint ?: a
         val dirty = bandRect
+        val pressure = pressureMean
         clearGestureState()
-        return RectifyCommit(a = a, b = b, pageId = gesturePageId, dirty = dirty)
+        return RectifyCommit(
+            a = a,
+            b = b,
+            pageId = gesturePageId,
+            dirty = dirty,
+            pressure = pressure,
+        )
     }
 
     /**
@@ -164,6 +183,8 @@ class PenStrokeRectifier(
         lastBandDrawnAt = null
         pointA = null
         bandPaint = null
+        pressureMean = 0f
+        pressureSamples = 0
         renderer.rawDrawingRenderEnabled = true
         renderer.wipeBand()
         bandRect = null
@@ -193,6 +214,19 @@ class PenStrokeRectifier(
         bandRect = null
         pointA = null
         bandPaint = null
+        pressureMean = 0f
+        pressureSamples = 0
+    }
+
+    /** Folds one pressure reading into the gesture's mean. */
+    private fun foldPressure(reading: Float) {
+        pressureMean = foldBandPressure(
+            mean = pressureMean,
+            count = pressureSamples,
+            reading = reading,
+            maxPressure = rawInputMaxPressure,
+        )
+        if (reading > 0f) pressureSamples++
     }
 
     private fun enterRectifyMode(a: Point2D, b: Point2D) {
@@ -226,9 +260,9 @@ class PenStrokeRectifier(
         return moved && now() - lastBandDrawTime > thresholds.bandMinIntervalMs
     }
 
-    /** Pushes the band and remembers the pushed area and where B was when it went. */
+    /** Pushes the band at the gesture's current mean pressure, and remembers the pushed area. */
     private fun drawBand(a: Point2D, b: Point2D) {
-        val spec = bandPaint ?: return
+        val spec = (bandPaint ?: return).copy(pressure = pressureMean)
         val dirty = bandBounds(bandRect, a, b, spec.strokeWidthPx)
         val pushed = renderer.drawBand(a, b, spec, dirty)
         if (pushed != null) {

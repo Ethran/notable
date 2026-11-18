@@ -1,11 +1,13 @@
 package com.ethran.notable.editor.canvas
 
 import android.graphics.BlendMode
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.editor.EditorViewModel
@@ -39,8 +41,11 @@ import com.ethran.notable.editor.canvas.rectify.RectBounds
 import com.ethran.notable.editor.canvas.rectify.RectifyCommit
 import com.ethran.notable.editor.canvas.rectify.RectifyRenderer
 import com.ethran.notable.editor.canvas.rectify.toPageStrokePoint
+import com.ethran.notable.editor.canvas.rectify.rectifyBandStroke
 import com.ethran.notable.editor.canvas.rectify.toRect
 import com.ethran.notable.editor.canvas.rectify.toRectBounds
+import com.ethran.notable.editor.drawing.onyx.OnyxStrokeRenderer
+import com.ethran.notable.editor.utils.rawInputMaxPressure
 import com.ethran.notable.ui.convertDpToPixel
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.device.Device
@@ -135,9 +140,33 @@ class OnyxInputHandler(
             }
             return drawCanvas.refreshManager
                 .drawOverFirmware(dirty.toRect()) { canvas ->
-                    canvas.drawLine(a.x, a.y, b.x, b.y, paint)
+                    if (spec.stamped) drawStampedBand(canvas, a, b, spec)
+                    else canvas.drawLine(a.x, a.y, b.x, b.y, paint)
                 }
                 ?.toRectBounds()
+        }
+
+        /** Stamps the band through the pen's own wrapper, via the dry renderer, so panel and page match. */
+        private fun drawStampedBand(
+            canvas: Canvas,
+            a: Point2D,
+            b: Point2D,
+            spec: BandPaintSpec,
+        ) {
+            val viewport = page.viewport.value
+            val stroke = rectifyBandStroke(
+                spec = spec,
+                a = a,
+                b = b,
+                scroll = viewport.scroll,
+                zoom = viewport.zoom,
+            )
+            // The surface is screen space, so the page transform is applied by hand as PageView sets it up.
+            canvas.save()
+            canvas.scale(viewport.zoom, viewport.zoom)
+            canvas.translate(-viewport.scroll.x, -viewport.scroll.y)
+            OnyxStrokeRenderer.drawStroke(canvas, stroke, Offset.Zero)
+            canvas.restore()
         }
 
         override fun wipeBand() {
@@ -176,8 +205,15 @@ class OnyxInputHandler(
                 // The engine holds screen positions; the page stroke needs page coordinates.
                 val line = transformToLine(
                     commit.a.toPageStrokePoint(viewport.scroll, viewport.zoom),
-                    commit.b.toPageStrokePoint(viewport.scroll, viewport.zoom)
+                    commit.b.toPageStrokePoint(viewport.scroll, viewport.zoom),
                 )
+                // Flat pressure at the level the band was stamped at, instead of transformToLine's
+                // endpoint ramp, which fades in where the pen came down. Raw scale divided to [0, 1].
+                    .map {
+                        it.copy(
+                            pressure = (commit.pressure / rawInputMaxPressure).coerceIn(0f, 1f),
+                        )
+                    }
                 handleDraw(
                     drawCanvas.page,
                     gesturePageId,
@@ -209,6 +245,8 @@ class OnyxInputHandler(
                 pageId = page.currentPageId,
                 pen = toolbarState.pen,
                 strokeWidthPx = toolbarState.activePenSetting.strokeSize * page.zoom,
+                // The nib, unscaled, as handleDraw stores it in Stroke.size.
+                strokeWidth = toolbarState.activePenSetting.strokeSize,
                 color = toolbarState.activePenSetting.color,
             )
         }

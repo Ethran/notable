@@ -24,11 +24,15 @@ internal fun PenStrokeRectifier.penDown(
     pageId: String = "page-a",
     pen: Pen = Pen.BALLPEN,
     strokeWidthPx: Float = 6f,
+    strokeWidth: Float = strokeWidthPx,
     color: Int = 0xFF000000.toInt(),
-) = onPenDown(Point2D(x, y), pageId, pen, strokeWidthPx, color)
+) = onPenDown(Point2D(x, y), pageId, pen, strokeWidthPx, strokeWidth, color)
 
 /** A pen move that draws, the mode the rectify gesture is allowed from. */
 internal fun PenStrokeRectifier.move(x: Float, y: Float) = onMove(Point2D(x, y), canRectify = true)
+
+/** A pen move that draws, reporting [point] as the SDK gave it — position and pressure together. */
+internal fun PenStrokeRectifier.move(point: Point2D) = onMove(point, canRectify = true)
 
 /** A pen move in a mode that must not rectify, such as the dedicated line tool. */
 internal fun PenStrokeRectifier.moveWithoutRectify(x: Float, y: Float) =
@@ -59,5 +63,9 @@ internal fun PenStrokeRectifier.hold(
 }
 
 /** Pen up at [x], [y], or with no point when the SDK reports none. */
-internal fun PenStrokeRectifier.penUp(x: Float? = null, y: Float? = null): RectifyCommit? =
-    onPenUp(if (x != null && y != null) Point2D(x, y) else null)
+internal fun PenStrokeRectifier.penUp(
+    x: Float? = null,
+    y: Float? = null,
+    pressure: Float = 0f,
+): RectifyCommit? =
+    onPenUp(if (x != null && y != null) Point2D(x, y, pressure) else null)

@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.canvas.rectify
 
+import androidx.compose.ui.geometry.Offset
 import com.ethran.notable.editor.utils.Pen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,10 +70,10 @@ class PenStrokeRectifierTest {
     ) {
         // The move that starts the dwell clock, then enough of them to pass the trigger time.
         advance(stepMs)
-        move(at.x, at.y)
+        move(at)
         while (clock.now < T0 + thresholds.triggerTimeMs + 100L) {
             advance(stepMs)
-            move(at.x, at.y)
+            move(at)
         }
     }
 
@@ -499,6 +500,357 @@ class PenStrokeRectifierTest {
             renderer.bands.last().spec.darken)
     }
 
+    // --- the band carries the gesture's average pressure --------------------
+
+    /** A device-like raw maximum; the JVM's own `rawInputMaxPressure` is 1, so tests need their own. */
+    private val rawMax = 4096f
+
+    /** Folds [readings] left to right, as the engine does over one gesture. */
+    private fun meanOf(vararg readings: Float): Float {
+        var mean = rawMax
+        var count = 0
+        readings.forEach {
+            mean = foldBandPressure(mean, count, it, rawMax)
+            if (it > 0f) count++
+        }
+        return mean
+    }
+
+    @Test
+    fun `the band pressure is the mean of the gesture's readings`() {
+        assertEquals(2048f, meanOf(1024f, 3072f), 0f)
+        assertEquals(2048f, meanOf(1024f, 2048f, 3072f), 0f)
+    }
+
+    @Test
+    fun `the band pressure ignores a zero reading rather than diluting`() {
+        // A hard press lifted lightly must not be dragged down by the near-zero lift.
+        assertEquals(3072f, meanOf(3072f, 0f), 0f)
+        assertEquals(3072f, meanOf(0f, 3072f), 0f)
+        assertEquals(3072f, meanOf(3072f, 0f, 0f, 0f), 0f)
+    }
+
+    @Test
+    fun `the band pressure falls back to full when no reading is usable`() {
+        // A gesture reporting no pressure at all must still draw, at full weight.
+        assertEquals(rawMax, meanOf(), 0f)
+        assertEquals(rawMax, meanOf(0f, 0f), 0f)
+    }
+
+    @Test
+    fun `the band pressure keeps the raw range rather than normalising`() {
+        // The regression: clamping a raw reading to [0,1] collapses every gesture onto full pressure.
+        assertEquals(205f, meanOf(205f, 205f), 0f)
+        assertEquals(rawMax, meanOf(rawMax * 2f, rawMax * 2f), 0f)
+        assertEquals(rawMax, meanOf(-1f, -1f), 0f)
+    }
+
+    @Test
+    fun `a light tap and light lift do not outweigh the stroke between them`() {
+        // Four pressed samples against one tap and one lift must keep the mean near the pressed level.
+        val tap = 200f
+        val lift = 150f
+        val pressed = 3500f
+
+        // Folded from a cold start, as the engine does at pen-down; meanOf starts from full pressure.
+        var mean = 0f
+        var count = 0
+        listOf(tap, pressed, pressed, pressed, pressed, lift).forEach {
+            mean = foldBandPressure(mean, count, it, rawMax, fullPressure = 0f)
+            if (it > 0f) count++
+        }
+
+        // Well above the old rule's answer — mean(200, 150) = 175 — and below the pressed level.
+        assertTrue(
+            "the mean must sit far above the two-endpoint answer of 175: was $mean",
+            mean > 1750f,
+        )
+        assertTrue("and below the pressed level: was $mean", mean < pressed)
+    }
+
+    /** A pencil gesture that rectifies, pressing at [pressureA] on pen-down and resting at [pressureB]. */
+    private fun rectifyPressingAt(pressureA: Float, pressureB: Float): PenStrokeRectifier {
+        val r = rectifier()
+        r.onPenDown(
+            Point2D(100f, 100f, pressure = pressureA),
+            "page-a", Pen.PENCIL, 6f, 6f, 0xFF000000.toInt(),
+        )
+        advance(10)
+        r.onMove(Point2D(400f, 400f, pressure = pressureB), canRectify = true)
+        r.holdAtRest(Point2D(405f, 405f, pressure = pressureB))
+        return r
+    }
+
+    @Test
+    fun `the pencil band is stamped at the gesture's pressure, not at full`() {
+        // Pins that the band stops hard-coding full pressure; both ends read 0.6 here.
+        val r = rectifyPressingAt(pressureA = 0.6f, pressureB = 0.6f)
+
+        assertEquals(
+            "the charcoal stamp must render at the pen's weight, not full pressure",
+            0.6f,
+            renderer.bands.last().spec.pressure,
+            0f,
+        )
+    }
+
+    @Test
+    fun `the pencil band averages the gesture rather than the pen-down tap`() {
+        val r = rectifyPressingAt(pressureA = 0.2f, pressureB = 0.6f)
+        val band = renderer.bands.last().spec.pressure
+
+        assertTrue(
+            "the 0.2 tap must not set the band's weight: was $band",
+            band > 0.2f,
+        )
+        assertTrue("and it must stay within the pressed range: was $band", band <= 0.6f)
+    }
+
+    @Test
+    fun `the band is not diluted by a rest that reports no pressure`() {
+        val r = rectifier()
+        r.onPenDown(
+            Point2D(100f, 100f, pressure = 0.6f),
+            "page-a", Pen.PENCIL, 6f, 6f, 0xFF000000.toInt(),
+        )
+        advance(10)
+        r.onMove(Point2D(400f, 400f, pressure = 0.6f), canRectify = true)
+        // Resting moves report no pressure, and must not pull the level toward nothing.
+        r.holdAtRest(Point2D(405f, 405f))
+
+        assertEquals(0.6f, renderer.bands.last().spec.pressure, 0f)
+    }
+
+    @Test
+    fun `the committed line carries the band's pressure`() {
+        val r = rectifier()
+        r.onPenDown(
+            Point2D(100f, 100f, pressure = 0.2f),
+            "page-a", Pen.PENCIL, 6f, 6f, 0xFF000000.toInt(),
+        )
+        advance(10)
+        r.onMove(Point2D(400f, 400f, pressure = 0.6f), canRectify = true)
+        r.holdAtRest(Point2D(405f, 405f, pressure = 0.6f))
+
+        val band = renderer.bands.last().spec.pressure
+        // Pen-up must commit exactly what the band was drawn at, or the line changes weight on refresh.
+        assertEquals("pen-up must equal what the pen was shown at", band, r.penUp(405f, 405f)!!.pressure, 0f)
+    }
+
+    @Test
+    fun `the commit keeps the stroke's weight when the pen lifts light`() {
+        // A firm stroke that taps down light and lifts light must still commit at the firm weight.
+        val r = rectifier()
+        r.onPenDown(
+            Point2D(100f, 100f, pressure = 0.05f),
+            "page-a", Pen.BRUSH, 6f, 6f, 0xFF000000.toInt(),
+        )
+        advance(10)
+        r.onMove(Point2D(300f, 300f, pressure = 0.9f), canRectify = true)
+        advance(10)
+        r.onMove(Point2D(400f, 400f, pressure = 0.9f), canRectify = true)
+        r.holdAtRest(Point2D(405f, 405f, pressure = 0.9f))
+
+        val committed = r.penUp(405f, 405f, pressure = 0.01f)!!.pressure
+
+        assertTrue(
+            "the light tap must not drag the commit toward nothing: was $committed",
+            committed > 0.7f,
+        )
+    }
+
+    @Test
+    fun `the commit is not dragged down by a lift that reports no pressure`() {
+        // A silent lift contributes nothing rather than pulling the level toward zero.
+        val r = rectifier()
+        r.onPenDown(
+            Point2D(100f, 100f, pressure = 0.2f),
+            "page-a", Pen.PENCIL, 6f, 6f, 0xFF000000.toInt(),
+        )
+        advance(10)
+        r.onMove(Point2D(400f, 400f, pressure = 0.6f), canRectify = true)
+        // The resting moves and the lift report no pressure, so they are skipped rather than counted.
+        r.holdAtRest(Point2D(405f, 405f))
+
+        // The running mean carries accumulated rounding, so a tolerance rather than exact equality.
+        assertEquals(0.4f, r.penUp(405f, 405f)!!.pressure, 0.0001f)
+    }
+
+    // --- the band's nib is the pen's width, not the zoomed one --------------
+
+    @Test
+    fun `the band carries the pen's own width as its nib`() {
+        // The nib must be the unscaled width, or the band only matches the stroke at zoom 1.
+        val zoom = 2f
+        val r = rectifier()
+        r.penDown(100f, 100f, pen = Pen.PENCIL, strokeWidthPx = 12f, strokeWidth = 6f)
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        val spec = renderer.bands.last().spec
+        assertEquals(
+            "the nib is what the committed stroke keeps",
+            6f,
+            spec.strokeWidth,
+            0f,
+        )
+        assertEquals(
+            "the geometry is still measured in screen pixels",
+            12f,
+            spec.strokeWidthPx,
+            0f,
+        )
+        assertTrue(
+            "the dirty rect must cover the zoomed band, not the nib",
+            spec.strokeWidthPx > spec.strokeWidth,
+        )
+        assertEquals(6f, rectifyBandStroke(spec, Point2D(0f, 0f), Point2D(10f, 10f), Offset.Zero, zoom).size, 0f)
+    }
+
+    @Test
+    fun `the band's points match the committed line's count`() {
+        // The band must use transformToLine's count and spread, or the grain differs per line length.
+        val spec = rectifyBandPaint(Pen.PENCIL, 0xFF000000.toInt(), 12f, 6f)
+        val stroke = rectifyBandStroke(
+            spec = spec,
+            a = Point2D(100f, 100f),
+            b = Point2D(500f, 100f),
+            scroll = Offset.Zero,
+            zoom = 1f,
+        )
+
+        assertEquals(100, stroke.points.size)
+        // Evenly spread, endpoints included, so the spread matches too and not just the count.
+        assertEquals(100f, stroke.points.first().x, 0f)
+        assertEquals(500f, stroke.points.last().x, 0f)
+        // Checked with a tolerance rather than distinct(): 400/99 is not exact in Float.
+        val gaps = stroke.points.zipWithNext { p, q -> q.x - p.x }
+        val expected = (500f - 100f) / 99f
+        assertTrue(
+            "points must be evenly spread",
+            gaps.all { kotlin.math.abs(it - expected) < 0.01f },
+        )
+    }
+
+    @Test
+    fun `the band's points land in page coordinates like a captured stroke`() {
+        // The same screen-to-page mapping capture uses in TouchPoint.toStrokePoint.
+        val spec = rectifyBandPaint(Pen.PENCIL, 0xFF000000.toInt(), 12f, 6f)
+        val stroke = rectifyBandStroke(
+            spec = spec,
+            a = Point2D(200f, 300f),
+            b = Point2D(600f, 300f),
+            scroll = Offset(50f, 20f),
+            zoom = 2f,
+        )
+
+        assertEquals(150f, stroke.points.first().x, 0f)   // 200 / 2 + 50
+        assertEquals(170f, stroke.points.first().y, 0f)   // 300 / 2 + 20
+        assertEquals(350f, stroke.points.last().x, 0f)    // 600 / 2 + 50
+    }
+
+    @Test
+    fun `the band's points carry the averaged pressure, not a ramp`() {
+        val spec = rectifyBandPaint(Pen.PENCIL, 0xFF000000.toInt(), 12f, 6f, pressure = 2048f)
+        val stroke = rectifyBandStroke(
+            spec = spec,
+            a = Point2D(0f, 0f, pressure = 1024f),
+            b = Point2D(100f, 0f, pressure = 3072f),
+            scroll = Offset.Zero,
+            zoom = 1f,
+        )
+
+        // Pins the absence of a ramp: no point may differ from another.
+        assertEquals("every point at one level", 1, stroke.points.map { it.pressure }.distinct().size)
+    }
+
+    // --- the pens that need their own wrapper stamp their band --------------
+
+    @Test
+    fun `the pencil band is drawn with the charcoal texture`() {
+        val r = rectifier()
+        r.penDown(100f, 100f, pen = Pen.PENCIL)
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        assertTrue(
+            "a flat band makes the pencil look like a ballpoint until a canvas refresh",
+            renderer.bands.last().spec.stamped,
+        )
+    }
+
+    @Test
+    fun `the brush band is drawn through its wrapper`() {
+        assertTrue("the brush needs its pressure-shaped width", stampedBandFor(Pen.BRUSH))
+    }
+
+    @Test
+    fun `the fountain band is drawn through its wrapper`() {
+        assertTrue("the fountain needs its pressure-shaped nib", stampedBandFor(Pen.FOUNTAIN))
+    }
+
+    @Test
+    fun `the charcoal band is drawn through its wrapper`() {
+        assertTrue("charcoal V2 is textured like the pencil", stampedBandFor(Pen.CHARCOAL))
+    }
+
+    private fun stampedBandFor(pen: Pen): Boolean {
+        clock.now = T0
+        val panel = FakeRectifyRenderer()
+        val r = PenStrokeRectifier(
+            now = { clock.now },
+            renderer = panel,
+            thresholds = thresholds,
+            surfaceSize = { SCREEN_W to SCREEN_H },
+        )
+        r.penDown(100f, 100f, pen = pen)
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        assertTrue("a $pen gesture must rectify to have a band to read", panel.bands.isNotEmpty())
+        return panel.bands.last().spec.stamped
+    }
+
+    @Test
+    fun `the ballpoint band is not drawn through a wrapper`() {
+        assertFalse(
+            "the ballpoint band is already a flat line, which is correct",
+            stampedBandFor(Pen.BALLPEN),
+        )
+    }
+
+    @Test
+    fun `the highlighter band is not drawn through a wrapper`() {
+        assertFalse(
+            "the highlighter's translucent band comes from darken, not a wrapper (2a370696)",
+            stampedBandFor(Pen.MARKER),
+        )
+    }
+
+    @Test
+    fun `the calligraphy band is not drawn through a wrapper`() {
+        // Left flat: the firmware already draws the chisel nib live.
+        assertFalse("calligraphy keeps its current flat band", stampedBandFor(Pen.CALLIGRAPHY))
+    }
+
+    @Test
+    fun `every other band still keeps the flat ballpoint path`() {
+        listOf(Pen.REDBALLPEN, Pen.GREENBALLPEN, Pen.BLUEBALLPEN, Pen.DASHED).forEach { pen ->
+            assertFalse("$pen must keep the flat band", stampedBandFor(pen))
+        }
+    }
+
+    @Test
+    fun `the charcoal pencil band still asks for a solid band`() {
+        // Stamped and darken are separate rules: the pencil is not translucent.
+        val r = rectifier()
+        r.penDown(100f, 100f, pen = Pen.PENCIL)
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        assertFalse("the pencil is not a highlighter", renderer.bands.last().spec.darken)
+    }
+
     @Test
     fun `the band width is the pen width scaled for zoom`() {
         val r = rectifier()
@@ -552,7 +904,7 @@ class PenStrokeRectifierTest {
         val a = Point2D(100f, 100f)
         val b = Point2D(400f, 400f)
         val r = rectifier()
-        r.onPenDown(a, "page-a", Pen.BALLPEN, 6f, 0xFF000000.toInt())
+        r.onPenDown(a, "page-a", Pen.BALLPEN, 6f, 6f, 0xFF000000.toInt())
         advance(10)
         r.onMove(b, canRectify = true)
         r.holdAtRest(Point2D(405f, 405f))
@@ -568,7 +920,7 @@ class PenStrokeRectifierTest {
     @Test
     fun `a pen down with no position cannot rectify`() {
         val r = rectifier()
-        r.onPenDown(null, "page-a", Pen.BALLPEN, 6f, 0xFF000000.toInt())
+        r.onPenDown(null, "page-a", Pen.BALLPEN, 6f, 6f, 0xFF000000.toInt())
         advance(10)
         r.move(400f, 400f)
         r.holdAtRest(Point2D(405f, 405f))
