@@ -1,5 +1,6 @@
 package com.ethran.notable.editor.canvas
 
+import android.graphics.BlendMode
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
@@ -119,6 +120,9 @@ class OnyxInputHandler(
             color = toolbarState.activePenSetting.color
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
+
+            // To have translucent highlighter during rectify
+            if (toolbarState.pen == Pen.MARKER) blendMode = BlendMode.DARKEN
         }
         val pushed = drawCanvas.refreshManager.drawOverFirmware(dirty) { canvas ->
             canvas.drawLine(a.x, a.y, b.x, b.y, paint)
