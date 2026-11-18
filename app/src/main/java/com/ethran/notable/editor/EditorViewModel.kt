@@ -162,6 +162,7 @@ sealed class ToolbarAction {
     data class ExportBook(val format: ExportFormat) : ToolbarAction()
     object CopyPageLink : ToolbarAction()
     object CopyBookLink : ToolbarAction()
+    object AddPage : ToolbarAction()
     data class BackgroundChanged(val type: String, val path: String?) : ToolbarAction()
 
     object NavigateToLibrary : ToolbarAction()
@@ -413,6 +414,8 @@ class EditorViewModel @Inject constructor(
                 }
             }
 
+            ToolbarAction.AddPage -> handleAddPage()
+
             is ToolbarAction.BackgroundChanged -> handleBackgroundChange(action.type, action.path)
 
             ToolbarAction.Undo -> sendCanvasCommand(CanvasCommand.Undo)
@@ -482,6 +485,14 @@ class EditorViewModel @Inject constructor(
         }
         viewModelScope.launch(Dispatchers.IO) {
             appRepository.kvProxy.setAppSettings(updated)
+        }
+    }
+
+    private fun handleAddPage() {
+        val id = bookId ?: return
+        val index = _toolbarState.value.currentPageNumber + 1
+        viewModelScope.launch(Dispatchers.IO) {
+            appRepository.newPageInBook(id, index)?.let { changePage(it) }
         }
     }
 
