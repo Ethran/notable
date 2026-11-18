@@ -68,6 +68,7 @@ Future plans include exploring how AI can enhance the app, with a focus on solut
 * 📒 **Notebooks:** group related notes and switch easily between notebooks.
 * 📁 **Folders:** organize notes with folders.
 * 🤏 **Configurable gestures:** [gesture controls](#gestures) in the editor, adjustable in Settings.
+* 📏 **Straight lines from your hand:** pause mid-stroke to turn it into a straight line, which settles onto 0°/45°/90° when it is close to one and follows the pen everywhere else.
 * 🧰 **Customizable toolbar:** choose and reorder tools, and create custom pens.
 * 🌅 **Images:** add, move, scale, and remove images.
 * ➤ **Selection export:** export or share selected handwriting as PNG.
