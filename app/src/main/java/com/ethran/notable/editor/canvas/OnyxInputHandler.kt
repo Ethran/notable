@@ -195,14 +195,14 @@ class OnyxInputHandler(
         private var pointB: TouchPoint? = null   // B, stop screen coordinates
         private var distanceThreshold = 20.0f
 
-        private val triggerTime: Long = 200 // ms
+        private val triggerTime: Long = 600 // ms
         private var startTime: Long? = null
 
         /**
          * Disarms the dwell detector. A dwell is only counted while the pen stays in one spot, so
          * it must not survive the gesture that measured it: [pointB] holds the previous stroke's
          * last point, so a next stroke starting at that point — or jittering around it — would sit
-         * within the distance threshold from its very first move, and 200 ms later be taken for a
+         * within the distance threshold from its very first move, and 600 ms later be taken for a
          * dwell and turn into a rectify. The SDK also recycles its points, so none of them may be
          * kept across a gesture.
          */
