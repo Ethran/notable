@@ -1,0 +1,589 @@
+package com.ethran.notable.editor.canvas.rectify
+
+import com.ethran.notable.editor.utils.Pen
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The rule behind "hold the pen still and the stroke becomes a straight line", tested gesture by
+ * gesture on a fake clock and a fake panel.
+ *
+ * Each test is named for the behaviour it pins. The ones citing a commit are characterization
+ * tests: they failed before that commit fixed the bug, and exist so an edit cannot quietly undo it.
+ *
+ * The dwell threshold comes from [thresholds], never from what production ships, so retuning
+ * `RectifyThresholds.triggerTimeMs` does not move this suite.
+ */
+class PenStrokeRectifierTest {
+
+    private val thresholds = RectifyThresholds(
+        triggerTimeMs = 600,
+        distanceThresholdPx = 20f,
+        bandMinIntervalMs = 120,
+        bandMinMovePx = 18f,
+        bandPaddingPx = 4,
+    )
+
+    private val clock = FakeClock()
+    private val renderer = FakeRectifyRenderer()
+
+    private fun rectifier() = PenStrokeRectifier(
+        now = { clock.now },
+        renderer = renderer,
+        thresholds = thresholds,
+        surfaceSize = { SCREEN_W to SCREEN_H },
+    )
+
+    /** Advances the fake clock, so a dwell or a throttle interval really passes. */
+    private fun advance(ms: Long) = clock.advance(ms)
+
+    /** A gesture that has just entered rectify: down at 100,100, one far move, then held still. */
+    private fun rectifying(
+        r: PenStrokeRectifier = rectifier(),
+        downAt: Pair<Float, Float> = 100f to 100f,
+    ): PenStrokeRectifier {
+        r.penDown(downAt.first, downAt.second)
+        advance(10)
+        r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+        return r
+    }
+
+    /**
+     * Holds the pen at a fixed position, stepping the clock past `triggerTimeMs`.
+     *
+     * The position must not change between moves: a move updates the detector's reference point,
+     * so anything but an identical position re-times the dwell and it never fires. The first move
+     * at [at] only starts the clock; a later one reads it as a dwell.
+     *
+     * [at] must land within [RectifyThresholds.distanceThresholdPx] of the previous move, so it
+     * reads as rest rather than travel.
+     */
+    private fun PenStrokeRectifier.holdAtRest(
+        at: Point2D,
+        stepMs: Long = 50L,
+    ) {
+        // The move that starts the dwell clock, then enough of them to pass the trigger time.
+        advance(stepMs)
+        move(at.x, at.y)
+        while (clock.now < T0 + thresholds.triggerTimeMs + 100L) {
+            advance(stepMs)
+            move(at.x, at.y)
+        }
+    }
+
+    // --- Entering rectify ---------------------------------------------------
+
+    @Test
+    fun `a pen held still past the dwell time enters rectify`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10)
+        r.move(400f, 400f)
+        assertFalse("moving pen must not rectify", r.isActive)
+
+        r.holdAtRest(Point2D(405f, 405f))
+        assertTrue("pen at rest past the dwell must rectify", r.isActive)
+    }
+
+    @Test
+    fun `a pen held still for less than the dwell time stays freehand`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10)
+        r.move(400f, 400f)
+
+        // Stops short of triggerTimeMs after the clock starts.
+        advance(50); r.move(405f, 405f) // starts the dwell clock
+        advance(100); r.move(405f, 405f)
+        advance(100); r.move(405f, 405f)
+        advance(100); r.move(405f, 405f)
+        assertFalse("a brief pause must not rectify", r.isActive)
+    }
+
+    @Test
+    fun `a dwell only rectifies in a mode that draws freehand`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10)
+        r.moveWithoutRectify(400f, 400f)
+        while (clock.now < T0 + 900L) {
+            advance(50)
+            r.moveWithoutRectify(405f, 405f)
+        }
+        assertFalse("the line tool must keep its own gesture", r.isActive)
+    }
+
+    @Test
+    fun `moving past the dwell threshold restarts the dwell clock`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10)
+        r.move(400f, 400f)
+
+        // Rest long enough to start the dwell clock, but not to fire.
+        advance(50); r.move(405f, 405f)
+        advance(100); r.move(405f, 405f)
+        advance(100); r.move(405f, 405f)
+
+        // A real move: the pen is travelling again, so the pause does not carry over.
+        advance(10); r.move(900f, 900f)
+        advance(100); r.move(905f, 905f)
+        advance(100); r.move(905f, 905f)
+        assertFalse("a pause before a move must not count toward the one after it", r.isActive)
+    }
+
+    // --- 1f2697c0: the dwell must not survive its gesture -------------------
+
+    @Test
+    fun `a dwell measured in one gesture never fires in the next`() {
+        val r = rectifier()
+        rectifying(r)
+        assertTrue(r.isActive)
+        r.penUp(405f, 405f)
+
+        // A new stroke that starts exactly where the last one ended.
+        r.penDown(405f, 405f)
+        advance(50); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+
+        assertFalse(
+            "the previous stroke's last point must not seed a dwell",
+            r.isActive,
+        )
+    }
+
+    @Test
+    fun `jitter around the previous stroke's last point does not rectify early`() {
+        val r = rectifier()
+        rectifying(r)
+        r.penUp(405f, 405f)
+
+        // A second stroke starting at the old end point and jittering there. Before 1f2697c0 the
+        // previous gesture's last point was still the detector's reference, so this sat inside the
+        // threshold from its very first move and rectified almost at once, swallowing the stroke.
+        // The clock starts no earlier than the first move, so the stroke cannot rectify before
+        // roughly T0 + 50 + triggerTimeMs; crossing a time short of that proves nothing was
+        // inherited.
+        r.penDown(405f, 405f)
+        val crossAt = T0 + thresholds.triggerTimeMs - 100
+        var moves = 0
+        while (clock.now < crossAt && moves < 60) {
+            advance(50)
+            r.move(405f + (moves % 2), 405f + (moves % 2))
+            moves++
+        }
+        assertTrue("the clock must have passed the trigger time", clock.now > T0 + thresholds.triggerTimeMs)
+        assertFalse("no dwell may be inherited from the previous stroke", r.isActive)
+    }
+
+    @Test
+    fun `pen down clears the dwell detector`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10)
+        r.move(400f, 400f)
+        advance(50); r.move(405f, 405f) // starts a dwell clock
+
+        r.penDown(700f, 700f)
+        advance(10); r.move(701f, 701f)
+
+        // With the detector cleared, this rest must start its clock over from now.
+        advance(100); r.move(701f, 701f)
+        advance(100); r.move(701f, 701f)
+        advance(100); r.move(701f, 701f)
+        assertFalse("pen down must not inherit a dwell", r.isActive)
+    }
+
+    @Test
+    fun `pen up clears the dwell detector`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(400f, 400f)
+        advance(50); r.move(405f, 405f) // starts a dwell clock
+        r.penUp(405f, 405f)
+
+        r.penDown(405f, 405f)
+        advance(10); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+        advance(100); r.move(406f, 406f)
+        assertFalse("pen up must not leave a dwell running", r.isActive)
+    }
+
+    // --- b12c2a88: the firmware layer is cleared before the band ------------
+
+    @Test
+    fun `entering rectify clears the firmware layer before the first band`() {
+        val r = rectifying()
+        assertTrue("expected a clear and a band", renderer.calls.size >= 2)
+        assertTrue(
+            "the firmware layer must be buried before the band, or the band is painted back out",
+            renderer.calls.first() is FakeRectifyRenderer.ClearFirmwareLayer,
+        )
+        assertTrue(
+            "the band follows the clear",
+            renderer.calls[1] is FakeRectifyRenderer.DrawBand,
+        )
+        assertEquals(
+            "the clear covers the whole screen",
+            RectBounds.ofSize(SCREEN_W, SCREEN_H),
+            renderer.cleared.single(),
+        )
+    }
+
+    @Test
+    fun `a gesture that never rectifies touches the panel not at all`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10)
+        r.move(400f, 400f)
+        advance(10); r.move(700f, 700f)
+        r.penUp(700f, 700f)
+        assertEquals("freehand must not push anything", emptyList<Any>(), renderer.calls)
+    }
+
+    // --- Entering rectify turns the firmware's own drawing off --------------
+
+    @Test
+    fun `entering rectify turns off the firmware live drawing and pen up turns it back on`() {
+        val r = rectifying()
+        assertFalse("the firmware must stop drawing its wobble over the band",
+            renderer.rawDrawingRenderEnabled)
+
+        r.penUp(405f, 405f)
+        assertTrue("pen up must restore the firmware's live drawing",
+            renderer.rawDrawingRenderEnabled)
+    }
+
+    @Test
+    fun `a first push that reaches no panel does not rectify and wipes nothing`() {
+        renderer.pushArea = null
+        val r = rectifying()
+        assertFalse("nothing can be drawn, so the gesture must not rectify", r.isActive)
+        assertTrue("the firmware's drawing must be handed back", renderer.rawDrawingRenderEnabled)
+        assertEquals(
+            "the band never landed on the panel, so there is nothing to wipe",
+            0,
+            renderer.wipes,
+        )
+        assertNull("and there is nothing to commit", r.penUp(405f, 405f))
+    }
+
+    @Test
+    fun `abandon re-enables firmware drawing and wipes the band`() {
+        val r = rectifying()
+        assertTrue("abandon is only interesting on a live rectify", r.isActive)
+        r.abandon()
+        assertFalse(r.isActive)
+        assertTrue(renderer.rawDrawingRenderEnabled)
+        assertEquals(1, renderer.wipes)
+        assertNull("an abandoned gesture commits nothing", r.penUp(405f, 405f))
+    }
+
+    @Test
+    fun `abandon with nothing rectifying does nothing`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        r.abandon()
+        assertEquals("a freehand gesture must not wipe the panel", emptyList<Any>(), renderer.calls)
+    }
+
+    // --- Commit -------------------------------------------------------------
+
+    @Test
+    fun `pen up commits a straight line from the pen-down point to the last move`() {
+        val r = rectifying()
+        advance(PUSHER_GAP)
+        r.move(600f, 200f)
+
+        val commit = r.penUp(601f, 201f)
+        assertNotNull("a rectified gesture must commit", commit)
+        assertEquals("A is where the pen went down", Point2D(100f, 100f), commit!!.a)
+        assertEquals("B is the pen's last move, not the up point", Point2D(600f, 200f), commit.b)
+        assertEquals("the commit carries the page the pen went down on", "page-a", commit.pageId)
+        assertNotNull("the band area is carried so the panel need not be pushed again",
+            commit.dirty)
+    }
+
+    @Test
+    fun `pen up with no recorded move falls back to the up point`() {
+        val r = rectifying()
+        // The band never reached a second move, so B is whatever the up event reports.
+        renderer.calls.clear()
+        val commit = r.penUp(405f, 405f)
+        assertEquals(Point2D(100f, 100f), commit!!.a)
+        assertEquals(Point2D(405f, 405f), commit.b)
+    }
+
+    @Test
+    fun `pen up with no up point still commits the last move`() {
+        val r = rectifying()
+        // The SDK's up event carries a point in practice; the A-only fallback is only reachable
+        // when both B and the up point are missing, which no gesture produces.
+        val commit = r.penUp()
+        assertEquals(Point2D(100f, 100f), commit!!.a)
+        assertEquals(Point2D(405f, 405f), commit.b)
+    }
+
+    @Test
+    fun `pen up on a gesture that never rectified commits nothing`() {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10); r.move(400f, 400f)
+        assertNull("a freehand gesture is drawn from the stroke list instead",
+            r.penUp(400f, 400f))
+    }
+
+    @Test
+    fun `pen up ends the gesture so a second pen up commits nothing`() {
+        val r = rectifying()
+        assertNotNull(r.penUp(405f, 405f))
+        assertNull("the gesture is over", r.penUp(405f, 405f))
+    }
+
+    // --- The band follows the pen, throttled --------------------------------
+
+    @Test
+    fun `each band goes from the pen-down point to the current pen position`() {
+        val r = rectifying()
+        val first = renderer.bands.last()
+        assertEquals(Point2D(100f, 100f), first.a)
+
+        advance(PUSHER_GAP)
+        r.move(600f, 200f)
+        val second = renderer.bands.last()
+        assertEquals(Point2D(100f, 100f), second.a)
+        assertEquals("the far end follows the pen", Point2D(600f, 200f), second.b)
+    }
+
+    /**
+     * A gesture that entered rectify on the very move that passed the dwell time, so that move is
+     * the only band so far and the throttle's interval runs from a known instant.
+     *
+     * [holdAtRest] keeps moving while it advances the clock, so a gesture reaching rectify through
+     * it can push a second band partway through its own loop, leaving the throttle's window at a
+     * drifting offset. For the tests that count pushes, the dwell is crossed in one move instead.
+     */
+    private fun rectifyOnFirstQualifyingMove(): PenStrokeRectifier {
+        val r = rectifier()
+        r.penDown(100f, 100f)
+        advance(10)
+        r.move(400f, 400f) // travel, so the reference is 400,400
+
+        advance(50)
+        r.move(405f, 405f) // inside the threshold: starts the dwell clock, no rectify
+        assertTrue("the first resting move must only start the clock", !r.isActive)
+
+        val startedAt = clock.now
+        clock.now = startedAt + thresholds.triggerTimeMs + 1
+        r.move(405f, 405f) // the dwell is now long enough: enters rectify and pushes once
+        assertTrue("a dwell past the trigger time must rectify", r.isActive)
+        assertEquals("entering rectify pushes exactly one band", 1, renderer.bands.size)
+        return r
+    }
+
+    /**
+     * The moment the last band was pushed, which the throttle arms itself against.
+     *
+     * Only valid straight after a push, which is all these tests need: [rectifyOnFirstQualifyingMove]
+     * ends by pushing, so the engine's clock was at [FakeClock.now] when it stamped the push. Each
+     * test then sets the clock relative to that instant, so it never depends on where the dwell
+     * loop left the time.
+     */
+    private val pushTime: Long get() = clock.now
+
+    /**
+     * Once the push interval is armed, the band is pushed at most once per
+     * [RectifyThresholds.bandMinIntervalMs], because each push is one EPD transaction and pushing
+     * every move point hangs the panel.
+     *
+     * Each step is measured from the moment the previous push happened, so no step depends on where
+     * the dwell loop left the clock. The entering push is excluded: it leaves the interval unarmed,
+     * which is production's behaviour and is pinned as the test's first step.
+     */
+    @Test
+    fun `the band is pushed at most once per throttle interval`() {
+        val r = rectifyOnFirstQualifyingMove()
+
+        // The band pushed on entering rectify does not arm the interval: production stamps the
+        // interval only from a push made inside the move handler, so the entering push leaves it at
+        // zero and the next move pushes whatever the clock says. Established here so the rest of the
+        // test can measure against an interval that is actually running.
+        val armedAt = pushTime
+        clock.now = armedAt + 1
+        r.move(600f, 200f)
+        assertEquals("the entering push leaves the interval unarmed", 2, renderer.bands.size)
+
+        // From here the interval is armed by that push, and holds.
+        val pushedAt = pushTime
+        clock.now = pushedAt + 1
+        r.move(650f, 250f)
+        assertEquals("pushing every move point hangs the panel", 2, renderer.bands.size)
+
+        clock.now = pushedAt + thresholds.bandMinIntervalMs + 1
+        r.move(700f, 300f)
+        assertEquals("once past the interval it pushes", 3, renderer.bands.size)
+
+        // And that push armed the interval again.
+        val thirdPushAt = pushTime
+        clock.now = thirdPushAt + 1
+        r.move(750f, 350f)
+        assertEquals("the interval arms again on every push", 3, renderer.bands.size)
+
+        clock.now = thirdPushAt + thresholds.bandMinIntervalMs + 1
+        r.move(800f, 400f)
+        assertEquals("a fourth push once past that interval", 4, renderer.bands.size)
+    }
+
+    @Test
+    fun `the band is not pushed again until the pen has moved enough`() {
+        val r = rectifyOnFirstQualifyingMove()
+        val pushedAt = pushTime
+
+        // Enough time, but the pen barely moved from where the band was last drawn.
+        clock.now = pushedAt + thresholds.bandMinIntervalMs + 1
+        r.move(410f, 410f)
+        assertEquals("a nudge is not worth an EPD transaction", 1, renderer.bands.size)
+
+        clock.now = pushedAt + 2 * thresholds.bandMinIntervalMs + 2
+        r.move(600f, 200f)
+        assertEquals("a real move pushes", 2, renderer.bands.size)
+    }
+
+    @Test
+    fun `bands widen from the area already pushed so one push wipes the last band`() {
+        val r = rectifyOnFirstQualifyingMove()
+        val firstDirty = renderer.bands.last().dirty
+
+        clock.now = pushTime + thresholds.bandMinIntervalMs + 1
+        r.move(900f, 700f)
+        val secondDirty = renderer.bands.last().dirty
+
+        assertTrue(
+            "the second push must cover the first, or the old band stays on the panel",
+            secondDirty.left <= firstDirty.left && secondDirty.top <= firstDirty.top &&
+                secondDirty.right >= firstDirty.right && secondDirty.bottom >= firstDirty.bottom,
+        )
+    }
+
+    // --- 2a370696: the highlighter stays translucent ------------------------
+
+    @Test
+    fun `the highlighter band is drawn translucent`() {
+        val r = rectifier()
+        r.penDown(100f, 100f, pen = Pen.MARKER, strokeWidthPx = 40f)
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        val spec = renderer.bands.last().spec
+        assertTrue("a solid highlighter bar over the page is the bug", spec.darken)
+    }
+
+    @Test
+    fun `a normal pen band is drawn solid`() {
+        val r = rectifier()
+        r.penDown(100f, 100f, pen = Pen.BALLPEN)
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        assertFalse("only the highlighter lets the page through",
+            renderer.bands.last().spec.darken)
+    }
+
+    @Test
+    fun `the band width is the pen width scaled for zoom`() {
+        val r = rectifier()
+        r.penDown(100f, 100f, strokeWidthPx = 12f, color = 0xFF00FF00.toInt())
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        val spec = renderer.bands.last().spec
+        assertEquals(12f, spec.strokeWidthPx, 0f)
+        assertEquals(0xFF00FF00.toInt(), spec.color)
+    }
+
+    // --- Band geometry ------------------------------------------------------
+
+    @Test
+    fun `the band covers the line plus half the stroke and the padding`() {
+        val r = rectifier()
+        r.penDown(100f, 100f, strokeWidthPx = 10f) // padding = 5 + 4 = 9
+        advance(10); r.move(300f, 300f)
+        r.holdAtRest(Point2D(302f, 302f))
+
+        // A is 100,100 and B ends at 302,302 (holdAtRest's resting point), with padding 5 + 4 = 9.
+        // The lower-left is the origin rather than 91,91 because the first band is unioned into the
+        // empty-at-origin rect, exactly as production seeds it from `Rect()`; drawOverFirmware
+        // insets the zone anyway, and the band is a line drawn between A and B, so the extra
+        // covered area is only pushed, never painted.
+        assertEquals(
+            RectBounds(0, 0, 311, 311),
+            renderer.bands.last().dirty,
+        )
+    }
+
+    @Test
+    fun `a band is clipped to the screen`() {
+        val r = rectifier()
+        r.penDown(10f, 10f, strokeWidthPx = 100f)
+        advance(10); r.move(SCREEN_W - 10f, SCREEN_H - 10f)
+        r.holdAtRest(Point2D(SCREEN_W - 12f, SCREEN_H - 12f))
+
+        val dirty = renderer.bands.last().dirty
+        assertEquals(0, dirty.left)
+        assertEquals(0, dirty.top)
+        assertEquals(SCREEN_W, dirty.right)
+        assertEquals(SCREEN_H, dirty.bottom)
+    }
+
+    // --- The SDK recycles its points ---------------------------------------
+
+    @Test
+    fun `the engine holds no reference to a point it was handed`() {
+        val a = Point2D(100f, 100f)
+        val b = Point2D(400f, 400f)
+        val r = rectifier()
+        r.onPenDown(a, "page-a", Pen.BALLPEN, 6f, 0xFF000000.toInt())
+        advance(10)
+        r.onMove(b, canRectify = true)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        // Data classes compare by value, so this pins that A and B survived as values rather than
+        // as positions that could have been overwritten: the SDK's TouchPoint is recycled while the
+        // gesture runs, and pen-up reads A later still.
+        val commit = r.penUp(405f, 405f)
+        assertEquals(a, commit!!.a)
+        assertEquals(Point2D(405f, 405f), commit.b)
+    }
+
+    @Test
+    fun `a pen down with no position cannot rectify`() {
+        val r = rectifier()
+        r.onPenDown(null, "page-a", Pen.BALLPEN, 6f, 0xFF000000.toInt())
+        advance(10)
+        r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+
+        assertFalse("with no A there is no line to start, so stay freehand", r.isActive)
+        assertEquals("and nothing is pushed", emptyList<Any>(), renderer.calls)
+        assertNull("and nothing is committed", r.penUp(405f, 405f))
+    }
+
+    @Test
+    fun `a rectify gesture commits the page it started on even after another page is named`() {
+        val r = rectifier()
+        r.penDown(100f, 100f, pageId = "page-a")
+        advance(10); r.move(400f, 400f)
+        r.holdAtRest(Point2D(405f, 405f))
+        assertEquals("page-a", r.penUp(405f, 405f)!!.pageId)
+    }
+}

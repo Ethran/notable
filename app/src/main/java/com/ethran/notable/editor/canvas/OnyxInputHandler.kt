@@ -30,8 +30,17 @@ import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
 import com.ethran.notable.editor.utils.penToStroke
 import com.ethran.notable.editor.utils.setupSurface
-import com.ethran.notable.editor.utils.toStrokePoint
 import com.ethran.notable.editor.utils.transformToLine
+import com.ethran.notable.editor.canvas.rectify.BandPaintSpec
+import com.ethran.notable.editor.canvas.rectify.toPoint2D
+import com.ethran.notable.editor.canvas.rectify.PenStrokeRectifier
+import com.ethran.notable.editor.canvas.rectify.Point2D
+import com.ethran.notable.editor.canvas.rectify.RectBounds
+import com.ethran.notable.editor.canvas.rectify.RectifyCommit
+import com.ethran.notable.editor.canvas.rectify.RectifyRenderer
+import com.ethran.notable.editor.canvas.rectify.toPageStrokePoint
+import com.ethran.notable.editor.canvas.rectify.toRect
+import com.ethran.notable.editor.canvas.rectify.toRectBounds
 import com.ethran.notable.ui.convertDpToPixel
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.device.Device
@@ -85,64 +94,78 @@ class OnyxInputHandler(
         } else null
         helper
     }
-    private var rectifyMode = false
-    private var bandRect: Rect? = null
-    private var lastBandB: TouchPoint? = null
-    private var lastBandBDrawn: TouchPoint? = null
-    private var lastBandDrawTime = 0L
-    private var pointACopy: TouchPoint? = null
+    /**
+     * Holds the rectify gesture's whole rule — dwell, band bounds, push throttle, commit point.
+     * Its clock is the wall clock, its panel the real EPD, and it reports the mode from the
+     * toolbar, so it is wired here rather than being passed in.
+     */
+    private val rectifier = PenStrokeRectifier(
+        now = { System.currentTimeMillis() },
+        renderer = OnyxRectifyRenderer(),
+        surfaceSize = { page.viewWidth to page.viewHeight },
+    )
 
-    private val bandMinIntervalMs = 120L
-    private val bandMinMovePx = 18f
-    private val bandPaddingPx = 4
+    /** True while the pen's gesture is being rectified into a straight line. */
+    private val rectifyMode get() = rectifier.isActive
 
-    private fun enterRectifyMode(a: TouchPoint, b: TouchPoint) {
-        log.d("PEN DOWN MOVE: rectify condition")
-        rectifyMode = true
-        lastBandB = b
+    /**
+     * Pushes over the firmware layer, draws the band as described by the paint spec, and reports the
+     * pushed area; the blit that wipes the previous band happens inside `drawOverFirmware`.
+     */
+    private inner class OnyxRectifyRenderer : RectifyRenderer {
 
-        drawCanvas.refreshManager.drawOverFirmware(
-            Rect(0, 0, page.viewWidth, page.viewHeight),
-            inset = 0,
-        ) { /* blit only */ }
+        override fun clearFirmwareLayer(area: RectBounds) {
+            drawCanvas.refreshManager.drawOverFirmware(area.toRect(), inset = 0) { /* blit only */ }
+        }
+
+        override fun drawBand(
+            a: Point2D,
+            b: Point2D,
+            spec: BandPaintSpec,
+            dirty: RectBounds,
+        ): RectBounds? {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                strokeWidth = spec.strokeWidthPx
+                color = spec.color
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+
+                // To have translucent highlighter during rectify
+                if (spec.darken) blendMode = BlendMode.DARKEN
+            }
+            return drawCanvas.refreshManager
+                .drawOverFirmware(dirty.toRect()) { canvas ->
+                    canvas.drawLine(a.x, a.y, b.x, b.y, paint)
+                }
+                ?.toRectBounds()
+        }
+
+        override fun wipeBand() {
+            drawCanvas.refreshManager.clearOverFirmware()
+        }
 
         // Render off, input on: setRawDrawingEnabled(false) would drop the rest of the gesture.
-        touchHelper?.isRawDrawingRenderEnabled = false
-        drawLiveBand(a, b)
-        if (bandRect == null) abandonRectify()
+        override var rawDrawingRenderEnabled: Boolean
+            get() = touchHelper?.isRawDrawingRenderEnabled ?: true
+            set(value) {
+                touchHelper?.isRawDrawingRenderEnabled = value
+            }
     }
 
-    private fun drawLiveBand(a: TouchPoint, b: TouchPoint) {
-        val width = toolbarState.activePenSetting.strokeSize * page.zoom
-        val dirty = bandBounds(bandRect, a, b, width)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            strokeWidth = width
-            color = toolbarState.activePenSetting.color
-            style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND
-
-            // To have translucent highlighter during rectify
-            if (toolbarState.pen == Pen.MARKER) blendMode = BlendMode.DARKEN
-        }
-        val pushed = drawCanvas.refreshManager.drawOverFirmware(dirty) { canvas ->
-            canvas.drawLine(a.x, a.y, b.x, b.y, paint)
-        }
-        if (pushed != null) {
-            bandRect = pushed
-            lastBandBDrawn = b
-        }
-    }
-
-    private fun handleRectifyGestureEnd(upPoint: TouchPoint?) {
-        if (!rectifyMode) return
-        rectifyMode = false
-        touchHelper?.isRawDrawingRenderEnabled = true
-        val a = pointACopy ?: return
-        val b = lastBandB ?: upPoint ?: a
-        val gesturePageId = takeGesturePageId()
-        lastBandB = null
-        val dirty = bandRect
-        bandRect = null
+    /**
+     * Commits a rectified gesture: the straight line from A to B goes into the page bitmap, and the
+     * area the band covered is noted as firmware ink rather than pushed again.
+     *
+     * The band already sits on the panel and `handleDraw` has put the line in the page bitmap, so a
+     * refresh here would only cost the raw-drawing toggle and its settle — the microfreeze and the
+     * toolbar blip that `refreshUi` used to cause on this path. See commit 939a593f.
+     */
+    internal fun commitRectifiedGesture(
+        commit: RectifyCommit?,
+        refresh: CanvasRefreshManager = drawCanvas.refreshManager,
+    ) {
+        if (commit == null) return
+        val gesturePageId = commit.pageId
         coroutineScope.launch(Dispatchers.Main.immediate) {
             CanvasEventBus.drawingInProgress.withLock {
                 if (gesturePageId != page.currentPageId) {
@@ -150,9 +173,10 @@ class OnyxInputHandler(
                     return@withLock
                 }
                 val viewport = page.viewport.value
+                // The engine holds screen positions; the page stroke needs page coordinates.
                 val line = transformToLine(
-                    a.toStrokePoint(viewport.scroll, viewport.zoom),
-                    b.toStrokePoint(viewport.scroll, viewport.zoom)
+                    commit.a.toPageStrokePoint(viewport.scroll, viewport.zoom),
+                    commit.b.toPageStrokePoint(viewport.scroll, viewport.zoom)
                 )
                 handleDraw(
                     drawCanvas.page,
@@ -164,20 +188,8 @@ class OnyxInputHandler(
                     line
                 )
             }
-            dirty?.let { drawCanvas.refreshManager.addFirmwareInk(it) }
+            commit.dirty?.let { refresh.addFirmwareInk(it.toRect()) }
         }
-    }
-
-    private fun abandonRectify() {
-        if (!rectifyMode) return
-        rectifyMode = false
-        lastBandB = null
-        lastBandBDrawn = null
-        pointACopy = null
-        touchHelper?.isRawDrawingRenderEnabled = true
-        drawCanvas.refreshManager.clearOverFirmware()
-        bandRect = null
-        takeGesturePageId()
     }
 
     @Suppress("RedundantOverride")
@@ -186,50 +198,33 @@ class OnyxInputHandler(
         // - pen : `onBeginRawDrawing()` -> `onRawDrawingTouchPointMoveReceived()` -> `onRawDrawingTouchPointListReceived()` -> `onEndRawDrawing()`
         // - erase :  `onBeginRawErasing()` -> `onRawErasingTouchPointMoveReceived()` -> `onRawErasingTouchPointListReceived()` -> `onEndRawErasing()`
 
-        private var pointA: TouchPoint? = null   // A, start screen coordinates
-
-        /**
-         * The pen's previous move, to measure the next one against. Null between gestures: the
-         * dwell must be measured within one gesture, never from the previous gesture's last point.
-         */
-        private var pointB: TouchPoint? = null   // B, stop screen coordinates
-        private var distanceThreshold = 20.0f
-
-        private val triggerTime: Long = 600 // ms
-        private var startTime: Long? = null
-
-        /**
-         * Disarms the dwell detector. A dwell is only counted while the pen stays in one spot, so
-         * it must not survive the gesture that measured it: [pointB] holds the previous stroke's
-         * last point, so a next stroke starting at that point — or jittering around it — would sit
-         * within the distance threshold from its very first move, and 600 ms later be taken for a
-         * dwell and turn into a rectify. The SDK also recycles its points, so none of them may be
-         * kept across a gesture.
-         */
-        private fun clearDwellDetection() {
-            pointB = null
-            startTime = null
-        }
-
         // Called on pen down event
         override fun onBeginRawDrawing(p0: Boolean, p1: TouchPoint?) {
             penDownPageId = page.currentPageId
-            pointA = p1?.let {
-                // Copy: pen-up reads A from another thread, by which time the SDK has recycled it.
-                TouchPoint(it).also { copy -> pointACopy = copy }
-            }
-            bandRect = null
-            lastBandB = null
-            lastBandDrawTime = 0L
-            clearDwellDetection()
             log.d("PEN DOWN EVENT: A = (${p1?.x}, ${p1?.y}), bool $p0")
+            // A is copied into the engine as a Point2D: the SDK recycles the TouchPoint it hands
+            // over, and pen-up reads A later still.
+            rectifier.onPenDown(
+                a = p1?.toPoint2D(),
+                pageId = page.currentPageId,
+                pen = toolbarState.pen,
+                strokeWidthPx = toolbarState.activePenSetting.strokeSize * page.zoom,
+                color = toolbarState.activePenSetting.color,
+            )
         }
 
         // Called on pen up event
         override fun onEndRawDrawing(p0: Boolean, p1: TouchPoint?) {
             log.d("PEN UP EVENT: B = (${p1?.x}, ${p1?.y}), bool $p0")
-            handleRectifyGestureEnd(p1)
-            clearDwellDetection()
+            // The engine restores the firmware's live drawing and disarms the dwell detector, in a
+            // gesture. Only the commit, which needs the page and the history, happens here.
+            val commit = rectifier.onPenUp(p1?.toPoint2D())
+            if (commit != null) {
+                // The gesture is spent either way, so the page id is taken now.
+                commitRectifiedGesture(commit.copy(pageId = takeGesturePageId()))
+            } else {
+                takeGesturePageId()
+            }
         }
 
         // Called as long as pen is down
@@ -237,48 +232,8 @@ class OnyxInputHandler(
 //            log.d("PEN DOWN MOVE: = (${p0?.x}, ${p0?.y}), ${toolbarState.mode}")
 
             if (p0 == null) return;
-
-            if (rectifyMode) {
-                val a = pointACopy ?: run {
-                    abandonRectify()
-                    return
-                }
-                lastBandB = p0
-                val now = System.currentTimeMillis()
-                val moved = bandRect == null ||
-                    hypot(p0.x - (lastBandBDrawn?.x ?: a.x), p0.y - (lastBandBDrawn?.y ?: a.y)) >
-                        bandMinMovePx
-                if (moved && now - lastBandDrawTime > bandMinIntervalMs) {
-                    lastBandDrawTime = now
-                    drawLiveBand(a, p0)
-                }
-                return
-            }
-
-            // Calculate distance between the 2 points
-            pointB?.let { previous ->
-                val distance = hypot(p0.x - previous.x, p0.y - previous.y)
-//                log.d("PEN DOWN MOVE: distance = $distance")
-
-                if (distance < distanceThreshold) {
-
-                    if (startTime == null) {
-                        startTime = System.currentTimeMillis()
-                        return
-                    }
-
-                    if (System.currentTimeMillis() - startTime!! > triggerTime
-                        && toolbarState.mode == Mode.Draw
-                    ) {
-                        enterRectifyMode(pointA ?: p0, p0)
-                    }
-                    return
-                }
-            }
-            // Update pointB
-            pointB = p0
-            startTime = null
-
+            // Dwell detection, band bounds and the push throttle all live in the engine.
+            rectifier.onMove(p0.toPoint2D(), canRectify = toolbarState.mode == Mode.Draw)
         }
 
         override fun onRawDrawingTouchPointListReceived(plist: TouchPointList) =
@@ -454,7 +409,10 @@ class OnyxInputHandler(
             // onEndRawDrawing runs first, so this is unreachable in theory. Commit rather than let
             // the raw wobble through.
             log.w("Rectify gesture reached the drawing list, committing the band instead")
-            handleRectifyGestureEnd(plist.points.lastOrNull())
+            val commit = rectifier.onPenUp(plist.points.lastOrNull()?.toPoint2D())
+            if (commit != null) {
+                commitRectifiedGesture(commit.copy(pageId = takeGesturePageId()))
+            }
             return
         }
         val currentLastStrokeEndTime = lastStrokeEndTime
@@ -610,22 +568,6 @@ class OnyxInputHandler(
         }
     }
 
-    private fun bandBounds(previous: Rect?, a: TouchPoint, b: TouchPoint, strokeWidth: Float): Rect {
-        val padding = (strokeWidth / 2f).toInt() + bandPaddingPx
-        val rect = previous?.let { Rect(it) } ?: Rect()
-        val left = min(a.x, b.x).toInt() - padding
-        val top = min(a.y, b.y).toInt() - padding
-        val right = max(a.x, b.x).toInt() + padding
-        val bottom = max(a.y, b.y).toInt() + padding
-        if (previous == null || previous.isEmpty) {
-            rect.set(left, top, right, bottom)
-        } else {
-            rect.union(left, top, right, bottom)
-        }
-        rect.sort()
-        if (!rect.intersect(0, 0, drawCanvas.width, drawCanvas.height)) return Rect()
-        return rect
-    }
 
     // The screen area the firmware drew [plist]'s track over.
     private fun trackArea(plist: TouchPointList): Rect {

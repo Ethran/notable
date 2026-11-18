@@ -77,7 +77,7 @@ fun <T> calculateBoundingBox(
 // Raw digitizer pressure scale, used to normalize captured pressure to [0, 1] once at
 // capture time (see StrokePoint.pressure / Stroke.maxPressure). Raw input only exists on
 // Onyx devices (TouchHelper is not created elsewhere); the <= 0 guard covers SDK stubs.
-private val rawInputMaxPressure: Float by lazy {
+internal val rawInputMaxPressure: Float by lazy {
     val max = if (DeviceCompat.isOnyxDevice) EpdController.getMaxTouchPressure() else 1f
     if (max > 0f) max else 1f
 }

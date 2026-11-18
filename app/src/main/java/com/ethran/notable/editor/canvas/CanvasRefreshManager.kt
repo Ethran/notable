@@ -21,6 +21,28 @@ import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
 
+/**
+ * The region [CanvasRefreshManager.drawOverFirmware] pushes for [dirty]: inflated by [inset],
+ * ordered, and clipped to the [viewWidth] x [viewHeight] view. Null when nothing should be pushed,
+ * which covers an empty [dirty] and a region that misses the view entirely.
+ *
+ * Split out of that method because the rest of it needs a `SurfaceHolder` and the EPD, while this
+ * arithmetic is what decides whether a rectify band reaches the panel at all — a null here is what
+ * tells the engine not to rectify.
+ */
+internal fun pushZoneFor(
+    dirty: Rect,
+    inset: Int,
+    viewWidth: Int,
+    viewHeight: Int,
+): Rect? {
+    if (dirty.isEmpty) return null
+    val zone = Rect(dirty).apply { inset(-inset, -inset) }
+    zone.sort()
+    if (!zone.intersect(0, 0, viewWidth, viewHeight) || zone.isEmpty) return null
+    return zone
+}
+
 class CanvasRefreshManager(
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
@@ -73,10 +95,7 @@ class CanvasRefreshManager(
         inset: Int = 24,
         onCanvas: (Canvas) -> Unit
     ): Rect? {
-        if (dirty.isEmpty) return null
-        val zone = Rect(dirty).apply { inset(-inset, -inset) }
-        zone.sort()
-        if (!zone.intersect(0, 0, page.viewWidth, page.viewHeight) || zone.isEmpty) return null
+        val zone = pushZoneFor(dirty, inset, page.viewWidth, page.viewHeight) ?: return null
         var canvas: Canvas? = null
         try {
             canvas = drawCanvas.holder.lockCanvas(zone)
