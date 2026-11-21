@@ -4,79 +4,56 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.rawInputMaxPressure
 
 /**
- * Turns a pen gesture that pauses into a straight line, without help from the SDK or a panel.
+ * Turns a pen gesture that pauses into a straight line, without help from the SDK or a panel: the
+ * firmware's wobbly live track is replaced by a band from the pen-down point to the pen, and
+ * [onPenUp] hands back a [RectifyCommit] for the adapter to draw.
  *
- * When the pen stops moving for [RectifyThresholds.triggerTimeMs], the gesture enters rectify: the
- * firmware's wobbly live track is replaced by a straight band from the pen-down point to the pen,
- * which follows the pen until it lifts. [onPenUp] then hands back a [RectifyCommit] for the adapter
- * to draw.
- *
- * This holds the whole rule — dwell detection, band bounds, push throttling, commit and abandon —
- * and nothing else. Time comes from [now] and the panel from [renderer], so a JVM test can drive a
- * gesture point by point and assert what was pushed and what was committed. Compare
- * `PointerTracker`, which is isolated from gestures the same way.
- *
- * Everything here is state for exactly one gesture. The SDK hands over `TouchPoint`s that it
- * recycles before pen-up, so they are converted to [Point2D] on arrival and none are kept across a
- * gesture.
- *
- * @param now the current time in ms, on the same clock the caller uses for the band throttle.
- * @param thresholds the dwell and throttle tunables.
- * @param renderer the panel and pen-render control.
- * @param surfaceSize the screen the band may be drawn on, used to clip the pushed region.
+ * Time comes from [now] and the panel from [renderer], so a JVM test can drive a gesture point by
+ * point. All state here belongs to exactly one gesture, and no SDK `TouchPoint` survives one.
  */
 class PenStrokeRectifier(
     private val now: () -> Long,
     private val renderer: RectifyRenderer,
-    private val thresholds: RectifyThresholds = RectifyThresholds(),
+    private val thresholds: RectifyThresholdsPx,
     private val surfaceSize: () -> Pair<Int, Int> = { 0 to 0 },
 ) {
-    /** True while the gesture is rectifying, i.e. between entering rectify and pen-up. */
+    /** True between entering rectify and pen-up. */
     var isActive: Boolean = false
         private set
 
     /** A, the pen-down point. Kept because the SDK's own copy is recycled before pen-up. */
     private var pointA: Point2D? = null
 
-    /**
-     * The pen's previous move, to measure the next one against. Null between gestures, so a dwell
-     * is never measured from the previous gesture's last point — see [clearDwellDetection].
-     */
+    /** The pen's previous move, the reference the next dwell is measured from. */
     private var previousMove: Point2D? = null
 
-    /** When the pen first came to rest within [RectifyThresholds.distanceThresholdPx]; null while
-     *  the pen is still travelling. */
+    /** When the pen first came to rest; null while it is still travelling. */
     private var dwellStartedAt: Long? = null
 
-    /** B, the latest move of the gesture, used as the line's far end at commit. */
+    /** B, the latest move of the gesture, the line's far end at commit. */
     private var lastMove: Point2D? = null
 
-    /** Where B was when the band last reached the panel, the reference for the move threshold. */
+    /** Where B was at the last push, reference for the move threshold. */
     private var lastBandDrawnAt: Point2D? = null
 
-    /** When the band last reached the panel, the reference for the interval throttle. */
+    /** When the band last reached the panel, reference for the interval throttle. */
     private var lastBandDrawTime = 0L
 
     /** The screen area the band covers so far, widened by each push. */
     private var bandRect: RectBounds? = null
 
-    /** The page the pen went down on, carried to the commit. */
     private var gesturePageId: String = ""
 
-    /** The band's paint rule, taken once per gesture so a toolbar change mid-stroke cannot split it. */
+    /** Taken once per gesture, so a toolbar change mid-stroke cannot split the band. */
     private var bandPaint: BandPaintSpec? = null
 
-    /** The gesture's running mean pressure, raw as the SDK reported it, and how many readings it holds. */
+    /** The gesture's running mean pressure, raw as the SDK reported it. */
     private var pressureMean = 0f
     private var pressureSamples = 0
 
     /**
-     * The pen went down at [a] on [pageId], with the active pen described by [pen] and [color], its
-     * nib [strokeWidth] and its on-screen extent [strokeWidthPx] (that width scaled by page zoom).
-     *
-     * A null [a] means the SDK reported no pen-down position. Nothing can then be rectified: there
-     * is no A for the line to start from, so the gesture stays freehand rather than committing a
-     * line from an invented point.
+     * The pen went down at [a] on [pageId]. A null [a] means the SDK reported no position, so
+     * nothing can be rectified: there is no A to start a line from.
      */
     fun onPenDown(
         a: Point2D?,
@@ -100,18 +77,15 @@ class PenStrokeRectifier(
     }
 
     /**
-     * The pen moved to [b].
-     *
-     * While rectifying, this widens the band toward the pen, throttled. Otherwise it measures the
-     * dwell, and a pause long enough starts one — but only while [canRectify] reports a mode that
-     * draws freehand, so the dedicated line tool keeps its own gesture.
+     * The pen moved to [b]. While rectifying this widens the band toward the pen, throttled;
+     * otherwise it measures the dwell. [canRectify] keeps the dedicated line tool on its own gesture.
      */
     fun onMove(b: Point2D, canRectify: Boolean) {
-        // Folded for every move, not just the rectifying ones, so the travel before the dwell counts.
+        // Folded for every move, so the travel before the dwell counts too.
         foldPressure(b.pressure)
 
         if (isActive) {
-            // No A means no line to draw: give the gesture back to the freehand path.
+            // No A means no line to draw: hand the gesture back to the freehand path.
             val a = pointA ?: run {
                 abandon()
                 return
@@ -124,31 +98,33 @@ class PenStrokeRectifier(
             return
         }
 
-        // Calculate distance between the 2 points
-        previousMove?.let { previous ->
-            if (b.distanceTo(previous) < thresholds.distanceThresholdPx) {
-                val started = dwellStartedAt
-                if (started == null) {
-                    dwellStartedAt = now()
-                    return
-                }
-                val a = pointA
-                if (canRectify && a != null && now() - started > thresholds.triggerTimeMs) {
-                    enterRectifyMode(a = a, b = b)
-                }
+        val previous = previousMove
+        val a = pointA
+        // The line's length so far is A to the pen, not A to the previous sample: measuring it
+        // against the previous sample latches the gesture shut, because a stroke whose first sample
+        // starts inside the floor could then never clear it — the early return below is what kept
+        // previousMove from ever advancing.
+        val longEnough = a != null && a.distanceTo(b) >= thresholds.distanceABThresholdPx
+
+        if (previous != null && longEnough && b.distanceTo(previous) < thresholds.distanceThresholdPx) {
+            val started = dwellStartedAt
+            if (started == null) {
+                dwellStartedAt = now()
+                // previousMove stays put while a rest is being timed, so drifting out of the rest
+                // breaks the dwell rather than re-timing it.
                 return
             }
+            if (canRectify && now() - started > thresholds.triggerTimeMs) enterRectifyMode(a, b)
+            return
         }
-        // Update pointB
+
         previousMove = b
         dwellStartedAt = null
     }
 
     /**
-     * The pen lifted at [upPoint], ending the gesture.
-     *
-     * Returns what to commit, or null when the gesture was not rectifying and should be drawn
-     * freehand instead. Restores the firmware's live drawing either way.
+     * The pen lifted at [upPoint]. Returns what to commit, or null when the gesture was not
+     * rectifying and should be drawn freehand. Restores the firmware's live drawing either way.
      */
     fun onPenUp(upPoint: Point2D?): RectifyCommit? {
         if (!isActive) {
@@ -173,10 +149,7 @@ class PenStrokeRectifier(
         )
     }
 
-    /**
-     * Gives up on rectifying the current gesture and wipes what the band left on the panel,
-     * restoring it to the page bitmap underneath.
-     */
+    /** Gives up on the gesture and wipes the band off the panel. */
     fun abandon() {
         if (!isActive) return
         isActive = false
@@ -192,14 +165,8 @@ class PenStrokeRectifier(
     }
 
     /**
-     * Disarms the dwell detector, on pen-down and on pen-up.
-     *
-     * A dwell is only counted while the pen stays in one spot, so it must not survive the gesture
-     * that measured it: [previousMove] holds the previous stroke's last point, so a next stroke
-     * starting at that point — or jittering around it — would sit within the distance threshold from
-     * its very first move, and [RectifyThresholds.triggerTimeMs] later be taken for a dwell and turn
-     * into a rectify. The SDK also recycles its points, so none of them may be kept across a
-     * gesture.
+     * Disarms the dwell detector. It must not survive its gesture: a next stroke starting on the
+     * previous stroke's last point would read as at rest from its very first move.
      */
     private fun clearDwellDetection() {
         previousMove = null
@@ -219,7 +186,6 @@ class PenStrokeRectifier(
         pressureSamples = 0
     }
 
-    /** Folds one pressure reading into the gesture's mean. */
     private fun foldPressure(reading: Float) {
         pressureMean = foldBandPressure(
             mean = pressureMean,
@@ -231,9 +197,8 @@ class PenStrokeRectifier(
     }
 
     private fun enterRectifyMode(a: Point2D, b: Point2D) {
-        // Already rectifying: the dwell keeps firing while the pen rests, and re-entering would
-        // clear the band area and re-time the throttle, so each move would push a fresh EPD
-        // transaction and hang the panel.
+        // The dwell keeps firing while the pen rests; re-entering would clear the band area and
+        // re-time the throttle, so every move would push a fresh EPD transaction.
         if (isActive) return
 
         isActive = true
@@ -245,9 +210,8 @@ class PenStrokeRectifier(
         val (width, height) = surfaceSize()
         renderer.clearFirmwareLayer(RectBounds.ofSize(width, height))
         drawBand(a, b)
-        // Nothing reached the panel, so there is no band to follow and nothing to commit. Give up
-        // rather than let the raw wobble through as a line, and hand the firmware's drawing back:
-        // abandon() cannot do it, being guarded on an active rectify with a band to wipe.
+        // Nothing reached the panel, so there is no band to commit. Give up rather than let the
+        // raw wobble through as a line.
         if (bandRect == null) {
             isActive = false
             renderer.rawDrawingRenderEnabled = true
@@ -262,10 +226,9 @@ class PenStrokeRectifier(
         return moved && now() - lastBandDrawTime > thresholds.bandMinIntervalMs
     }
 
-    /** The band's far end as the panel shows it: [b] rotated onto an axis guide when one is near. */
+    /** [b] rotated onto an axis guide when one is near, as the panel shows it. */
     private fun snappedEnd(a: Point2D, b: Point2D): Point2D = snapBand(a, b, thresholds)
 
-    /** Pushes the band at the gesture's current mean pressure, and remembers the pushed area. */
     private fun drawBand(a: Point2D, b: Point2D) {
         val spec = (bandPaint ?: return).copy(pressure = pressureMean)
         val end = snappedEnd(a, b)
@@ -278,13 +241,9 @@ class PenStrokeRectifier(
     }
 
     /**
-     * The screen area a band from [a] to [b] covers, widened by the stroke and by what earlier
-     * bands already covered, clipped to the screen.
-     *
-     * [previous] is the area already pushed, so widening rather than replacing is what lets one
-     * push wipe an earlier band instead of leaving it behind. The padding is half the stroke plus
-     * [RectifyThresholds.bandPaddingPx], enough for the round cap. A band off-screen gives an empty
-     * rect, which the adapter refuses to push.
+     * The screen area a band from [a] to [b] covers, unioned with [previous] so one push wipes an
+     * earlier band rather than leaving it behind, and clipped to the screen — a band off-screen
+     * gives an empty rect, which the adapter refuses to push.
      */
     private fun bandBounds(
         previous: RectBounds?,
@@ -299,9 +258,6 @@ class PenStrokeRectifier(
             maxOf(a.x, b.x).toInt() + padding,
             maxOf(a.y, b.y).toInt() + padding,
         )
-        // Built the same way production does it: union into an empty-at-origin rect, sort, then
-        // clip to the screen — and when the clip misses, hand back the empty-at-origin rect, which
-        // is what makes the adapter's isEmpty check refuse to push it.
         val rect = (previous ?: RectBounds.EMPTY).union(next)
         val sorted = rect.sorted()
         val (width, height) = surfaceSize()

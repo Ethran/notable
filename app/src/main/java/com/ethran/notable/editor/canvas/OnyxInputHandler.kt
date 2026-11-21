@@ -39,6 +39,7 @@ import com.ethran.notable.editor.canvas.rectify.Point2D
 import com.ethran.notable.editor.canvas.rectify.RectBounds
 import com.ethran.notable.editor.canvas.rectify.RectifyCommit
 import com.ethran.notable.editor.canvas.rectify.RectifyRenderer
+import com.ethran.notable.editor.canvas.rectify.RectifyThresholds
 import com.ethran.notable.editor.canvas.rectify.toPageStrokePoint
 import com.ethran.notable.editor.canvas.rectify.rectifyBandStroke
 import com.ethran.notable.editor.canvas.rectify.toRect
@@ -46,6 +47,7 @@ import com.ethran.notable.editor.canvas.rectify.toRectBounds
 import com.ethran.notable.editor.drawing.onyx.OnyxStrokeRenderer
 import com.ethran.notable.editor.utils.rawInputMaxPressure
 import com.ethran.notable.ui.convertDpToPixel
+import com.ethran.notable.ui.pixelsPerMillimetre
 import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.extension.isNullOrEmpty
@@ -98,14 +100,11 @@ class OnyxInputHandler(
         } else null
         helper
     }
-    /**
-     * Holds the rectify gesture's whole rule — dwell, band bounds, push throttle, commit point.
-     * Its clock is the wall clock, its panel the real EPD, and it reports the mode from the
-     * toolbar, so it is wired here rather than being passed in.
-     */
+    /** The rectify gesture's whole rule — dwell, band bounds, push throttle, commit point. */
     private val rectifier = PenStrokeRectifier(
         now = { System.currentTimeMillis() },
         renderer = OnyxRectifyRenderer(),
+        thresholds = RectifyThresholds().resolve(pixelsPerMillimetre(drawCanvas.context)),
         surfaceSize = { page.viewWidth to page.viewHeight },
     )
 

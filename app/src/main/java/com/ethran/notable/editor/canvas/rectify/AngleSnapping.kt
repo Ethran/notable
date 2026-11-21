@@ -14,7 +14,7 @@ import kotlin.math.sqrt
 internal fun snapBand(
     a: Point2D,
     b: Point2D,
-    thresholds: RectifyThresholds,
+    thresholds: RectifyThresholdsPx,
 ): Point2D {
     if (!thresholds.snapEnabled) return b
 
@@ -38,10 +38,7 @@ internal fun snapBand(
     )
 }
 
-/**
- * The signed pull from [angle] toward the nearest multiple of [stepRad]. Positive when the guide
- * lies above [angle], so adding it to [angle] reaches the guide.
- */
+/** The signed pull from [angle] toward the nearest multiple of [stepRad]. */
 private fun nearestAxisDeviation(angle: Float, stepRad: Float): Float {
     if (stepRad <= 0f) return 0f
     return wrapToPi((angle / stepRad).roundToInt() * stepRad - angle)

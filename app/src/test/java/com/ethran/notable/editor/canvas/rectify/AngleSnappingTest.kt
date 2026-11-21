@@ -10,10 +10,8 @@ import kotlin.math.sqrt
 
 /**
  * The soft snap onto the screen axes: near a guide the line leans to it, past the tolerance the pen
- * is obeyed exactly.
- *
- * Endpoints are built by [at] as a ray from the origin at a stated angle and length, so an expected
- * endpoint is that ray and the assertions read as geometry rather than as magic numbers.
+ * is obeyed exactly. Endpoints are rays from the origin at a stated angle, so assertions read as
+ * geometry rather than magic numbers.
  */
 class AngleSnappingTest {
 
@@ -22,7 +20,7 @@ class AngleSnappingTest {
         snapStepDeg = 45,
         snapToleranceDeg = 5,
         snapStrength = 1f,
-    )
+    ).resolve(pxPerMm = 1f)
 
     private val origin = Point2D(0f, 0f)
 
@@ -35,8 +33,7 @@ class AngleSnappingTest {
         )
     }
 
-    /** Snaps [b] about the origin, defaulting to the shipped 45-degree step so tests read as intent. */
-    private fun snap(b: Point2D, t: RectifyThresholds = thresholds): Point2D =
+    private fun snap(b: Point2D, t: RectifyThresholdsPx = thresholds): Point2D =
         snapBand(origin, b, t)
 
     private fun angleOf(p: Point2D): Float = atan2(p.y, p.x) * 180f / Math.PI.toFloat()

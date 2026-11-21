@@ -11,26 +11,21 @@ import org.junit.Test
 
 /**
  * The rule behind "hold the pen still and the stroke becomes a straight line", tested gesture by
- * gesture on a fake clock and a fake panel.
- *
- * Each test is named for the behaviour it pins. The ones citing a commit are characterization
- * tests: they failed before that commit fixed the bug, and exist so an edit cannot quietly undo it.
- *
- * The dwell threshold comes from [thresholds], never from what production ships, so retuning
- * `RectifyThresholds.triggerTimeMs` does not move this suite.
+ * gesture on a fake clock and a fake panel. Thresholds come from [thresholds], never from what
+ * production ships.
  */
 class PenStrokeRectifierTest {
 
+    // pxPerMm = 1, so the distance fields read as the pixel values these tests assert on.
     private val thresholds = RectifyThresholds(
         triggerTimeMs = 600,
-        distanceThresholdPx = 20f,
+        distanceThresholdMm = 20f,
         bandMinIntervalMs = 120,
-        bandMinMovePx = 18f,
-        bandPaddingPx = 4,
-        // Off, so the dwell, throttle and geometry tests see exactly the angle the pen drew. The
-        // snapping tests build their own engine with it on rather than moving this suite.
+        bandMinMoveMm = 18f,
+        bandPaddingMm = 4f,
+        // Snapping tests build their own engine with it on.
         snapEnabled = false,
-    )
+    ).resolve(pxPerMm = 1f)
 
     private val clock = FakeClock()
     private val renderer = FakeRectifyRenderer()
@@ -42,8 +37,15 @@ class PenStrokeRectifierTest {
         surfaceSize = { SCREEN_W to SCREEN_H },
     )
 
-    /** Advances the fake clock, so a dwell or a throttle interval really passes. */
     private fun advance(ms: Long) = clock.advance(ms)
+
+    /** An engine with an explicit A–B floor, so the floor tests do not track the shipped value. */
+    private fun rectifierWithAbFloor(floor: Float) = PenStrokeRectifier(
+        now = { clock.now },
+        renderer = renderer,
+        thresholds = thresholds.copy(distanceABThresholdPx = floor),
+        surfaceSize = { SCREEN_W to SCREEN_H },
+    )
 
     /** A gesture that has just entered rectify: down at 100,100, one far move, then held still. */
     private fun rectifying(
@@ -58,20 +60,13 @@ class PenStrokeRectifierTest {
     }
 
     /**
-     * Holds the pen at a fixed position, stepping the clock past `triggerTimeMs`.
-     *
-     * The position must not change between moves: a move updates the detector's reference point,
-     * so anything but an identical position re-times the dwell and it never fires. The first move
-     * at [at] only starts the clock; a later one reads it as a dwell.
-     *
-     * [at] must land within [RectifyThresholds.distanceThresholdPx] of the previous move, so it
-     * reads as rest rather than travel.
+     * Holds the pen at [at], stepping the clock past `triggerTimeMs`. The position must not change
+     * between moves: any move re-times the dwell, so it never fires.
      */
     private fun PenStrokeRectifier.holdAtRest(
         at: Point2D,
         stepMs: Long = 50L,
     ) {
-        // The move that starts the dwell clock, then enough of them to pass the trigger time.
         advance(stepMs)
         move(at)
         while (clock.now < T0 + thresholds.triggerTimeMs + 100L) {
@@ -92,6 +87,29 @@ class PenStrokeRectifierTest {
 
         r.holdAtRest(Point2D(405f, 405f))
         assertTrue("pen at rest past the dwell must rectify", r.isActive)
+    }
+
+    @Test
+    fun `a stroke whose first sample starts inside the A-B floor still rectifies`() {
+        val r = rectifierWithAbFloor(30f)
+        r.penDown(100f, 100f)
+        // The SDK's first sample is barely off pen-down. Measuring the floor against that sample
+        // rather than against the pen latched the whole gesture shut, at any distance.
+        advance(10); r.move(104f, 100f)
+        advance(10); r.move(300f, 300f)
+
+        r.holdAtRest(Point2D(305f, 305f))
+        assertTrue("a slow start must not cost the stroke its dwell", r.isActive)
+    }
+
+    @Test
+    fun `a stroke shorter than the A-B floor stays freehand`() {
+        val r = rectifierWithAbFloor(30f)
+        r.penDown(100f, 100f)
+        advance(10); r.move(112f, 105f)
+
+        r.holdAtRest(Point2D(113f, 106f))
+        assertFalse("a dot must not become a line", r.isActive)
     }
 
     @Test
@@ -407,7 +425,7 @@ class PenStrokeRectifierTest {
 
     /**
      * Once the push interval is armed, the band is pushed at most once per
-     * [RectifyThresholds.bandMinIntervalMs], because each push is one EPD transaction and pushing
+     * [RectifyThresholdsPx.bandMinIntervalMs], because each push is one EPD transaction and pushing
      * every move point hangs the panel.
      *
      * Each step is measured from the moment the previous push happened, so no step depends on where
