@@ -20,6 +20,9 @@ Overview
 - The file type is decided from the URI's MIME type or the file name's extension: either one
   matching is enough, so `book.pdf` reported as `text/plain` still imports as a PDF. The title
   override `bookTitle` is never used for this.
+- XOPP is checked first, and it also accepts the generic MIME types `application/gzip` and
+  `application/octet-stream`. So `book.pdf` reported as `application/octet-stream` goes to the XOPP
+  importer, not the PDF one, and fails.
 - Notebook title: `bookTitle` or the file name, with a `.xopp` / `.pdf` extension removed
   (any case), then sanitized: only letters, digits, spaces and dots kept, whitespace and dots
   collapsed, trimmed, at most 100 characters.

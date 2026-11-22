@@ -160,9 +160,12 @@ These operations appear under **DANGER ZONE**, ask for confirmation, and cannot 
 - **Download All** (*Replace Local Data?*) refuses to run if the server has no notebooks. Otherwise
   it updates folders from the server, downloads every server notebook over the local copy (skipping
   ones already identical, so an interrupted run resumes), and only then deletes local notebooks and
-  folders that are not on the server. That deletion runs even if some notebooks failed to download;
-  those can be left partly downloaded until a later sync completes them. It is **not transactional**: a failure can leave a partial
-  restore.
+  folders that are not on the server. That deletion runs even if some notebooks failed to download.
+  Those can be left partly downloaded, and one that sat in a folder that is not on the server is
+  deleted together with that folder. A normal sync would then treat that notebook as deleted on
+  this device and delete it from the server too. **If Download All reports an error, run it again
+  until it succeeds before you run a normal sync.** It is **not transactional**: a failure can leave
+  a partial restore.
 
 Back up your data and confirm which copy is authoritative before continuing.
 
