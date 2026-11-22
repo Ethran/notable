@@ -160,7 +160,7 @@ The current database version is **38**. `AppDatabase` declares:
   `defaultBackground`), `35→36` (adds `page_sync_state`, renames
   `notebook_sync_state.localUpdatedAtAtSync` → `syncedLocalUpdatedAt`), `37→38` (`Page.scroll` →
   `positionY`; adds `positionX`, the page sheet and the notebook default sheet, all existing pages
-  infinite). `36→37` adds `remoteDirEtag` / `remoteDirServerKey`.
+  infinite). `36→37` needs no spec: it only adds `remoteDirEtag` / `remoteDirServerKey`.
 
 After the `32→33` migration, `StrokeMigrationHelper.reencodeStrokePointsToBinary()`
 (`StrokeReencoding.kt`, started from `MainActivity`) moves the rows from `stroke_old` (JSON point
