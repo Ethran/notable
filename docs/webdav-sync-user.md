@@ -201,6 +201,9 @@ same notebook on two devices at once.
 If one device deletes a notebook while another makes a later edit, Notable keeps and re-uploads the
 edited copy. This protects the edit but can make a deletion reappear.
 
+Some servers don't report when the deletion happened. Then Notable can't tell which came first, so a
+device that has edits not yet synced keeps that notebook too.
+
 ## Activity Log
 
 The **Activity Log** in the Sync settings shows transfers and errors. It keeps the latest 50 entries
