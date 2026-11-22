@@ -23,9 +23,10 @@ PDFs in `Documents/notabledb/backgrounds/<type>/`; rows store paths to them, not
 - Folder https://github.com/Ethran/notable/blob/main/app/src/main/java/com/ethran/notable/data/db/Folder.kt
   - Hierarchical container. Fields in code: `id` (String UUID PK), `title`, `parentFolderId` (nullable FK to Folder), `createdAt`, `updatedAt`.
 - Notebook https://github.com/Ethran/notable/blob/main/app/src/main/java/com/ethran/notable/data/db/Notebook.kt
-  - Ordered collection of pages. Fields: `id` (String UUID PK), `title`, `openPageId` (last opened page, nullable), `pageIds` (page order, `List<String>` stored as a JSON array), `parentFolderId` (nullable FK to Folder), `defaultBackground`, `defaultBackgroundType` (background for new pages), `linkedExternalUri` (nullable; the file a notebook is linked to, e.g. a PDF or `.xopp`), `createdAt`, `updatedAt`.
+  - Ordered collection of pages. Fields: `id` (String UUID PK), `title`, `openPageId` (last opened page, nullable), `pageIds` (page order, `List<String>` stored as a JSON array), `parentFolderId` (nullable FK to Folder), `defaultBackground`, `defaultBackgroundType` (background for new pages), `defaultSheet` (nullable `SheetSize`, the sheet new pages get; null for infinite pages), `linkedExternalUri` (nullable; the file a notebook is linked to, e.g. a PDF or `.xopp`), `createdAt`, `updatedAt`.
 - Page https://github.com/Ethran/notable/blob/main/app/src/main/java/com/ethran/notable/data/db/Page.kt
-  - A page, either in a notebook (`notebookId`) or a standalone "quick page" in a folder. Fields: `id` (String UUID PK), `scroll`, `notebookId` (nullable FK to Notebook), `background` (path or native template name), `backgroundType` (`BackgroundType.key`: `native`, `image`, `imagerepeating`, `coverImage`, `autoPdf`, `pdf<N>`), `parentFolderId` (nullable FK to Folder), `createdAt`, `updatedAt`.
+  - A page, either in a notebook (`notebookId`) or a standalone "quick page" in a folder. Fields: `id` (String UUID PK), `positionX`, `positionY` (the page point at the top-left corner of the view when the page was last shown on this device, in page pixels; device-local, not synced), `notebookId` (nullable FK to Notebook), `background` (path or native template name), `backgroundType` (`BackgroundType.key`: `native`, `image`, `imagerepeating`, `coverImage`, `autoPdf`, `pdf<N>`), `sheet` (nullable `SheetSize`; null for an infinite canvas), `parentFolderId` (nullable FK to Folder), `createdAt`, `updatedAt`.
+  - `SheetSize` (`data/model/SheetSize.kt`) is the page's `width` and `height` in page pixels, the units strokes and images are stored in. It is fixed when the page is created, from the notebook's `defaultSheet`. A notebook can mix pages with and without a sheet; a sheet is never invented for an infinite page, and a continuous (multi-page) layout applies only when every page has one.
   - `updatedAt` is the time of the page's last edit (strokes/images). Saving bumps it with `UPDATE page SET updatedAt = MAX(:now, updatedAt + 1)`, so it never moves backwards. Sync and page previews compare against it.
 - Stroke https://github.com/Ethran/notable/blob/main/app/src/main/java/com/ethran/notable/data/db/Stroke.kt
   - Addressable record containing style and geometry inline. Fields: `id` (String UUID PK), `size` (Float), `pen` (`Pen` enum, stored by name), `color` (Int ARGB), `maxPressure` (Int, the denominator of the stored pressure values, see 3.4), bounding box floats (`top`, `bottom`, `left`, `right`), `points` (List<StrokePoint>), `pageId` (FK to Page), timestamps.
@@ -67,6 +68,8 @@ CREATE TABLE Notebook (
   parentFolderId        TEXT REFERENCES Folder(id) ON DELETE CASCADE,
   defaultBackground     TEXT NOT NULL DEFAULT 'blank',
   defaultBackgroundType TEXT NOT NULL DEFAULT 'native',
+  defaultSheetWidth     INTEGER,                           -- defaultSheet; both null = infinite
+  defaultSheetHeight    INTEGER,
   linkedExternalUri     TEXT,
   createdAt             INTEGER NOT NULL,
   updatedAt             INTEGER NOT NULL
@@ -75,10 +78,13 @@ CREATE INDEX index_Notebook_parentFolderId ON Notebook(parentFolderId);
 
 CREATE TABLE Page (
   id             TEXT NOT NULL PRIMARY KEY,
-  scroll         INTEGER NOT NULL,
+  positionX      INTEGER NOT NULL DEFAULT 0,
+  positionY      INTEGER NOT NULL DEFAULT 0,
   notebookId     TEXT REFERENCES Notebook(id) ON DELETE CASCADE,
   background     TEXT NOT NULL DEFAULT 'blank',
   backgroundType TEXT NOT NULL DEFAULT 'native',
+  sheetWidth     INTEGER,                        -- sheet; both null = infinite canvas
+  sheetHeight    INTEGER,
   parentFolderId TEXT REFERENCES Folder(id) ON DELETE CASCADE,
   createdAt      INTEGER NOT NULL,
   updatedAt      INTEGER NOT NULL
@@ -145,15 +151,16 @@ CREATE INDEX index_page_sync_state_notebookId ON page_sync_state(notebookId);
 
 ### 2.0 Version and migrations
 
-The current database version is **37**. `AppDatabase` declares:
+The current database version is **38**. `AppDatabase` declares:
 - Manual migrations (`Migrations.kt`): `16→17` (timestamps), `17→18` (`Page.nativeTemplate`),
   `22→23` (delete pages whose notebook no longer exists), `32→33` (stroke table rebuilt with `points`
   as an SB BLOB and `maxPressure`; the old table is kept as `stroke_old`).
-- Auto migrations for every other step from 19 to 37, with specs for renames:
+- Auto migrations for every other step from 19 to 38, with specs for renames:
   `30→31` (`Page.nativeTemplate` → `background`), `31→32` (`Notebook.defaultNativeTemplate` →
   `defaultBackground`), `35→36` (adds `page_sync_state`, renames
-  `notebook_sync_state.localUpdatedAtAtSync` → `syncedLocalUpdatedAt`). `36→37` adds
-  `remoteDirEtag` / `remoteDirServerKey`.
+  `notebook_sync_state.localUpdatedAtAtSync` → `syncedLocalUpdatedAt`), `37→38` (`Page.scroll` →
+  `positionY`; adds `positionX`, the page sheet and the notebook default sheet, all existing pages
+  infinite). `36→37` adds `remoteDirEtag` / `remoteDirServerKey`.
 
 After the `32→33` migration, `StrokeMigrationHelper.reencodeStrokePointsToBinary()`
 (`StrokeReencoding.kt`, started from `MainActivity`) moves the rows from `stroke_old` (JSON point

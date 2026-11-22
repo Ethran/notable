@@ -35,9 +35,12 @@ import javax.inject.Inject
 )
 data class Page(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
-    /** The page point at the top-left corner of the view when the page was last shown, in page pixels. */
-    val positionY: Int = 0,
+    /**
+     * [positionX], [positionY]: the page point at the top-left corner of the view when the page was
+     * last shown on this device, in page pixels. Device-local: sync never reads them.
+     */
     @ColumnInfo(defaultValue = "0") val positionX: Int = 0,
+    @ColumnInfo(defaultValue = "0") val positionY: Int = 0,
     @ColumnInfo(index = true) val notebookId: String? = null,
     @ColumnInfo(defaultValue = "blank") val background: String = "blank", // path or native subtype
     @ColumnInfo(defaultValue = "native") val backgroundType: String = "native", // image, imageRepeating, coverImage, native

@@ -76,8 +76,6 @@ class AutoMigration35to36 : AutoMigrationSpec
 )
 class AutoMigration37to38 : AutoMigrationSpec
 
-
-
 // Migration 32 -> 33:
 // 1. Rename original Stroke table to stroke_old
 // 2. Drop any carried indexes from old table (index_Stroke_pageId)

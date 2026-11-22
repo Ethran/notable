@@ -229,8 +229,9 @@ class MigrationTest {
 
     /**
      * 37 -> 38 renames `Page.scroll` to `positionY` and adds the horizontal position and the sheet
-     * size. A page keeps how far down it was scrolled, starts at x = 0, and every existing page and
-     * notebook stays an infinite canvas: no sheet, so the app shows it as before.
+     * size. A page keeps how far down it was scrolled and its strokes and images, starts at x = 0,
+     * and every existing page and notebook stays an infinite canvas: no sheet, so the app shows it
+     * as before.
      */
     @Test(timeout = 60000)
     @Throws(IOException::class)
@@ -250,6 +251,22 @@ class MigrationTest {
             """
             INSERT INTO Page (id, scroll, notebookId, background, backgroundType, createdAt, updatedAt)
             VALUES ('page1', 750, 'nb1', 'blank', 'native', 1620000000000, 1620000000000)
+            """.trimIndent()
+        )
+        // The rename rebuilds the Page table, and strokes and images are deleted with their page
+        // (ON DELETE CASCADE). Seed one of each so the test fails if the rebuild ever takes them.
+        oldDb.execSQL(
+            """
+            INSERT INTO Stroke (id, size, pen, top, bottom, `left`, `right`, points, pageId,
+                                createdAt, updatedAt)
+            VALUES ('stroke1', 3.0, 'BALLPEN', 10.0, 20.0, 10.0, 20.0, x'00', 'page1',
+                    1620000000000, 1620000000000)
+            """.trimIndent()
+        )
+        oldDb.execSQL(
+            """
+            INSERT INTO Image (id, x, y, height, width, uri, pageId, createdAt, updatedAt)
+            VALUES ('image1', 50, 60, 200, 300, 'images/a.jpg', 'page1', 1620000000000, 1620000000000)
             """.trimIndent()
         )
         oldDb.close()
@@ -274,6 +291,15 @@ class MigrationTest {
             assertTrue(it.moveToFirst())
             assertTrue(it.isNull(it.getColumnIndexOrThrow("defaultSheetWidth")))
             assertTrue(it.isNull(it.getColumnIndexOrThrow("defaultSheetHeight")))
+        }
+        migratedDb.query("SELECT id FROM Stroke WHERE pageId = 'page1'").use {
+            assertEquals("the page's stroke survives", 1, it.count)
+        }
+        migratedDb.query("SELECT id FROM Image WHERE pageId = 'page1'").use {
+            assertEquals("the page's image survives", 1, it.count)
+        }
+        migratedDb.query("PRAGMA foreign_key_check").use {
+            assertEquals("no dangling foreign keys", 0, it.count)
         }
 
         // 4. Room reads the migrated rows as infinite pages, and stores a sheet it is given.

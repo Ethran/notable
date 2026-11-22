@@ -29,7 +29,7 @@ class NotebookSerializerTest {
         pageIds: List<String> = listOf("p-1", "p-2"),
         openPageId: String? = "p-1",
         parentFolderId: String? = "folder-1",
-        defaultSheet: SheetSize? = SheetSize(1860, 2632),
+        defaultSheet: SheetSize? = null,
         linkedExternalUri: String? = null,
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
@@ -49,7 +49,7 @@ class NotebookSerializerTest {
 
     @Test
     fun manifest_round_trip_preserves_all_fields() {
-        val original = sampleNotebook()
+        val original = sampleNotebook(defaultSheet = SheetSize(1860, 2632))
         val json = NotebookSerializer.serializeManifest(original)
 
         val result = NotebookSerializer.deserializeManifest(json)
@@ -96,7 +96,7 @@ class NotebookSerializerTest {
     // A manifest from an app without sheets reads back with infinite pages as the default.
     @Test
     fun manifest_without_defaultSheet_reads_as_infinite() {
-        val json = NotebookSerializer.serializeManifest(sampleNotebook())
+        val json = NotebookSerializer.serializeManifest(sampleNotebook(defaultSheet = SheetSize(1860, 2632)))
         val legacy = JsonObject(Json.parseToJsonElement(json).jsonObject - "defaultSheet").toString()
 
         val result = NotebookSerializer.deserializeManifest(legacy)

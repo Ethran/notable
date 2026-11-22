@@ -23,7 +23,7 @@ Contents:
 | Writing edits to the database | `PageSaver` (singleton) | the process |
 | Which page an editor shows | `PageView` (`OpenPage` snapshot) | the editor |
 | Keeping shown pages cached | `PageLeases` (views per page), through `PageDataManager.hold` | while any view shows the page |
-| Scroll and zoom | `PageView` (`PageViewport`) | the editor; vertical scroll also in `Page.scroll` |
+| Scroll and zoom | `PageView` (`PageViewport`) | the editor; vertical scroll also in `Page.positionY` |
 
 `PageDataManager` holds page data only. It knows nothing about which page is in front, nor tracks
 how a page is scrolled or zoomed: it only keeps the viewport a cached bitmap shows and the scroll
@@ -115,8 +115,10 @@ editor and the code around it.
   no longer shown is dropped instead of being applied to the new page. Scroll and zoom are ignored
   until the first page is shown.
 - Each committed step records the vertical scroll with `PageDataManager.recordScroll(pageId, y)`;
-  `PageSaver` writes it to `Page.scroll` with the other edits. A page shown for the first time in
-  an editor opens at that saved scroll, unzoomed.
+  `PageSaver` writes it to `Page.positionY` with the other edits, without bumping `updatedAt`. A
+  page shown for the first time in an editor opens at that saved scroll, unzoomed. The position is
+  device-local: sync never reads it, so each device keeps its own. `Page.positionX` is stored but
+  not written yet.
 - `PageDataManager.contentHeight(pageId)` measures the bottom of the page's strokes and images.
   `PageView` keeps it in a `StateFlow` for the scroll indicator and recomputes it after loading and
   after each edit.
