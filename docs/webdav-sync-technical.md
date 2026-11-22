@@ -30,7 +30,8 @@ Reconciliation has two regimes:
 The protocol has commit points but no atomic notebook snapshot. Pages precede the manifest on upload;
 page replacements precede the notebook-row commit on download. This leaves several gaps:
 
-- upload publishes page files (each one atomically, via a staging file and `MOVE`) before publishing
+- upload publishes page files (each one atomically via a staging file and `MOVE`, or, when `MOVE`
+  is unsupported or fails transiently, by a direct `PUT` that is not atomic) before publishing
   `manifest.json`; if a page id is unchanged, an interrupted update can expose new page content
   through an *old* manifest;
 - download replaces pages one at a time before committing the notebook row; a failed download is
@@ -238,8 +239,10 @@ missing local page can leave a manifest reference with no uploaded page file.
 4. If every fetched page completed without a transient/DB error, write the notebook row from the
    manifest (keeping this device's `openPageId`) and commit in one transaction: mark the notebook
    `SYNCED` at the remote timestamp, upsert the fetched pages' `page_sync_state` rows, and drop rows
-   for departed pages. Then best-effort prune local pages no longer in the manifest. A killed download
-   writes no rows, so the next sync re-fetches the same pages.
+   for departed pages. Then best-effort prune local pages no longer in the manifest. A download killed
+   before this commit writes no sync-state rows, so the next sync re-fetches the same pages. What it
+   did write stays: pages already replaced and, for a notebook new to this device, the placeholder
+   notebook row created with `updatedAt` 0, which keeps the notebook looking stale until a commit.
 
 A media 404 is logged and dropped — it does not block the notebook commit. Other media failures do.
 Corrupt individual stroke/image DTOs are skipped by the serializer rather than failing the whole
@@ -565,8 +568,9 @@ detection (5.3):
 
 Committed state is written **only inside** the notebook's commit transaction (after the manifest is
 published on upload / the atomic page swap on download); the notebook row additionally records
-`ERROR`, `REMOTE_AHEAD`, and `CONFLICT` outcomes, and conflict resolution rebaselines rows (5.5). A killed sync writes no rows, so the next
-sync re-transfers the same pages — "skip" is exactly as trustworthy as the notebook badge.
+`ERROR`, `REMOTE_AHEAD`, and `CONFLICT` outcomes, and conflict resolution rebaselines rows (5.5). A sync killed before a notebook's commit writes no sync-state rows for that
+notebook (notebooks committed earlier in the same run keep theirs), so the next sync re-transfers the
+same pages — "skip" is exactly as trustworthy as the notebook badge.
 
 `NotebookSyncStatusStore` derives a badge for every notebook: `ERROR` if the row is in error;
 `CONFLICT` if it's flagged; `NOT_SYNCED` if there is no row or local time is more than one second past

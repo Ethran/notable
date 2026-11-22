@@ -17,8 +17,9 @@ Overview
     - linkToExternalFile: link vs copy (used for PDFs)
     - fileType: optional MIME-type pre-check
     - bookTitle: optional notebook title override
-- The file type is decided from the URI's MIME type or, when it has none (e.g. a `file:` URI),
-  from the file name's extension — never from `bookTitle`.
+- The file type is decided from the URI's MIME type or the file name's extension: either one
+  matching is enough, so `book.pdf` reported as `text/plain` still imports as a PDF. The title
+  override `bookTitle` is never used for this.
 - Notebook title: `bookTitle` or the file name, with a `.xopp` / `.pdf` extension removed
   (any case), then sanitized: only letters, digits, spaces and dots kept, whitespace and dots
   collapsed, trimmed, at most 100 characters.

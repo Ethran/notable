@@ -150,15 +150,18 @@ Badges describe the last recorded state, not the server's current state. A noteb
 These operations appear under **DANGER ZONE**, ask for confirmation, and cannot be undone.
 
 - **Upload All** (*Replace Server Data?*) uploads every local notebook and `folders.json`, then
-  deletes server notebooks that do not exist locally (leaving deletion markers so other devices
-  remove them too). If the local library looks incomplete — at least 10 server notebooks missing
+  deletes server notebooks that do not exist locally. It leaves deletion markers so other devices
+  remove them too, except where a device edited the notebook later (see
+  [Deletion Conflicts](#deletion-conflicts)). If this device has no folders, `folders.json` is not
+  uploaded, so the server keeps its old folder list and a later sync can bring those folders back. If the local library looks incomplete — at least 10 server notebooks missing
   locally and more than half of the server's — it keeps them and reports an error instead. A partial
   failure can leave mixed old and new server data.
 
 - **Download All** (*Replace Local Data?*) refuses to run if the server has no notebooks. Otherwise
   it updates folders from the server, downloads every server notebook over the local copy (skipping
   ones already identical, so an interrupted run resumes), and only then deletes local notebooks and
-  folders that are not on the server. It is **not transactional**: a failure can leave a partial
+  folders that are not on the server. That deletion runs even if some notebooks failed to download;
+  those can be left partly downloaded until a later sync completes them. It is **not transactional**: a failure can leave a partial
   restore.
 
 Back up your data and confirm which copy is authoritative before continuing.
