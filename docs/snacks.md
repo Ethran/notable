@@ -1,19 +1,20 @@
 # Snack (Snackbar) System
 
-Snack system in Notable currently has three layers:
+Snack system in Notable has three layers:
 
-1. **UI render layer**: `SnackBar(state, dispatcher)` renders local and global snacks.
+1. **UI render layer**: `SnackBar(state, dispatcher)` (`ui/SnackBar.kt`) renders local and global snacks.
 2. **UI dispatch layer**: `SnackDispatcher` (Hilt singleton) is the main API for app-wide messages.
-3. **Domain event layer (in progress)**: `AppEventBus` publishes domain events that are translated to UI snacks by `AppEventUiBridge`.
+3. **Domain event layer**: `AppEventBus` publishes domain events that are translated to UI snacks by `AppEventUiBridge`.
 
 ## Key Components
 
-- `SnackConf`: UI payload for snackbar rendering (`id`, `text`, `duration`, optional `content`, optional `actions`).
-- `SnackDispatcher`: app-wide snackbar dispatch API (Hilt).
-- `DefaultSnackDispatcher`: concrete implementation used by UI layer.
-- `SnackState`: local composable-scoped snack state (`LocalSnackContext`).
-- `AppEventBus`: domain-level event stream for low-level components.
-- `AppEventUiBridge`: maps `AppEvent` -> `SnackConf` and sends via `SnackDispatcher`.
+- `SnackConf`: UI payload for snackbar rendering (`id`, `text`, `duration`, optional `progress` 0..1, optional `content`, optional `actions`). Showing a snack with an existing `id` updates it in place.
+- `SnackDispatcher` (`ui/SnackDispatcher.kt`): app-wide snackbar dispatch API (`showOrUpdateSnack`, `removeSnack`, `activeSnacks`).
+- `DefaultSnackDispatcher`: its implementation, bound in Hilt by `SnackModule`.
+- `SnackState`: local snack state, provided to composables through `LocalSnackContext` by `MainActivity`; also has `showSnackDuring` / `runWithSnack` helpers.
+- `AppEventBus` (`data/events/`): domain-level event stream for low-level components; events are the `AppEvent` sealed interface.
+- `AppEventUiBridge` (`ui/AppEventUiBridge.kt`): maps `AppEvent` -> `SnackConf` and sends via `SnackDispatcher`.
+- `SyncWorkUiBridge` (`ui/SyncWorkUiBridge.kt`): turns finished WorkManager sync runs into snack events, which `MainActivity` shows through `SnackDispatcher`.
 
 ## Triggering Snacks
 
@@ -29,11 +30,11 @@ Use `LocalSnackContext.current` + `SnackState.displaySnack(...)` for view-local 
 
 Publish `AppEvent` to `AppEventBus` (do not build `SnackConf` in domain code).
 
-## Current Migration Status
+## Wiring
 
-- `AppEventBus` is implemented and bound in Hilt (`EventModule`).
-- `AppEventUiBridge` is started from `MainActivity` and translates events to `SnackDispatcher` calls.
-- `StrokeMigrationHelper` (`StrokeReencoding.kt`) uses `AppEventBus`.
+- `AppEventBus` is bound in Hilt (`EventModule`, `DefaultAppEventBus`).
+- `AppEventUiBridge` is a singleton injected into `MainActivity`; on creation it starts collecting `AppEventBus` on the application scope and translates events to `SnackDispatcher` calls.
+- Publishers include `PageSaver` (edits not saved), `PageDataManager` / `BackgroundFileWatcher`, `ImportEngine`, `ExportEngine`, `XoppFile`, `ThumbnailBackfillQueue`, `History`, `StrokeMigrationHelper` (`StrokeReencoding.kt`) and the version check (`utils/versionChecker.kt`).
 
 ## Best Practices
 

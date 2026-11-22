@@ -2,7 +2,7 @@
 
 Thanks for wanting to help! Notable is maintained mostly by one person in my spare time. 
 The rules below exist to keep reviews possible. PRs
-that ignore them may be closed with a link to this file --  that's not personal, you're welcome to
+that ignore them may be closed with a link to this file. That's not personal: you're welcome to
 reopen once they're addressed.
 
 ## Before you start
@@ -11,8 +11,8 @@ reopen once they're addressed.
 - **Features and larger changes:** open an issue or ask on [Discord](https://discord.gg/rvNHgaDmN2)
   first. It's much cheaper to agree on an approach before the code exists.
 - Read [docs/file-structure.md](docs/file-structure.md) to see where code belongs, and
-  [docs/database-structure.md](docs/database-structure.md) if you touch the data model. Those files are only meant as a helpers, 
-they might have some mistakes.
+  [docs/database-structure.md](docs/database-structure.md) if you touch the data model. These files
+  are only meant as a help and may contain mistakes; when they disagree with the code, the code wins.
 
 
 ## Pull request size
@@ -49,7 +49,7 @@ It is the one place where I learn what *you* understood, decided, and tested.
   optional, and it's read as supporting material only.
 
 It's fine for the description to be short. "Fixes #123: eraser left ghosts after a GC refresh.
-Tested on Note Air 3, scribbled and erased ~20 times." is a ok description.
+Tested on Note Air 3, scribbled and erased ~20 times." is an OK description.
 
 ## Using AI to write code
 

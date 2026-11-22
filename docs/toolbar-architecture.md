@@ -39,8 +39,10 @@ sealed interface ToolbarElement {
     fun isSelected(state: ToolbarUiState): Boolean = false
 }
 
-// PenElement   — a pen preset: pen type + setting + StrokeSubmenuSpec; isSelected by presetId
-// ShapeElement — one SHAPE button + shape picker (LINE today); isSelected: mode == Line
+// PenElement   — a pen preset: pen type + setting + StrokeSubmenuSpec;
+//                isSelected: its presetId is active and mode is Draw or Line
+// ShapeElement — one SHAPE button; LINE is the only shape, so it toggles Draw/Line
+//                instead of opening a picker; isSelected: mode == Line
 // ModeElement  — eraser / select; isSelected: mode == this.mode
 // ActionElement— undo, redo, paste, reset-view, home, toggle; stateless
 // CustomElement— PAGE_NAV / MENU / IMAGE_PICKER; bespoke rendering
@@ -67,8 +69,8 @@ fun resolve(name: String, pens: List<ToolbarPen>): ToolbarElement? =
 ```
 
 `presentlyUsedToolIcon(state, pens)` — the collapsed-toolbar icon — is a registry lookup: the
-first selected element's icon, else the active pen preset's icon, else the `line_dashed`
-fallback (the old exhaustive `when(pen)` is gone).
+first selected static element's icon (shape, eraser, select), else the active pen preset's icon,
+else the `line_dashed` fallback.
 
 ### 3. [ToolbarPen](../app/src/main/java/com/ethran/notable/editor/ui/toolbar/model/ToolbarPen.kt) — pen presets
 
@@ -79,14 +81,15 @@ setting.
 @Serializable
 data class ToolbarPen(
     val id: String,               // generated, stable (8-char), never reused
-    val pen: Pen,                 // base type: BALLPEN, PENCIL, BRUSH, FOUNTAIN, MARKER
+    val pen: Pen,                 // base type, one of BASE_TYPES: BALLPEN, FOUNTAIN, BRUSH,
+                                  // MARKER, CHARCOAL, PENCIL, CALLIGRAPHY
     val color: Int, val size: Float,
     val colorOptions: List<Int>? = null,   // which colors its StrokeMenu offers (null → default)
     val sizeOptions: List<Float>? = null,  // which sizes (null → type default)
 )
 ```
 
-- Referenced from layouts as `"PEN:<id>"`. `DEFAULT_PENS` reproduces the historical eight
+- Referenced from layouts as `"PEN:<id>"`. `DEFAULT_PENS` holds the eight default
   buttons with stable seed ids (`ball`/`red`/`blue`/`green`/`pencil`/`brush`/`fountain`/`marker`);
   red/green/blue are plain `BALLPEN` presets with a color.
 - **Selection is by preset id**, not `Pen` — two ballpens in different colors are distinct.
@@ -116,8 +119,10 @@ data class ToolbarLayout(val scrollable: List<String>, val pinned: List<String>)
 
 ## Rendering: [ToolbarContent](../app/src/main/java/com/ethran/notable/editor/ui/toolbar/Toolbar.kt)
 
-`ToolbarContent` reads the layout from the `GlobalAppSettings.current` snapshot (so setting
-changes recompose), runs `.validated()`, and iterates:
+`ToolbarContent` also shows the `BackgroundSelector` modal while it is open. A collapsed toolbar
+(`isToolbarOpen == false`) renders only one button with `presentlyUsedToolIcon`. An open one
+reads the layout from the `GlobalAppSettings.current` snapshot (so setting changes recompose),
+runs `.validated()`, and iterates:
 
 ```
 Row(toolbar):
@@ -128,28 +133,33 @@ Row(toolbar):
 
 [`ToolbarElementView`](../app/src/main/java/com/ethran/notable/editor/ui/toolbar/ToolbarElementView.kt)
 is the one generic renderer — a `when(element)` over the subtypes. It draws the button via
-`ToolbarButton`, handles selected state, and opens the element's declared submenu
-(`StrokeMenu` for pens, the eraser popup for `ModeElement`). Composables are stateless except
-transient popup-open state; **all mutation flows `ToolbarAction → onToolbarAction() → new
-ToolbarUiState`**. The image picker routes through an `onPickImage` callback because its
+`ToolbarButton`, handles selected state, and shows the element's declared submenu
+(`StrokeMenu` for pens, the eraser popup for `ModeElement`, `ToolbarMenu` for `MENU`). **All
+mutation flows `ToolbarAction → onToolbarAction() → new ToolbarUiState`**, including which
+popup is open: `penMenuPresetId`, `isEraserMenuOpen` and `isMenuOpen` live in `ToolbarUiState`,
+so an open popup turns the pen off (`isDrawing` is derived from them). Tapping a pen button sends
+`PenButtonTapped`; the ViewModel selects the pen, or toggles its stroke menu if it is already
+selected. The image picker routes through an `onPickImage` callback because its
 activity-result launcher is Compose infrastructure owned by `ToolbarContent`, not a
-`ToolbarAction`.
+`ToolbarAction`. `PositionedToolbar` places the toolbar at the top or bottom
+(`AppSettings.toolbarPosition`).
 
 ---
 
 ## Persistence
 
-`AppSettings` gained two `@Serializable` fields, persisted and observed for free through the
-existing `KvProxy` / Room `Kv` / `GlobalAppSettings.current` path:
+`AppSettings` has two `@Serializable` fields for the toolbar, persisted and observed through the
+`KvProxy` / Room `Kv` / `GlobalAppSettings.current` path:
 
 ```kotlin
 val toolbarLayout: ToolbarLayout? = null   // null → ToolbarLayout.DEFAULT
 val toolbarPens: List<ToolbarPen> = DEFAULT_PENS
 ```
 
-`ignoreUnknownKeys` + optional-with-default means old blobs decode to defaults and old app
-versions ignore the new keys. Pen-setting edits (`ChangePenSetting` from `StrokeMenu`) write
-back to the preset synchronously (ordering rapid slider edits) and persist async. The
+`ignoreUnknownKeys` + optional-with-default means blobs without these keys decode to defaults
+and app versions without them ignore the keys. Pen-setting edits (`ChangePenSetting` from
+`StrokeMenu`) write back to the preset in `GlobalAppSettings` synchronously (ordering rapid
+slider edits), update `ToolbarUiState.penSettings` directly, and persist to the database async. The
 ViewModel mirrors `toolbarPens` into `ToolbarUiState.penSettings` via a `snapshotFlow`, and
 **reselects the first surviving preset** when the active id disappears — so deleting a pen
 mid-session needs no special-casing.
@@ -158,7 +168,7 @@ mid-session needs no special-casing.
 
 ## Settings editor: [ToolbarSettings](../app/src/main/java/com/ethran/notable/ui/components/ToolbarSettings.kt)
 
-A "Toolbar" tab (between Gestures and Debug) editing the draft layout, committed via
+A "Toolbar" tab (between Gestures and Sync) editing the draft layout, committed via
 `onSettingsChange(settings.copy(toolbarLayout = …, toolbarPens = …))`. Every commit writes a
 **concrete** `validated()` layout (never null), materializing `DEFAULT` on first edit so
 editing default presets can't silently drop buttons.
@@ -192,9 +202,10 @@ A self-identifying JSON envelope, written/read via SAF pickers
 ```
 
 `decode(text): ImportResult` rejects malformed JSON, a wrong `type`, or a newer `version` with
-a user-presentable `IllegalArgumentException`; it deduplicates pen ids and resets degenerate
-option lists, runs `validated(pens)`, and returns a `droppedCount` (validator-appended `MENU`
-not counted) so the caller can report normalized entries in a snackbar instead of failing.
+a user-presentable `IllegalArgumentException`; it deduplicates pen ids, drops color/size
+options outside the editor's candidate sets (an option list left empty falls back to the
+defaults), runs `validated(pens)`, and returns a `droppedCount` (dropped layout entries and
+duplicate pens; the validator-appended `MENU` not counted) so the caller can report normalized entries in a snackbar instead of failing.
 Import replaces `toolbarLayout` **and** `toolbarPens` wholesale, behind a confirmation dialog
 (irreversible); the editor's snapshotFlow reselects a surviving preset afterward.
 
@@ -205,8 +216,8 @@ Import replaces `toolbarLayout` **and** `toolbarPens` wholesale, behind a confir
 | To add… | Do this | Don't touch |
 | :-- | :-- | :-- |
 | A static tool (button/action) | one `ToolbarElements.all` entry + a `ToolbarElementId` | `ToolbarContent`, `ToolbarElementView` |
-| A new pen type | a `Pen` value + a `StrokeStyleRegistry.forPen` entry | the toolbar model |
-| A new shape | extend the `Shape` enum | the picker grows automatically |
+| A new pen type | a `Pen` value + a `StrokeStyleRegistry` entry + its `ToolbarElements.penIcon` and `ToolbarPen.BASE_TYPES` entries | `ToolbarContent`, `ToolbarElementView` |
+| A new shape | extend the `Shape` enum + `ShapeElement.shapes`; the SHAPE button is a plain Draw/Line toggle while `LINE` is the only shape, so a picker is still to be built | |
 | A text tool (future) | `Mode.Text` + a `TextElement` spec + its submenu | the render loop |
 
 A unit test asserts **every `ToolbarElementId` resolves** and **every stroke-producing `Pen`

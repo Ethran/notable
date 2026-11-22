@@ -8,14 +8,16 @@ experimental, so keep an independent backup—especially before using a replacem
 ## What Gets Synced
 
 - Notebooks, their order, and their settings
-- Pages, handwriting, drawings, managed images, and managed backgrounds
+- Pages, handwriting, drawings, and inserted images
 - Folder organization and notebook moves
 - Notebook deletions
 
 Not synced:
 
 - Standalone Quick Pages
-- Files referenced through linked external PDF paths
+- Custom page backgrounds: background images and PDFs (imported or linked). The page keeps its
+  background setting, but the file itself must be available on each device. Built-in templates
+  (lined, grid, …) work everywhere.
 - Folder deletions; a deleted folder may reappear after another device syncs
 
 Changes to different pages merge automatically. If both devices change the same page or the notebook
@@ -66,48 +68,63 @@ Create an app password instead of using your regular password:
 2. Enter your **Server URL**, **Username**, and **Password** (or app password)
 3. Tap **Save Credentials**
 
+Once a password is saved the field shows **(unchanged)**; leave it empty to keep the saved password.
+
 ### 3. Test Your Connection
 
 1. Tap **Test Connection**.
 2. If it fails, check the URL and credentials, then see [Troubleshooting](#troubleshooting).
 
-The test checks authentication and server time, but not uploads, quota, or every WebDAV operation.
-A successful test does not guarantee that sync will succeed.
+The test checks authentication and server time. When the connection works, it also runs a short
+check of how the server reports file changes: it writes and then deletes a few small files in
+`/notable/.capability-probe/`. The result appears under **Server capabilities** and decides whether
+**Fast change detection** can be used on this server (see [Sync Options](#sync-options)). Run the
+test again after changing the server URL or username.
+
+The test does not check quota or every WebDAV operation, so a successful test does not guarantee
+that sync will succeed.
 
 Sync stops when the device and server clocks differ by more than 30 seconds. Enable automatic date
 and time if necessary.
 
 ### 4. Enable Sync
 
-1. Toggle **Enable WebDAV Sync**
-2. Run **Sync Now** once and check the Sync Log before enabling automatic sync
+1. Toggle **Sync WebDAV** (while sync is off, the Sync tab first shows an experimental-feature
+   warning to accept)
+2. Run **Sync Now** once and check the Activity Log before enabling automatic sync
 
 ## Sync Options
 
 | Option | Behavior |
 |---|---|
-| **Sync Now** | Runs a full sync. "Last synced" changes only after the entire run succeeds. Other notebooks can still transfer if one fails. |
-| **Auto sync every … minutes** | Schedules background sync every 15–240 minutes. Android may delay it for battery or network reasons. |
-| **Sync on app start** | Schedules a full sync when Notable's main screen starts. |
-| **Sync when closing notes** | Syncs only the notebook you closed. It skips the attempt if another sync holds the lock. |
-| **Check for newer version when opening a notebook** | Checks the remote manifest and offers **Sync now** when it is newer. Network and authentication errors do not block opening the notebook. |
-| **Wi-Fi only** | Requires a network Android reports as unmetered, usually Wi-Fi or Ethernet. |
+| **Sync Now** | Runs a full sync. "Last sync" changes only after the entire run succeeds. Other notebooks can still transfer if one fails. |
+| **Auto sync every … minutes** | Schedules background sync; the **Sync interval** selector sets 15–240 minutes in 5-minute steps. Android may delay it for battery or network reasons. |
+| **Sync when the app starts** | Schedules a full sync when Notable's main screen starts. |
+| **Sync when closing notes** | Syncs only the notebook you closed. It skips the attempt if another sync is running. |
+| **Check for a newer version when opening a notebook** | Checks the server's copy and, when it is newer, offers **Sync now**, which closes the notebook and syncs it. Network and authentication errors do not block opening the notebook. |
+| **Fast change detection** | On servers where Test Connection found it safe, a full sync skips checking notebooks whose server folder has not changed. Turn it off to force the standard per-notebook check. It has no effect until Test Connection has run. |
+| **Sync on WiFi only (no mobile data)** | Requires a network Android reports as unmetered, usually Wi-Fi or Ethernet. |
+
+Every sync first saves the open notebook's pending edits; if they cannot be saved, the sync stops and
+tries again later.
 
 ### Upload Only / Download Only
 
 These two modes are mutually exclusive — turning one on turns the other off.
 
 - **Upload only** pushes local changes but does not download notebooks or apply remote deletions. It
-  skips newer server copies and marks them **Newer on server**. Folder metadata can still be merged
-  and written.
+  skips newer server copies and marks them **Newer on server**. Folders are still merged into the
+  server's `folders.json`, but server folder changes are not applied locally.
 
-- **Download only** pulls server changes but does not upload notebooks or local deletions. Local
-  edits remain **Not synced**. Cleanup may still delete server tombstones older than 90 days, so this
-  is not a strictly read-only mode.
+- **Download only** pulls server changes but does not upload notebooks, folders, or local deletions.
+  Local edits remain **Not synced**, and a notebook deleted only on this device is downloaded again.
+  Cleanup may still delete server deletion markers older than 90 days, so this is not a strictly
+  read-only mode.
 
 ### Cancel a Running Sync
 
-**Cancel** stops WorkManager sync jobs, although an active network request may take time to finish.
+**Cancel sync** (shown while a sync runs) stops WorkManager sync jobs, although an active network
+request may take time to finish.
 It also removes periodic sync for the current app session; restart Notable to restore the schedule.
 It may not stop sync-on-close or check-on-open.
 
@@ -122,7 +139,7 @@ Each notebook cover in the library shows a small icon reflecting its sync status
 | 🕐 | **Scheduled** | A full sync is running and this notebook is waiting its turn. |
 | 🔄 | **Syncing** | This notebook is transferring. |
 | ☁️⬇ | **Newer on server** | Upload-only mode skipped a newer server copy. |
-| ⚠️ | **Error** | The last attempt failed. Check the Sync Log. |
+| ⚠️ | **Error** | The last attempt failed. Check the Activity Log. |
 | 🔄❗ | **Conflict** | Both devices changed the same page or notebook structure. Tap the notebook to resolve it. |
 
 Badges describe the last recorded state, not the server's current state. A notebook may briefly show
@@ -130,14 +147,25 @@ Badges describe the last recorded state, not the server's current state. A noteb
 
 ## Replacement Operations
 
-These operations appear under **CAUTION: Replacement Operations** and cannot be undone.
+These operations appear under **DANGER ZONE**, ask for confirmation, and cannot be undone.
 
-- **Upload All (Replace Server with Local Data)** uploads every local notebook, then removes server
-  notebooks that do not exist locally. A partial failure can leave mixed old and new server data.
+- **Upload All** (*Replace Server Data?*) uploads every local notebook and `folders.json`, then
+  deletes server notebooks that do not exist locally. It leaves deletion markers so other devices
+  remove them too, except where a device edited the notebook later (see
+  [Deletion Conflicts](#deletion-conflicts)). If this device has no folders, `folders.json` is not
+  uploaded, so the server keeps its old folder list and a later sync can bring those folders back. If the local library looks incomplete — at least 10 server notebooks missing
+  locally and more than half of the server's — it keeps them and reports an error instead. A partial
+  failure can leave mixed old and new server data.
 
-- **Download All (Replace Local with Server Data)** verifies that the server contains notebooks,
-  clears local data, then downloads the server copy. It is **not transactional**: a later failure can
-  leave a partial restore.
+- **Download All** (*Replace Local Data?*) refuses to run if the server has no notebooks. Otherwise
+  it updates folders from the server, downloads every server notebook over the local copy (skipping
+  ones already identical, so an interrupted run resumes), and only then deletes local notebooks and
+  folders that are not on the server. That deletion runs even if some notebooks failed to download.
+  Those can be left partly downloaded, and one that sat in a folder that is not on the server is
+  deleted together with that folder. A normal sync would then treat that notebook as deleted on
+  this device and delete it from the server too. **If Download All reports an error, run it again
+  until it succeeds before you run a normal sync.** It is **not transactional**: a failure can leave
+  a partial restore.
 
 Back up your data and confirm which copy is authoritative before continuing.
 
@@ -176,10 +204,13 @@ same notebook on two devices at once.
 If one device deletes a notebook while another makes a later edit, Notable keeps and re-uploads the
 edited copy. This protects the edit but can make a deletion reappear.
 
-## Sync Log
+Some servers don't report when the deletion happened. Then Notable can't tell which came first, so a
+device that has edits not yet synced keeps that notebook too.
 
-The **Sync Log** shows transfers and errors. It keeps the latest 50 entries in memory, so copy a
-failure promptly. Tap **Clear** to empty it.
+## Activity Log
+
+The **Activity Log** in the Sync settings shows transfers and errors. It keeps the latest 50 entries
+in memory, so copy a failure promptly with **Copy Log**. Tap **Clear Log** to empty it.
 
 ## Troubleshooting
 
@@ -190,8 +221,8 @@ failure promptly. Tap **Clear** to empty it.
 3. Use an app password when your provider requires one (see
    [Nextcloud with two-factor authentication](#nextcloud-with-two-factor-authentication))
 4. Check server quota and Android device storage
-5. Confirm the server supports `HEAD` and depth-1 `PROPFIND`
-6. Copy the Sync Log before older entries disappear
+5. Confirm the server supports `HEAD`, `PROPFIND` and `MOVE`
+6. Copy the Activity Log before older entries disappear
 
 ### Notebooks Not Appearing on Other Device
 
@@ -207,10 +238,10 @@ failure promptly. Tap **Clear** to empty it.
 Missing media does not fail the whole notebook sync and is not fetched automatically if it appears
 later.
 
-1. On the device that still has the file, open the affected notebook, make a small edit, and sync —
-   this re-uploads the media
-2. Linked external PDFs are intentionally not copied by design — make the same file available
-   separately on each device
+1. For an inserted image: on the device that still has the file, open the affected notebook, edit
+   the page that holds it, and sync — this re-uploads the media
+2. Custom backgrounds (images and PDFs) are not synced — make the same file available separately on
+   each device
 
 ### Very Slow Sync
 
@@ -232,7 +263,7 @@ When something looks wrong and you're not sure which side to trust:
 
 1. Stop editing the affected notebook on all devices
 2. Make an external backup of the known-good side
-3. Test the connection and inspect the Sync Log
+3. Test the connection and inspect the Activity Log
 4. Try an ordinary **Sync Now**
 5. Only use a replacement operation once you're certain which side is authoritative
 
@@ -249,11 +280,11 @@ When something looks wrong and you're not sure which side to trust:
 1. Use HTTPS unless you fully trust the network.
 2. Sync before switching devices.
 3. Keep a separate backup, especially before replacement operations.
-4. Check and copy the Sync Log promptly after a failure.
+4. Check and copy the Activity Log promptly after a failure.
 
 ## Getting Help
 
-1. Check the Sync Log for error details
+1. Check the Activity Log for error details
 2. Verify your WebDAV server is accessible and writable outside of Notable
 3. Try the troubleshooting steps above
 4. [Report an issue](https://github.com/Ethran/notable/issues)

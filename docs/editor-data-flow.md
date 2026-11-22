@@ -64,7 +64,9 @@ editor and the code around it.
    from the page's preview or background.
 3. **Swapping pages.** On the main thread, in one step under its page lock, `PageView`:
    - puts the old page's screen bitmap on the shelf (`onExit`), tagged with the viewport it shows,
-     for the page's next showing and its preview, if the page's data is loaded;
+     for the page's next showing and its preview, if the page's data is loaded, and reports the
+     page left through `onPageLeft` (`EditorViewModel.onPageLeft` asks `PagePreviewStore` for its
+     preview);
    - takes the new page's lease and closes the old one;
    - puts in the new page's `OpenPage` snapshot (record and page number), its viewport and its
      bitmap.
@@ -75,8 +77,8 @@ editor and the code around it.
    they are in.
 5. **Neighbours.** `EditorViewModel.onPageShown` is called once the page holds its lease; it
    cancels loads of pages left behind and prefetches the neighbours.
-6. **Closing.** `PageView.disposeOldPage` puts the shown page's bitmap on the shelf, releases the lease and
-   marks the view disposed. A disposed view shows, draws and loads nothing more, even if a page
+6. **Closing.** `PageView.disposeOldPage` puts the shown page's bitmap on the shelf (reporting it
+   through `onPageLeft` too), releases the lease and marks the view disposed. A disposed view shows, draws and loads nothing more, even if a page
    change was running. `EditorViewModel.onDispose` then stops loading the pages around it.
 
 ---
@@ -97,8 +99,8 @@ editor and the code around it.
 4. Saving is forced sooner when it matters:
    - `saveSoon()` when the editor closes and when the app goes to the background. It starts the
      save without waiting, so a process killed right after may not finish it;
-   - `saveAll()` before export and sync, which read pages from the database; they stop, and
-     report why, if it returns an error.
+   - `saveAll()` before export, sync and duplicating a page, which read pages from the database;
+     they stop, and report why, if it returns an error.
 
 ---
 
