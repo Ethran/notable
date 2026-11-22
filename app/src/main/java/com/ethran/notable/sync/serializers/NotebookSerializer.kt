@@ -7,10 +7,13 @@ import com.ethran.notable.data.db.Stroke
 import com.ethran.notable.data.db.decodeStrokePoints
 import com.ethran.notable.data.db.encodeStrokePoints
 import com.ethran.notable.data.db.withNormalizedPressure
+import com.ethran.notable.data.model.SheetSize
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.logCallStack
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -56,6 +59,7 @@ object NotebookSerializer {
             parentFolderId = notebook.parentFolderId,
             defaultBackground = notebook.defaultBackground,
             defaultBackgroundType = notebook.defaultBackgroundType,
+            defaultSheet = notebook.defaultSheet?.toDto(),
             linkedExternalUri = notebook.linkedExternalUri,
             createdAt = notebook.createdAt.toInstant().toString(),
             updatedAt = notebook.updatedAt.toInstant().toString(),
@@ -90,6 +94,7 @@ object NotebookSerializer {
                     parentFolderId = manifestDto.parentFolderId,
                     defaultBackground = manifestDto.defaultBackground,
                     defaultBackgroundType = manifestDto.defaultBackgroundType,
+                    defaultSheet = manifestDto.defaultSheet?.toSheetSize(),
                     linkedExternalUri = manifestDto.linkedExternalUri,
                     createdAt = createdAt,
                     updatedAt = updatedAt
@@ -135,7 +140,8 @@ object NotebookSerializer {
             background = page.background,
             backgroundType = page.backgroundType,
             parentFolderId = page.parentFolderId,
-            scroll = page.scroll,
+            legacyScroll = page.positionY,
+            sheet = page.sheet?.toDto(),
             createdAt = page.createdAt.toInstant().toString(),
             updatedAt = page.updatedAt.toInstant().toString()
         )
@@ -209,7 +215,7 @@ object NotebookSerializer {
                 background = pageDto.background,
                 backgroundType = pageDto.backgroundType,
                 parentFolderId = pageDto.parentFolderId,
-                scroll = pageDto.scroll,
+                sheet = pageDto.sheet?.toSheetSize(),
                 createdAt = pageCreated,
                 updatedAt = pageUpdated
             )
@@ -341,6 +347,7 @@ object NotebookSerializer {
         val parentFolderId: String?,
         val defaultBackground: String,
         val defaultBackgroundType: String,
+        val defaultSheet: SheetDto? = null,
         val linkedExternalUri: String?,
         val createdAt: String,
         val updatedAt: String,
@@ -358,7 +365,10 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
-        val scroll: Int,
+        // The view position is device-local and never read back. The key is written only because
+        // app versions before sheets require it; once they are unsupported, it can be dropped.
+        @EncodeDefault @SerialName("scroll") val legacyScroll: Int = 0,
+        val sheet: SheetDto? = null,
         val createdAt: String,
         val updatedAt: String
     )
@@ -371,12 +381,21 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
-        val scroll: Int,
+        // See [PageHeaderDto.legacyScroll]; optional on read, so dropping the key later is safe.
+        @EncodeDefault @SerialName("scroll") val legacyScroll: Int = 0,
+        val sheet: SheetDto? = null,
         val createdAt: String,
         val updatedAt: String,
         val strokes: List<StrokeDto>,
         val images: List<ImageDto>
     )
+
+    /** A [SheetSize] in page pixels. Left out for an infinite page. */
+    @Serializable
+    private data class SheetDto(val width: Int, val height: Int)
+
+    private fun SheetSize.toDto() = SheetDto(width, height)
+    private fun SheetDto.toSheetSize() = SheetSize(width, height)
 
     @Serializable
     private data class StrokeDto(

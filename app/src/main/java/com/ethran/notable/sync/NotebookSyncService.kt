@@ -431,24 +431,6 @@ class NotebookSyncService @Inject constructor(
     }
 
     /**
-     * Whether two manifests disagree on any authoritative notebook field that cannot be merged page by
-     * page — every serialized field except page *content* (which merges per page) and `updatedAt`, the
-     * change clock the tolerance window already reasons about rather than a value to conflict on.
-     * Device-local navigation state (`openPageId`) is not serialized at all, so it never enters here.
-     *
-     * A pure download would overwrite the local side of any of the compared fields, so a divergence
-     * here is surfaced as a whole-notebook conflict rather than silently resolved.
-     */
-    fun structurallyDiverges(local: Notebook, remote: Notebook): Boolean =
-        local.pageIds != remote.pageIds ||
-            local.title != remote.title ||
-            local.parentFolderId != remote.parentFolderId ||
-            local.defaultBackground != remote.defaultBackground ||
-            local.defaultBackgroundType != remote.defaultBackgroundType ||
-            local.linkedExternalUri != remote.linkedExternalUri ||
-            local.createdAt != remote.createdAt
-
-    /**
      * The full conflict picture for [notebook] against the server: the same-page conflicts from
      * [detectPageConflicts] plus whether the manifests [structurallyDiverges]. Read-only; used by the
      * resolution UI, so it fetches the remote manifest fresh. A remote manifest that cannot be read or
@@ -1061,20 +1043,20 @@ class NotebookSyncService @Inject constructor(
 
         // 2. Deserialize manifest (Early Return on corrupted JSON)
         val manifestJson = manifestFile.content.decodeToString()
-        val notebook = NotebookSerializer.deserializeManifest(manifestJson)
+        val remoteNotebook = NotebookSerializer.deserializeManifest(manifestJson)
             .onFailure { return AppResult.Error(it) }
 
-        log.i(TAG, "Found notebook: ${notebook.title} (${notebook.pageIds.size} pages)")
+        log.i(TAG, "Found notebook: ${remoteNotebook.title} (${remoteNotebook.pageIds.size} pages)")
 
         // 3. Ensure a notebook row exists so page foreign keys resolve, but do NOT advance its
         //    commit timestamp yet. A brand-new notebook is inserted with an epoch-0 timestamp so a
         //    partial download reads as "older than remote" and re-downloads next sync instead of
         //    being skipped as in-sync. An existing notebook keeps its current
         //    (older) timestamp untouched.
-        // openPageId is device-local navigation state and is not carried in the manifest, so the
-        // deserialized notebook has none. Preserve whatever this device last had open across the
-        // download instead of resetting it.
+        // openPageId is device-local navigation state and is not carried in the manifest, and a
+        // sheet is never cleared by a download; downloadedNotebookRow keeps both from this device.
         val existingBook = appRepository.bookRepository.getById(notebookId)
+        val notebook = downloadedNotebookRow(remoteNotebook, existingBook)
         val isNew = existingBook == null
         if (isNew) {
             try {
@@ -1150,7 +1132,7 @@ class NotebookSyncService @Inject constructor(
         val departedPageIds =
             (rowsByPageId.keys - notebook.pageIds.toSet()).toList()
         return try {
-            appRepository.bookRepository.updateVerbatim(notebook.copy(openPageId = existingBook?.openPageId))
+            appRepository.bookRepository.updateVerbatim(notebook)
             // Commit point: mark the notebook synced at the remote
             // timestamp, write the fetched pages' rows, and drop rows for departed pages -- one
             // transaction. Skipped pages keep their prior rows untouched.

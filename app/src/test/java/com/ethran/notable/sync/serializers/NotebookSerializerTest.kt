@@ -1,8 +1,12 @@
 package com.ethran.notable.sync.serializers
 
 import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.model.SheetSize
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -25,6 +29,7 @@ class NotebookSerializerTest {
         pageIds: List<String> = listOf("p-1", "p-2"),
         openPageId: String? = "p-1",
         parentFolderId: String? = "folder-1",
+        defaultSheet: SheetSize? = null,
         linkedExternalUri: String? = null,
         createdAt: Date = Date(1_700_000_000_000),
         updatedAt: Date = Date(1_700_000_456_000),
@@ -36,6 +41,7 @@ class NotebookSerializerTest {
         parentFolderId = parentFolderId,
         defaultBackground = "blank",
         defaultBackgroundType = "native",
+        defaultSheet = defaultSheet,
         linkedExternalUri = linkedExternalUri,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -43,7 +49,7 @@ class NotebookSerializerTest {
 
     @Test
     fun manifest_round_trip_preserves_all_fields() {
-        val original = sampleNotebook()
+        val original = sampleNotebook(defaultSheet = SheetSize(1860, 2632))
         val json = NotebookSerializer.serializeManifest(original)
 
         val result = NotebookSerializer.deserializeManifest(json)
@@ -58,6 +64,7 @@ class NotebookSerializerTest {
         assertEquals(original.pageIds, restored.pageIds)
         assertEquals(original.parentFolderId, restored.parentFolderId)
         assertEquals(original.defaultBackground, restored.defaultBackground)
+        assertEquals(original.defaultSheet, restored.defaultSheet)
         assertEquals(original.defaultBackgroundType, restored.defaultBackgroundType)
         assertEquals(original.linkedExternalUri, restored.linkedExternalUri)
         // ISO 8601 round-trip is millisecond-precise — exact equality is reasonable here.
@@ -70,6 +77,7 @@ class NotebookSerializerTest {
         val original = sampleNotebook(
             openPageId = null,
             parentFolderId = null,
+            defaultSheet = null,
             linkedExternalUri = null,
             pageIds = emptyList(),
         )
@@ -80,8 +88,36 @@ class NotebookSerializerTest {
 
         assertNull(restored.openPageId)
         assertNull(restored.parentFolderId)
+        assertNull(restored.defaultSheet)
         assertNull(restored.linkedExternalUri)
         assertEquals(emptyList<String>(), restored.pageIds)
+    }
+
+    // A manifest from an app without sheets reads back with infinite pages as the default.
+    @Test
+    fun manifest_without_defaultSheet_reads_as_infinite() {
+        val json = NotebookSerializer.serializeManifest(sampleNotebook(defaultSheet = SheetSize(1860, 2632)))
+        val legacy = JsonObject(Json.parseToJsonElement(json).jsonObject - "defaultSheet").toString()
+
+        val result = NotebookSerializer.deserializeManifest(legacy)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        assertNull((result as AppResult.Success).data.defaultSheet)
+    }
+
+    // A manifest as the app wrote it before sheets. Kept as a literal: never regenerate it.
+    @Test
+    fun manifest_from_before_sheets_reads_with_no_default_sheet() {
+        val old = """{"version":1,"notebookId":"nb-1","title":"My notebook",""" +
+            """"pageIds":["p-1","p-2"],"parentFolderId":null,"defaultBackground":"blank",""" +
+            """"defaultBackgroundType":"native","linkedExternalUri":null,""" +
+            """"createdAt":"2023-11-14T22:13:20Z","updatedAt":"2023-11-14T22:20:56Z",""" +
+            """"serverTimestamp":"2023-11-14T22:20:57Z"}"""
+
+        val result = NotebookSerializer.deserializeManifest(old)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data
+        assertEquals(listOf("p-1", "p-2"), restored.pageIds)
+        assertNull(restored.defaultSheet)
     }
 
     @Test

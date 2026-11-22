@@ -235,9 +235,12 @@ missing local page can leave a manifest reference with no uploaded page file.
    A page is also fetched when it has no row, is not present locally, or has no ETag in the listing
    (a failed/empty listing therefore fetches everything). For each fetched page: GET and fully
    deserialize the page JSON, download absent images and managed backgrounds (each background once per
-   notebook), then replace that page, its strokes, and its image rows in one Room transaction.
+   notebook), then replace that page, its strokes, and its image rows in one Room transaction. The
+   page row keeps this device's view position and, if the file has no valid sheet, its local sheet
+   (`downloadedPageRow`, `sync/DownloadedRows.kt`).
 4. If every fetched page completed without a transient/DB error, write the notebook row from the
-   manifest (keeping this device's `openPageId`) and commit in one transaction: mark the notebook
+   manifest (keeping this device's `openPageId`, and its `defaultSheet` when the manifest has no valid
+   one: `downloadedNotebookRow`) and commit in one transaction: mark the notebook
    `SYNCED` at the remote timestamp, upsert the fetched pages' `page_sync_state` rows, and drop rows
    for departed pages. Then best-effort prune local pages no longer in the manifest. A download killed
    before this commit writes no sync-state rows, so the next sync re-fetches the same pages. What it
@@ -350,6 +353,7 @@ trailing slash and appends the path, percent-encoding each path segment.
   "parentFolderId": null,
   "defaultBackground": "blank",
   "defaultBackgroundType": "native",
+  "defaultSheet": { "width": 1860, "height": 2632 },
   "linkedExternalUri": null,
   "createdAt": "2026-07-27T10:00:00Z",
   "updatedAt": "2026-07-27T10:05:00.123Z",
@@ -364,12 +368,27 @@ trailing slash and appends the path, percent-encoding each path segment.
   serialized** — it never travels between devices, and a download preserves the local value rather
   than overwriting it. Older manifests that still carry the key are tolerated and ignored
   (`ignoreUnknownKeys = true`).
+- `defaultSheet` is the sheet new pages get, in page pixels (see 4.3). It is left out when new pages
+  are infinite.
 
 ### 4.3 Page JSON (`pages/{uuid}.json`)
 
 Page JSON schema version is `1`. It contains `id`, a nullable `notebookId` (`null` for standalone
-Quick Pages, which are never synced), background fields, nullable `parentFolderId`, scroll position,
-timestamps, and arrays of strokes and images.
+Quick Pages, which are never synced), background fields, nullable `parentFolderId`, `scroll`, an
+optional `sheet`, timestamps, and arrays of strokes and images.
+
+**Sheets.** `sheet` is `{ "width": …, "height": … }` in page pixels, the units strokes and images
+use; it is left out for an infinite page. A sheet is fixed when the page is created, so a download
+never clears one: a missing sheet, or one with a side ≤ 0 or above 20 000 px, keeps the local value
+(`downloadedSheet`). That protects sheets from app versions before sheets, which upload pages and
+manifests without the key. `defaultSheet` is not compared for structural conflicts (5.3) for the same
+reason.
+
+**View position.** The view position is device-local, like `openPageId`, and is never read from the
+file: a download keeps the local position, and a page new to the device opens at the top. The vertical
+position is still written as `"scroll"` (`legacyScroll` in the DTO), because app versions before
+sheets require the key and fail to parse a page without it. Reading treats it as optional, so a later
+version can stop writing it once those versions are no longer supported.
 
 Each stroke carries geometry/style metadata (`id`, `size`, `pen`, `color`, `maxPressure`, bounding
 box, timestamps) plus `pointsData` — the stroke binary encoding returned by `encodeStrokePoints`,
@@ -453,7 +472,8 @@ means concurrent edits that the tie cannot prove equal, so the planner returns `
 - **Genuine conflict** — either a *page conflict* (the same page edited locally **and** remotely since
   the last common sync) or a *structural conflict* (the manifests disagree on page set, order, title,
   parent folder, default background, linked file, or `createdAt`; an unreadable remote manifest counts
-  as structural). Mark the notebook `CONFLICT` and leave both copies unchanged.
+  as structural). `defaultSheet` is not compared: a download never clears it (4.3), so a difference
+  only means one side came from an app version without sheets. Mark the notebook `CONFLICT` and leave both copies unchanged.
 
 Conflicts are only *detected* in two-way sync, because that's the only mode that produces a
 `Reconcile` (see 5.9).
@@ -692,12 +712,18 @@ treated as success — the resource is already gone. Both are therefore safe to 
   drops the precondition and conflict handling degrades to last-writer-wins (logged once per notebook
   upload in the sync log), and remote GC after upload is skipped.
 - Custom image and PDF backgrounds are stored as absolute paths and so are not synced (5.11).
+- When an app version without sheets edits a sheet page and uploads it, the server copy loses the
+  sheet. Devices that already have the page keep theirs (4.3), but a device that downloads the page
+  for the first time gets an infinite page. The server copy gets its sheet back when a newer device
+  uploads that page again, which happens only after an edit to it.
 - Conflict resolution relies on synchronized device clocks; normal preflight rejects skew over 30
   seconds.
 - `WebDavClientFactoryPort` abstracts client construction only. Transfer services still accept the
   concrete `WebDAVClient`, and all of them reach through the broad `AppRepository` — the main
   obstacle to executor-level tests today.
-- Unit tests cover serializers, the pure planner and page selector, `ETag` parsing/comparison, the
+- Unit tests cover serializers (including page and manifest files in the format before sheets, and
+  parsing by the page DTO of those versions), the download row rules (`DownloadedRowsTest`), the
+  pure planner and page selector, `ETag` parsing/comparison, the
   capability-probe verdict, the bulk fast-path gate, the mass-deletion guard, new-notebook selection,
   `WebDAVClient` requests, path encoding, progress reporting, logger behavior, factory construction,
   HTTP-date parsing, and `finalizeSyncResult`.
