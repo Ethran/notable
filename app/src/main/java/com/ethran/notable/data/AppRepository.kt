@@ -20,6 +20,7 @@ import com.ethran.notable.data.db.getPageIndex
 import com.ethran.notable.data.db.newPage
 import com.ethran.notable.data.events.AppEvent
 import com.ethran.notable.data.model.BackgroundType
+import com.ethran.notable.sync.downloadedPageRow
 import io.shipbook.shipbooksdk.ShipBook
 import java.util.Date
 import java.util.UUID
@@ -73,16 +74,18 @@ class AppRepository @Inject constructor(
      * Replace a downloaded page's content in a single transaction: an interrupted download can no
      * longer leave a page with its old strokes deleted but new ones not yet inserted (sync P5).
      * A null [pageRepository.getWithDataById] result means the page row is absent -> create it.
+     * The row keeps this device's view position and sheet ([downloadedPageRow]).
      */
     suspend fun replaceDownloadedPage(page: Page, strokes: List<Stroke>, images: List<Image>) {
         db.withTransaction {
             val existing = pageRepository.getWithDataById(page.id)
+            val row = downloadedPageRow(page, existing?.page)
             if (existing != null) {
                 strokeRepository.deleteAll(existing.strokes.map { it.id })
                 imageRepository.deleteAll(existing.images.map { it.id })
-                pageRepository.update(page)
+                pageRepository.update(row)
             } else {
-                pageRepository.create(page)
+                pageRepository.create(row)
             }
             strokeRepository.create(strokes)
             imageRepository.create(images)

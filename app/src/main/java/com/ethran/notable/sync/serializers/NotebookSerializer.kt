@@ -12,6 +12,7 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
 import com.ethran.notable.utils.logCallStack
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -139,8 +140,7 @@ object NotebookSerializer {
             background = page.background,
             backgroundType = page.backgroundType,
             parentFolderId = page.parentFolderId,
-            positionY = page.positionY,
-            positionX = page.positionX,
+            legacyScroll = page.positionY,
             sheet = page.sheet?.toDto(),
             createdAt = page.createdAt.toInstant().toString(),
             updatedAt = page.updatedAt.toInstant().toString()
@@ -215,8 +215,6 @@ object NotebookSerializer {
                 background = pageDto.background,
                 backgroundType = pageDto.backgroundType,
                 parentFolderId = pageDto.parentFolderId,
-                positionY = pageDto.positionY,
-                positionX = pageDto.positionX,
                 sheet = pageDto.sheet?.toSheetSize(),
                 createdAt = pageCreated,
                 updatedAt = pageUpdated
@@ -367,9 +365,9 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
-        // Kept under its old name: older clients require it.
-        @SerialName("scroll") val positionY: Int,
-        val positionX: Int = 0,
+        // The view position is device-local and never read back. The key is written only because
+        // app versions before sheets require it; once they are unsupported, it can be dropped.
+        @EncodeDefault @SerialName("scroll") val legacyScroll: Int = 0,
         val sheet: SheetDto? = null,
         val createdAt: String,
         val updatedAt: String
@@ -383,9 +381,8 @@ object NotebookSerializer {
         val background: String,
         val backgroundType: String,
         val parentFolderId: String?,
-        // Kept under its old name: older clients require it.
-        @SerialName("scroll") val positionY: Int,
-        val positionX: Int = 0,
+        // See [PageHeaderDto.legacyScroll]; optional on read, so dropping the key later is safe.
+        @EncodeDefault @SerialName("scroll") val legacyScroll: Int = 0,
         val sheet: SheetDto? = null,
         val createdAt: String,
         val updatedAt: String,
@@ -393,7 +390,7 @@ object NotebookSerializer {
         val images: List<ImageDto>
     )
 
-    /** A [SheetSize]; both sides or none, as on the page. */
+    /** A [SheetSize] in page pixels. Left out for an infinite page. */
     @Serializable
     private data class SheetDto(val width: Int, val height: Int)
 

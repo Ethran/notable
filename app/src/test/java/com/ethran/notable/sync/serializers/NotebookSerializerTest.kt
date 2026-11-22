@@ -104,6 +104,22 @@ class NotebookSerializerTest {
         assertNull((result as AppResult.Success).data.defaultSheet)
     }
 
+    // A manifest as the app wrote it before sheets. Kept as a literal: never regenerate it.
+    @Test
+    fun manifest_from_before_sheets_reads_with_no_default_sheet() {
+        val old = """{"version":1,"notebookId":"nb-1","title":"My notebook",""" +
+            """"pageIds":["p-1","p-2"],"parentFolderId":null,"defaultBackground":"blank",""" +
+            """"defaultBackgroundType":"native","linkedExternalUri":null,""" +
+            """"createdAt":"2023-11-14T22:13:20Z","updatedAt":"2023-11-14T22:20:56Z",""" +
+            """"serverTimestamp":"2023-11-14T22:20:57Z"}"""
+
+        val result = NotebookSerializer.deserializeManifest(old)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+        val restored = (result as AppResult.Success).data
+        assertEquals(listOf("p-1", "p-2"), restored.pageIds)
+        assertNull(restored.defaultSheet)
+    }
+
     @Test
     fun deserializeManifest_returns_error_for_malformed_json() {
         val result = NotebookSerializer.deserializeManifest("{ this is not json")

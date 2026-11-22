@@ -9,8 +9,9 @@ import com.ethran.notable.data.model.SheetSize
 import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.utils.AppResult
 import com.ethran.notable.utils.DomainError
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -143,16 +144,13 @@ class NotebookSerializerPageTest {
     }
 
     @Test
-    fun page_round_trip_preserves_the_position_and_the_sheet() {
-        val page = samplePage(positionY = 300, positionX = 120, sheet = SheetSize(1860, 2632))
+    fun page_round_trip_preserves_the_sheet() {
+        val page = samplePage(sheet = SheetSize(1860, 2632))
         val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
 
         val result = NotebookSerializer.deserializePage(json)
         assertTrue("expected Success, got $result", result is AppResult.Success)
-        val restored = (result as AppResult.Success).data.first
-        assertEquals(300, restored.positionY)
-        assertEquals(120, restored.positionX)
-        assertEquals(SheetSize(1860, 2632), restored.sheet)
+        assertEquals(SheetSize(1860, 2632), (result as AppResult.Success).data.first.sheet)
     }
 
     // Older clients require the vertical position under its old key, "scroll".
@@ -165,20 +163,100 @@ class NotebookSerializerPageTest {
         assertFalse("positionY must not be written: $json", "positionY" in fields)
     }
 
-    // A page file from an app without the horizontal position or sheets reads back as an
-    // infinite page at x = 0.
+    // "scroll" equals its default at the top of the page; it must still be written.
     @Test
-    fun page_file_without_positionX_or_sheet_reads_as_an_infinite_page() {
-        val page = samplePage(positionY = 300, positionX = 120, sheet = SheetSize(1860, 2632))
-        val json = NotebookSerializer.serializePage(page, listOf(sampleStroke("s-1")), emptyList())
-        val legacy = JsonObject(Json.parseToJsonElement(json).jsonObject - "positionX" - "sheet").toString()
+    fun page_file_writes_scroll_at_the_top_of_the_page() {
+        val json = NotebookSerializer.serializePage(samplePage(positionY = 0), emptyList(), emptyList())
 
-        val result = NotebookSerializer.deserializePage(legacy)
+        assertEquals(0, Json.parseToJsonElement(json).jsonObject.getValue("scroll").jsonPrimitive.int)
+    }
+
+    // A later app version may stop writing "scroll"; its page files must still parse here.
+    @Test
+    fun page_file_without_scroll_parses() {
+        val noScroll = """{"version":1,"id":"page-1","notebookId":"nb-1","background":"blank",""" +
+            """"backgroundType":"native","parentFolderId":null,""" +
+            """"createdAt":"2023-11-14T22:13:20Z","updatedAt":"2023-11-14T22:20:56Z",""" +
+            """"strokes":[],"images":[]}"""
+
+        val result = NotebookSerializer.deserializePage(noScroll)
+        assertTrue("expected Success, got $result", result is AppResult.Success)
+    }
+
+    // The view position is device-local; the horizontal one never goes on the wire.
+    @Test
+    fun page_file_never_writes_positionX() {
+        val page = samplePage(positionX = 120, sheet = SheetSize(1860, 2632))
+        val json = NotebookSerializer.serializePage(page, emptyList(), emptyList())
+
+        assertFalse(
+            "positionX must not be written: $json",
+            "positionX" in Json.parseToJsonElement(json).jsonObject
+        )
+    }
+
+    // An infinite page writes exactly the keys of the format before sheets, so older clients and
+    // file diffs see no change. Also catches someone turning on encodeDefaults.
+    @Test
+    fun infinite_page_file_has_exactly_the_old_key_set() {
+        val json = NotebookSerializer.serializePage(samplePage(positionY = 300), emptyList(), emptyList())
+
+        assertEquals(
+            setOf(
+                "version", "id", "notebookId", "background", "backgroundType", "parentFolderId",
+                "scroll", "createdAt", "updatedAt", "strokes", "images",
+            ),
+            Json.parseToJsonElement(json).jsonObject.keys,
+        )
+    }
+
+    // A page file as the app wrote it before sheets. Kept as a literal: never regenerate it.
+    @Test
+    fun page_file_from_before_sheets_reads_as_an_infinite_page() {
+        val old = """{"version":1,"id":"page-1","notebookId":"nb-1","background":"blank",""" +
+            """"backgroundType":"native","parentFolderId":null,"scroll":300,""" +
+            """"createdAt":"2023-11-14T22:13:20Z","updatedAt":"2023-11-14T22:20:56Z",""" +
+            """"strokes":[],"images":[]}"""
+
+        val result = NotebookSerializer.deserializePage(old)
         assertTrue("expected Success, got $result", result is AppResult.Success)
         val restored = (result as AppResult.Success).data.first
-        assertEquals(300, restored.positionY)
-        assertEquals(0, restored.positionX)
+        assertEquals("page-1", restored.id)
+        assertEquals("the view position is never read from the file", 0, restored.positionY)
         assertNull(restored.sheet)
+    }
+
+    // The page DTO of the app before sheets. An older client must still parse what we write;
+    // this also pins "scroll" as written, since that DTO requires it.
+    @Serializable
+    private data class LegacyPageDto(
+        val version: Int,
+        val id: String,
+        val notebookId: String?,
+        val background: String,
+        val backgroundType: String,
+        val parentFolderId: String?,
+        val scroll: Int,
+        val createdAt: String,
+        val updatedAt: String,
+        val strokes: List<JsonElement>,
+        val images: List<JsonElement>,
+    )
+
+    @Test
+    fun older_client_parses_a_sheet_page_file() {
+        val page = samplePage(positionY = 300, positionX = 120, sheet = SheetSize(1860, 2632))
+        val json = NotebookSerializer.serializePage(
+            page,
+            listOf(sampleStroke("s-1")),
+            listOf(sampleImage("i-1"))
+        )
+
+        val legacy = Json { ignoreUnknownKeys = true }.decodeFromString<LegacyPageDto>(json)
+        assertEquals("page-1", legacy.id)
+        assertEquals(300, legacy.scroll)
+        assertEquals(1, legacy.strokes.size)
+        assertEquals(1, legacy.images.size)
     }
 
     @Test
@@ -197,8 +275,6 @@ class NotebookSerializerPageTest {
         assertEquals(page.notebookId, restoredPage.notebookId)
         assertEquals(page.background, restoredPage.background)
         assertEquals(page.backgroundType, restoredPage.backgroundType)
-        assertEquals(page.positionY, restoredPage.positionY)
-        assertEquals(page.positionX, restoredPage.positionX)
         assertEquals(page.sheet, restoredPage.sheet)
         assertEquals(page.createdAt, restoredPage.createdAt)
         assertEquals(page.updatedAt, restoredPage.updatedAt)
