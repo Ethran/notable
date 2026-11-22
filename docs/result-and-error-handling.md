@@ -23,7 +23,7 @@ sealed interface AppResult<out D, out E : DomainError> {
 </details>
 
 ### 2. [DomainError](../app/src/main/java/com/ethran/notable/utils/AppResult.kt)
-Strongly-typed errors with a mandatory `userMessage`. 
+Strongly-typed errors (a sealed class: `NotFound`, `DatabaseError`, `FileError`, `DrawingError`, the sync errors, …) with a mandatory `userMessage` and a `recoverable` flag (whether retrying can help; `RemoteMissing` is not recoverable).
 
 **Error Accumulation:** You can combine multiple errors using the `+` operator. This is useful for loops where you don't want to "fail fast" on the first item (e.g., rendering multiple images).
 
@@ -33,12 +33,17 @@ Strongly-typed errors with a mandatory `userMessage`.
 ```kotlin
 // Combines two errors into MultipleErrors
 operator fun DomainError.plus(other: DomainError): DomainError.MultipleErrors {
-    val leftList = if (this is DomainError.MultipleErrors) this.errors else listOf(this)
-    val rightList = if (other is DomainError.MultipleErrors) other.errors else listOf(other)
+    val leftList = (this as? DomainError.MultipleErrors)?.errors ?: listOf(this)
+    val rightList = (other as? DomainError.MultipleErrors)?.errors ?: listOf(other)
     return DomainError.MultipleErrors(leftList + rightList)
 }
 ```
 </details>
+
+`MultipleErrors` is recoverable only if every error in it is.
+
+### 3. [ErrorAccumulator](../app/src/main/java/com/ethran/notable/utils/ErrorAccumulator.kt)
+Wraps the `+` idiom for loops: `add(error)` / `addFrom(result)` per item, then `asResult(value)` gives `Success(value)` if nothing failed, else `Error` with all collected errors. Not thread-safe; one instance per loop. Used by the sync services.
 
 ---
 
@@ -46,10 +51,11 @@ operator fun DomainError.plus(other: DomainError): DomainError.MultipleErrors {
 
 | Type | Function | Usage                                                 |
 | :--- | :--- |:------------------------------------------------------|
-| **Chain** | `map`, `flatMap` | Transform or sequence operations.                     |
+| **Chain** | `map`, `flatMap`, `mapError` | Transform or sequence operations, or convert the error. |
 | **Side Effect** | `onSuccess`, `onError` | Log or trigger UI events without changing the result. |
 | **Terminal** | `fold` | Use to handle both states.                            |
 | **Unwrap** | `getOrNull`, `getOrElse` | Safely access data.                                   |
+| **Early exit** | `onFailure` | Returns the data, or runs a block that must leave (`return`/`throw`) on error. |
 
 ---
 

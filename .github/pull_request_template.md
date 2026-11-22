@@ -26,7 +26,7 @@ the collapsible "AI-generated content" section at the bottom.
 ## Checklist
 
 - [ ] I wrote this description myself
-- [ ] This PR cannot be reasonably split into smaller PR.
+- [ ] This PR cannot reasonably be split into smaller PRs
 - [ ] I have read and understand every line of this change
 - [ ] Tested on a device
 - Does it change the database schema? YES / NO

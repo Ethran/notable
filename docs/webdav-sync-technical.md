@@ -11,7 +11,13 @@ preflight checks, folder sync, notebook reconciliation, transfers, and replaceme
 concrete `WebDAVClient` and broad `AppRepository`. This coupling limits executor-level testing.
 
 Transfer is page-based. The `page_sync_state` table identifies pages changed since the last committed
-sync; a page is the smallest transferable unit.
+sync; a page is the smallest transferable unit. On servers where it was measured to be safe, *bulk
+change detection* skips the per-notebook manifest request for notebooks whose remote directory ETag
+has not moved since the last converged sync (section 3.6).
+
+Every sync entry point first flushes the editor's pending edits to the database
+(`PageSaver.saveAll()`); if that fails the sync stops, because sync reads pages and their edit
+timestamps from Room.
 
 Reconciliation has two regimes:
 
@@ -24,8 +30,9 @@ Reconciliation has two regimes:
 The protocol has commit points but no atomic notebook snapshot. Pages precede the manifest on upload;
 page replacements precede the notebook-row commit on download. This leaves several gaps:
 
-- upload writes live page files before publishing `manifest.json`; if a page id is unchanged, an
-  interrupted update can expose new page content through an *old* manifest;
+- upload publishes page files (each one atomically, via a staging file and `MOVE`) before publishing
+  `manifest.json`; if a page id is unchanged, an interrupted update can expose new page content
+  through an *old* manifest;
 - download replaces pages one at a time before committing the notebook row; a failed download is
   retried on the next sync because the timestamp stays stale, but partially replaced pages can
   already be visible locally in the meantime;
@@ -59,8 +66,12 @@ SyncOrchestrator.resolvePageConflict / resolveNotebookConflict
     → NotebookSyncService (rebaseline sync rows)
     → NotebookReconciliationService (the follow-up transfer)
 
+Test Connection (settings, in-process)
+    SettingsViewModel → WebDAVClient.testConnection → CapabilityProbeService
+        → ServerCapabilities stored in Kv (SYNC_SERVER_CAPABILITIES)
+
 WebDavClientFactoryPort → WebDAVClient → shared OkHttpClient
-AppRepository → Room repositories and notebook_sync_state
+AppRepository → Room repositories, notebook_sync_state and page_sync_state
 SyncProgressReporter → settings progress UI and notebook badges
 ```
 
@@ -69,7 +80,9 @@ SyncProgressReporter → settings progress UI and notebook badges
 | [`SyncScheduler.kt`](../app/src/main/java/com/ethran/notable/sync/SyncScheduler.kt) | Creates unique one-time work and one unique periodic job. Periodic work uses a minimum 15-minute interval and a `CONNECTED` or `UNMETERED` constraint. |
 | [`SyncWorker.kt`](../app/src/main/java/com/ethran/notable/sync/SyncWorker.kt) | `CoroutineWorker` for WorkManager integration. Performs connectivity/settings checks, decodes `SyncRequest`, invokes the orchestrator, and maps `DomainError` to WorkManager success/failure/retry. |
 | [`SyncOrchestrator.kt`](../app/src/main/java/com/ethran/notable/sync/SyncOrchestrator.kt) | Owns normal-flow sequencing, the process-wide sync mutex (companion-object `Mutex`), settings reads, progress transitions, and the successful full-sync timestamp. |
-| [`SyncPreflightService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPreflightService.kt) | Enforces the unmetered constraint, checks server clock skew, and ensures the root collections exist. |
+| [`SyncPreflightService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPreflightService.kt) | Enforces the unmetered constraint, checks server clock skew, and ensures the root collections exist. A full sync uses `ensureServerReady`: one root `PROPFIND` answers both (its `Date` header gives the skew; a `HEAD` is the fallback when that header is missing). |
+| [`CapabilityProbeService.kt`](../app/src/main/java/com/ethran/notable/sync/CapabilityProbeService.kt) / [`ServerCapabilities.kt`](../app/src/main/java/com/ethran/notable/sync/ServerCapabilities.kt) | Measures, from Test Connection only, the server's non-standard ETag behaviour that the fast paths rely on, and the record it stores (section 3.6). |
+| [`SyncSettings.kt`](../app/src/main/java/com/ethran/notable/sync/SyncSettings.kt) / [`SyncRequest.kt`](../app/src/main/java/com/ethran/notable/sync/SyncRequest.kt) | The persisted settings record (Kv key `SYNC_SETTINGS`) and the WorkManager request types (`SyncAll`, `ForceUpload`, `ForceDownload`, `UploadDeletion`, `SyncNotebook`, `SyncFromPageId`). |
 | [`FolderSyncService.kt`](../app/src/main/java/com/ethran/notable/sync/FolderSyncService.kt) | Reads, merges, applies, and conditionally writes `folders.json`. |
 | [`NotebookReconciliationService.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookReconciliationService.kt) | Fetches remote manifest metadata and executes the planner's decision for local notebooks. |
 | [`NotebookSyncPlanner.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSyncPlanner.kt) | Pure per-notebook decision — `Upload` / `Download` / `Skip` / `Reconcile` / `SkipUploadOnly` / `SkipDownloadOnly` (unit-tested). |
@@ -78,18 +91,18 @@ SyncProgressReporter → settings progress UI and notebook badges
 | [`SyncConflictStrategy.kt`](../app/src/main/java/com/ethran/notable/sync/SyncConflictStrategy.kt) | The `ASK` / `SERVER_WINS` / `LOCAL_WINS` strategy enum (only `ASK` implemented) plus the resolution value types (`PageConflictResolution`, `NotebookConflictResolution`, `NotebookConflict`). |
 | [`ETag.kt`](../app/src/main/java/com/ethran/notable/sync/ETag.kt) | Value type for a WebDAV ETag: parses the server's spelling (weak `W/` prefix, quotes), compares by validator rather than raw string, and derives the `If-Match` write guard. |
 | [`SyncForceService.kt`](../app/src/main/java/com/ethran/notable/sync/SyncForceService.kt) | "Replace server with local" and "replace local with server" flows. |
-| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt) | Synchronous OkHttp WebDAV operations: `HEAD`, `GET`, conditional `GET`, `PUT`, `MKCOL`, `DELETE`, `MOVE`, and depth-1 `PROPFIND`, funneled through one private `execute()` helper. |
+| [`WebDAVClient.kt`](../app/src/main/java/com/ethran/notable/sync/WebDAVClient.kt) | Synchronous OkHttp WebDAV operations: `HEAD`, `GET`, conditional `GET`, `PUT` (optionally `If-Match` or `If-None-Match: *`), `MKCOL`, `DELETE`, `MOVE` (destination `If` guard, `Overwrite: T/F`), depth-1 `PROPFIND` listings and depth-0 `PROPFIND` for one resource's ETag, funneled through one private `execute()` helper. PROPFIND names `getetag`/`getlastmodified`/`resourcetype` explicitly (Nextcloud omits `getetag` for `allprop`); response ETags fall back to `OC-ETag`. |
 | [`WebDavXml.kt`](../app/src/main/java/com/ethran/notable/sync/WebDavXml.kt) | PROPFIND XML parsing (hrefs, entries) and UUID validation. |
 | [`SyncPorts.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPorts.kt) | DI port/adapter for WebDAV client creation, plus the shared singleton `OkHttpClient` — one connection pool for all sync operations. |
 | [`SyncPaths.kt`](../app/src/main/java/com/ethran/notable/sync/SyncPaths.kt) | Centralized server path construction (root, notebooks, deletions, per-notebook manifest/pages/images/backgrounds, tombstones). |
 | [`NotebookSyncStatusStore.kt`](../app/src/main/java/com/ethran/notable/sync/NotebookSyncStatusStore.kt) | Derives per-notebook badges from Room state, notebook timestamps, and live progress. Nothing extra is stored — the badge is a pure function of those three sources. |
-| [`SyncWorkUiBridge`](../app/src/main/java/com/ethran/notable/sync) | Converts completed WorkManager jobs into terminal snack messages. |
+| [`ui/SyncWorkUiBridge.kt`](../app/src/main/java/com/ethran/notable/ui/SyncWorkUiBridge.kt) | Converts completed WorkManager jobs into terminal snack messages. |
 | [`SyncProgressReporter.kt`](../app/src/main/java/com/ethran/notable/sync/SyncProgressReporter.kt) / [`SyncState.kt`](../app/src/main/java/com/ethran/notable/sync/SyncState.kt) | Owns the `SyncState` `StateFlow` consumed by the settings UI and the badge store. |
 | [`serializers/NotebookSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/NotebookSerializer.kt) | Serializes/deserializes notebooks, pages, strokes, and images to/from JSON. |
 | [`serializers/FolderSerializer.kt`](../app/src/main/java/com/ethran/notable/sync/serializers/FolderSerializer.kt) | Serializes/deserializes the folder hierarchy to/from `folders.json`. |
 | `notebook_sync_state` (Room, `data/db`) | Per-notebook commit bookkeeping table — see [section 5.10](#510-per-notebook-and-per-page-sync-state). |
 | `page_sync_state` (Room, `data/db`) | Per-page commit bookkeeping (ETag + change anchor) that drives dirty-page selection and per-page conflict detection — see [section 5.10](#510-per-notebook-and-per-page-sync-state). |
-| `KvProxy` + [`CryptoHelper`](../app/src/main/java/com/ethran/notable/data/db) | Credentials are persisted to the app key-value Room table and encrypted with an AndroidKeyStore-backed AES-GCM key. |
+| [`KvProxy`](../app/src/main/java/com/ethran/notable/data/db/Kv.kt) + [`CryptoHelper`](../app/src/main/java/com/ethran/notable/data/db/CryptoHelper.kt) | Sync settings and measured server capabilities are persisted to the app key-value Room table; the password is encrypted with an AndroidKeyStore-backed AES-GCM key. |
 | [`ConnectivityChecker.kt`](../app/src/main/java/com/ethran/notable/sync/ConnectivityChecker.kt) | Queries Android `ConnectivityManager` for network/Wi-Fi availability. |
 | [`SyncLogger.kt`](../app/src/main/java/com/ethran/notable/sync/SyncLogger.kt) | Maintains a ring buffer of the last 50 log entries, exposed as a `StateFlow`, for the sync UI. |
 
@@ -102,12 +115,17 @@ acquire the lock, it returns `SyncInProgress` rather than queueing behind the ru
 
 ```
 1. INITIALIZE
+   ├── Flush pending editor edits to Room (PageSaver.saveAll); stop on failure
    ├── Read persisted settings; require sync enabled and username/password non-blank
    ├── If Wi-Fi-only is enabled, require an unmetered active network
    ├── Build a client from the configured base URL and credentials
-   ├── HEAD the base URL, parse its HTTP Date header, reject absolute clock skew over 30s
-   ├── Ensure /notable, /notable/notebooks, and /notable/deletions exist (MKCOL)
-   └── One depth-1 PROPFIND of /notable/notebooks; the id set is shared by steps 4 and 5
+   ├── One depth-1 PROPFIND of /notable: its Date header gives the clock skew (rejected over
+   │   30s; HEAD of the base URL as fallback when Date is missing), its listing tells which of
+   │   /notable, /notable/notebooks and /notable/deletions must be created (MKCOL)
+   ├── One depth-1 PROPFIND of /notable/notebooks; the id set is shared by steps 4 and 5, and
+   │   each directory's ETag feeds bulk change detection
+   └── Bulk change detection is on when the "Fast change detection" setting is on AND the stored
+       ServerCapabilities belong to this server (URL + username) with collectionEtagPropagates
 
 2. SYNC FOLDERS
    ├── If folders.json exists, fetch it with its ETag
@@ -121,8 +139,9 @@ acquire the lock, it returns `SyncInProgress` rather than queueing behind the ru
 3. APPLY REMOTE NOTEBOOK TOMBSTONES  (skipped in upload-only mode)
    ├── List /notable/deletions with getlastmodified
    ├── For each UUID tombstone: delete the local notebook, UNLESS its updatedAt is after the
-   │   tombstone time (resurrection — see section 5.7)
-   ├── Remove the notebook's notebook_sync_state row after local deletion
+   │   tombstone time (resurrection — see section 5.7). A tombstone without a lastModified
+   │   deletes only a notebook with no unsynced local edits
+   ├── Remove the notebook's notebook_sync_state and page_sync_state rows after local deletion
    ├── Best-effort delete tombstones older than 90 days — this still runs in download-only mode,
    │   so that mode is not strictly read-only on the server
    └── Return the tombstoned-id set, used to suppress re-downloading those ids in step 5
@@ -132,25 +151,31 @@ acquire the lock, it returns `SyncInProgress` rather than queueing behind the ru
        ├── Existence = "id in the shared PROPFIND set?" (no per-notebook HEAD)
        ├── If remote absent → upload, unless download-only is enabled
        └── If remote present:
-           ├── With a stored ETag, GET manifest.json with If-None-Match; a 304 means "unchanged"
+           ├── Bulk detection on and the directory ETag matches the stored baseline → the
+           │   remote is known unchanged; no manifest request (section 3.6)
+           ├── Else with a stored ETag, GET manifest.json with If-None-Match; a 304 means
+           │   "unchanged"
            ├── Otherwise GET the manifest and its ETag
-           └── NotebookSyncPlanner.decide(...) returns Upload / Download / Skip /
+           └── NotebookSyncPlanner.decide(...) returns Upload / Download / Skip / Reconcile /
                SkipUploadOnly / SkipDownloadOnly (see section 5.9 for the exact rule)
    A missing manifest inside an existing remote directory is treated as an interrupted remote
    upload: normal/upload-only mode re-uploads the local notebook; download-only mode skips it.
-   Per-notebook errors are accumulated; other notebooks still continue, but the run finishes as
-   failed if any error remains.
+   A failed notebook is marked ERROR and the others still continue; the run then finishes
+   (deletions, new notebooks, finalize) but is reported as failed.
 
 5. DOWNLOAD NEW REMOTE NOTEBOOKS  (skipped in upload-only mode)
    Candidate ids = remote ids − ids present before download − tombstoned ids
-                   − all ids still present in notebook_sync_state
+                   − all ids still present in notebook_sync_state (not in download-only mode)
    (the last subtraction stops a locally-deleted, previously-synced notebook from being
-   re-downloaded before its tombstone uploads)
+   re-downloaded before its tombstone uploads; a download-only device is a mirror, so there a
+   missing local notebook is restored instead)
 
 6. UPLOAD LOCAL NOTEBOOK DELETIONS  (skipped in download-only mode)
    deletedLocally = notebook_sync_state ids − local ids captured before downloads
+   If that looks like lost local state rather than deletions (at least 10 notebooks AND more
+   than half of all synced ones), refuse with a non-recoverable error instead of deleting.
    For each id: delete the remote notebook directory, PUT a zero-byte tombstone, then drop the
-   local sync-state row once the tombstone PUT succeeds
+   notebook and page sync-state rows once the tombstone PUT succeeds
 
 7. FINALIZE
    ├── Bidirectional mode only: best-effort delete orphan remote notebook directories that have
@@ -165,21 +190,36 @@ acquire the lock, it returns `SyncInProgress` rather than queueing behind the ru
 2. Upload only the **dirty** pages — the ones `PageSyncSelector` reports changed since their
    `page_sync_state` anchor. Editing one page of an 800-page notebook PUTs one page, not 800; skipped
    pages keep their existing row. For each dirty page: load its strokes and image rows, stream compact
-   page JSON to a cache file one element at a time (bounding upload memory), stream that file to
-   `pages/{pageId}.json`, and upload each managed image/background only when a preceding `HEAD` says it
-   is absent.
+   page JSON to a cache file one element at a time (bounding upload memory), and publish it:
+   PUT the file to a unique staging name `pages/{pageId}.json.{random-uuid}.tmp`, then `MOVE` it
+   over `pages/{pageId}.json` with the page's stored ETag as the destination `If` guard. Each managed
+   image/background is uploaded only when a preceding `HEAD` says it is absent.
    A page unchanged *locally* can still be **missing on the server** (another device deleted its file
    or the whole remote directory). One depth-1 `PROPFIND` of `pages/` — read once for names and ETags —
-   force-uploads any manifest page absent from that listing, guarded with `If-None-Match: *` so a page
-   another device recreated first 412s instead of being overwritten. If the listing can't be read, every
-   page is re-uploaded (safe and self-healing).
+   force-uploads any manifest page absent from that listing, published non-overwriting
+   (`Overwrite: F` on the MOVE, `If-None-Match: *` on the PUT fallback) so a page another device
+   recreated first is rejected instead of overwritten. A page with no sync row that *is* listed is
+   guarded with the listed ETag. If the listing can't be read, every page is re-uploaded (safe and
+   self-healing).
+   A guarded page 412 is settled on content: the remote page is fetched and byte-compared with ours.
+   Identical bytes (our own earlier uncommitted upload, or a re-spelled ETag) adopt the remote ETag;
+   different bytes are a real concurrent edit → `SyncConflict`, and the remaining pages are not
+   uploaded. If `MOVE` is unsupported or fails transiently, the page falls back to a direct PUT with
+   the same precondition.
 3. If any page transfer failed, do **not** publish the manifest — the old commit marker stays in
    place and the notebook is retried on the next sync.
 4. Otherwise publish the manifest last: PUT `manifest.json.tmp`, then `MOVE` it over `manifest.json`,
-   using the destination `If` header when an ETag was read. On a non-412 MOVE failure, fall back to a
-   direct guarded PUT; a 412 is a real concurrency conflict and is propagated.
-5. On manifest success: mark the notebook `SYNCED`, best-effort remove a resurrection tombstone, then
-   list and prune unreferenced remote page/media files.
+   using the destination `If` header when a usable (strong) ETag is held. A 412 is a real concurrency
+   conflict and is propagated — but only if a precondition was actually sent; any other MOVE failure
+   falls back to a direct guarded PUT. The new manifest ETag is the tmp PUT's ETag when the server was
+   measured to preserve ETags across `MOVE` (`movePreservesEtag`), otherwise it is read back with a
+   depth-0 `PROPFIND`. Page rows whose PUT/MOVE reported no ETag are backfilled from one `PROPFIND`
+   of `pages/`.
+5. On manifest success, in one Room transaction (`commitNotebookSync`): mark the notebook `SYNCED`,
+   write the uploaded pages' rows, and drop rows of pages that left the notebook. Then best-effort
+   remove a resurrection tombstone, and — only when the manifest write was guarded — list and prune
+   unreferenced remote page/media files (an unguarded, last-writer-wins commit could otherwise delete a
+   page a concurrent device just uploaded).
 
 The code does not verify that every id in `Notebook.pageIds` was actually returned from Room, so a
 missing local page can leave a manifest reference with no uploaded page file.
@@ -191,13 +231,15 @@ missing local page can leave a manifest reference with no uploaded page file.
    a partial download still reads as "remote newer" and gets retried.
 3. List `pages/` once for its ETags and fetch **only the pages whose ETag differs** from our stored
    `page_sync_state` row (a page unchanged on the server is skipped and keeps its local content).
-   A page absent from a failed/empty listing is treated as "can't tell" and fetched. For each fetched
-   page: GET and fully deserialize the page JSON, download absent images and managed backgrounds, then
-   replace that page, its strokes, and its image rows in one Room transaction.
-4. If every fetched page completed without a transient/DB error, commit in one transaction: write the
-   notebook with the remote timestamp, upsert the fetched pages' `page_sync_state` rows, drop rows for
-   departed pages, mark the notebook `SYNCED`, and best-effort prune local pages no longer in the
-   manifest. A killed download writes no rows, so the next sync re-fetches the same pages.
+   A page is also fetched when it has no row, is not present locally, or has no ETag in the listing
+   (a failed/empty listing therefore fetches everything). For each fetched page: GET and fully
+   deserialize the page JSON, download absent images and managed backgrounds (each background once per
+   notebook), then replace that page, its strokes, and its image rows in one Room transaction.
+4. If every fetched page completed without a transient/DB error, write the notebook row from the
+   manifest (keeping this device's `openPageId`) and commit in one transaction: mark the notebook
+   `SYNCED` at the remote timestamp, upsert the fetched pages' `page_sync_state` rows, and drop rows
+   for departed pages. Then best-effort prune local pages no longer in the manifest. A killed download
+   writes no rows, so the next sync re-fetches the same pages.
 
 A media 404 is logged and dropped — it does not block the notebook commit. Other media failures do.
 Corrupt individual stroke/image DTOs are skipped by the serializer rather than failing the whole
@@ -206,11 +248,14 @@ page.
 ### 3.4 Single-notebook sync and targeted deletion
 
 Sync-on-close and check-on-open run in-process (application `CoroutineScope`), not through
-WorkManager. Sync-on-close reuses the same timestamp-comparison logic as step 4 above but on a single
-notebook; if the orchestrator's mutex is already held by a full/periodic sync, it quietly returns
-success rather than racing it. Check-on-open is a read-only conditional manifest `GET` that never
-takes the mutex and treats every error/ambiguity as "not newer." Targeted notebook deletion routes
-through WorkManager but does not take the orchestrator's mutex either.
+WorkManager. Sync-on-close reuses the same per-notebook reconciliation as step 4 above on a single
+notebook, with its own clock-skew `HEAD` and a `HEAD` of the manifest for existence (no bulk
+detection); if the orchestrator's mutex is already held by a full/periodic sync, it quietly returns
+success rather than racing it, and an unmet Wi-Fi constraint is likewise a silent no-op.
+Check-on-open is a read-only conditional manifest `GET` that never takes the mutex and treats every
+error/ambiguity as "not newer"; when the server is newer it shows a snackbar whose **Sync now** closes
+the editor and then runs the single-notebook sync. Targeted notebook deletion routes through
+WorkManager but does not take the orchestrator's mutex either.
 
 ### 3.5 Triggers, cancellation, and UI notifications
 
@@ -222,13 +267,51 @@ through WorkManager but does not take the orchestrator's mutex either.
 | Note close | In-process, application scope | One notebook | Skips successfully if the sync mutex is busy; no WorkManager retry/output handling. |
 | Check on open | In-process, application scope | Read-only manifest check | Does not take the sync mutex. |
 | Notebook deletion | WorkManager | One tombstone/delete | Does not take the orchestrator's mutex. |
-| Force upload/download | WorkManager | All data on one side | Uses the mutex, but does not publish normal progress steps. |
+| Force upload/download | WorkManager | All data on one side | Uses the mutex; shows one "Syncing notebooks" step with per-notebook progress. |
+| Conflict resolution | In-process | One notebook | Waits for the mutex instead of skipping (5.5). |
 
 All work currently carries the same `sync-work` tag. The settings **Cancel** button calls
 `cancelAllWorkByTag`, which therefore also cancels the periodic schedule for the rest of the current
 app session; `MainActivity` recreates it on a later app start, but it is not immediately restored by
 Cancel itself. Blocking OkHttp calls may not stop the instant Cancel is pressed, since coroutine
 cancellation is not guaranteed to interrupt an in-flight synchronous request.
+
+### 3.6 Capability probe and bulk change detection
+
+Two fast paths depend on ETag behaviour that WebDAV does not guarantee, so they are enabled only
+after being **measured** on the configured server:
+
+- **Probe.** *Test Connection* first does a `HEAD` of the base URL (auth + clock skew); if that
+  succeeds, `CapabilityProbeService.probe` builds a scratch tree `/notable/.capability-probe/notebooks/
+  probe/{manifest.json, pages/page.json}` (the same depth as real notebooks), performs an overwrite,
+  a tmp-PUT + `MOVE` publish, a deep create and a deep overwrite, reading the `notebooks/` collection
+  ETag after each, then deletes the tree. The result is stored as `ServerCapabilities` (Kv key
+  `SYNC_SERVER_CAPABILITIES`) with `serverKey` = SHA-256 of server URL + username, and shown in the
+  settings as a "Server capabilities" breakdown. Any failure stores all flags `false`. Ordinary syncs
+  never probe.
+- **`collectionEtagPropagates`** — the collection ETag moved on **all four** mutations. This gates bulk
+  change detection.
+- **`movePreservesEtag`** — the `MOVE` succeeded and the destination kept the tmp file's exact ETag.
+  This lets manifest publish skip the depth-0 `PROPFIND` readback.
+- `issuesEtagOnPut` / `issuesStrongEtags` — diagnostics only.
+
+A capability record is used only when its `serverKey` matches the current client's; one from another
+server or account is ignored.
+
+**Bulk change detection** (full sync only, when enabled per step 1 of 3.1): the `PROPFIND` of
+`/notable/notebooks` already returns every notebook directory's ETag. `notebook_sync_state` keeps a
+baseline (`remoteDirEtag`, `remoteDirServerKey`). A notebook whose row is `SYNCED`, whose baseline
+was recorded for the current server, and whose baseline weakly matches the listed directory ETag is
+treated as "remote unchanged" without fetching its manifest; the planner then decides on local
+changes alone.
+
+The baseline is stored only where the listing is known to show the converged state: after a `Skip`, a
+download, a download-only merge, and a newly downloaded notebook. It is **not** stored after an upload
+(our own write moved the directory ETag, and re-reading it could capture a concurrent writer's), so the
+sync after an upload does one ordinary conditional manifest `GET`, whose `304` then re-establishes the
+baseline. The ordinary sync-state writes (`markSynced`, `markError`, `markConflict`,
+`markRemoteAhead`) build a fresh row and so clear the baseline, and `updateRemoteDirBaseline` only
+writes it onto a `SYNCED` row. Storing a baseline never fails a sync. The **Fast change detection** setting turns the fast path off.
 
 ## 4. Data format
 
@@ -240,6 +323,7 @@ trailing slash and appends the path, percent-encoding each path segment.
 ```
 /notable/
 ├── folders.json
+├── .capability-probe/           # scratch tree of Test Connection; deleted after the probe
 ├── deletions/
 │   └── {notebook-uuid}          # zero bytes; server lastModified is the deletion time
 └── notebooks/
@@ -247,6 +331,7 @@ trailing slash and appends the path, percent-encoding each path segment.
         ├── manifest.json
         ├── manifest.json.tmp    # transient publish path; may remain after an interruption
         ├── pages/{page-uuid}.json
+        ├── pages/{page-uuid}.json.{uuid}.tmp   # transient page staging; swept by remote GC
         ├── images/{basename}
         └── backgrounds/{basename}
 ```
@@ -283,12 +368,11 @@ Page JSON schema version is `1`. It contains `id`, a nullable `notebookId` (`nul
 Quick Pages, which are never synced), background fields, nullable `parentFolderId`, scroll position,
 timestamps, and arrays of strokes and images.
 
-Each stroke carries geometry/style metadata plus `pointsData` — the current stroke binary encoding
-returned by `encodeStrokePoints`, Base64-wrapped for JSON transport. The binary encoder currently
-writes format version **2** (magic `SB`, version byte `2`) and can use LZ4 internally above a
-size/ratio threshold; the decoder still supports the older v1 pressure encoding. It should not be
-described as "SB1" without qualifying that decoding is backward-compatible, not the current write
-format.
+Each stroke carries geometry/style metadata (`id`, `size`, `pen`, `color`, `maxPressure`, bounding
+box, timestamps) plus `pointsData` — the stroke binary encoding returned by `encodeStrokePoints`,
+Base64-wrapped for JSON transport. The encoder writes SB version **2** (normalized pressure, LZ4 above
+a size/ratio threshold); the decoder also reads version 1, and imported strokes are normalized with
+`withNormalizedPressure()`. The format is specified in [database-structure.md](database-structure.md).
 
 Image URIs are serialized as a relative `parentDirectory/basename` string. Transfer uses the basename
 for the remote image path and rewrites downloaded image records to local absolute paths.
@@ -365,7 +449,8 @@ means concurrent edits that the tie cannot prove equal, so the planner returns `
   locally dirty, preventing manifest ETag ping-pong.
 - **Genuine conflict** — either a *page conflict* (the same page edited locally **and** remotely since
   the last common sync) or a *structural conflict* (the manifests disagree on page set, order, title,
-  parent folder, or defaults). Mark the notebook `CONFLICT` and leave both copies unchanged.
+  parent folder, default background, linked file, or `createdAt`; an unreadable remote manifest counts
+  as structural). Mark the notebook `CONFLICT` and leave both copies unchanged.
 
 Conflicts are only *detected* in two-way sync, because that's the only mode that produces a
 `Reconcile` (see 5.9).
@@ -434,7 +519,8 @@ because the folder reappears.
 the stored sync-state anchor, and the remote manifest facts, and returns one of `Upload`, `Download`,
 `Skip`, `Reconcile`, `SkipUploadOnly`, or `SkipDownloadOnly`:
 
-- unchanged remote + local timestamp more than 1 second past the stored anchor → `Upload`;
+- unchanged remote (a `304`, or a bulk-detection match) + local timestamp more than 1 second past
+  the stored anchor, or no anchor → `Upload`; otherwise `Skip`;
 - changed remote, one side clearly newer → `Upload` / `Download` per the 1-second rule in section 5.2;
 - changed remote, timestamps tied within tolerance → `Reconcile` (a tie is not proof of page equality,
   so the executor merges per page rather than mark it synced over possibly-stale pages — see 5.3);
@@ -459,12 +545,14 @@ deletion) are the source of truth for sync bookkeeping.
 | `notebookId` | Primary key. |
 | `state` | `SYNCED`, `ERROR`, `REMOTE_AHEAD`, or `CONFLICT`. |
 | `lastSyncedAt` | Device time at the latest state write, including errors/remote-ahead/conflict. |
-| `syncedLocalUpdatedAt` | Local notebook timestamp captured at the last committed sync — the dirty anchor. (Column is still named `localUpdatedAtAtSync` on disk.) |
+| `syncedLocalUpdatedAt` | Local notebook timestamp captured at the last committed sync — the dirty anchor. |
 | `remoteEtag` | Last known manifest ETag, sent as `If-None-Match` on the next reconcile. |
 | `remoteUpdatedAt` | Last known remote manifest timestamp. |
 | `lastError` | Last transfer error message, if any. |
+| `remoteDirEtag` | Notebook directory ETag at the last converged sync — the bulk-detection baseline (3.6). |
+| `remoteDirServerKey` | `serverKey` of the server that baseline was observed on; a baseline from another server is never used. |
 
-`page_sync_state` — per-page commit marker driving dirty-page selection (5.9) and page-conflict
+`page_sync_state` — per-page commit marker driving dirty-page selection (3.2) and page-conflict
 detection (5.3):
 
 | Column | Meaning |
@@ -475,8 +563,9 @@ detection (5.3):
 | `syncedLocalUpdatedAt` | The change anchor: `Page.updatedAt` at that commit. A strict `>` against the current value answers "edited since?" (same clock on both sides, so no tolerance needed). |
 | `lastSyncedAt` | Wall-clock of the last committed sync; informational, never compared. |
 
-Both tables are written **only inside** the notebook's commit transaction (after the manifest is
-published on upload / the atomic page swap on download). A killed sync writes no rows, so the next
+Committed state is written **only inside** the notebook's commit transaction (after the manifest is
+published on upload / the atomic page swap on download); the notebook row additionally records
+`ERROR`, `REMOTE_AHEAD`, and `CONFLICT` outcomes, and conflict resolution rebaselines rows (5.5). A killed sync writes no rows, so the next
 sync re-transfers the same pages — "skip" is exactly as trustworthy as the notebook badge.
 
 `NotebookSyncStatusStore` derives a badge for every notebook: `ERROR` if the row is in error;
@@ -496,7 +585,11 @@ missing or unsyncable file from wedging a whole notebook:
   commits and stops being retried for that file; other media failures still block the commit;
 - a locally referenced media file that can't be found is logged but does not stop the upload of the
   rest of the notebook;
-- linked external PDFs are intentionally not copied — only managed backgrounds transfer.
+- backgrounds stored as an absolute path are skipped on upload and download. Only a background path
+  relative to `notabledb/backgrounds` is transferred, but the background picker and PDF import both
+  store absolute paths (`notabledb/backgrounds/<type>/…` or the linked file), so in practice image and
+  PDF backgrounds are not synced; the page keeps the path, which resolves only where that file exists.
+  Native templates are a name, not a file, and need no transfer.
 
 A notebook that committed with a media 404 is **not** automatically re-fetched if that media later
 appears on the server; a force download or a local edit that re-triggers an upload/download is the
@@ -508,7 +601,10 @@ current recovery path.
 
 Credentials are persisted via the app's key-value Room table (`kv`, through `KvProxy`). The password
 is encrypted using an AES-GCM key stored in AndroidKeyStore; on read, a decryption failure returns
-settings with a blank password rather than throwing.
+settings with a blank password rather than throwing (sync then treats it as missing credentials). Writes go
+through `KvProxy.updateSyncSettings`, which never sees the plaintext password and keeps the stored
+encrypted value unless a new password is given, so a failed decrypt never erases the saved password.
+In the settings UI a blank password field means "unchanged".
 
 ### 6.2 Transport security
 
@@ -540,17 +636,18 @@ DomainError.SyncClockSkew(seconds)           // device clock differs from server
 DomainError.SyncWifiRequired                 // wifiOnly set but not on an unmetered network
 DomainError.SyncInProgress                   // another sync already holds the mutex
 DomainError.SyncConflict                     // PUT/MOVE precondition failure (HTTP 412)
+DomainError.SyncDirectionalConflict          // conflict resolution attempted in upload/download-only
 DomainError.SyncError(message, recoverable)  // generic non-success HTTP status
 DomainError.RemoteMissing(path)              // GET 404; non-recoverable, non-fatal for media
 ```
 
-Multiple per-notebook errors are aggregated into `MultipleErrors`, which currently inherits
-`recoverable = true` regardless of its children — so an aggregate of otherwise-permanent errors can
-still cause a retry of the entire full sync.
+Multiple per-notebook errors are aggregated into `MultipleErrors`, which is `recoverable` only when
+every child is, so an aggregate containing a permanent error is not retried by the worker.
 
 ### 7.2 Concurrency control
 
-The orchestrator's mutex covers full sync, single-notebook sync, and force operations. It does not
+The orchestrator's mutex covers full sync, single-notebook sync, force operations, and conflict
+resolution. It does not
 cover check-on-open or targeted notebook deletion (section 3.4). There is no cross-device locking —
 WebDAV provides no atomic multi-file transaction, which is why the ordering guarantees in
 [section 1](#1-architecture-overview) matter.
@@ -564,7 +661,8 @@ WebDAV provides no atomic multi-file transaction, which is why the ordering guar
 - Disabled sync, missing credentials, or an unmet unmetered constraint: treated as a successful skip.
 - `SyncInProgress`: treated as completed work with a non-success informational payload, not a hard
   failure — a manual Sync Now can legitimately collide with a running periodic sync.
-- The worker also has a broad `catch (Exception)`, which includes cancellation exceptions.
+- The worker also has a broad `catch (Exception)`, which includes cancellation exceptions; an
+  unexpected exception is retried up to 3 attempts.
 
 ### 7.4 WebDAV idempotency
 
@@ -586,15 +684,19 @@ treated as success — the resource is already gone. Both are therefore safe to 
 - Same-page conflicts require choosing one whole page; there is no stroke-level merge.
 - `SERVER_WINS` and `LOCAL_WINS` remain persisted placeholders. The engine always uses `ASK`.
 - Conflict resolution requires two-way sync, and folder deletions do not propagate.
-- Weak ETags cannot guard writes. When a server supplies them, `ETag.writeGuard` drops the
-  precondition and conflict handling degrades to last-writer-wins.
+- Weak or missing ETags cannot guard writes. When a server supplies only those, `ETag.writeGuard`
+  drops the precondition and conflict handling degrades to last-writer-wins (logged once per notebook
+  upload in the sync log), and remote GC after upload is skipped.
+- Custom image and PDF backgrounds are stored as absolute paths and so are not synced (5.11).
 - Conflict resolution relies on synchronized device clocks; normal preflight rejects skew over 30
   seconds.
 - `WebDavClientFactoryPort` abstracts client construction only. Transfer services still accept the
   concrete `WebDAVClient`, and all of them reach through the broad `AppRepository` — the main
   obstacle to executor-level tests today.
-- Unit tests cover serializers, the pure planner, request/path encoding, progress reporting, logger
-  behavior, factory construction, HTTP-date parsing, and `finalizeSyncResult`.
+- Unit tests cover serializers, the pure planner and page selector, `ETag` parsing/comparison, the
+  capability-probe verdict, the bulk fast-path gate, the mass-deletion guard, new-notebook selection,
+  `WebDAVClient` requests, path encoding, progress reporting, logger behavior, factory construction,
+  HTTP-date parsing, and `finalizeSyncResult`.
 - There are no executor-level tests for `NotebookSyncService`, `NotebookReconciliationService`,
   `FolderSyncService`, `SyncForceService`, scheduler cancellation, trigger integration, or remote JSON
   identity/path validation. The seam these need is a narrow transfer port in place of the concrete

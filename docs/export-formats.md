@@ -6,7 +6,13 @@ Maintainers
 - Every new export format must live in its own helper file. Add your name and contact at the top of that file as a comment. You are responsible for maintaining that format going forward.
 
 Overview
-- Entrypoint: ExportEngine.export(target, format, options)
+- Entrypoint: ExportEngine.export(target, format, options) — returns a message for the snackbar.
+  It first flushes pending editor edits to the database (`PageSaver.saveAll()`), since exporters
+  read pages from the DB; if that fails the export is cancelled.
+- Callers: the editor menu (page: PDF/PNG/JPEG/XOPP; book: PDF/PNG/XOPP) and the notebook dialog
+  (book: PDF/XOPP).
+- Linked export: a notebook with `linkedExternalUri` set (notebook dialog) is written as XOPP to that
+  location every time the editor closes (`exportToLinkedFileAsync`, overwrite on).
 - Targets:
     - Book(bookId): all pages of a notebook
     - Page(pageId): a single page
@@ -20,7 +26,8 @@ Core (Maintainer: @Ethran)
 - PDF
     - Book: multi-page; pagination via GlobalAppSettings.current.paginatePdf
     - Page: single page (or paginated)
-    - Scales to A4 width; splits by A4 height if enabled
+    - Scales to A4 width; with pagination each Notable page is split into A4-height PDF pages,
+      without it each Notable page becomes one PDF page as tall as its content
 - PNG
     - Book: <file>-p1.png, <file>-p2.png, …
     - Page: single PNG
