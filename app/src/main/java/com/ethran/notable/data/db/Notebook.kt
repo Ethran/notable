@@ -206,10 +206,15 @@ class BookRepository @Inject constructor(
         notebookDao.setParentFolder(id, folderId, Date())
     }
 
-    suspend fun addPage(bookId: String, pageId: String, index: Int? = null) {
+    /**
+     * Inserts [pageId] right after [afterPageId], found in the page list as it is now.
+     * Appends when [afterPageId] is null or no longer in the notebook.
+     */
+    suspend fun addPage(bookId: String, pageId: String, afterPageId: String? = null) {
         val notebook = notebookDao.getById(bookId) ?: return
         val pageIds = notebook.pageIds.toMutableList()
-        if (index != null) pageIds.add(index, pageId)
+        val after = afterPageId?.let { pageIds.indexOf(it) } ?: -1
+        if (after >= 0) pageIds.add(after + 1, pageId)
         else pageIds.add(pageId)
         notebookDao.setPageIds(bookId, pageIds, Date())
     }

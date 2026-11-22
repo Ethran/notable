@@ -490,9 +490,9 @@ class EditorViewModel @Inject constructor(
 
     private fun handleAddPage() {
         val id = bookId ?: return
-        val index = _toolbarState.value.currentPageNumber + 1
+        val afterPageId = currentPageId
         viewModelScope.launch(Dispatchers.IO) {
-            appRepository.newPageInBook(id, index)?.let { changePage(it) }
+            appRepository.newPageInBook(id, afterPageId)?.let { changePage(it) }
         }
     }
 

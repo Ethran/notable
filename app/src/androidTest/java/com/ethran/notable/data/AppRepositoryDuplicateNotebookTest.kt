@@ -39,7 +39,7 @@ class AppRepositoryDuplicateNotebookTest {
     private suspend fun createNotebook(notebook: Notebook = Notebook(title = "Lecture notes")): Notebook {
         repo.bookRepository.create(notebook)
         val firstPageId = repo.bookRepository.getById(notebook.id)!!.pageIds.single()
-        val secondPageId = repo.newPageInBook(notebook.id, 1)!!
+        val secondPageId = repo.newPageInBook(notebook.id, afterPageId = firstPageId)!!
         repo.strokeRepository.create(listOf(testStroke(firstPageId), testStroke(firstPageId, y = 300f)))
         repo.imageRepository.create(listOf(testImage(secondPageId)))
         return repo.bookRepository.getById(notebook.id)!!
