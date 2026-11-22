@@ -53,15 +53,6 @@ class PenPoolTest {
     }
 
     @Test
-    fun clearDestroysIdlePens() {
-        val pool = pool()
-        pool.use("a", ::create) { }
-        pool.use("b", ::create) { }
-        pool.clear()
-        assertEquals(setOf(0, 1), destroyed.toSet())
-    }
-
-    @Test
     fun nestedUseOfSameKeyGetsSeparatePen() {
         val pool = pool()
         pool.use("a", ::create) { pool.use("a", ::create) { } }

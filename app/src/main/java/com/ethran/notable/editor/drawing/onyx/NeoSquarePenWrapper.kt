@@ -16,8 +16,6 @@ private val logger = ShipBook.getLogger("NeoSquarePenWrapper")
  * [NeoPenRender]. Mirrors kreader's `SquarePenShape.drawBrush` (config.width / brushAngle /
  * brushRatio). The chisel nib angle is fixed per pen preset (Notable ships +45°).
  */
-private data class SquareKey(val width: Float, val angle: Float)
-
 object NeoSquarePenWrapper {
 
     fun drawStroke(
@@ -56,3 +54,5 @@ object NeoSquarePenWrapper {
         if (rendered == null) logger.e("Drawing strokes failed: Pen creation failed")
     }
 }
+
+private data class SquareKey(val width: Float, val angle: Float)

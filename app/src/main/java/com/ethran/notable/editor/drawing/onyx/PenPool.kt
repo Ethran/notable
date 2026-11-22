@@ -25,11 +25,6 @@ class PenPool<K : Any, P : Any>(
         return result
     }
 
-    fun clear() {
-        val old = synchronized(idle) { idle.toList().also { idle.clear() } }
-        old.forEach { destroy(it.second) }
-    }
-
     private fun take(key: K): P? = synchronized(idle) {
         val i = idle.indexOfLast { it.first == key }
         if (i >= 0) idle.removeAt(i).second else null
