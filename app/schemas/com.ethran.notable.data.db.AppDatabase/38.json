@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 38,
-    "identityHash": "e20a4366490e680bddda71d68ee0810d",
+    "identityHash": "8452b17bfcecc3be342894dc95067f69",
     "entities": [
       {
         "tableName": "Folder",
@@ -176,7 +176,7 @@
       },
       {
         "tableName": "Page",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `positionY` INTEGER NOT NULL, `positionX` INTEGER NOT NULL DEFAULT 0, `notebookId` TEXT, `background` TEXT NOT NULL DEFAULT 'blank', `backgroundType` TEXT NOT NULL DEFAULT 'native', `parentFolderId` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `sheetWidth` INTEGER, `sheetHeight` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`parentFolderId`) REFERENCES `Folder`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`notebookId`) REFERENCES `Notebook`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `positionX` INTEGER NOT NULL DEFAULT 0, `positionY` INTEGER NOT NULL DEFAULT 0, `notebookId` TEXT, `background` TEXT NOT NULL DEFAULT 'blank', `backgroundType` TEXT NOT NULL DEFAULT 'native', `parentFolderId` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `sheetWidth` INTEGER, `sheetHeight` INTEGER, PRIMARY KEY(`id`), FOREIGN KEY(`parentFolderId`) REFERENCES `Folder`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`notebookId`) REFERENCES `Notebook`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -185,14 +185,15 @@
             "notNull": true
           },
           {
-            "fieldPath": "positionY",
-            "columnName": "positionY",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
             "fieldPath": "positionX",
             "columnName": "positionX",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "positionY",
+            "columnName": "positionY",
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"
@@ -640,7 +641,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e20a4366490e680bddda71d68ee0810d')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8452b17bfcecc3be342894dc95067f69')"
     ]
   }
 }
