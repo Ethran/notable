@@ -13,16 +13,12 @@ import com.ethran.notable.data.db.AppDatabase
 import com.ethran.notable.data.db.BookRepository
 import com.ethran.notable.data.db.ImageRepository
 import com.ethran.notable.data.db.PageRepository
+import com.ethran.notable.data.db.Stroke
+import com.ethran.notable.data.db.StrokeDao
 import com.ethran.notable.data.db.StrokeRepository
 import com.ethran.notable.data.events.DefaultAppEventBus
 import com.ethran.notable.testing.TestDatabaseFactory
 import com.ethran.notable.utils.AppResult
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -46,6 +42,9 @@ class XoppImportTest {
     private lateinit var importEngine: ImportEngine
     private val screenWidth = SCREEN_WIDTH
 
+    /** Called on the importing thread before each batch of strokes is written. */
+    private var beforeStrokeBatch: () -> Unit = {}
+
     @Before
     fun setUp() {
         // XoppFile scales the A4 page to SCREEN_WIDTH, read when it is constructed below. Outside
@@ -55,8 +54,15 @@ class XoppImportTest {
         val pageRepo = PageRepository(db.pageDao())
         val bookRepo = BookRepository(db.notebookDao(), db.pageDao())
         val appEventBus = DefaultAppEventBus()
+        val strokeDao = db.strokeDao()
+        val samplingStrokeDao = object : StrokeDao by strokeDao {
+            override suspend fun create(strokes: List<Stroke>) {
+                beforeStrokeBatch()
+                strokeDao.create(strokes)
+            }
+        }
         importEngine = ImportEngine(
-            context, pageRepo, bookRepo, StrokeRepository(db.strokeDao()),
+            context, pageRepo, bookRepo, StrokeRepository(samplingStrokeDao),
             ImageRepository(db.ImageDao()), appEventBus
         ).apply { xoppFile = XoppFile(context, pageRepo, bookRepo, appEventBus) }
     }
@@ -71,6 +77,10 @@ class XoppImportTest {
      * A real notebook, with a page as long as a long lecture's, is imported whole: its pages in
      * order, each with its images and the x, y of every stroke's points. The import streams it
      * rather than holding it in memory.
+     *
+     * The heap is measured as each batch of strokes is written, on the importing thread, so the
+     * import is paused while the collection runs. Measured from another thread, it would also count
+     * what the import allocates during the collection, which takes long on some devices.
      */
     @Test(timeout = 600_000)
     fun notebook_isImportedWhole_withoutBeingHeldInMemory() = runBlocking {
@@ -80,9 +90,10 @@ class XoppImportTest {
         val heapBefore = liveHeap()
         var peakHeap = heapBefore
         val start = System.currentTimeMillis()
-        val pageIds = whileSampling({ peakHeap = maxOf(peakHeap, liveHeap()) }) {
-            import(file).successData()
-        }
+        beforeStrokeBatch = { peakHeap = maxOf(peakHeap, liveHeap()) }
+        val pageIds = import(file).successData()
+        beforeStrokeBatch = {}
+        peakHeap = maxOf(peakHeap, liveHeap())
         val importGrowth = peakHeap - heapBefore
 
         val stored = pageIds.map { db.pageDao().getPageWithDataById(it)!! }
@@ -157,26 +168,6 @@ class XoppImportTest {
         runtime.gc()
         return runtime.totalMemory() - runtime.freeMemory()
     }
-
-    /**
-     * Runs [block] while calling [sample] each second on another thread. Not more often: a forced
-     * collection can take a few hundred milliseconds on a slow emulator.
-     */
-    private suspend fun <T> whileSampling(sample: () -> Unit, block: suspend () -> T): T =
-        coroutineScope {
-            val sampler = launch(Dispatchers.Default) {
-                while (isActive) {
-                    sample()
-                    delay(1000)
-                }
-            }
-            try {
-                block()
-            } finally {
-                sampler.cancelAndJoin()
-                sample()
-            }
-        }
 
     private suspend fun import(file: File, options: ImportOptions = ImportOptions()) =
         importEngine.import(Uri.fromFile(file), options)
