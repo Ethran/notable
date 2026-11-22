@@ -136,8 +136,7 @@ class AppRepository @Inject constructor(
         val notebookId = pageWithData.page.notebookId
         val duplicatedPageId = copyPage(pageWithData, notebookId)
         if (notebookId == null) return
-        val pageIndex = bookRepository.getById(notebookId)?.getPageIndex(pageId) ?: return
-        if (pageIndex != -1) bookRepository.addPage(notebookId, duplicatedPageId, pageIndex + 1)
+        bookRepository.addPage(notebookId, duplicatedPageId, afterPageId = pageId)
     }
 
     /** Copies a notebook and its contents, excluding its external link. */
@@ -219,13 +218,14 @@ class AppRepository @Inject constructor(
         return page.id
     }
 
-    suspend fun newPageInBook(notebookId: String, index: Int = 0): String? {
+    /** Creates a page right after [afterPageId], or at the end when it is null or gone. */
+    suspend fun newPageInBook(notebookId: String, afterPageId: String?): String? {
         try {
             val book = bookRepository.getById(notebookId)
                 ?: return null
             val page = book.newPage()
             pageRepository.create(page)
-            bookRepository.addPage(notebookId, page.id, index)
+            bookRepository.addPage(notebookId, page.id, afterPageId)
             return page.id
         } catch (e: Exception) {
             log.e("Failed to create page in book: ${e.message}")

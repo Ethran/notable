@@ -104,7 +104,7 @@ fun PageMenu(
                         .padding(10.dp)
                         .noRippleClickable {
                             scope.launch {
-                                appRepository.newPageInBook(notebookId, index + 1)
+                                appRepository.newPageInBook(notebookId, afterPageId = pageId)
                             }
                         }) {
                     Text("Insert after")

@@ -131,6 +131,12 @@ private fun ToolbarMenuContent(
             onAction(ToolbarAction.ClearAllStrokes)
             onAction(ToolbarAction.ToggleMenu)
         }
+        if (uiState.notebookId != null) {
+            MenuItem(stringResource(R.string.add_page)) {
+                onAction(ToolbarAction.AddPage)
+                onAction(ToolbarAction.ToggleMenu)
+            }
+        }
         DividerCentered()
 
         MenuItem(stringResource(R.string.change_background)) {

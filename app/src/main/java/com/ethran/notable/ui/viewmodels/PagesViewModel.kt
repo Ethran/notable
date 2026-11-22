@@ -89,9 +89,9 @@ class PagesViewModel @Inject constructor(
         }
     }
 
-    fun newPageInBook(bookId: String, index: Int) {
+    fun newPageAfter(bookId: String, afterPageId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            appRepository.newPageInBook(bookId, index)
+            appRepository.newPageInBook(bookId, afterPageId)
         }
     }
 

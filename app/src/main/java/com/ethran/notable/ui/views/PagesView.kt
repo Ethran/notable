@@ -104,7 +104,7 @@ fun PagesView(
         onReorder = { id, to -> viewModel.reorderPage(bookId, id, to) },
         onDeletePage = viewModel::deletePage,
         onDuplicatePage = viewModel::duplicatePage,
-        onAddPageAfter = { viewModel.newPageInBook(bookId, it) })
+        onAddPageAfter = { viewModel.newPageAfter(bookId, it) })
 }
 
 
@@ -118,7 +118,7 @@ fun PagesContent(
     onReorder: (String, Int) -> Unit,
     onDeletePage: (String) -> Unit,
     onDuplicatePage: (String) -> Unit,
-    onAddPageAfter: (Int) -> Unit
+    onAddPageAfter: (pageId: String) -> Unit
 ) {
     if (state.isLoading) return
 
@@ -236,7 +236,7 @@ fun PagesContent(
                             onDelete = { pendingDeletePageId = pageId },
                             onDuplicate = { onDuplicatePage(pageId) },
                             onAddAfter = {
-                                onAddPageAfter(pageIndex + 1)
+                                onAddPageAfter(pageId)
                             })
                     }
                 }
