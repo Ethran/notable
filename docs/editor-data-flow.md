@@ -117,8 +117,10 @@ editor and the code around it.
 - Each committed step records the vertical scroll with `PageDataManager.recordScroll(pageId, y)`;
   `PageSaver` writes it to `Page.positionY` with the other edits, without bumping `updatedAt`. A
   page shown for the first time in an editor opens at that saved scroll, unzoomed. The position is
-  device-local: sync never reads it, so each device keeps its own. `Page.positionX` is stored but
-  not written yet.
+  device-local. Sync still uploads `positionY` as the legacy `scroll` key, which app versions
+  before sheets require, but a download ignores it and keeps the local position, so each device
+  keeps its own (see [webdav-sync-technical.md](webdav-sync-technical.md) 4.3). `Page.positionX` is
+  stored but not written yet, and never uploaded.
 - `PageDataManager.contentHeight(pageId)` measures the bottom of the page's strokes and images.
   `PageView` keeps it in a `StateFlow` for the scroll indicator and recomputes it after loading and
   after each edit.
