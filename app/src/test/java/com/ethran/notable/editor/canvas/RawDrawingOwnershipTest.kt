@@ -7,7 +7,7 @@ import java.io.File
 /**
  * The Onyx pen's raw-drawing switches (pen, render, input, session) and the firmware's live pen
  * style are called only in the [PenDevice] adapter, so one place shows, and logs, everything the
- * firmware is told.
+ * firmware is told. Likewise only [SurfaceWriter] locks and posts the canvas surface.
  */
 class RawDrawingOwnershipTest {
 
@@ -26,6 +26,16 @@ class RawDrawingOwnershipTest {
         val offenders = callsOutside(sdkCall, owners = setOf("PenDevice.kt"))
         assertTrue(
             "Raw-drawing or pen-style SDK calls outside the PenDevice adapter:\n" + offenders.joinToString("\n"),
+            offenders.isEmpty()
+        )
+    }
+
+    /** What the panel shows is decided in one place; a second writer would bypass its rules. */
+    @Test
+    fun onlySurfaceWriterPostsTheCanvasSurface() {
+        val offenders = callsOutside(Regex("""\b(lockCanvas|unlockCanvasAndPost)\s*\("""), setOf("SurfaceWriter.kt"))
+        assertTrue(
+            "Surface lock/post outside SurfaceWriter:\n" + offenders.joinToString("\n"),
             offenders.isEmpty()
         )
     }
