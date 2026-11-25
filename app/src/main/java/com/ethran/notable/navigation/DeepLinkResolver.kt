@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import com.ethran.notable.data.AppRepository
 import com.ethran.notable.data.db.Notebook
+import com.ethran.notable.data.db.Page
+import com.ethran.notable.data.model.BackgroundType
 import com.ethran.notable.di.ApplicationScope
 import com.ethran.notable.editor.utils.PreviewSaveMode
 import com.ethran.notable.io.ImportEngine
@@ -30,8 +32,8 @@ class DeepLinkResolver @Inject constructor(
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     @param:ApplicationScope private val applicationScope: CoroutineScope,
 ) {
-    // Held while a notebook following a PDF is looked up and then made, so that two imports of one
-    // file make one notebook.
+    // Held while a notebook following a PDF is looked up and then made or given pages, so that two
+    // imports of one file make one notebook, and no one adds pages to a notebook still importing.
     private val importMutex = Mutex()
 
     sealed interface Target {
@@ -93,6 +95,25 @@ class DeepLinkResolver @Inject constructor(
             )
         }
     }.await()
+
+    /**
+     * Gives the notebook that follows the PDF at [path] a page for each page the PDF has beyond the
+     * notebook's last one. A PDF that got shorter keeps its notebook's pages, and their strokes.
+     */
+    suspend fun addMissingPages(path: String): Unit = withContext(Dispatchers.IO) {
+        importMutex.withLock {
+            val book = appRepository.bookRepository.getLinkedToPdf(path) ?: return@withLock
+            repeat(getPdfPageCount(path) - book.pageIds.size) {
+                val page = Page(
+                    notebookId = book.id,
+                    background = book.defaultBackground,
+                    backgroundType = BackgroundType.AutoPdf.key
+                )
+                appRepository.pageRepository.create(page)
+                appRepository.bookRepository.addPage(book.id, page.id)
+            }
+        }
+    }
 
     /** What the import dialog shows of the PDF of [link]. */
     suspend fun preview(link: DeepLink.Pdf): PdfPreview = withContext(Dispatchers.IO) {
