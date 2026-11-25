@@ -15,17 +15,25 @@ import com.ethran.notable.utils.fold
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Singleton
 
 /** Finds what a [DeepLink] points at in the database, and imports the PDF of a [DeepLink.Pdf]. */
+@Singleton
 class DeepLinkResolver @Inject constructor(
     private val appRepository: AppRepository,
     private val importEngine: ImportEngine,
     private val thumbnailBackfillQueue: ThumbnailBackfillQueue,
     @param:ApplicationScope private val applicationScope: CoroutineScope,
 ) {
+    // Held while a notebook following a PDF is looked up and then made, so that two imports of one
+    // file make one notebook.
+    private val importMutex = Mutex()
+
     sealed interface Target {
         /** Open [pageId]; [note] is shown when the link asked for something slightly different. */
         data class Editor(val pageId: String, val bookId: String?, val note: String? = null) : Target
@@ -63,25 +71,27 @@ class DeepLinkResolver @Inject constructor(
      * doesn't stop it halfway.
      */
     suspend fun import(link: DeepLink.Pdf): Target = applicationScope.async(Dispatchers.IO) {
-        // Another import may have made a notebook following the file meanwhile, e.g. the PDF
-        // receiver's while the import dialog was open.
-        appRepository.bookRepository.getLinkedToPdf(link.path)
-            ?.let { return@async openBook(it, link.page) }
-        val result = importEngine.import(
-            Uri.fromFile(File(link.path)),
-            ImportOptions(linkToExternalFile = true)
-        )
-        result.fold(
-            onSuccess = { pageIds ->
-                thumbnailBackfillQueue.enqueue(pageIds, PreviewSaveMode.STRICT_BW)
-                val book = pageIds.firstOrNull()
-                    ?.let { appRepository.pageRepository.getById(it)?.notebookId }
-                    ?.let { appRepository.bookRepository.getById(it) }
-                    ?: return@fold Target.Failed("Imported notebook not found")
-                openBook(book, link.page)
-            },
-            onError = { Target.Failed("Import failed: ${it.userMessage}") }
-        )
+        importMutex.withLock {
+            // Another import may have made a notebook following the file meanwhile, e.g. the PDF
+            // receiver's while the import dialog was open.
+            appRepository.bookRepository.getLinkedToPdf(link.path)
+                ?.let { return@withLock openBook(it, link.page) }
+            val result = importEngine.import(
+                Uri.fromFile(File(link.path)),
+                ImportOptions(linkToExternalFile = true)
+            )
+            result.fold(
+                onSuccess = { pageIds ->
+                    thumbnailBackfillQueue.enqueue(pageIds, PreviewSaveMode.STRICT_BW)
+                    val book = pageIds.firstOrNull()
+                        ?.let { appRepository.pageRepository.getById(it)?.notebookId }
+                        ?.let { appRepository.bookRepository.getById(it) }
+                        ?: return@fold Target.Failed("Imported notebook not found")
+                    openBook(book, link.page)
+                },
+                onError = { Target.Failed("Import failed: ${it.userMessage}") }
+            )
+        }
     }.await()
 
     /** What the import dialog shows of the PDF of [link]. */
