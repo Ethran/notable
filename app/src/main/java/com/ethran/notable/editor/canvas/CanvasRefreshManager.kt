@@ -16,7 +16,6 @@ import com.ethran.notable.editor.utils.refreshScreenRegion
 import com.ethran.notable.editor.utils.resetScreenFreeze
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
-import com.onyx.android.sdk.pen.TouchHelper
 import io.shipbook.shipbooksdk.Log
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.launch
@@ -25,7 +24,7 @@ class CanvasRefreshManager(
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
     private val viewModel: EditorViewModel,
-    private val touchHelper: TouchHelper?
+    private val penDevice: PenDevice?
 ) {
     private val log = ShipBook.getLogger("DrawCanvas")
 
@@ -54,7 +53,7 @@ class CanvasRefreshManager(
             return
         }
         // reset screen freeze
-        resetScreenFreeze(touchHelper)
+        resetScreenFreeze(penDevice)
         log.d("refreshUi: done")
     }
 
@@ -77,7 +76,7 @@ class CanvasRefreshManager(
         )
         CanvasEventBus.waitForDrawing()
         drawCanvasToView(null)
-        resetScreenFreeze(touchHelper)
+        resetScreenFreeze(penDevice)
     }
 
     /**
@@ -96,14 +95,14 @@ class CanvasRefreshManager(
             firmwareInk.setEmpty()
         }
         // 1. Block input immediately so no stroke can start during the swap/settle.
-        touchHelper?.setRawInputReaderEnable(false)
+        penDevice?.setInputEnabled(false)
         drawCanvas.coroutineScope.launch {
             // 2. Push the erased page bitmap to the EPD *while still frozen* (drawBitmapToSurfaceSync
             //    forces it through with enablePost(0)+enablePost(1), like kreader's renderToScreen).
             drawBitmapToSurfaceSync(dirty)
             // 3. Now drop the firmware raw layer (eraser indicator / scribble ink). The panel
             //    already shows the clean page, so this is a no-flash transition.
-            touchHelper?.setRawDrawingEnabled(false)
+            penDevice?.setDrawingEnabled(false)
             // 4. Settle before re-arming (150ms stroke / 500ms area), mirroring the official app.
             DeviceCompat.delayBeforeResumingDrawing(isErasing = true, areaErase = areaErase)
             // 5. Re-arm raw drawing (also re-enables input). The heavy toggle resets the eraser

@@ -23,7 +23,7 @@ const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
 
 /**
  * Width (px) of the pen-eraser swath: the diameter of the region [handleErase] actually deletes.
- * Shared so the native side-button eraser indicator (see einkHelper.enableNativeEraser) is drawn
+ * Shared so the native side-button eraser indicator (see PenDevice.kt, enableNativeEraser) is drawn
  * at exactly the size it erases.
  */
 const val ERASER_SWATH_WIDTH = 30f

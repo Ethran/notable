@@ -3,7 +3,6 @@ package com.ethran.notable.editor.canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.RectF
-import android.util.Log
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toRect
 import com.ethran.notable.editor.EditorViewModel
@@ -16,10 +15,7 @@ import com.ethran.notable.editor.utils.Pen
 import com.ethran.notable.editor.utils.calculateBoundingBox
 import com.ethran.notable.editor.utils.cancelPendingScreenFreezeReset
 import com.ethran.notable.editor.utils.copyInput
-import com.ethran.notable.editor.utils.configureCalligraphyLiveAngle
 import com.ethran.notable.editor.utils.copyInputToSimplePointF
-import com.ethran.notable.editor.utils.ERASER_INDICATOR_COLOR
-import com.ethran.notable.editor.utils.enableNativeEraser
 import com.ethran.notable.editor.utils.getModifiedStrokeEndpoints
 import com.ethran.notable.editor.utils.handleDraw
 import com.ethran.notable.editor.utils.handleErase
@@ -27,11 +23,11 @@ import com.ethran.notable.editor.utils.handleScribbleToErase
 import com.ethran.notable.editor.utils.handleSelect
 import com.ethran.notable.editor.utils.onSurfaceInit
 import com.ethran.notable.editor.utils.penToStroke
+import com.ethran.notable.editor.utils.rawDrawingArea
 import com.ethran.notable.editor.utils.setupSurface
 import com.ethran.notable.editor.utils.transformToLine
 import com.ethran.notable.ui.convertDpToPixel
 import com.onyx.android.sdk.data.note.TouchPoint
-import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.extension.isNullOrEmpty
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
@@ -66,21 +62,6 @@ class OnyxInputHandler(
     private val log = ShipBook.getLogger("DrawCanvas")
     private val toolbarState get() = viewModel.toolbarState.value
 
-    // TODO: As OnyxInput is not done by lazy, which forces evaluation of the touchHelper
-    //       lazy during DrawCanvas construction.
-    val touchHelper by lazy {
-        val helper = if (DeviceCompat.isOnyxDevice) {
-            try {
-                referencedSurfaceView = this.hashCode().toString()
-                TouchHelper.create(drawCanvas, inputCallback)
-            } catch (t: Throwable) {
-                Log.w("OnyxInputHandler", "TouchHelper.create failed: ${t.message}")
-                null
-            }
-        } else null
-        helper
-    }
-
     @Suppress("RedundantOverride")
     private val inputCallback: RawInputCallback = object : RawInputCallback() {
         // Documentation: https://github.com/onyx-intl/OnyxAndroidDemo/blob/d3a1ffd3af231fe4de60a2a0da692c17cb35ce31/doc/Onyx-Pen-SDK.md#L40-L62
@@ -104,16 +85,16 @@ class OnyxInputHandler(
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             penDownPageId = page.currentPageId
-            if (touchHelper == null) return
+            val device = penDevice ?: return
             // Re-assert the native eraser indicator because setRawDrawingEnabled(true) (called
             // on every resume) resets it to disabled internally. The track style follows the active
             // eraser type: the wide marker (style 8) for the pen/drag eraser, a dotted outline
             // (DASH style 5) for the lasso/select eraser. See docs/onyx-sdk/onyx-native-eraser-indicator.md.
-            enableNativeEraser(touchHelper, toolbarState.eraser)
+            device.enableEraserTrack(toolbarState.eraser)
             // The eraser channel carries no colour of its own — the firmware paints the track with
             // the global setStrokeColor. Set it here (width comes from the style's params, so this
             // touches colour only, not thickness). This is the one thing we still set on begin.
-            touchHelper?.setStrokeColor(ERASER_INDICATOR_COLOR)
+            device.setEraserTrackColor()
             isErasing = true
         }
 
@@ -136,28 +117,50 @@ class OnyxInputHandler(
         }
     }
 
+    /** This surface's Onyx pen; null without one. Declared after [inputCallback], which it uses. */
+    val penDevice: TouchHelperPenDevice? = createTouchHelper()?.let { helper ->
+        TouchHelperPenDevice(helper, drawCanvas, inputCallback) {
+            val toolbarHeight = if (toolbarState.isToolbarOpen)
+                convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
+            rawDrawingArea(drawCanvas, toolbarHeight)
+        }
+    }
+
+    private fun createTouchHelper(): TouchHelper? {
+        if (!DeviceCompat.isOnyxDevice) return null
+        return try {
+            referencedSurfaceView = this.hashCode().toString()
+            val start = System.nanoTime()
+            TouchHelper.create(drawCanvas, inputCallback).also {
+                log.d("TouchHelper.create: %.1f ms".format((System.nanoTime() - start) / 1e6))
+            }
+        } catch (t: Throwable) {
+            log.w("TouchHelper.create failed: ${t.message}")
+            null
+        }
+    }
+
     fun updatePenAndStroke() {
-        if(touchHelper == null) return
+        val device = penDevice ?: return
         // it takes around 11 ms to run on Note 4c.
         log.i("Update pen and stroke")
         when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
             Mode.Draw, Mode.Line -> {
                 val scaledWidth = toolbarState.activePenSetting.strokeSize * page.zoom
-                touchHelper!!.setStrokeStyle(penToStroke(toolbarState.pen))
-                    ?.setStrokeWidth(scaledWidth)
-                    ?.setStrokeColor(toolbarState.activePenSetting.color)
+                device.setStroke(
+                    penToStroke(toolbarState.pen), scaledWidth, toolbarState.activePenSetting.color
+                )
                 // Match the live square-pen nib angle to the dry render (+45°) so the calligraphy
                 // stroke doesn't rotate on pen-up. See docs/onyx-sdk/onyx-pen-styles-catalog.md.
                 if (toolbarState.pen == Pen.CALLIGRAPHY) {
-                    configureCalligraphyLiveAngle(angleDegrees = 45f, strokeWidth = scaledWidth)
+                    device.setCalligraphyAngle(angleDegrees = 45f, strokeWidth = scaledWidth)
                 }
             }
 
             Mode.Erase -> applyEraserIndicatorStyle(penEraserColor = Color.GRAY)
 
-            Mode.Select -> touchHelper?.setStrokeStyle(penToStroke(Pen.BALLPEN))?.setStrokeWidth(3f)
-                ?.setStrokeColor(Color.GRAY)
+            Mode.Select -> device.setStroke(penToStroke(Pen.BALLPEN), 3f, Color.GRAY)
         }
     }
 
@@ -172,29 +175,15 @@ class OnyxInputHandler(
      * visible against ink).
      */
     private fun applyEraserIndicatorStyle(penEraserColor: Int = Color.BLACK) {
-        if (touchHelper == null) return
+        val device = penDevice ?: return
         when (toolbarState.eraser) {
-            Eraser.PEN -> touchHelper!!.setStrokeStyle(penToStroke(Pen.MARKER))
-                ?.setStrokeWidth(30f)
-                ?.setStrokeColor(penEraserColor)
-
-            Eraser.SELECT -> {
-                val dashStyleID = penToStroke(Pen.DASHED)
-                touchHelper!!.setStrokeStyle(dashStyleID)
-                    ?.setStrokeWidth(3f)
-                    ?.setStrokeColor(Color.BLACK)
-                val params = FloatArray(4)
-                params[0] = 5f // thickness
-                params[1] = 9f // no idea
-                params[2] = 9f // no idea
-                params[3] = 0f // no idea
-                Device.currentDevice().setStrokeParameters(dashStyleID, params)
-            }
+            Eraser.PEN -> device.setStroke(penToStroke(Pen.MARKER), 30f, penEraserColor)
+            Eraser.SELECT -> device.setDashedStroke(width = 3f, color = Color.BLACK)
         }
     }
 
     suspend fun updateIsDrawing() {
-        if(touchHelper == null) return
+        val device = penDevice ?: return
         val state = toolbarState
         log.d(
             "Update is drawing: ${state.isDrawing} (resumed=${state.isResumed}, " +
@@ -217,7 +206,7 @@ class OnyxInputHandler(
             CanvasEventBus.waitForDrawing()
             // draw to view, before showing drawing, avoid stutter
             drawCanvas.refreshManager.drawCanvasToView(null)
-            touchHelper!!.setRawDrawingEnabled(false)
+            device.setDrawingEnabled(false)
         }
     }
 
@@ -229,9 +218,9 @@ class OnyxInputHandler(
      * See docs/onyx-sdk/onyx-native-eraser-indicator.md.
      */
     fun enableRawDrawing() {
-        val helper = touchHelper ?: return
-        helper.setRawDrawingEnabled(true)
-        enableNativeEraser(helper, toolbarState.eraser)
+        val device = penDevice ?: return
+        device.setDrawingEnabled(true)
+        device.enableEraserTrack(toolbarState.eraser)
         updatePenAndStroke()
     }
 
@@ -243,7 +232,7 @@ class OnyxInputHandler(
      */
     fun updateEraserTrack() {
         if (!toolbarState.isDrawing) return
-        enableNativeEraser(touchHelper, toolbarState.eraser)
+        penDevice?.enableEraserTrack(toolbarState.eraser)
     }
 
     private var surfaceSetupJob: Job? = null
@@ -261,9 +250,7 @@ class OnyxInputHandler(
                 return@launch
             }
             onSurfaceInit(drawCanvas)
-            val toolbarHeight =
-                if (toolbarState.isToolbarOpen) convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
-            setupSurface(drawCanvas, touchHelper, toolbarHeight)
+            setupSurface(penDevice)
             // Armed inside the same coroutine, after the session is recreated: a caller that sets
             // the pen style right after updateActiveSurface() would otherwise race this launch.
             // Only when drawing is on: if updateIsDrawing() disabled it while the surface did not
@@ -272,7 +259,7 @@ class OnyxInputHandler(
         }
     }
     private fun onRawDrawingList(plist: TouchPointList) {
-        if (touchHelper == null) return
+        if (penDevice == null) return
         val currentLastStrokeEndTime = lastStrokeEndTime
         lastStrokeEndTime = System.currentTimeMillis()
         val startTime = System.currentTimeMillis()

@@ -76,7 +76,7 @@ class DrawCanvas(
 
     val inputHandler =
         OnyxInputHandler(this, page, viewModel, history, coroutineScope)
-    val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.touchHelper)
+    val refreshManager = CanvasRefreshManager(this, page, viewModel, inputHandler.penDevice)
 
 
     private val observers = CanvasObserverRegistry(
@@ -125,9 +125,9 @@ class DrawCanvas(
                 )
                 holder.removeCallback(this)
                 if (referencedSurfaceView == this@DrawCanvas.hashCode().toString()) {
-                    inputHandler.touchHelper?.closeRawDrawing()
+                    inputHandler.penDevice?.closeSession()
                 }
-                onSurfaceDestroy(this@DrawCanvas, inputHandler.touchHelper)
+                onSurfaceDestroy(this@DrawCanvas, inputHandler.penDevice)
             }
         }
 

@@ -128,7 +128,7 @@ class CanvasObserverRegistry(
                 launch(Dispatchers.Default) {
                     if (dirtyRectangle.isNull()) refreshManager.refreshUiSuspend()
                     else {
-                        partialRefreshRegionOnce(drawCanvas, zoneToRedraw, inputHandler.touchHelper)
+                        partialRefreshRegionOnce(drawCanvas, zoneToRedraw, inputHandler.penDevice)
                     }
                 }
             }
