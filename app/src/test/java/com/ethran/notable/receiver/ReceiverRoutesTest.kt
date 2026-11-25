@@ -98,6 +98,8 @@ class ReceiverRoutesTest {
             assertEquals(HttpStatusCode.BadRequest, push("page=2").status)
             for (name in listOf("..%2Fa.pdf", ".a.pdf", "a.txt", "%2Fsdcard%2Fa.pdf"))
                 assertEquals(name, HttpStatusCode.BadRequest, push("name=$name").status)
+            for (page in listOf("0", "-1", "two", ""))
+                assertEquals(page, HttpStatusCode.BadRequest, push("name=a.pdf&page=$page").status)
             assertEquals(HttpStatusCode.UnsupportedMediaType, push("name=a.pdf", body = "<html>".encodeToByteArray()).status)
             host.ready = false
             assertEquals(HttpStatusCode.ServiceUnavailable, push("name=a.pdf").status)

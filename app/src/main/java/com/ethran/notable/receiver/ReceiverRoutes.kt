@@ -80,6 +80,10 @@ fun Application.pdfReceiver(host: ReceiverHost) {
             val name = call.request.queryParameters["name"]
             if (name == null || !isAllowedName(name))
                 return@put refuse(HttpStatusCode.BadRequest, "Give name=<file name>.pdf, without a path")
+            val pageGiven = call.request.queryParameters["page"]
+            val page = parsePage(pageGiven)
+            if (pageGiven != null && page == null)
+                return@put refuse(HttpStatusCode.BadRequest, "page must be a number from 1")
             val length = call.request.contentLength()
                 ?: return@put reply(HttpStatusCode.LengthRequired, "Content-Length is required")
             if (length > MAX_PDF_BYTES)
@@ -90,8 +94,9 @@ fun Application.pdfReceiver(host: ReceiverHost) {
             val target = File(host.receiveDir, name)
             val written = withContext(Dispatchers.IO) {
                 call.receiveStream().use { body ->
+                    // Reported here, so that a server stopped right after the write still redraws.
                     writeReceivedPdf(body, length, target, host::countPages)
-                        .also { if (it != WriteResult.Written) body.skipRest() }
+                        .also { if (it == WriteResult.Written) host.written(target) else body.skipRest() }
                 }
             }
             when (written) {
@@ -106,10 +111,9 @@ fun Application.pdfReceiver(host: ReceiverHost) {
                     HttpStatusCode.InternalServerError,
                     "Writing failed, the old file is kept: ${written.error.message}"
                 )
-                WriteResult.Written -> host.written(target)
+                WriteResult.Written -> Unit
             }
 
-            val page = parsePage(call.request.queryParameters["page"])
             val pushed = try {
                 host.open(DeepLink.Pdf(target.path, page))
             } catch (e: CancellationException) {

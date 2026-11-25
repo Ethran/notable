@@ -264,18 +264,19 @@ curl --fail-with-body -sS -T build/main.pdf -H "Expect:" \
   --url-query "name=My paper.pdf" --url-query "page=12" http://localhost:8765/pdf
 ```
 
-The file is written as `Documents/notable/Received/<name>`, so a push can't touch anything else.
+The file is written as `Documents/notabledb/Received/<name>`, so a push can't touch anything else.
 That folder belongs to the receiver: other apps changing files there go unnoticed.
 The first push of a name imports it as a new notebook that observes the file, and shows it; later
 pushes redraw that notebook. A push moves you only when it gives `page`, which means what it
 means in a [link](#links): page N of the PDF. Without it you stay where you are, also in another
-notebook. The answer is one line, and its status code says what happened:
+notebook. A `page` past the end of the PDF still answers 200, and the line says how many pages
+there are. The answer is one line, and its status code says what happened:
 
 | Code | Meaning |
 |---|---|
 | 200 | Written, and the notebook that observes it shows the new version |
 | 202 | Written, but no notebook observes it (the import failed; the line says why) |
-| 400 | `name` missing, or not a plain `.pdf` file name, or the upload ended early |
+| 400 | `name` missing or not a plain `.pdf` file name; `page` not a number from 1; or the upload ended early |
 | 401 | Wrong or missing token |
 | 404 | Unknown request: an older Notable |
 | 411, 413, 415, 422 | No `Content-Length`; larger than 200 MB; not a PDF; a PDF with no readable page |
