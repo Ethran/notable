@@ -40,7 +40,7 @@ enum class Pen(val penName: String) {
     MARKER("MARKER"),
     FOUNTAIN("FOUNTAIN"),
     DASHED("DASHED"),
-    // Added pens (see docs/onyx-sdk/onyx-pen-styles-catalog.md):
+    // Added pens:
     CHARCOAL("CHARCOAL"),      // charcoal V2 texture — labelled "Charcoal"
     CALLIGRAPHY("CALLIGRAPHY");// NeoSquarePen, fixed +45° nib
 

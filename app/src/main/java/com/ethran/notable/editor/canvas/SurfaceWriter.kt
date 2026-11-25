@@ -13,10 +13,14 @@ import com.ethran.notable.editor.PageView
 import com.ethran.notable.editor.drawing.selectPaint
 import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.pointsToPath
+import com.ethran.notable.utils.checkMainThread
 import com.onyx.android.sdk.api.device.epd.EpdController
 import io.shipbook.shipbooksdk.ShipBook
 
-/** The only code that locks and posts the canvas surface. */
+/**
+ * The only code that locks and posts the canvas surface. Only [RawDrawingController] calls it; the
+ * controller alone decides what is written and when.
+ */
 class SurfaceWriter(
     private val drawCanvas: DrawCanvas,
     private val page: PageView,
@@ -35,9 +39,10 @@ class SurfaceWriter(
      * (null: the page, with the page-cut line in Select mode) there, and posts it. With [force],
      * the post is forced through to the panel while raw drawing still owns the screen. Returns
      * whether the requested content was drawn and posted (false when the lock, the draw or the
-     * post failed).
+     * post failed). Main thread only.
      */
     fun write(dirtyRect: Rect?, bitmap: Bitmap?, force: Boolean): Boolean {
+        checkMainThread("SurfaceWriter.write")
         val zoneToRedraw = dirtyRect ?: Rect(0, 0, page.viewWidth, page.viewHeight)
         val source = bitmap ?: page.windowedBitmap
         val start = SystemClock.uptimeMillis()
@@ -100,3 +105,7 @@ class SurfaceWriter(
         canvas.drawPath(path, selectPaint)
     }
 }
+
+fun Rect.toScreenArea() = ScreenArea(left, top, right, bottom)
+
+fun ScreenArea.toRect() = Rect(left, top, right, bottom)

@@ -19,19 +19,11 @@ import com.ethran.notable.data.datastore.AppSettings
 import com.ethran.notable.data.datastore.GlobalAppSettings
 import com.ethran.notable.utils.logCallStack
 import com.onyx.android.sdk.api.device.epd.EpdController
-import com.onyx.android.sdk.api.device.epd.EpdController.SCHEME_NORMAL
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.api.device.epd.UpdateOption
 import com.onyx.android.sdk.device.Device
-import com.ethran.notable.editor.canvas.PenDevice
 import com.onyx.android.sdk.utils.DeviceInfoUtil
 import io.shipbook.shipbooksdk.ShipBook
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlin.time.Duration.Companion.milliseconds
 
 private val log = ShipBook.getLogger("einkHelper")
 
@@ -47,49 +39,6 @@ fun isRecommendedRefreshMode(): Boolean {
 
 fun getCurRefreshModeString(): String {
     return (Device.currentDevice().appScopeRefreshMode).toString()
-}
-
-suspend fun waitForEpdRefresh(updateOption: UpdateOption = Device.currentDevice().appScopeRefreshMode) {
-    log.d("Waiting for screen, Update mode: $updateOption")
-//        Device.currentDevice().waitForUpdateFinished()
-    // depending on device, it may take different amount of time to
-    // refresh the screen. So for example, when closing menus, we
-    // need to wait before we freeze screen.
-
-    // Onyx library might change
-    @Suppress("REDUNDANT_ELSE_IN_WHEN")
-    when (updateOption) {
-        UpdateOption.NORMAL -> {
-            // HD mode
-            delay(190.milliseconds) // On my device ~160 is the minimal delay
-        }
-
-        UpdateOption.REGAL -> {
-            // regal mode
-            delay(180.milliseconds) // On my device ~150 is the minimal delay
-        }
-
-        UpdateOption.FAST -> {
-            //ultra fast, fast, balanced
-            delay(20.milliseconds) // 5ms is problematic sometimes on balanced mode.
-        }
-
-        UpdateOption.FAST_X -> {
-            // no idea what it is
-            delay(4.milliseconds) // Minimal delay
-        }
-
-        UpdateOption.FAST_QUALITY -> {
-            // no idea what it is
-            delay(15.milliseconds)
-        }
-
-        else -> {
-            // Default fallback
-            log.e("Unknown refresh mode: $updateOption")
-            delay(10.milliseconds)
-        }
-    }
 }
 
 /**
@@ -128,33 +77,7 @@ fun onSurfaceChanged(view: View) {
 }
 
 
-fun onSurfaceDestroy(view: View, pen: PenDevice?) {
-    if (pen == null) return
-    log.v("onSurfaceDestroy, (${view.left}, ${view.top} - ${view.right}, ${view.bottom})")
-    pen.setDrawingEnabled(false)
-}
-
-
-/**
- * Recreates the raw-drawing session over [PenDevice]'s area and leaves it **disabled**: the caller
- * arms it with `OnyxInputHandler.enableRawDrawing`, which also configures the eraser channel and
- * pen style.
- */
-fun setupSurface(pen: PenDevice?) {
-    if (pen == null) return
-    // Takes at least 50ms on Note 4c,
-    // and I don't think that we need it immediately
-    log.i("Setup editable surface")
-    pen.setDrawingEnabled(false)
-    pen.closeSession()
-    pen.openSession()
-    log.i("Setup editable surface completed")
-}
-
-/**
- * The raw-drawing area of [view]: (limit, exclude), the page outside the toolbar, and the toolbar
- * [toolbarHeight] high at the configured edge.
- */
+/** Where raw drawing works on [view]: everything but the toolbar. Returns (limit, exclude). */
 fun rawDrawingArea(view: View, toolbarHeight: Int): Pair<Rect, Rect> {
     val viewWidth = view.width
     val viewHeight = view.height
@@ -185,43 +108,6 @@ fun refreshScreen() {
     EpdController.repaintEveryThing(UpdateMode.REGAL_PLUS)
 }
 
-fun restoreDefaults(view: View) {
-    EpdController.setDisplayScheme(SCHEME_NORMAL)
-}
-
-fun partialRefreshRegionOnce(view: View, dirtyRect: Rect, pen: PenDevice?) {
-    if (pen == null) return
-    refreshScreenRegion(view, dirtyRect)
-    resetScreenFreeze(pen)
-}
-
-// Single coroutine scope + job for the raw-drawing resume so overlapping calls coalesce.
-// Without this, a continuous scroll fires resetScreenFreeze on every frame, each arming a
-// fresh 500 ms resume timer — the timers stack and "Resuming raw drawing" floods at the end.
-private val screenFreezeScope = CoroutineScope(Dispatchers.Default)
-private var screenFreezeResetJob: Job? = null
-
-// When raw drawing is being turned off entirely (e.g. entering selection), a pending resume
-// must not fire afterwards: its delayed isRawDrawingRenderEnabled=true would hand the screen
-// back to the firmware with input disabled — a frozen screen nothing unfreezes.
-fun cancelPendingScreenFreezeReset() {
-    screenFreezeResetJob?.cancel()
-}
-
-fun resetScreenFreeze(pen: PenDevice?) {
-    if (pen == null) {
-        log.w("no pen device")
-        return
-    }
-    // Cancel any pending resume and re-arm. While calls keep arriving (e.g. during a scroll)
-    // raw drawing stays disabled; only the last call's delay completes and re-enables it once.
-    screenFreezeResetJob?.cancel()
-    screenFreezeResetJob = screenFreezeScope.launch {
-        pen.setRenderEnabled(false)
-        DeviceCompat.delayBeforeResumingDrawing()
-        pen.setRenderEnabled(true)
-    }
-}
 
 
 /**
@@ -327,20 +213,16 @@ object DeviceCompat {
         }
     }
 
-    suspend fun delayBeforeResumingDrawing(isErasing: Boolean = false, areaErase: Boolean = false) {
-        if (!isOnyxDevice) return
-        // Delays mirror kreader's WaitForUpdateFinishedAction:
-        //  - erase: 150ms stroke, 500ms area (lasso). Safe at 150ms because commitErase uses the
-        //    heavy setRawDrawingEnabled toggle which hands the screen back atomically.
-        //  - normal pen: 500ms color, 300ms monochrome.
-        // See docs/onyx-sdk/onyx-pen-up-refresh-and-screen-freeze.md.
-        val delay = when {
-            isErasing -> if (areaErase) 500.milliseconds else 150.milliseconds
-            isColorDevice() -> 500.milliseconds
-            else -> 300.milliseconds
-        }
-        log.d("delayBeforeResumingDrawing(isErasing=$isErasing): Delaying raw drawing resume for ${delay}ms")
-        delay(delay)
-        log.d("delayBeforeResumingDrawing: Resuming raw drawing")
-    }
+    /**
+     * How long a post needs to reach the panel before the pen comes back on: 500ms color, 300ms
+     * monochrome. With less, the post is lost along with the firmware's ink (measured on a BOOX).
+     */
+    fun postSettleMillis(): Long = if (isColorDevice()) 500 else 300
+
+    /**
+     * How long the pen stays off after an erase commit: 150ms for a stroke erase, 500ms for an
+     * area (lasso) erase. Short for a stroke erase because the commit pushes the erased area as a
+     * forced post and drops the firmware layer at once, so nothing is left to settle but the push.
+     */
+    fun eraseSettleMillis(areaErase: Boolean): Long = if (areaErase) 500 else 150
 }

@@ -1,8 +1,8 @@
 package com.ethran.notable.editor.canvas
 
-import android.graphics.Rect
 import android.net.Uri
 import io.shipbook.shipbooksdk.Log
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -14,7 +14,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.measureTimeMillis
 
 object CanvasEventBus {
-    val forceUpdate = MutableSharedFlow<Rect?>() // null for full redraw
+    /** Redraw the whole page into its bitmap and show it. */
+    val forceUpdate = MutableSharedFlow<Unit>()
     val refreshUi = MutableSharedFlow<Unit>()
     val refreshUiImmediately = MutableSharedFlow<Unit>(
         replay = 1, extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -55,9 +56,39 @@ object CanvasEventBus {
 
 
     // For QuickNav scrolling with previews
-    val isScrubbing = MutableStateFlow<Boolean> (false)
-    val previewPage = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val restoreCanvas = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val scrubs = AtomicInteger()
+
+    /**
+     * The QuickNav scrub under way, or null. Each scrub has its own id, carried by the work queued
+     * for it (a preview, its end), so that work cannot act on a later scrub.
+     */
+    private val _activeScrub = MutableStateFlow<Int?>(null)
+    val activeScrub: StateFlow<Int?> = _activeScrub.asStateFlow()
+
+    /** Preview requests; each names the scrub it was made in ([requestPreview]). */
+    val previewPage = MutableSharedFlow<PreviewRequest>(extraBufferCapacity = 1)
+
+    /**
+     * Asks for a preview of [pageId] for the scrub under way, taken now: delivered after a later
+     * scrub started, the request still belongs to its own and is dropped. No scrub: nothing.
+     */
+    fun requestPreview(pageId: String) {
+        previewRequest(pageId)?.let { previewPage.tryEmit(it) }
+    }
+
+    internal fun previewRequest(pageId: String): PreviewRequest? =
+        activeScrub.value?.let { PreviewRequest(it, pageId) }
+
+    fun startScrub() {
+        _activeScrub.value = scrubs.incrementAndGet()
+    }
+
+    fun endScrub() {
+        _activeScrub.value = null
+    }
+
+    /** [scrub] is the scrub under way: its queued work may still act. */
+    fun isCurrentScrub(scrub: Int) = activeScrub.value == scrub
 
 
     val changePage = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -93,3 +124,6 @@ object CanvasEventBus {
     }
 
 }
+
+/** A QuickNav page preview asked for during [scrub]. */
+data class PreviewRequest(val scrub: Int, val pageId: String)

@@ -5,9 +5,11 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The Onyx pen's raw-drawing switches (pen, render, input, session) and the firmware's live pen
- * style are called only in the [PenDevice] adapter, so one place shows, and logs, everything the
- * firmware is told. Likewise only [SurfaceWriter] locks and posts the canvas surface.
+ * Raw drawing has one owner. A second place that turns the Onyx pen, its render or its input on
+ * or off brings back the races [RawDrawingController] removed (a delayed "on" landing after an
+ * "off", a frozen screen), so the SDK calls may appear only in the [PenDevice] adapter. The same
+ * holds for the firmware's live pen style, which every enable resets: it is set only through
+ * [TouchHelperPenDevice].
  */
 class RawDrawingOwnershipTest {
 

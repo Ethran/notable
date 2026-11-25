@@ -27,6 +27,7 @@ com.ethran.notable/
     - canvas/ — The drawing surface and its hardware-specific logic:
         - DrawCanvas.kt — The `SurfaceView` the editor draws on.
         - OnyxInputHandler.kt — Onyx raw drawing (pen input → strokes, erasing, lasso).
+        - RawDrawingController.kt — The only owner of the Onyx pen's raw-drawing on/off state.
         - PenDevice.kt — The only caller of the Onyx `TouchHelper`'s raw-drawing switches and live pen style.
         - CanvasRefreshManager.kt — Copies the page bitmap to the surface; e-ink refresh.
         - CanvasObserverRegistry.kt — The flows the canvas reacts to (ViewModel state, CanvasEventBus).

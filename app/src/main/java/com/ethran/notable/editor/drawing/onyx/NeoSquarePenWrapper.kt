@@ -13,8 +13,8 @@ private val logger = ShipBook.getLogger("NeoSquarePenWrapper")
  * Renders a dry stroke with the Onyx square/calligraphy pen (NeoSquarePen). The SDK ships no
  * `NeoSquarePenWrapper`, so — like [NeoFountainPenV2Wrapper] — we drive the pen directly:
  * build a [com.onyx.android.sdk.pen.NeoPenConfig], create the pen, and run it through
- * [NeoPenRender]. Mirrors kreader's `SquarePenShape.drawBrush` (config.width / brushAngle /
- * brushRatio). The chisel nib angle is fixed per pen preset (Notable ships +45°).
+ * [NeoPenRender] (config.width / brushAngle / brushRatio). The chisel nib angle is fixed per pen
+ * preset (Notable ships +45°).
  */
 object NeoSquarePenWrapper {
 

@@ -21,7 +21,7 @@ private val log = ShipBook.getLogger("RawDrawing")
  *   `openRawDrawing` does not restore it, so [openSession] binds the host view again first.
  * The style setters apply whether input and render are on or not.
  *
- * Only [TouchHelperPenDevice] calls the SDK.
+ * Only [RawDrawingController] calls these, and only [TouchHelperPenDevice] calls the SDK.
  */
 interface PenDevice {
     /** `setRawDrawingEnabled`. */
@@ -44,6 +44,16 @@ interface PenDevice {
 
     /** `closeRawDrawing`: every setter is a no-op until the next [openSession]. */
     fun closeSession()
+}
+
+/** A [PenDevice] for surfaces without an Onyx pen: there is no firmware layer to drive. */
+object NoPenDevice : PenDevice {
+    override fun setDrawingEnabled(enabled: Boolean) = Unit
+    override fun setRenderEnabled(enabled: Boolean) = Unit
+    override fun setInputEnabled(enabled: Boolean) = Unit
+    override fun resetPenDefaults() = Unit
+    override fun openSession() = Unit
+    override fun closeSession() = Unit
 }
 
 /**
