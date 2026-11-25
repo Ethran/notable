@@ -891,16 +891,33 @@ class PageDataManager @Inject constructor(
         bitmap to (entry.bitmapViewport ?: return null)
     }
 
+    /** A screen bitmap taken off the shelf to read, showing [viewport]; see [takeBitmapToSave]. */
+    internal data class BorrowedBitmap(
+        val bitmap: Bitmap,
+        val viewport: PageViewport,
+        val backgroundFileChanges: Long,
+    )
+
     /**
      * Takes [pageId]'s bitmap off the shelf, with the viewport it shows, to write its preview; the
-     * caller puts it back with [putBackBitmap]. Null if no bitmap is on the shelf.
+     * caller puts it back with [putBack]. Null if no bitmap is on the shelf.
      */
-    internal fun takeBitmapToSave(pageId: String): Pair<Bitmap, PageViewport>? = synchronized(lock) {
+    internal fun takeBitmapToSave(pageId: String): BorrowedBitmap? = synchronized(lock) {
         val entry = entries[pageId] ?: return null
         val bitmap = entry.bitmap?.get()?.takeIf { !it.isRecycled } ?: return null
         val viewport = entry.bitmapViewport ?: return null
         clearBitmapLocked(entry)
-        bitmap to viewport
+        BorrowedBitmap(bitmap, viewport, backgroundFileChanges)
+    }
+
+    /**
+     * Puts back [borrowed] as [putBackBitmap] does, unless a background file changed since it was
+     * taken: then it may show the old file, and the page draws a new bitmap when next shown.
+     */
+    internal fun putBack(pageId: String, borrowed: BorrowedBitmap): Unit = synchronized(lock) {
+        if (borrowed.backgroundFileChanges != backgroundFileChanges) return
+        val entry = entries[pageId] ?: return
+        if (entry.bitmap?.get() == null) shelveBitmapLocked(entry, borrowed.bitmap, borrowed.viewport)
     }
 
     /**
@@ -1112,8 +1129,8 @@ class PageDataManager @Inject constructor(
      *
      * A render during which a background file changed may show the file as it was, so it is not
      * cached but rendered again, [MAX_BACKGROUND_RENDERS] times at most. If files still change, the
-     * last render is returned uncached, and the page is marked as showing [path], for the next
-     * change of it to find.
+     * last render is returned uncached, and the page is marked as showing [path] and watches it, for
+     * the next change of it to find.
      */
     fun renderBackground(pageId: String, path: String, pageNumber: Int, scale: Float): Bitmap? {
         var renders = 0
@@ -1127,6 +1144,7 @@ class PageDataManager @Inject constructor(
             }
             if (++renders == MAX_BACKGROUND_RENDERS) {
                 synchronized(lock) { getOrCreateEntryLocked(pageId).backgroundPath = path }
+                armBackgroundWatch(pageId, background)
                 return background.bitmap
             }
         }
