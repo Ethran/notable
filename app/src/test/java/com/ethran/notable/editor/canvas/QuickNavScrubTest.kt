@@ -15,7 +15,9 @@ import org.junit.Test
 class QuickNavScrubTest {
 
     @After
-    fun noScrubLeft() = CanvasEventBus.endScrub()
+    fun noScrubLeft() {
+        CanvasEventBus.activeScrub.value?.let(CanvasEventBus::endScrub)
+    }
 
     @Test
     fun aPreviewRequestKeepsTheScrubItWasMadeIn() {
@@ -36,16 +38,26 @@ class QuickNavScrubTest {
 
     @Test
     fun noRequestWithoutAScrub() {
-        CanvasEventBus.endScrub()
+        CanvasEventBus.endScrub(CanvasEventBus.startScrub())
         assertNull(CanvasEventBus.previewRequest("page-1"))
     }
 
     @Test
     fun everyScrubHasItsOwnId() {
-        CanvasEventBus.startScrub()
-        val first = CanvasEventBus.activeScrub.value
-        CanvasEventBus.endScrub()
-        CanvasEventBus.startScrub()
-        assertNotEquals(first, CanvasEventBus.activeScrub.value)
+        val first = CanvasEventBus.startScrub()
+        CanvasEventBus.endScrub(first)
+        val second = CanvasEventBus.startScrub()
+        assertNotEquals(first, second)
+        assertEquals(second, CanvasEventBus.activeScrub.value)
+    }
+
+    @Test
+    fun aLateEndOfAnEarlierScrubLeavesTheCurrentOne() {
+        val first = CanvasEventBus.startScrub()
+        val second = CanvasEventBus.startScrub()
+        CanvasEventBus.endScrub(first) // e.g. an abandoned gesture's cleanup, run late
+        assertEquals(second, CanvasEventBus.activeScrub.value)
+        CanvasEventBus.endScrub(second)
+        assertNull(CanvasEventBus.activeScrub.value)
     }
 }

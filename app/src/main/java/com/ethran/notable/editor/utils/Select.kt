@@ -120,7 +120,6 @@ fun selectImagesAndStrokes(
     }
     val startOffset = IntOffset(pageBounds.left, pageBounds.top) - viewport.scroll.toIntOffset()
 
-    // set state
     viewModel.selectionState.selectedImages = imagesToSelect
     viewModel.selectionState.selectedStrokes = strokesToSelect
     // Pre-edit originals for the undo baseline (see SelectionState.initialSelected*). Captured

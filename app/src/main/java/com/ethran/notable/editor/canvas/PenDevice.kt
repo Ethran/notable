@@ -12,6 +12,41 @@ import io.shipbook.shipbooksdk.ShipBook
 private val log = ShipBook.getLogger("RawDrawing")
 
 /**
+ * Firmware stroke style for the side-button eraser's track. Not a public [TouchHelper] constant
+ * (those stop at 7). Its width comes from [Device.setStrokeParameters], not from the pen's stroke
+ * width. With STROKE_STYLE_MARKER instead, the eraser channel takes the pen's width, so the first
+ * erase after a thin pen draws a thin track.
+ */
+private const val ERASER_STROKE_STYLE = 8
+
+/** The eraser track's width: the diameter `handleErase` deletes, so the track shows what goes. */
+private const val ERASER_STROKE_WIDTH = ERASER_SWATH_WIDTH
+
+/**
+ * Style 8's 2nd and 3rd parameters: shape (edge, smoothing), not colour. Sweeping the first from
+ * 0.01 to 0.8 on a device changed the track only slightly and never its colour.
+ */
+private const val ERASER_STROKE_PARAM1 = 0.5f
+private const val ERASER_STROKE_PARAM2 = 1f // effect unknown; the value found to work
+
+/**
+ * The eraser track's colour. The eraser channel has no colour of its own: the firmware uses the
+ * global stroke colour, so this is set when an erase begins.
+ */
+private val ERASER_INDICATOR_COLOR = android.graphics.Color.BLACK
+
+/**
+ * Firmware DASH style ([TouchHelper.STROKE_STYLE_DASH]) for the lasso eraser's track: a dotted
+ * outline. Parameters found by experiment on a BOOX, none verified: [0] = 5 is probably the line
+ * thickness; [1] = 9, [2] = 9, [3] = 0 are probably dash length, gap length and phase.
+ */
+private const val SELECT_ERASER_STYLE = 5
+private val SELECT_ERASER_PARAMS = floatArrayOf(5f, 9f, 9f, 0f)
+
+/** Firmware square-pen (calligraphy) stroke style: [TouchHelper.STROKE_STYLE_SQUARE_PEN]. */
+private const val SQUARE_PEN_STYLE = 7
+
+/**
  * The raw-drawing calls of one Onyx `TouchHelper`, as the SDK (onyxsdk-pen 1.5.9) implements them:
  * - [setRenderEnabled] and [setInputEnabled] do nothing unless a session is open and their own
  *   flag differs from the value;
@@ -148,61 +183,11 @@ private inline fun timed(call: String, verbose: Boolean = false, block: () -> Un
 }
 
 /**
- * Firmware stroke style dedicated to the native eraser track (the drag-erase indicator). Not a
- * public [TouchHelper] constant (those stop at 7). Its width is bound to
- * [Device.setStrokeParameters], independent of the pen's stroke config. This is the ONLY reliable
- * style: with STROKE_STYLE_MARKER the eraser channel falls back to the global setStrokeWidth (thin
- * pen) and the first-erase bug returns.
- */
-private const val ERASER_STROKE_STYLE = 8
-
-/**
- * Native eraser indicator thickness. Bound to [ERASER_SWATH_WIDTH] so the indicator is drawn at
- * exactly the diameter `handleErase` deletes.
- */
-private const val ERASER_STROKE_WIDTH = ERASER_SWATH_WIDTH
-
-/**
- * Style 8's 2nd/3rd SurfaceFlinger shape params. These are per-style SHAPE params (edge/smooth),
- * NOT colour — confirmed on a device: sweeping param[1] from 0.01..0.8 changes the track only
- * subtly and never its colour. The track colour is set separately via setStrokeColor
- * ([TouchHelperPenDevice.setEraserTrackColor]).
- */
-private const val ERASER_STROKE_PARAM1 = 0.5f
-private const val ERASER_STROKE_PARAM2 = 1f // effect unknown; the value found to work
-
-/**
- * Colour of the native eraser track. The eraser channel carries no colour of its own; the firmware
- * draws the track using the global setStrokeColor state (SET_STROKE_COLOR). Applied when an erase
- * begins. Tune here for a lighter/darker grey.
- */
-private val ERASER_INDICATOR_COLOR = android.graphics.Color.BLACK
-
-/**
- * Firmware DASH stroke style ([TouchHelper.STROKE_STYLE_DASH]) used for the LASSO/SELECT eraser
- * track: a dotted outline.
- *
- * Params, found by experiment on a BOOX; none is verified:
- * - [0] = 5: probably the line thickness.
- * - [1] = 9, [2] = 9, [3] = 0: unknown. Probably dash length, gap length and phase (the shape of
- *   Android's DashPathEffect). A sweep of each on a device would settle it.
- */
-private const val SELECT_ERASER_STYLE = 5
-private val SELECT_ERASER_PARAMS = floatArrayOf(5f, 9f, 9f, 0f)
-
-/**
- * Enables the firmware's native eraser-stroke rendering for pen side-button erasing.
- * MUST be called after every [PenDevice.resetPenDefaults] (which turns it off); the input handler's
- * armPen does.
- * Wrapped in try/catch because the Onyx SDK is unstable across devices/firmware.
- *
- * Configures the eraser style's parameters PROACTIVELY via [Device.setStrokeParameters]: the
- * eraser track width is then bound to the eraser STYLE's own parameters, NOT the pen's current
- * setStrokeWidth. This decouples the indicator from the active pen so the side-button eraser
- * renders at the correct thickness on the FIRST erase after drawing with a thin pen (set when an
- * erase begins, the width would land after the firmware's stroke snapshot). Must be the
- * dedicated style 8: with STROKE_STYLE_MARKER the eraser channel ignores these params and falls
- * back to the pen's global width.
+ * Turns on the firmware's track for the side-button eraser, in the style of the current eraser.
+ * Run after every [PenDevice.resetPenDefaults], which turns it off (the input handler's
+ * configurePen does). The style's width is set here, before any erase: set when an erase begins,
+ * it would come after the firmware has read the style, and the first erase after a thin pen would
+ * draw a thin track. Wrapped in try/catch: not every device or firmware supports it.
  */
 private fun enableNativeEraser(touchHelper: TouchHelper, eraser: Eraser) {
     try {
@@ -227,14 +212,11 @@ private fun enableNativeEraser(touchHelper: TouchHelper, eraser: Eraser) {
     }
 }
 
-/** Firmware square-pen (calligraphy) stroke style — [TouchHelper.STROKE_STYLE_SQUARE_PEN]. */
-private const val SQUARE_PEN_STYLE = 7
-
 /**
- * Configures the firmware's LIVE square-pen (calligraphy) nib angle so the ink drawn while writing
- * matches Notable's dry re-render (NeoSquarePenWrapper, +45°). Without this the firmware uses its
- * default nib orientation and the stroke visibly rotates on pen-up. The style's params:
- * params[1] = width (≤10), params[2] = angle.
+ * Sets the firmware's live square-pen (calligraphy) nib angle, so the ink drawn while writing
+ * matches Notable's dry render (NeoSquarePenWrapper, +45 degrees). Without it the firmware uses its
+ * default nib angle and the stroke visibly rotates on pen-up. The style's parameters:
+ * params[1] = width (at most 10), params[2] = angle.
  */
 private fun configureCalligraphyLiveAngle(angleDegrees: Float, strokeWidth: Float) {
     try {

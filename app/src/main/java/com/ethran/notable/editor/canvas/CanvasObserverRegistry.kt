@@ -152,9 +152,10 @@ class CanvasObserverRegistry(
     }
 
     /**
-     * If `isDrawing` changes, its reconcile shows the whole page, so drawing it here too would be a
-     * second full-page draw. If it stays off (a popup open across a wake-up, a selection), nothing
-     * else draws it. The ViewModel mirrors resume and focus inline on Main,
+     * If `isDrawing` changes, the controller shows the whole page
+     * ([RawDrawingController.drawingConditionsChanged]), so drawing it here too would be a second
+     * full-page draw. If it stays off (a popup open across a wake-up, a selection), nothing else
+     * draws it. The ViewModel mirrors resume and focus inline on Main,
      * before this observer runs, so `isDrawing` is already current here.
      */
     private fun redrawIfPenStaysOff() {
@@ -233,7 +234,7 @@ class CanvasObserverRegistry(
                 .collect { eraser ->
                     log.v("eraser change: $eraser")
                     // The side-button eraser's track and the hand eraser's style both follow it.
-                    inputHandler.armPen()
+                    inputHandler.configurePen()
                     refreshManager.refreshUiSuspend()
                 }
         }
@@ -255,7 +256,7 @@ class CanvasObserverRegistry(
                             "quickNav=${state.isQuickNavOpen}, selection=${state.isSelectionActive}, " +
                             "selectionGesture=${state.isSelectionGestureActive})"
                     )
-                    drawCanvas.rawDrawing.reconcile()
+                    drawCanvas.rawDrawing.drawingConditionsChanged()
                 }
         }
     }

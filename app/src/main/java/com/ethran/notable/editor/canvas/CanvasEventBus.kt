@@ -2,7 +2,6 @@ package com.ethran.notable.editor.canvas
 
 import android.net.Uri
 import io.shipbook.shipbooksdk.Log
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -56,7 +55,9 @@ object CanvasEventBus {
 
 
     // For QuickNav scrolling with previews
-    private val scrubs = AtomicInteger()
+
+    /** The id of the last scrub started. Main thread only. */
+    private var lastScrub = 0
 
     /**
      * The QuickNav scrub under way, or null. Each scrub has its own id, carried by the work queued
@@ -65,12 +66,17 @@ object CanvasEventBus {
     private val _activeScrub = MutableStateFlow<Int?>(null)
     val activeScrub: StateFlow<Int?> = _activeScrub.asStateFlow()
 
-    /** Preview requests; each names the scrub it was made in ([requestPreview]). */
-    val previewPage = MutableSharedFlow<PreviewRequest>(extraBufferCapacity = 1)
+    /**
+     * Preview requests; each names the scrub it was made in ([requestPreview]). The newest wins:
+     * a request not yet taken is replaced by a later one.
+     */
+    val previewPage = MutableSharedFlow<PreviewRequest>(
+        extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
 
     /**
-     * Asks for a preview of [pageId] for the scrub under way, taken now: delivered after a later
-     * scrub started, the request still belongs to its own and is dropped. No scrub: nothing.
+     * Asks for a preview of [pageId] in the current scrub. The request keeps that scrub's id, so it
+     * is dropped if it arrives after the scrub ended. Does nothing if no scrub is under way.
      */
     fun requestPreview(pageId: String) {
         previewRequest(pageId)?.let { previewPage.tryEmit(it) }
@@ -79,12 +85,16 @@ object CanvasEventBus {
     internal fun previewRequest(pageId: String): PreviewRequest? =
         activeScrub.value?.let { PreviewRequest(it, pageId) }
 
-    fun startScrub() {
-        _activeScrub.value = scrubs.incrementAndGet()
+    /** Starts a new scrub and returns its id, for [endScrub]. Main thread. */
+    fun startScrub(): Int {
+        lastScrub++
+        _activeScrub.value = lastScrub
+        return lastScrub
     }
 
-    fun endScrub() {
-        _activeScrub.value = null
+    /** Ends [scrub]; does nothing if it is not the scrub under way (already ended, or replaced). */
+    fun endScrub(scrub: Int) {
+        _activeScrub.compareAndSet(scrub, null)
     }
 
     /** [scrub] is the scrub under way: its queued work may still act. */

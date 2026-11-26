@@ -13,7 +13,7 @@ import java.io.File
  */
 class RawDrawingOwnershipTest {
 
-    // With or without a receiver (`with(helper) { … }`), as a call or the Kotlin property setter.
+    // With or without a receiver (`with(helper) { ... }`), as a call or the Kotlin property setter.
     private val sdkCall = Regex(
         """\b(setRawDrawingEnabled|setRawDrawingRenderEnabled|setRawInputReaderEnable|""" +
                 """openRawDrawing|closeRawDrawing|resetPenDefaultRawDrawing|bindHostView|""" +

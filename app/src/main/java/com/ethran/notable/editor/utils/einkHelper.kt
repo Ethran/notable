@@ -221,8 +221,7 @@ object DeviceCompat {
 
     /**
      * How long the pen stays off after an erase commit: 150ms for a stroke erase, 500ms for an
-     * area (lasso) erase. Short for a stroke erase because the commit pushes the erased area as a
-     * forced post and drops the firmware layer at once, so nothing is left to settle but the push.
+     * area (lasso) erase and for scribble-to-erase (150ms was too short after a large scribble).
      */
     fun eraseSettleMillis(areaErase: Boolean): Long = if (areaErase) 500 else 150
 }

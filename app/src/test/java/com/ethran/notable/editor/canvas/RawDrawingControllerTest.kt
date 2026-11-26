@@ -6,6 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
+/** The post settle the harness gives the controller. */
+private const val SETTLE = 300L
+
 /**
  * The controller's rules, checked at every write and every SDK call against fakes of the panel
  * and the SDK. A random test drives the same events production sends (pen intent, refreshes,
@@ -137,10 +140,10 @@ class RawDrawingControllerTest {
         private var refreshOffAt: Long? = null
 
         val controller = RawDrawingController<String>(
-            device = device,
-            wanted = { wanted },
-            armPen = { device.armed = true },
-            writeSurface = { area, preview, force ->
+            pen = device,
+            drawingWanted = { wanted },
+            configurePen = { device.armed = true },
+            postToSurface = { area, preview, force ->
                 writes += Write(timer.now, area, preview, force, surfaceValid, device.input, device.render)
                 assertTrue("write without a session", device.created)
                 if (preview == null) {
@@ -181,9 +184,9 @@ class RawDrawingControllerTest {
 
         fun closeSession() = controller.closeSession()
 
-        fun reconcile() {
+        fun drawingConditionsChanged() {
             pending += null
-            controller.reconcile()
+            controller.drawingConditionsChanged()
         }
 
         fun showPage(area: ScreenArea?) {
@@ -266,14 +269,14 @@ class RawDrawingControllerTest {
             val random = Random(seed)
             val h = Harness()
             h.rebuildSession()
-            // The collector reconciles one dispatch after a change; other work can run in between.
-            var reconcilePending = false
+            // The collector reports a change one dispatch later; other work can run in between.
+            var conditionsChangePending = false
             val trace = mutableListOf<String>()
             repeat(60) {
                 val op = when (random.nextInt(36)) {
                     in 0..5 -> {
                         h.wanted = !h.wanted
-                        reconcilePending = true
+                        conditionsChangePending = true
                         "wanted=${h.wanted}"
                     }
                     in 6..9 -> {
@@ -314,9 +317,9 @@ class RawDrawingControllerTest {
                         "advance($ms)"
                     }
                 }
-                if (reconcilePending && random.nextInt(3) != 0) {
-                    h.reconcile()
-                    reconcilePending = false
+                if (conditionsChangePending && random.nextInt(3) != 0) {
+                    h.drawingConditionsChanged()
+                    conditionsChangePending = false
                 }
                 trace += op
                 h.assertInvariants("seed $seed, after ${trace.joinToString()}")
@@ -325,7 +328,7 @@ class RawDrawingControllerTest {
             h.previewOwner?.let { h.endPreview(it) }
             h.surfaceValid = true
             if (!h.device.created) h.rebuildSession()
-            if (reconcilePending) h.reconcile()
+            if (conditionsChangePending) h.drawingConditionsChanged()
             h.showPage(ScreenArea(0, 0, 1, 1)) // any later event writes what failed before
             h.timer.advanceUntilIdle()
             val step = "seed $seed, at the end of ${trace.joinToString()}"
@@ -360,7 +363,7 @@ class RawDrawingControllerTest {
         h.rebuildSession()
         val before = h.writes.size
         h.wanted = false
-        h.reconcile()
+        h.drawingConditionsChanged()
         val w = h.writes.drop(before).single()
         assertTrue("the whole page", w.wholePage)
         assertTrue("posted while the firmware still read the pen", w.input)
@@ -373,10 +376,10 @@ class RawDrawingControllerTest {
         val h = Harness()
         h.rebuildSession()
         h.wanted = false // a popup opens
-        h.reconcile()
+        h.drawingConditionsChanged()
         h.timer.advanceBy(1_000)
         h.wanted = true // and closes
-        h.reconcile()
+        h.drawingConditionsChanged()
         assertTrue("the page is shown first", h.writes.last().wholePage)
         assertTrue("and the pen is back with no wait", h.device.input)
     }
@@ -387,9 +390,9 @@ class RawDrawingControllerTest {
         // The fake fails if input comes on unarmed or the pen is reset with input on.
         h.rebuildSession()
         h.wanted = false
-        h.reconcile()
+        h.drawingConditionsChanged()
         h.wanted = true
-        h.reconcile()
+        h.drawingConditionsChanged()
         assertTrue(h.device.input)
         assertTrue(h.device.armed)
     }
@@ -428,12 +431,12 @@ class RawDrawingControllerTest {
         val h = Harness()
         h.rebuildSession()
         h.showPage(null) // the pen is held off
-        h.wanted = false // a popup opened; its collector has not reconciled yet
+        h.wanted = false // a popup opened; its collector has not reported it yet
         h.timer.advanceUntilIdle()
         assertFalse("not back over the popup", h.device.input)
-        h.reconcile()
+        h.drawingConditionsChanged()
         h.wanted = true
-        h.reconcile()
+        h.drawingConditionsChanged()
         h.assertConverged("after the popup closed")
     }
 
@@ -463,6 +466,22 @@ class RawDrawingControllerTest {
         assertTrue(h.pageWrites().last().let { it.ok && it.wholePage })
         h.timer.advanceUntilIdle()
         h.assertConverged("after the next event")
+    }
+
+    @Test
+    fun aPostAfterAFailedRefreshSettlesBeforeThePenComesBack() {
+        val h = Harness()
+        h.rebuildSession()
+        h.surfaceValid = false
+        h.showPage(box) // the pen goes off; the post fails
+        h.surfaceValid = true
+        h.timer.advanceBy(SETTLE) // the hold ends; the retry succeeds
+        assertTrue(h.pageWrites().last().let { it.ok && it.at == SETTLE })
+        assertFalse("not back on the tick of the post", h.device.input)
+        h.timer.advanceBy(SETTLE - 1)
+        assertFalse("off while that post settles", h.device.input)
+        h.timer.advanceBy(1)
+        assertTrue(h.device.input)
     }
 
     // --- Erase ---
@@ -507,6 +526,22 @@ class RawDrawingControllerTest {
     }
 
     @Test
+    fun aPostAfterAFailedErasePushSettlesBeforeThePenComesBack() {
+        val h = Harness()
+        h.rebuildSession()
+        h.surfaceValid = false
+        h.commitErase(box, areaErase = false) // the forced push fails
+        h.surfaceValid = true
+        h.timer.advanceBy(150) // the erase settle ends; the plain post succeeds
+        assertTrue(h.pageWrites().last().let { it.ok && it.at == 150L })
+        assertFalse("not back on the tick of the post", h.device.input)
+        h.timer.advanceBy(SETTLE - 1)
+        assertFalse("off while that post settles", h.device.input)
+        h.timer.advanceBy(1)
+        assertTrue(h.device.input)
+    }
+
+    @Test
     fun aFailedErasePushIsWrittenByTheNextEventWhileThePenStaysOff() {
         val h = Harness()
         h.rebuildSession()
@@ -514,7 +549,7 @@ class RawDrawingControllerTest {
         h.commitErase(box, areaErase = false)
         h.surfaceValid = true
         h.wanted = false // a popup opens during the settle
-        h.reconcile()
+        h.drawingConditionsChanged()
         h.timer.advanceUntilIdle()
         assertTrue("shown with the pen off", h.pending.isEmpty())
         assertFalse(h.device.input)
@@ -547,7 +582,7 @@ class RawDrawingControllerTest {
         val h = Harness()
         h.rebuildSession()
         h.wanted = false // a popup opened right after the stroke, before its points were handled
-        h.reconcile()
+        h.drawingConditionsChanged()
         h.strokeDrawn(box)
         assertEquals(box, h.writes.last().area)
         assertTrue(h.pending.isEmpty())
@@ -612,6 +647,10 @@ class RawDrawingControllerTest {
         h.surfaceValid = true
         h.showPage(box) // the next event
         assertTrue("the whole page, not just box", h.pageWrites().last().let { it.ok && it.wholePage })
+        assertFalse("a post after a failure settles first", h.device.input)
+        h.timer.advanceBy(SETTLE - 1)
+        assertFalse(h.device.input)
+        h.timer.advanceBy(1)
         h.assertConverged("after the page was shown")
     }
 
@@ -626,6 +665,21 @@ class RawDrawingControllerTest {
         h.surfaceValid = true
         h.timer.advanceBy(500)
         assertTrue("recovered without another event", h.pageWrites().last().let { it.ok && it.wholePage })
+    }
+
+    @Test
+    fun aNewPreviewOwnerStartsAFreshRunOfRecovery() {
+        val h = Harness()
+        h.rebuildSession()
+        h.surfaceValid = false
+        h.showPage(box) // fails, and so do all its recovery wakes
+        h.timer.advanceUntilIdle()
+        h.scrub = 2
+        h.showPreview("p1") // a scrub starts; its first write fails too
+        h.surfaceValid = true
+        h.timer.advanceBy(500)
+        assertEquals("recovered without another event", "p1", h.writes.last().preview)
+        assertTrue(h.writes.last().ok)
     }
 
     @Test
@@ -663,9 +717,5 @@ class RawDrawingControllerTest {
         h.rebuildSession()
         assertEquals("p1", h.writes.last().preview)
         assertFalse(h.device.input)
-    }
-
-    private companion object {
-        const val SETTLE = 300L
     }
 }

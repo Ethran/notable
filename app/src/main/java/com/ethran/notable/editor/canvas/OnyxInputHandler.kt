@@ -58,7 +58,7 @@ class OnyxInputHandler(
     private val log = ShipBook.getLogger("DrawCanvas")
     private val toolbarState get() = viewModel.toolbarState.value
 
-    /** The owner of raw drawing on this surface ([DrawCanvas] builds it from [penDevice]). */
+    /** The owner of raw drawing on this surface ([DrawCanvas] builds it from [pen]). */
     private val rawDrawing get() = drawCanvas.rawDrawing
 
     private val inputCallback: RawInputCallback = object : RawInputCallback() {
@@ -83,13 +83,12 @@ class OnyxInputHandler(
         // Handle button/eraser tip of the pen:
         override fun onBeginRawErasing(p0: Boolean, p1: TouchPoint?) {
             penDownPageId = page.currentPageId
-            val device = penDevice ?: return
-            // Belt and braces: armPen has set the eraser track when the pen came on, and the
-            // firmware has latched its style for this erase by now. Kept as found working on
-            // devices; it costs about 1 ms.
-            device.enableEraserTrack(toolbarState.eraser)
+            val pen = this@OnyxInputHandler.pen ?: return
+            // Set again at each erase start. configurePen already set it when the pen came on;
+            // whether this second call is needed has not been tested. It costs about 1 ms.
+            pen.enableEraserTrack(toolbarState.eraser)
             // Width comes from the style's params, so this touches colour only, not thickness.
-            device.setEraserTrackColor()
+            pen.setEraserTrackColor()
         }
 
         override fun onEndRawErasing(p0: Boolean, p1: TouchPoint?) {
@@ -104,7 +103,7 @@ class OnyxInputHandler(
     }
 
     /** This surface's Onyx pen; null without one. Declared after [inputCallback], which it uses. */
-    val penDevice: TouchHelperPenDevice? = createTouchHelper()?.let { helper ->
+    val pen: TouchHelperPenDevice? = createTouchHelper()?.let { helper ->
         TouchHelperPenDevice(helper, drawCanvas, inputCallback) {
             val toolbarHeight = if (toolbarState.isToolbarOpen)
                 convertDpToPixel(40.dp, drawCanvas.context).toInt() else 0
@@ -126,31 +125,31 @@ class OnyxInputHandler(
     }
 
     fun updatePenAndStroke() {
-        val device = penDevice ?: return
+        val pen = this.pen ?: return
         // it takes around 11 ms to run on Note 4c.
         log.i("Update pen and stroke")
         when (toolbarState.mode) {
             // we need to change size according to zoom level before drawing on screen
             Mode.Draw, Mode.Line -> {
                 val scaledWidth = toolbarState.activePenSetting.strokeSize * page.zoom
-                device.setStroke(
+                pen.setStroke(
                     penToStroke(toolbarState.pen), scaledWidth, toolbarState.activePenSetting.color
                 )
                 // Match the live square-pen nib angle to the dry render (+45°) so the calligraphy
                 // stroke doesn't rotate on pen-up.
                 if (toolbarState.pen == Pen.CALLIGRAPHY) {
-                    device.setCalligraphyAngle(angleDegrees = 45f, strokeWidth = scaledWidth)
+                    pen.setCalligraphyAngle(angleDegrees = 45f, strokeWidth = scaledWidth)
                 }
             }
 
             // The hand eraser's feedback: a grey marker for the pen eraser, a dashed line for the
-            // lasso. (The side-button eraser draws the firmware's own track, see armPen.)
+            // lasso. (The side-button eraser draws the firmware's own track, see configurePen.)
             Mode.Erase -> when (toolbarState.eraser) {
-                Eraser.PEN -> device.setStroke(penToStroke(Pen.MARKER), 30f, Color.GRAY)
-                Eraser.SELECT -> device.setDashedStroke(width = 3f, color = Color.BLACK)
+                Eraser.PEN -> pen.setStroke(penToStroke(Pen.MARKER), 30f, Color.GRAY)
+                Eraser.SELECT -> pen.setDashedStroke(width = 3f, color = Color.BLACK)
             }
 
-            Mode.Select -> device.setStroke(penToStroke(Pen.BALLPEN), 3f, Color.GRAY)
+            Mode.Select -> pen.setStroke(penToStroke(Pen.BALLPEN), 3f, Color.GRAY)
         }
     }
 
@@ -160,9 +159,9 @@ class OnyxInputHandler(
      * input comes on: SDK callbacks reach the UI thread after the firmware has started a stroke,
      * so this cannot wait for one. Also run when the tool changes.
      */
-    fun armPen() {
-        val device = penDevice ?: return
-        device.enableEraserTrack(toolbarState.eraser)
+    fun configurePen() {
+        val pen = this.pen ?: return
+        pen.enableEraserTrack(toolbarState.eraser)
         updatePenAndStroke()
     }
 

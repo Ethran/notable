@@ -48,7 +48,7 @@ class DrawCanvas(
 
             // With an Onyx pen the firmware renders pen and eraser strokes; without one (another
             // device, or TouchHelper failed to start) the OpenGL front-buffer renderer does.
-            if (inputHandler.penDevice == null) {
+            if (inputHandler.pen == null) {
                 glRenderer.onTouchListener.onTouch(this, event)
             }
 
@@ -77,10 +77,10 @@ class DrawCanvas(
      * one it drives [NoPenDevice] under the same surface rules.
      */
     val rawDrawing: RawDrawingController<Bitmap> = RawDrawingController(
-        device = inputHandler.penDevice ?: NoPenDevice,
-        wanted = { inputHandler.penDevice != null && viewModel.toolbarState.value.isDrawing },
-        armPen = inputHandler::armPen,
-        writeSurface = { area, preview, force -> surfaceWriter.write(area?.toRect(), preview, force) },
+        pen = inputHandler.pen ?: NoPenDevice,
+        drawingWanted = { inputHandler.pen != null && viewModel.toolbarState.value.isDrawing },
+        configurePen = inputHandler::configurePen,
+        postToSurface = { area, preview, force -> surfaceWriter.write(area?.toRect(), preview, force) },
         timer = ScopeMainTimer(coroutineScope),
         postSettleMillis = DeviceCompat::postSettleMillis,
         eraseSettleMillis = DeviceCompat::eraseSettleMillis,

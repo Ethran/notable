@@ -14,7 +14,7 @@ private val logger = ShipBook.getLogger("NeoSquarePenWrapper")
  * `NeoSquarePenWrapper`, so — like [NeoFountainPenV2Wrapper] — we drive the pen directly:
  * build a [com.onyx.android.sdk.pen.NeoPenConfig], create the pen, and run it through
  * [NeoPenRender] (config.width / brushAngle / brushRatio). The chisel nib angle is fixed per pen
- * preset (Notable ships +45°).
+ * preset (Notable ships +45 degrees).
  */
 object NeoSquarePenWrapper {
 

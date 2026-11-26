@@ -71,6 +71,8 @@ fun PageHorizontalSliderWithReturn(
     onDragStart: () -> Unit = {},
     onPreviewIndexChanged: (index: Int) -> Unit = {},
     onDragEnd: (index: Int) -> Unit = {},
+    /** The drag stopped without an end or a cancel: the scrubber left the screen, or restarted. */
+    onDragAbandoned: () -> Unit = {},
     onReturnClick: () -> Unit = {},
 ) {
     val density = LocalDensity.current
@@ -142,32 +144,46 @@ fun PageHorizontalSliderWithReturn(
                     .pointerInput(pageCount, currentIndex, quantization) {
                         if (pageCount <= 0) return@pointerInput
 
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                isPressed = true
-                                onDragStart()
-                                val newIndex = indexFromX(offset.x)
+                        // A drag under way. detectDragGestures calls neither end callback when
+                        // this coroutine is cancelled (the scrubber leaves the screen, or a key
+                        // changes), so the finally below ends it then.
+                        var dragging = false
+                        try {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    dragging = true
+                                    isPressed = true
+                                    onDragStart()
+                                    val newIndex = indexFromX(offset.x)
+                                    if (newIndex != dragIndex) {
+                                        dragIndex = newIndex
+                                        onPreviewIndexChanged(newIndex)
+                                    }
+                                },
+                                onDragEnd = {
+                                    dragging = false
+                                    isPressed = false
+                                    onDragEnd(dragIndex)
+                                },
+                                onDragCancel = {
+                                    dragging = false
+                                    isPressed = false
+                                    onDragEnd(dragIndex)
+                                }
+                            ) { change, _ ->
+                                change.consume()
+                                val currentX =
+                                    change.position.x.coerceIn(0f, containerWidthPx.toFloat())
+                                val newIndex = indexFromX(currentX)
                                 if (newIndex != dragIndex) {
                                     dragIndex = newIndex
                                     onPreviewIndexChanged(newIndex)
                                 }
-                            },
-                            onDragEnd = {
-                                isPressed = false
-                                onDragEnd(dragIndex)
-                            },
-                            onDragCancel = {
-                                isPressed = false
-                                onDragEnd(dragIndex)
                             }
-                        ) { change, _ ->
-                            change.consume()
-                            val currentX =
-                                change.position.x.coerceIn(0f, containerWidthPx.toFloat())
-                            val newIndex = indexFromX(currentX)
-                            if (newIndex != dragIndex) {
-                                dragIndex = newIndex
-                                onPreviewIndexChanged(newIndex)
+                        } finally {
+                            if (dragging) {
+                                isPressed = false
+                                onDragAbandoned()
                             }
                         }
                     }

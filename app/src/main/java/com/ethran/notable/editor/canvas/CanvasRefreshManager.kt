@@ -51,7 +51,8 @@ class CanvasRefreshManager(
 
     /**
      * QuickNav [scrub] ended: its preview (if it still owns the surface) gives way to the whole
-     * page, refreshed in full on the panel. From any thread.
+     * page. Once the controller accepts the end, a full panel refresh is requested, whether or not
+     * the page post succeeded (a retry posts it later). From any thread.
      */
     fun endPreview(scrub: Int) {
         drawCanvas.post {
@@ -62,12 +63,8 @@ class CanvasRefreshManager(
     private fun fullScreen() = Rect(0, 0, page.viewWidth, page.viewHeight)
 
     /**
-     * Atomic erase commit for both the pen-button eraser and scribble-to-erase, on the main
-     * thread: [RawDrawingController.commitErase] pushes the already-repainted area (with every
-     * stroke only the firmware shows) while the screen is still frozen, then drops the firmware
-     * layer, so the eraser indicator and the erased strokes disappear in one transition.
-     * Must be called after the page bitmap has already been repainted (after handleErase /
-     * handleScribbleToErase).
+     * Commits an erase over [dirtyRect] (see [RawDrawingController.commitErase]). Main thread;
+     * call after the page bitmap is repainted (after handleErase / handleScribbleToErase).
      */
     fun commitErase(dirtyRect: Rect, areaErase: Boolean) {
         checkMainThread("CanvasRefreshManager.commitErase")
