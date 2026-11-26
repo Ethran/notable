@@ -38,7 +38,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,8 +62,6 @@ import com.ethran.notable.editor.utils.setRecommendedMode
 import com.ethran.notable.navigation.NavigationDestination
 import com.ethran.notable.ui.viewmodels.WelcomeViewModel
 import com.ethran.notable.utils.hasUsableStorage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 
 object WelcomeDestination : NavigationDestination {
@@ -78,7 +75,6 @@ fun WelcomeView(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val scope = rememberCoroutineScope()
 
     var filePermissionGranted by remember { mutableStateOf(hasUsableStorage(context)) }
     var recommendedRefreshMode by remember { mutableStateOf(isRecommendedRefreshMode()) }
@@ -130,9 +126,7 @@ fun WelcomeView(
         onFilePermissionRequest = { requestPermissions() },
         onRefreshModeRequest = { setRecommendedMode() },
         onContinue = {
-            scope.launch(Dispatchers.IO) {
-                viewModel.removeWelcome()
-            }
+            viewModel.removeWelcome()
             goToLibrary()
         }
     )

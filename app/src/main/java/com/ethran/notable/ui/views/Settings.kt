@@ -106,7 +106,7 @@ fun SettingsView(
         onCheckUpdate = { force ->
             viewModel.checkUpdate(context, force)
         },
-        onUpdateSettings = { viewModel.updateSettings(it) },
+        onUpdateSettings = viewModel::updateSettings,
         listOfGestures = viewModel.getGestureRows(),
         availableGestures = viewModel.availableGestures,
         syncUiState = viewModel.syncUiState,
@@ -137,7 +137,7 @@ fun SettingsContent(
     goToWelcome: () -> Unit,
     goToSystemInfo: () -> Unit,
     onCheckUpdate: (Boolean) -> Unit,
-    onUpdateSettings: (AppSettings) -> Unit,
+    onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit,
     selectedTabInitial: Int = 0,
     listOfGestures: List<GestureRowModel> = emptyList(),
     availableGestures: List<Pair<AppSettings.GestureAction, Any>> = emptyList(),

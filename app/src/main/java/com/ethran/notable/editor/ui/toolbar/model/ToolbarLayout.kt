@@ -71,3 +71,7 @@ data class ToolbarLayout(
         )
     }
 }
+
+/** Removes the entry at [index] only if it is still a divider, so a repeated delete is harmless. */
+internal fun List<String>.dropDividerAt(index: Int): List<String> =
+    if (getOrNull(index) == ToolbarElementId.DIVIDER.name) filterIndexed { i, _ -> i != index } else this
