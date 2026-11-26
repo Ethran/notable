@@ -472,19 +472,19 @@ class EditorViewModel @Inject constructor(
      * so rapid StrokeMenu slider changes stay ordered; only the DB write is async.
      */
     private fun handlePenSettingChange(presetId: String, setting: PenSetting) {
-        val settings = GlobalAppSettings.current
-        val updated = settings.copy(
-            toolbarPens = settings.toolbarPens.map {
-                if (it.id == presetId) it.copy(color = setting.color, size = setting.strokeSize)
-                else it
-            }
-        )
-        GlobalAppSettings.update(updated)
+        GlobalAppSettings.update { settings ->
+            settings.copy(
+                toolbarPens = settings.toolbarPens.map {
+                    if (it.id == presetId) it.copy(color = setting.color, size = setting.strokeSize)
+                    else it
+                }
+            )
+        }
         _toolbarState.update {
             it.copy(penSettings = it.penSettings + (presetId to setting))
         }
         viewModelScope.launch(Dispatchers.IO) {
-            appRepository.kvProxy.setAppSettings(updated)
+            appRepository.kvProxy.persistAppSettings()
         }
     }
 
@@ -497,10 +497,9 @@ class EditorViewModel @Inject constructor(
     }
 
     private fun updateScribbleToErase(enabled: Boolean) {
+        GlobalAppSettings.update { it.copy(scribbleToEraseEnabled = enabled) }
         viewModelScope.launch(Dispatchers.IO) {
-            appRepository.kvProxy.setAppSettings(
-                GlobalAppSettings.current.copy(scribbleToEraseEnabled = enabled)
-            )
+            appRepository.kvProxy.persistAppSettings()
         }
     }
 

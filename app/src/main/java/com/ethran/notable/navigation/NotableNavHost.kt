@@ -5,6 +5,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -39,6 +40,7 @@ fun NotableNavHost(
     modifier: Modifier = Modifier,
     appNavigator: NotableNavigator
 ) {
+    LaunchedEffect(Unit) { appNavigator.openInitialRoute() }
 
     Box(modifier = modifier.fillMaxSize()) {
         NavHost(
@@ -111,6 +113,10 @@ fun NotableNavHost(
                 val bookId = backStackEntry.arguments?.getString(EditorDestination.BOOK_ID_ARG)
 
                 val currentPageId = appNavigator.resolveAndSyncPageId(backStackEntry)
+                val shownPageId = appNavigator.currentPageId
+                LaunchedEffect(shownPageId) {
+                    shownPageId?.let { appRepository.recordLastOpenedPage(it) }
+                }
 
                 EditorView(
                     goToLibrary = {appNavigator.goToLibrary(it)},
