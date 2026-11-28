@@ -267,7 +267,8 @@ curl --fail-with-body -sS -T build/main.pdf -H "Expect:" \
 The file is written as `Documents/notabledb/Received/<name>`, so a push can't touch anything else.
 That folder belongs to the receiver: other apps changing files there go unnoticed.
 The first push of a name imports it as a new notebook that observes the file, and shows it; later
-pushes redraw that notebook. A push moves you only when it gives `page`, which means what it
+pushes redraw that notebook, and when the PDF has become longer, add the new pages at its end. A PDF
+that became shorter keeps the notebook's pages, with what you wrote on them. A push moves you only when it gives `page`, which means what it
 means in a [link](#links): page N of the PDF. Without it you stay where you are, also in another
 notebook. A `page` past the end of the PDF still answers 200, and the line says how many pages
 there are. The answer is one line, and its status code says what happened:

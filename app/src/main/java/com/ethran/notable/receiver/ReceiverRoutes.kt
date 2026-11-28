@@ -36,8 +36,9 @@ interface ReceiverHost {
     fun written(file: File)
 
     /**
-     * Finds the notebook observing [link]'s file, importing the file as a notebook that observes it
-     * if there is none, and shows it when [link] asks for a page or the notebook is new.
+     * Finds the notebook observing [link]'s file and gives it a page for each page the PDF has
+     * beyond it, or imports the file as a notebook that observes it if there is none. Shows the
+     * notebook when [link] asks for a page or the notebook is new.
      */
     suspend fun open(link: DeepLink.Pdf): Pushed
     fun log(message: String)
@@ -53,7 +54,8 @@ data class Pushed(val target: Target, val imported: Boolean = false)
  * - `GET /`: `Notable <version>`, without a token, to tell "receiver off" from "wrong token".
  * - `PUT /pdf?name=<file name>[&page=N]` with `Authorization: Bearer <token>` and the PDF as the
  *   body: writes it as `<receive folder>/<name>` and redraws the notebook that observes it. The
- *   first push of a name imports it as such a notebook. A push moves the user only to show a new
+ *   first push of a name imports it as such a notebook, and a later push of a longer PDF adds the
+ *   new pages at its end. A push moves the user only to show a new
  *   notebook, or to page N of the PDF when it gives `page`. Answers a status code, which scripts
  *   act on, and one line for a person.
  */

@@ -156,6 +156,7 @@ class PdfReceiver @Inject constructor(
         // Not cancellable: an import cut off when Notable leaves the foreground would leave a
         // notebook with only some of the pages, which later pushes would find and keep.
         withContext(NonCancellable) {
+            deepLinkResolver.get().addMissingPages(link.path)
             val found = deepLinkResolver.get().resolve(link)
             val imported = found is Target.AskToImport
             // Turning the receiver on is the consent a link asks for: a received file is followed.
