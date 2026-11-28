@@ -10,8 +10,6 @@ import com.ethran.notable.editor.state.Mode
 import com.ethran.notable.editor.utils.ImageHandler
 import com.ethran.notable.editor.utils.cleanAllStrokes
 import com.ethran.notable.editor.utils.loadPagePreviewOrFallback
-import com.ethran.notable.editor.utils.partialRefreshRegionOnce
-import com.onyx.android.sdk.extension.isNull
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,11 +78,11 @@ class CanvasObserverRegistry(
         observeRestartAfterConfChange()
         observeReloadFromDb()
         observePenChanges()
-        observeIsDrawingSnapshot()
+        observeIsDrawing()
         observeToolbar()
         observeMode()
         observeQuickNav()
-        observeRestoreCanvas()
+        observeScrubEnd()
     }
 
     // Last bitmap and viewport actually pushed by an immediate refresh. Used to drop redundant
@@ -109,28 +107,18 @@ class CanvasObserverRegistry(
                 }
                 lastImmediate = shown
                 log.v("Refreshing UI!")
-                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                refreshManager.refreshUi(zoneToRedraw)
+                refreshManager.refreshUi(null)
             }
         }
     }
 
     private fun observeForceUpdate() {
-        // observe forceUpdate, takes rect in screen coordinates
-        // given null it will redraw whole page
-        // BE CAREFUL: partial update is not tested fairly -- might not work in some situations.
         observerScope.launch(Dispatchers.Main) {
-            CanvasEventBus.forceUpdate.collect { dirtyRectangle ->
+            CanvasEventBus.forceUpdate.collect {
                 // On loading, make sure that the loaded strokes are visible to it.
-                log.v("Force update, zone: $dirtyRectangle, Strokes to draw: ${page.strokes.size}")
-                val zoneToRedraw = dirtyRectangle ?: Rect(0, 0, page.viewWidth, page.viewHeight)
-                page.drawAreaScreenCoordinates(zoneToRedraw)
-                launch(Dispatchers.Default) {
-                    if (dirtyRectangle.isNull()) refreshManager.refreshUiSuspend()
-                    else {
-                        partialRefreshRegionOnce(drawCanvas, zoneToRedraw, inputHandler.touchHelper)
-                    }
-                }
+                log.v("Force update, strokes to draw: ${page.strokes.size}")
+                page.drawAreaScreenCoordinates(Rect(0, 0, page.viewWidth, page.viewHeight))
+                launch(Dispatchers.Default) { refreshManager.refreshUiSuspend() }
             }
         }
     }
@@ -164,14 +152,15 @@ class CanvasObserverRegistry(
     }
 
     /**
-     * If the pen turns on, the enable path draws the page first, so drawing it here too would be a
-     * second full-page draw. If something still keeps the pen off (a popup open across a wake-up,
-     * a selection), nothing else draws it. The ViewModel mirrors resume and focus inline on Main,
+     * If `isDrawing` changes, the controller shows the whole page
+     * ([RawDrawingController.drawingConditionsChanged]), so drawing it here too would be a second
+     * full-page draw. If it stays off (a popup open across a wake-up, a selection), nothing else
+     * draws it. The ViewModel mirrors resume and focus inline on Main,
      * before this observer runs, so `isDrawing` is already current here.
      */
     private fun redrawIfPenStaysOff() {
         if (viewModel.toolbarState.value.isDrawing) return
-        drawCanvas.refreshManager.drawCanvasToView(null)
+        refreshManager.refreshUi(null)
     }
 
     private fun observeZoom() {
@@ -197,8 +186,8 @@ class CanvasObserverRegistry(
         observerScope.launch {
             CanvasEventBus.reinitSignal.collect {
                 log.v("Configuration changed!")
-                drawCanvas.init()
-                drawCanvas.refreshManager.drawCanvasToView(null)
+                drawCanvas.attachRenderer()
+                refreshManager.refreshUi(null)
             }
         }
     }
@@ -224,8 +213,6 @@ class CanvasObserverRegistry(
                 .collect { pen ->
                     log.v("pen change: $pen")
                     inputHandler.updatePenAndStroke()
-                    //I think we don't need to refresh the screen here.
-//                refreshManager.refreshUiSuspend()
                 }
         }
         observerScope.launch {
@@ -246,22 +233,30 @@ class CanvasObserverRegistry(
                 .drop(1)
                 .collect { eraser ->
                     log.v("eraser change: $eraser")
-                    inputHandler.updateEraserTrack()
-                    inputHandler.updatePenAndStroke()
+                    // The side-button eraser's track and the hand eraser's style both follow it.
+                    inputHandler.configurePen()
                     refreshManager.refreshUiSuspend()
                 }
         }
     }
 
-    private fun observeIsDrawingSnapshot() {
+    private fun observeIsDrawing() {
         observerScope.launch {
             viewModel.toolbarState
                 .map { it.isDrawing }
                 .distinctUntilChanged()
-                .drop(1)
+                // Applied at registration too (one whole-page write).
                 .collect {
-                    log.v("isDrawing change to $it")
-                    inputHandler.updateIsDrawing()
+                    val state = viewModel.toolbarState.value
+                    log.d(
+                        "Update is drawing: ${state.isDrawing} (resumed=${state.isResumed}, " +
+                            "focus=${state.hasWindowFocus}, menu=${state.isMenuOpen}, " +
+                            "eraserMenu=${state.isEraserMenuOpen}, penMenu=${state.penMenuPresetId}, " +
+                            "background=${state.isBackgroundSelectorModalOpen}, " +
+                            "quickNav=${state.isQuickNavOpen}, selection=${state.isSelectionActive}, " +
+                            "selectionGesture=${state.isSelectionGestureActive})"
+                    )
+                    drawCanvas.rawDrawing.drawingConditionsChanged()
                 }
         }
     }
@@ -274,9 +269,8 @@ class CanvasObserverRegistry(
                 .drop(1)
                 .collect { isToolbarOpen ->
                     log.v("istoolbaropen change: $isToolbarOpen")
+                    // The session is rebuilt over the new area: it shows the page and arms the pen.
                     inputHandler.updateActiveSurface()
-                    inputHandler.updatePenAndStroke()
-                    refreshManager.refreshUi(null)
                 }
         }
     }
@@ -298,8 +292,10 @@ class CanvasObserverRegistry(
     @OptIn(FlowPreview::class)
     private fun observeQuickNav() {
         observerScope.launch {
-            CanvasEventBus.previewPage.debounce(50).collectLatest { pageId ->
-                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — scrub already ended
+            CanvasEventBus.previewPage.debounce(50).collectLatest { request ->
+                // The preview belongs to the scrub it was asked for in; dropped once that is over.
+                val (scrub, pageId) = request
+                if (!CanvasEventBus.isCurrentScrub(scrub)) return@collectLatest
                 // Null for a loose page, or if sync has just deleted the notebook.
                 val pageNumber = page.openPage.record?.notebookId
                     ?.let { viewModel.appRepository.bookRepository.getPageIndex(it, pageId) }
@@ -322,21 +318,27 @@ class CanvasObserverRegistry(
                     return@collectLatest
                 }
 
-                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                if (!CanvasEventBus.isScrubbing.value) return@collectLatest // dropped — race lost
-                log.d("QuickNav restoreCanvas: page=$pageId, bitmap=${previewBitmap.hashCode()}")
-                drawCanvas.refreshManager.restoreCanvas(zoneToRedraw, previewBitmap)
+                if (!CanvasEventBus.isCurrentScrub(scrub)) return@collectLatest
+                log.d("QuickNav preview: scrub=$scrub, page=$pageId, bitmap=${previewBitmap.hashCode()}")
+                refreshManager.showPreview(scrub, previewBitmap)
             }
         }
     }
 
-    private fun observeRestoreCanvas() {
+    /**
+     * A scrub's lifetime is its preview's: whichever way it ends (a page chosen, the same page,
+     * nothing, or straight into the next scrub), its preview ends and the canvas shows its page.
+     */
+    private fun observeScrubEnd() {
         observerScope.launch {
-            CanvasEventBus.restoreCanvas.collect {
-                log.d("Restoring canvas")
-                val zoneToRedraw = Rect(0, 0, page.viewWidth, page.viewHeight)
-                drawCanvas.refreshManager.restoreCanvas(zoneToRedraw)
-                log.v("Restored canvas")
+            var current: Int? = null
+            CanvasEventBus.activeScrub.collect { scrub ->
+                val ended = current
+                current = scrub
+                if (ended != null) { // a StateFlow never repeats a value: this one ended
+                    log.d("Scrub $ended ended")
+                    refreshManager.endPreview(ended)
+                }
             }
         }
     }

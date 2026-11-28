@@ -58,6 +58,9 @@ class QuickNavViewModel(
     val uiState: StateFlow<QuickNavUiState> = _uiState.asStateFlow()
     private var lastScrubEndTargetPageId: String? = null
 
+    /** The id of this scrubber's last scrub ([CanvasEventBus.startScrub]); null before the first. */
+    private var scrub: Int? = null
+
     private var loadJob: Job? = null
     private var requestedPageId: String? = null
 
@@ -126,32 +129,32 @@ class QuickNavViewModel(
     // --- Scrubber Actions ---
 
     fun onScrubStart() {
-        viewModelScope.launch {
-            lastScrubEndTargetPageId = null
-            CanvasEventBus.isScrubbing.emit(true)
-        }
+        lastScrubEndTargetPageId = null
+        // Now, not in a coroutine: previews requested from here on belong to this scrub.
+        scrub = CanvasEventBus.startScrub()
+    }
+
+    /** The gesture was abandoned (the scrubber left the screen mid-drag): end it, change nothing. */
+    fun onScrubAbandoned() {
+        scrub?.let(CanvasEventBus::endScrub)
     }
 
     fun onScrubPreview(index: Int) {
         val pageId = _uiState.value.scrubber?.pageAt(index) ?: return
-        viewModelScope.launch { CanvasEventBus.previewPage.tryEmit(pageId) }
+        // Taken now, not in a coroutine: the request keeps the scrub it was made in.
+        CanvasEventBus.requestPreview(pageId)
     }
 
     fun onScrubEnd(index: Int) {
         val targetPageId = _uiState.value.scrubber?.pageAt(index)
+        val ended = scrub
 
         viewModelScope.launch {
-            CanvasEventBus.isScrubbing.emit(false)
-            if (targetPageId == null) {
-                // Nothing to commit; redraw the current page over the last preview.
-                CanvasEventBus.restoreCanvas.emit(Unit)
-                return@launch
-            }
+            // Ends the preview: the canvas shows its page again (CanvasObserverRegistry).
+            ended?.let(CanvasEventBus::endScrub)
+            if (targetPageId == null) return@launch // nothing to commit
 
             log.v("onScrubEnd: $index")
-
-            // moved, to be only run if we are changing page to the current page
-//            CanvasEventBus.restoreCanvas.emit(Unit)
 
             // Gesture end callbacks can fire more than once; ignore repeated commit for same target.
             if (targetPageId == lastScrubEndTargetPageId) {

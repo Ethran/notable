@@ -102,6 +102,7 @@ fun QuickNav(
         onScrubStart = viewModel::onScrubStart,
         onScrubPreview = viewModel::onScrubPreview,
         onScrubEnd = viewModel::onScrubEnd,
+        onScrubAbandoned = viewModel::onScrubAbandoned,
         onReturnClick = { viewModel.onReturnClick(quickNavSourcePageId) },
         goToPage = { goToPage(it) },
     )
@@ -119,6 +120,7 @@ fun QuickNavContent(
     onScrubStart: () -> Unit,
     onScrubPreview: (Int) -> Unit,
     onScrubEnd: (Int) -> Unit,
+    onScrubAbandoned: () -> Unit,
     onReturnClick: () -> Unit,
     goToPage: (String) -> Unit,
 ) {
@@ -188,6 +190,7 @@ fun QuickNavContent(
                         onDragStart = onScrubStart,
                         onPreviewIndexChanged = onScrubPreview,
                         onDragEnd = onScrubEnd,
+                        onDragAbandoned = onScrubAbandoned,
                         onReturnClick = onReturnClick
                     )
                 }
@@ -260,6 +263,7 @@ fun QuickNavContentPreview() {
         onScrubStart = {},
         onScrubPreview = {},
         onScrubEnd = {},
+        onScrubAbandoned = {},
         onReturnClick = {},
         goToPage = {},
     )

@@ -24,10 +24,13 @@ com.ethran.notable/
     - dbUtils.kt — Location of the database directory.
 
 - editor/ — The core note-taking engine
-    - canvas/ — The drawing surface and its hardware-specific logic:
+    - canvas/ — The drawing surface and its hardware-specific logic (see `docs/raw-drawing.md`):
         - DrawCanvas.kt — The `SurfaceView` the editor draws on.
         - OnyxInputHandler.kt — Onyx raw drawing (pen input → strokes, erasing, lasso).
-        - CanvasRefreshManager.kt — Copies the page bitmap to the surface; e-ink refresh.
+        - RawDrawingController.kt — The only owner of the canvas surface and of the pen's on/off state.
+        - SurfaceWriter.kt — The only code that locks and posts the surface.
+        - PenDevice.kt — The only caller of the Onyx `TouchHelper`'s raw-drawing switches and live pen style.
+        - CanvasRefreshManager.kt — Hands the editor's redraw and preview requests to the controller.
         - CanvasObserverRegistry.kt — The flows the canvas reacts to (ViewModel state, CanvasEventBus).
         - CanvasEventBus.kt — App-wide canvas signals (redraw, refresh, resumed/focus state).
     - drawing/ — Rendering: page drawing (pageDrawing.kt), backgrounds (backgrounds.kt), dry-stroke renderers (StrokeRenderer.kt, AppStrokeRenderer.kt, onyx/ with the Onyx pen wrappers), pen styles (StrokeStyleRegistry.kt, penStrokes.kt), OpenGLRenderer/LineRenderer (front-buffered drawing on non-Onyx devices).

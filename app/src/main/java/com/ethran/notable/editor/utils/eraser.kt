@@ -23,7 +23,7 @@ const val SCRIBBLE_INTERSECTION_THRESHOLD = 0.20f
 
 /**
  * Width (px) of the pen-eraser swath: the diameter of the region [handleErase] actually deletes.
- * Shared so the native side-button eraser indicator (see einkHelper.enableNativeEraser) is drawn
+ * Shared so the native side-button eraser indicator (see PenDevice.kt, enableNativeEraser) is drawn
  * at exactly the size it erases.
  */
 const val ERASER_SWATH_WIDTH = 30f
@@ -167,7 +167,7 @@ fun handleScribbleToErase(
         // pushes this rect to the SurfaceView/EPD via commitErase, and the surface bitmap
         // (windowedBitmap) is in screen space — returning page coords here pushed the wrong
         // region whenever scrolled/zoomed. The caller unions this with the scribble track so
-        // the firmware ink is cleared in the same post. See docs/onyx-sdk/onyx-scribble-to-erase.md.
+        // the firmware ink is cleared in the same post.
         val effectedArea = page.toScreenCoordinates(strokeBounds(deletedStrokes))
         page.drawAreaScreenCoordinates(screenArea = effectedArea)
         return effectedArea

@@ -32,7 +32,7 @@ fun EditorSurface(
                 page = page,
                 history = history
             ).apply {
-                init()
+                attachRenderer()
                 registerObservers()
             }
         },

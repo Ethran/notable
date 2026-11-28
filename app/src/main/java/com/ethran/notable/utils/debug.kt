@@ -1,6 +1,7 @@
 package com.ethran.notable.utils
 
 import android.os.Looper
+import com.ethran.notable.BuildConfig
 import io.shipbook.shipbooksdk.ShipBook
 
 
@@ -29,6 +30,13 @@ internal fun formatAppCallStack(stack: Array<StackTraceElement>, n: Int = 8): St
 
 fun logCallStack(reason: String, n: Int = 8) {
     log.w("$reason Call stack:\n${formatAppCallStack(Thread.currentThread().stackTrace, n)}")
+}
+
+/** Fails in debug builds, logs in release ones, when [what] runs off the main thread. */
+fun checkMainThread(what: String) {
+    if (Looper.myLooper() == Looper.getMainLooper()) return
+    val message = "$what called off the main thread"
+    if (BuildConfig.DEBUG) error(message) else log.e(message)
 }
 
 fun ensureNotMainThread(taskName: String) {

@@ -833,7 +833,8 @@ class EditorViewModel @Inject constructor(
             Log.d("EditorView", "Tried to change to same page!")
             val snack = SnackConf(text = "Tried to change to same page!", duration = 4000)
             snackDispatcher.showOrUpdateSnack(snack)
-            CanvasEventBus.restoreCanvas.emit(Unit)
+            // An ordinary redraw: it waits while a QuickNav preview owns the canvas.
+            CanvasEventBus.refreshUi.emit(Unit)
         }
     }
 

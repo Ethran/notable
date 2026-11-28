@@ -9,7 +9,6 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
-import android.os.Looper
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -17,7 +16,6 @@ import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toRect
-import com.ethran.notable.BuildConfig
 import com.ethran.notable.R
 import com.ethran.notable.SCREEN_HEIGHT
 import com.ethran.notable.SCREEN_WIDTH
@@ -47,6 +45,7 @@ import com.ethran.notable.gestures.ZOOM_SENSITIVITY
 import com.ethran.notable.gestures.ZOOM_SNAP_THRESHOLD
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackState
+import com.ethran.notable.utils.checkMainThread
 import com.ethran.notable.utils.onError
 import io.shipbook.shipbooksdk.ShipBook
 import kotlinx.coroutines.CoroutineScope
@@ -304,7 +303,7 @@ class PageView(
      * bitmap of another.
      */
     private fun showPrepared(prepared: PreparedPage): OpenPage? {
-        checkMainThread("showPrepared")
+        checkMainThread("PageView.showPrepared")
         val page = prepared.page
         synchronized(pageLock) {
             if (disposed) return null
@@ -400,7 +399,7 @@ class PageView(
             // TODO: If we put it in loadPage(…) sometimes it will try to refresh
             //  without seeing strokes, I have no idea why.
             coroutineScope.launch(Dispatchers.Main) {
-                CanvasEventBus.forceUpdate.emit(null)
+                CanvasEventBus.forceUpdate.emit(Unit)
             }
 
             logCache.d("Loaded page from persistent layer $pageId")
@@ -565,7 +564,7 @@ class PageView(
         ignoredImageIds: List<String> = listOf(),
         canvas: Canvas? = null
     ) {
-        if (canvas == null) checkMainThread("drawAreaScreenCoordinates")
+        if (canvas == null) checkMainThread("PageView.drawAreaScreenCoordinates")
         // A disposed view has put its bitmap on the shelf, so it draws nothing more into it.
         val activeCanvas = canvas ?: synchronized(pageLock) { if (disposed) return; windowedCanvas }
         val pageArea = toPageCoordinates(screenArea)
@@ -601,7 +600,7 @@ class PageView(
         )
         if (!commitViewport(pageId, start.copy(scroll = newScroll))) return
 
-        CanvasEventBus.forceUpdate.emit(null)
+        CanvasEventBus.forceUpdate.emit(Unit)
     }
 
 
@@ -954,7 +953,7 @@ class PageView(
     }
 
     private fun updateCanvasDimensions() {
-        checkMainThread("updateDimensions")
+        checkMainThread("PageView.updateDimensions")
         // A zoom fitted to the old size does not fit the new one, on any page.
         synchronized(pageLock) {
             viewportFlow.update { it.copy(zoom = 1f) }
@@ -968,7 +967,7 @@ class PageView(
         // TODO: it might be worth to do it
         //  by redrawing only part of the screen, like in scroll and zoom.
         coroutineScope.launch {
-            CanvasEventBus.forceUpdate.emit(null)
+            CanvasEventBus.forceUpdate.emit(Unit)
         }
 //        persistBitmapDebounced()
     }
@@ -991,7 +990,7 @@ class PageView(
      * page is shown yet, the page is missing, or the view is disposed.
      */
     private fun commitViewport(pageId: String, next: PageViewport): Boolean {
-        checkMainThread("commitViewport")
+        checkMainThread("PageView.commitViewport")
         synchronized(pageLock) {
             val shown = openPage
             if (disposed || shown.pageId != pageId || shown.record == null) return false
@@ -1016,14 +1015,6 @@ class PageView(
     fun toScreenCoordinates(rect: Rect): Rect = viewport.value.toScreen(rect)
 
     private fun toPageCoordinates(rect: Rect): Rect = viewport.value.toPage(rect)
-
-    // The screen bitmap, its canvas and the viewport change on the main thread only: page swaps,
-    // scroll and zoom steps, resizes and drawing. Fails in debug builds, logs in release ones.
-    private fun checkMainThread(what: String) {
-        if (Looper.myLooper() == Looper.getMainLooper()) return
-        val message = "PageView.$what called off the main thread"
-        if (BuildConfig.DEBUG) error(message) else log.e(message)
-    }
 
     private suspend fun waitForDrawingWithSnack() {
         if (drawingInProgress.isLocked) {
