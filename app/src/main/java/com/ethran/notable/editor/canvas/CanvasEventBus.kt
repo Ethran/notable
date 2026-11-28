@@ -6,7 +6,9 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
@@ -67,23 +69,13 @@ object CanvasEventBus {
     val activeScrub: StateFlow<Int?> = _activeScrub.asStateFlow()
 
     /**
-     * Preview requests; each names the scrub it was made in ([requestPreview]). The newest wins:
-     * a request not yet taken is replaced by a later one.
+     * Preview requests; each names the scrub it was made in. Only [requestPreview] adds them. The
+     * newest wins: a request not yet taken is replaced by a later one.
      */
-    val previewPage = MutableSharedFlow<PreviewRequest>(
+    private val _previewPage = MutableSharedFlow<PreviewRequest>(
         extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-
-    /**
-     * Asks for a preview of [pageId] in the current scrub. The request keeps that scrub's id, so it
-     * is dropped if it arrives after the scrub ended. Does nothing if no scrub is under way.
-     */
-    fun requestPreview(pageId: String) {
-        previewRequest(pageId)?.let { previewPage.tryEmit(it) }
-    }
-
-    internal fun previewRequest(pageId: String): PreviewRequest? =
-        activeScrub.value?.let { PreviewRequest(it, pageId) }
+    val previewPage: SharedFlow<PreviewRequest> = _previewPage.asSharedFlow()
 
     /** Starts a new scrub and returns its id, for [endScrub]. Main thread. */
     fun startScrub(): Int {
@@ -91,6 +83,17 @@ object CanvasEventBus {
         _activeScrub.value = lastScrub
         return lastScrub
     }
+
+    /**
+     * Asks for a preview of [pageId] in the current scrub. The request keeps that scrub's id, so it
+     * is dropped if it arrives after the scrub ended. Does nothing if no scrub is under way.
+     */
+    fun requestPreview(pageId: String) {
+        previewRequest(pageId)?.let { _previewPage.tryEmit(it) }
+    }
+
+    internal fun previewRequest(pageId: String): PreviewRequest? =
+        activeScrub.value?.let { PreviewRequest(it, pageId) }
 
     /** Ends [scrub]; does nothing if it is not the scrub under way (already ended, or replaced). */
     fun endScrub(scrub: Int) {

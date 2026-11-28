@@ -77,15 +77,23 @@ fun onSurfaceChanged(view: View) {
 }
 
 
-/** Where raw drawing works on [view]: everything but the toolbar. Returns (limit, exclude). */
-fun rawDrawingArea(view: View, toolbarHeight: Int): Pair<Rect, Rect> {
+/** Where raw drawing works ([limit]) and where it must not ([exclude], the toolbar). */
+data class RawDrawingArea(val limit: Rect, val exclude: Rect)
+
+/** Where raw drawing works on [view]: everything but the toolbar. */
+fun rawDrawingArea(view: View, toolbarHeight: Int): RawDrawingArea {
     val viewWidth = view.width
     val viewHeight = view.height
     return if (GlobalAppSettings.current.toolbarPosition == AppSettings.Position.Top) {
-        Rect(0, toolbarHeight, viewWidth, viewHeight) to Rect(0, 0, viewWidth, toolbarHeight)
+        RawDrawingArea(
+            limit = Rect(0, toolbarHeight, viewWidth, viewHeight),
+            exclude = Rect(0, 0, viewWidth, toolbarHeight),
+        )
     } else {
-        Rect(0, 0, viewWidth, viewHeight - toolbarHeight) to
-                Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight)
+        RawDrawingArea(
+            limit = Rect(0, 0, viewWidth, viewHeight - toolbarHeight),
+            exclude = Rect(0, viewHeight - toolbarHeight, viewWidth, viewHeight),
+        )
     }
 }
 

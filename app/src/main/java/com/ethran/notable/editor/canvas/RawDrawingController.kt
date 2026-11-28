@@ -61,13 +61,7 @@ class RawDrawingController<P : Any>(
     // --- What the surface should show, and what is still to write ---
 
     /** A preview owns the surface (QuickNav); null: the page does. */
-    private var preview: P? = null
-
-    /** Who showed [preview]: only they end it ([endPreview]). */
-    private var previewOwner: Int? = null
-
-    /** [preview] is on the surface. */
-    private var previewShown = false
+    private var preview: Preview<P>? = null
 
     /** Page area not known to be on the panel. null: none. */
     private var pageStale: Stale? = null
@@ -92,6 +86,9 @@ class RawDrawingController<P : Any>(
     /** A write failed in the current pass: the surface is not taking posts, so no more tries. */
     private var failedThisPass = false
     private var cancelWake: (() -> Unit)? = null
+
+    /** When the scheduled wake fires ([MainTimer.nowMillis]); null: none. For the log. */
+    private var nextWake: Long? = null
 
     private val steps = mutableListOf<String>()
 
@@ -150,12 +147,11 @@ class RawDrawingController<P : Any>(
     fun showPreview(owner: Int, preview: P): Boolean {
         checkThread()
         // A new owner gets its own retries; later previews of the same owner share them.
-        if (owner != previewOwner) failures = 0
-        this.preview = preview
-        previewOwner = owner
-        previewShown = false
+        if (owner != this.preview?.owner) failures = 0
+        val next = Preview(owner, preview)
+        this.preview = next
         applyState("show preview")
-        return previewShown
+        return next.shown
     }
 
     /**
@@ -164,10 +160,8 @@ class RawDrawingController<P : Any>(
      */
     fun endPreview(owner: Int): Boolean {
         checkThread()
-        if (preview == null || previewOwner != owner) return false
+        if (preview?.owner != owner) return false
         preview = null
-        previewOwner = null
-        previewShown = false
         failures = 0
         markPage(Stale.Whole)
         applyState("end preview")
@@ -215,6 +209,7 @@ class RawDrawingController<P : Any>(
     private fun applyState(trigger: String) {
         cancelWake?.invoke()
         cancelWake = null
+        nextWake = null
         failedThisPass = false
         if (sessionOpen) {
             pendingErase?.let { commitPendingErase(it) }
@@ -284,12 +279,12 @@ class RawDrawingController<P : Any>(
 
     /** Writes what the surface still lacks; the pen is off by now. */
     private fun writeContent() {
-        val shown = preview
-        if (shown == null) {
+        val current = preview
+        if (current == null) {
             writePage()
-        } else if (!previewShown && !failedThisPass) {
-            previewShown = write(null, shown, force = false)
-            steps += "preview ${if (previewShown) "shown" else "FAILED"}"
+        } else if (!current.shown && !failedThisPass) {
+            current.shown = write(null, current.bitmap, force = false)
+            steps += "preview ${if (current.shown) "shown" else "FAILED"}"
         }
     }
 
@@ -315,7 +310,7 @@ class RawDrawingController<P : Any>(
 
     /** A new surface (or none) shows nothing yet: the whole page, or the preview, is to write. */
     private fun newSurface() {
-        previewShown = false
+        preview?.shown = false
         pendingErase = null
         firmwareInk = null
         failures = 0
@@ -341,19 +336,36 @@ class RawDrawingController<P : Any>(
     /** Wakes for the end of a hold, or to retry a failed write while recovery lasts. */
     private fun scheduleWake() {
         val now = timer.nowMillis
-        val lacking = pageStale != null || (preview != null && !previewShown)
+        val lacking = pageStale != null || preview?.shown == false
         val recovery = if (lacking && failures in 1..RECOVERY_ATTEMPTS) now + RECOVERY_MS else 0L
-        val next = listOf(penOffUntil, recovery).filter { it > now }.minOrNull() ?: return
+        val next = listOf(penOffUntil, recovery).filter { it > now }.minOrNull()
+        nextWake = next
+        if (next == null) return
         cancelWake = timer.schedule(next - now) {
             cancelWake = null
             applyState("timer")
         }
     }
 
-    private fun state() =
-        "pen=${if (enabled) "on" else "off"}, open=$sessionOpen, " +
-            "surface=${if (preview == null) "page" else if (previewShown) "preview" else "preview pending"}, " +
-            "page stale=${pageStale ?: "none"}, failures=$failures"
+    /** For the log: the pen's state, and why it is off (not wanted, a hold, a preview). */
+    private fun state(): String {
+        val now = timer.nowMillis
+        val surface = when (preview?.shown) {
+            null -> "page"
+            true -> "preview"
+            false -> "preview pending"
+        }
+        return "pen=${if (enabled) "on" else "off"}, wanted=${drawingWanted()}, " +
+            "hold=${max(0L, penOffUntil - now)} ms, open=$sessionOpen, surface=$surface, " +
+            "page stale=${pageStale ?: "none"}, failures=$failures, " +
+            "wake=${nextWake?.let { "in ${it - now} ms" } ?: "none"}"
+    }
+
+    /** A preview on the surface, shown by [owner] (a QuickNav scrub). */
+    private class Preview<P>(val owner: Int, val bitmap: P) {
+        /** [bitmap] is on the surface. */
+        var shown = false
+    }
 
     private class PendingErase(val area: ScreenArea?, val settleMillis: Long)
 }

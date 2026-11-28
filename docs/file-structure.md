@@ -24,7 +24,7 @@ com.ethran.notable/
     - dbUtils.kt — Location of the database directory.
 
 - editor/ — The core note-taking engine
-    - canvas/ — The drawing surface and its hardware-specific logic:
+    - canvas/ — The drawing surface and its hardware-specific logic (see `docs/raw-drawing.md`):
         - DrawCanvas.kt — The `SurfaceView` the editor draws on.
         - OnyxInputHandler.kt — Onyx raw drawing (pen input → strokes, erasing, lasso).
         - RawDrawingController.kt — The only owner of the canvas surface and of the pen's on/off state.

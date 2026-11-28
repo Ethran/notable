@@ -1,9 +1,9 @@
 package com.ethran.notable.editor.canvas
 
-import android.graphics.Rect
 import android.view.View
 import com.ethran.notable.editor.utils.ERASER_SWATH_WIDTH
 import com.ethran.notable.editor.utils.Eraser
+import com.ethran.notable.editor.utils.RawDrawingArea
 import com.onyx.android.sdk.device.Device
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
@@ -101,13 +101,13 @@ object NoPenDevice : PenDevice {
  *
  * @param hostView and [callback]: what the helper was created with, bound again on every
  *   [openSession] (as Onyx's pen demo does before each `openRawDrawing`).
- * @param area the drawing area for a new session: (limit, exclude).
+ * @param area the drawing area for a new session.
  */
 class TouchHelperPenDevice(
     private val helper: TouchHelper,
     private val hostView: View,
     private val callback: RawInputCallback,
-    private val area: () -> Pair<Rect, Rect>,
+    private val area: () -> RawDrawingArea,
 ) : PenDevice {
     override fun setDrawingEnabled(enabled: Boolean) =
         timed("setRawDrawingEnabled($enabled)") { helper.setRawDrawingEnabled(enabled) }
@@ -124,13 +124,15 @@ class TouchHelperPenDevice(
         timed("resetPenDefaultRawDrawing") { helper.resetPenDefaultRawDrawing() }
 
     override fun openSession() {
-        val (limit, exclude) = area()
-        timed("openRawDrawing(limit=$limit, exclude=$exclude)") {
+        val area = area()
+        timed("openRawDrawing(limit=${area.limit}, exclude=${area.exclude})") {
             helper.debugLog(false)
             // closeRawDrawing cleared the pen manager's host view; the limit rect set here
             // replaces the visible rect bindHostView sets.
             helper.bindHostView(hostView, callback)
-            helper.setLimitRect(mutableListOf(limit)).setExcludeRect(listOf(exclude)).openRawDrawing()
+            helper.setLimitRect(mutableListOf(area.limit))
+                .setExcludeRect(listOf(area.exclude))
+                .openRawDrawing()
         }
     }
 
