@@ -22,6 +22,7 @@ import com.ethran.notable.sync.SyncScheduler
 import com.ethran.notable.sync.SyncSettings
 import com.ethran.notable.sync.SyncState
 import com.ethran.notable.sync.WebDavClientFactoryPort
+import com.ethran.notable.receiver.PdfReceiver
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.SnackDispatcher
 import com.ethran.notable.utils.AppResult
@@ -30,6 +31,7 @@ import com.ethran.notable.utils.isLatestVersion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -70,7 +72,8 @@ class SettingsViewModel @Inject constructor(
     private val capabilityProbeService: CapabilityProbeService,
     private val snackDispatcher: SnackDispatcher,
     private val appEventBus: AppEventBus,
-    @param:ApplicationScope private val appScope: CoroutineScope
+    @param:ApplicationScope private val appScope: CoroutineScope,
+    private val pdfReceiver: PdfReceiver,
 ) : ViewModel() {
 
     // We use the GlobalAppSettings object directly.
@@ -122,6 +125,16 @@ class SettingsViewModel @Inject constructor(
             val result = isLatestVersion(context, appEventBus, force)
             withContext(Dispatchers.Main) {
                 isLatestVersion = result
+            }
+        }
+    }
+
+    val receiverToken: StateFlow<String?> = pdfReceiver.token
+
+    fun onNewReceiverToken() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { pdfReceiver.renewToken() }.onFailure {
+                snackDispatcher.showOrUpdateSnack(SnackConf(text = "Can't store a new token", duration = 3000))
             }
         }
     }

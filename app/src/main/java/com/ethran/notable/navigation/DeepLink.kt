@@ -69,7 +69,7 @@ fun parseDeepLink(link: String): DeepLink? {
         kind == "book" && segments.size == 2 && !id.isNullOrBlank() -> DeepLink.Book(id)
         kind == "pdf" && segments.size == 1 -> {
             val path = query["path"]?.takeIf { it.startsWith("/") } ?: return null
-            DeepLink.Pdf(path = path, page = query["page"]?.toIntOrNull()?.takeIf { it >= 1 })
+            DeepLink.Pdf(path = path, page = parsePage(query["page"]))
         }
 
         else -> null
@@ -83,6 +83,9 @@ private fun parseQuery(query: String): Map<String, String> = buildMap {
         put(pair.substringBefore('='), decode(pair.substringAfter('=', "")))
     }
 }
+
+/** A page number counted from 1; anything else is no page. */
+internal fun parsePage(value: String?): Int? = value?.toIntOrNull()?.takeIf { it >= 1 }
 
 private fun encode(value: String, keepSlashes: Boolean = false): String {
     val encoded = URLEncoder.encode(value, "UTF-8").replace("+", "%20")

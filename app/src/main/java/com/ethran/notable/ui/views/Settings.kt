@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +65,7 @@ import com.ethran.notable.ui.LocalSnackContext
 import com.ethran.notable.ui.SnackConf
 import com.ethran.notable.ui.components.DebugSettings
 import com.ethran.notable.ui.components.GeneralSettings
+import com.ethran.notable.ui.components.PdfReceiverSettings
 import com.ethran.notable.ui.components.GesturesSettings
 import com.ethran.notable.ui.components.ToolbarSettings
 import com.ethran.notable.ui.theme.InkaTheme
@@ -87,6 +89,7 @@ fun SettingsView(
 ) {
     val context = LocalContext.current
     val settings = viewModel.settings
+    val receiverToken by viewModel.receiverToken.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.checkUpdate(context, force = false)
@@ -124,7 +127,9 @@ fun SettingsView(
                 onConfirmForceUpload = viewModel::onConfirmForceUpload,
                 onConfirmForceDownload = viewModel::onConfirmForceDownload,
             ),
-        )
+        ),
+        receiverToken = receiverToken,
+        onNewReceiverToken = viewModel::onNewReceiverToken,
     )
 }
 
@@ -143,6 +148,8 @@ fun SettingsContent(
     availableGestures: List<Pair<AppSettings.GestureAction, Any>> = emptyList(),
     syncUiState: SyncSettingsUiState = SyncSettingsUiState(),
     syncCallbacks: SyncSettingsCallbacks = SyncSettingsCallbacks(),
+    receiverToken: String? = null,
+    onNewReceiverToken: () -> Unit = {},
 ) {
     var selectedTab by remember { mutableIntStateOf(selectedTabInitial) }
     val tabs = listOf(
@@ -175,7 +182,12 @@ fun SettingsContent(
                     .verticalScroll(scrollState)
             ) {
                 when (selectedTab) {
-                    0 -> GeneralSettings(settings, onUpdateSettings)
+                    0 -> Column {
+                        GeneralSettings(settings, onUpdateSettings)
+                        PdfReceiverSettings(
+                            settings, onUpdateSettings, receiverToken, onNewReceiverToken
+                        )
+                    }
                     1 -> GesturesSettings(
                         settings, onUpdateSettings, listOfGestures, availableGestures
                     )
